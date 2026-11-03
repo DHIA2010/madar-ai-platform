@@ -7,6 +7,7 @@ import { IntegrationsSection } from "./components/integrations-section"
 import { MarketingFooter } from "./components/marketing-footer"
 import { MarketingHeader } from "./components/marketing-header"
 import { PricingSection } from "./components/pricing-section"
+import { ScrollToHash } from "./components/scroll-to-hash"
 import { ShowcaseSection } from "./components/showcase-section"
 import { WhyMadarSection } from "./components/why-madar-section"
 import { loadPublicPricing } from "./pricing-data"
@@ -15,6 +16,7 @@ export async function MarketingHomePage() {
   const pricing = await loadPublicPricing()
   return (
     <div lang="ar" dir="rtl" className="min-h-screen bg-white text-[#0b1738] antialiased">
+      <ScrollToHash />
       <MarketingHeader />
       <main>
         <HeroSection />

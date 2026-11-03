@@ -1,9 +1,16 @@
+import Link from "next/link"
 import { ArrowLeft, BadgeCheck, CheckCircle2, Sparkles } from "lucide-react"
+
+import { ROUTES } from "@/constants/routes"
 
 import { MADAR_REGISTER_URL, MARKETING_INTEGRATIONS } from "../marketing-constants"
 import { DashboardMockup, ReceiptCard } from "./mockups"
 
-const HIGHLIGHTS = ["تجربة مجانية ٧ أيام", "متوافق مع الفوترة الإلكترونية", "عربي بالكامل"]
+const HIGHLIGHTS = [
+  "تجربة مجانية ٧ أيام",
+  "متوافق مع الفوترة الإلكترونية",
+  "يدعم العربية والإنجليزية",
+]
 
 export function HeroSection() {
   return (
@@ -39,12 +46,12 @@ export function HeroSection() {
               ابدأ تجربتك المجانية
               <ArrowLeft className="size-5 transition-transform group-hover:-translate-x-1" />
             </a>
-            <a
-              href="#pricing"
+            <Link
+              href={ROUTES.contactSales}
               className="inline-flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-8 py-4 text-base font-bold text-[#0b1738] transition-colors hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
             >
-              شاهد الأسعار
-            </a>
+              تحدث مع المبيعات
+            </Link>
           </div>
 
           <ul className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-semibold text-slate-600">

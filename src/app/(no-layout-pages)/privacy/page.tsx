@@ -1,169 +1,169 @@
 import type { Metadata } from "next"
 
+import { ROUTES } from "@/constants/routes"
+
 import { LegalPageShell } from "@/features/marketing-site/components/legal-page-shell"
 import { MADAR_CONTACT_EMAIL } from "@/features/marketing-site/marketing-constants"
 
 export const metadata: Metadata = {
-  title: "Privacy Policy",
-  description: "MADAR Privacy Policy for platform users and connected advertising integrations.",
-  alternates: { canonical: "https://madar.my/privacy" },
+  title: { absolute: "سياسة الخصوصية | مدار" },
+  description: "سياسة الخصوصية لمنصة مدار لمستخدمي المنصة والتكاملات الإعلانية المرتبطة بها.",
+  alternates: {
+    canonical: "https://madar.my/privacy",
+    languages: { ar: "https://madar.my/privacy", en: "https://madar.my/privacy/en" },
+  },
 }
 
-const EFFECTIVE_DATE = "July 10, 2026"
+const EFFECTIVE_DATE = "10 يوليو 2026"
 
+// Arabic translation of privacy/en/page.tsx -- keep the two in step.
 export default function PrivacyPage() {
   return (
     <LegalPageShell
-      title="Privacy Policy"
+      title="سياسة الخصوصية"
       effectiveDate={EFFECTIVE_DATE}
+      alternateHref={ROUTES.privacyEnglish}
       intro={
         <>
-          This Privacy Policy explains how MADAR collects, uses, stores, and protects personal and
-          advertising data when you use the MADAR marketing intelligence platform, including
-          integrations with supported advertising, analytics, and commerce platforms.
+          توضح سياسة الخصوصية هذه كيف تجمع مدار البيانات الشخصية والإعلانية وتستخدمها وتخزنها
+          وتحميها عند استخدامك لمنصة مدار لتحليلات التسويق، بما في ذلك التكاملات مع المنصات
+          الإعلانية ومنصات التحليلات والتجارة المدعومة.
         </>
       }
     >
       <section>
-        <h2>1. Introduction</h2>
+        <h2>1. مقدمة</h2>
         <p>
-          MADAR is a software-as-a-service marketing intelligence platform. Businesses may connect
-          advertising, analytics, and commerce accounts using OAuth to analyze performance and
-          generate reporting dashboards and insights.
+          مدار منصة برمجية تُقدَّم كخدمة (SaaS) لتحليلات التسويق. ويمكن للمنشآت ربط حساباتها
+          الإعلانية وحسابات التحليلات والتجارة عبر بروتوكول OAuth لتحليل الأداء وإنشاء لوحات
+          التقارير والرؤى.
         </p>
-        <p className="mt-3 font-medium">
-          MADAR only reads data from connected platforms. MADAR does not create, modify, publish, or
-          manage advertising campaigns on behalf of users.
+        <p className="mt-3 font-semibold">
+          تقتصر مدار على قراءة البيانات من المنصات المرتبطة، ولا تنشئ الحملات الإعلانية أو تعدّلها
+          أو تنشرها أو تديرها نيابةً عن المستخدمين.
         </p>
       </section>
 
       <section>
-        <h2>2. Information We Collect</h2>
-        <p>We may collect and process the following categories of information:</p>
+        <h2>2. المعلومات التي نجمعها</h2>
+        <p>قد نجمع ونعالج الفئات التالية من المعلومات:</p>
         <ul>
-          <li>Account and profile details, such as business email and account identifiers.</li>
-          <li>Workspace and organization metadata used to manage access and permissions.</li>
+          <li>بيانات الحساب والملف الشخصي، مثل البريد الإلكتروني للمنشأة ومعرّفات الحساب.</li>
+          <li>البيانات الوصفية لمساحات العمل والمنشآت المستخدمة لإدارة الوصول والصلاحيات.</li>
           <li>
-            Connected platform data, including campaign-level and account-level advertising
-            performance metrics such as impressions, clicks, conversions, spend, and related
-            metadata, as well as store, order, product, and customer data from connected commerce
-            platforms.
+            بيانات المنصات المرتبطة، بما في ذلك مقاييس أداء الإعلانات على مستوى الحملة والحساب، مثل
+            مرات الظهور والنقرات والتحويلات والإنفاق والبيانات الوصفية المرتبطة بها، إضافةً إلى
+            بيانات المتجر والطلبات والمنتجات والعملاء من منصات التجارة المرتبطة.
           </li>
+          <li>السجلات التقنية والأحداث الأمنية اللازمة لموثوقية المنصة ومنع الاحتيال والتدقيق.</li>
           <li>
-            Technical logs and security events necessary for platform reliability, fraud prevention,
-            and auditing.
-          </li>
-          <li>
-            Website usage information, such as pages visited and general device/browser information,
-            collected through standard web analytics.
+            معلومات استخدام الموقع، مثل الصفحات التي تمت زيارتها ومعلومات عامة عن الجهاز والمتصفح،
+            التي تُجمع عبر أدوات تحليلات الويب المعتادة.
           </li>
         </ul>
       </section>
 
       <section>
-        <h2>3. OAuth Permissions and Tokens</h2>
+        <h2>3. أذونات OAuth والرموز المميزة</h2>
         <p>
-          MADAR uses OAuth 2.0 to connect third-party advertising, analytics, and commerce
-          platforms. During this process, MADAR receives access tokens and refresh tokens required
-          to securely retrieve authorized data.
+          تستخدم مدار بروتوكول OAuth 2.0 لربط منصات الإعلانات والتحليلات والتجارة التابعة لجهات
+          خارجية. وخلال ذلك، تتلقى مدار رموز الوصول (Access Tokens) ورموز التحديث (Refresh Tokens)
+          اللازمة لاسترجاع البيانات المصرّح بها بشكل آمن.
         </p>
         <ul>
-          <li>OAuth tokens are stored securely and encrypted at rest.</li>
-          <li>OAuth state parameters are validated to prevent unauthorized callback use.</li>
-          <li>Tokens are used only for authorized read access and synchronization operations.</li>
+          <li>تُخزَّن رموز OAuth بشكل آمن ومشفّر أثناء التخزين.</li>
           <li>
-            Users can disconnect integrations at any time, which revokes MADAR&rsquo;s access in the
-            platform workflow.
+            يتم التحقق من معاملات الحالة (State) في OAuth لمنع أي استخدام غير مصرّح به لعمليات
+            الرجوع.
           </li>
+          <li>تُستخدم الرموز فقط لعمليات القراءة والمزامنة المصرّح بها.</li>
+          <li>يمكن للمستخدمين فصل التكاملات في أي وقت، مما يُلغي وصول مدار ضمن آلية عمل المنصة.</li>
         </ul>
       </section>
 
       <section>
-        <h2>4. Advertising and Commerce Platform Integrations</h2>
+        <h2>4. التكامل مع منصات الإعلانات والتجارة</h2>
         <p>
-          MADAR integrates with supported advertising platforms (such as Google Ads, Meta Ads, and
-          Snapchat Ads), analytics platforms (such as Google Analytics), and commerce platforms
-          (such as Salla and Shopify) to retrieve account and performance data for analytics and
-          reporting. Where a business authorizes MADAR to connect a TikTok advertising account, the
-          same principle applies: MADAR only retrieves data through TikTok&rsquo;s official,
-          approved APIs, and only to provide campaign analytics and reporting within MADAR.
+          تتكامل مدار مع المنصات الإعلانية المدعومة (مثل Google Ads وMeta Ads وSnapchat Ads)، ومنصات
+          التحليلات (مثل Google Analytics)، ومنصات التجارة (مثل سلة وShopify)، لاسترجاع بيانات
+          الحسابات والأداء لأغراض التحليلات والتقارير. وعندما تصرّح منشأة لمدار بربط حساب إعلاني على
+          TikTok، ينطبق المبدأ نفسه: لا تسترجع مدار البيانات إلا عبر واجهات برمجة التطبيقات الرسمية
+          والمعتمدة من TikTok، وفقط لتقديم تحليلات الحملات وتقاريرها داخل مدار.
         </p>
-        <p className="mt-3 font-medium">
-          MADAR does not sell customer data and does not use connected data for unrelated
-          third-party marketing purposes.
+        <p className="mt-3 font-semibold">
+          لا تبيع مدار بيانات العملاء، ولا تستخدم البيانات المرتبطة لأغراض تسويقية لجهات خارجية لا
+          علاقة لها بالخدمة.
         </p>
       </section>
 
       <section>
-        <h2>5. How Information Is Used</h2>
+        <h2>5. كيفية استخدام المعلومات</h2>
         <p>
-          Connected data is used to provide operational analytics, trend monitoring, performance
-          dashboards, and insights inside MADAR.
+          تُستخدم البيانات المرتبطة لتقديم التحليلات التشغيلية ومتابعة الاتجاهات ولوحات الأداء
+          والرؤى داخل مدار.
         </p>
-        <p className="mt-3 font-medium">
-          Data is used only for analytics and reporting purposes within the MADAR service.
-        </p>
-      </section>
-
-      <section>
-        <h2>6. How Data Is Protected</h2>
-        <p>
-          MADAR applies administrative, technical, and organizational safeguards to protect data,
-          including encryption mechanisms for sensitive token material and controls for access
-          management, auditing, and secure transport.
+        <p className="mt-3 font-semibold">
+          تُستخدم البيانات لأغراض التحليلات والتقارير فقط ضمن خدمة مدار.
         </p>
       </section>
 
       <section>
-        <h2>7. Data Retention</h2>
+        <h2>6. كيفية حماية البيانات</h2>
         <p>
-          MADAR retains integration and reporting data for as long as necessary to provide the
-          service, satisfy legal obligations, resolve disputes, and enforce platform agreements.
+          تطبّق مدار ضمانات إدارية وتقنية وتنظيمية لحماية البيانات، بما في ذلك آليات تشفير للرموز
+          الحساسة، وضوابط لإدارة الوصول والتدقيق والنقل الآمن.
+        </p>
+      </section>
+
+      <section>
+        <h2>7. الاحتفاظ بالبيانات</h2>
+        <p>
+          تحتفظ مدار ببيانات التكاملات والتقارير طوال المدة اللازمة لتقديم الخدمة، والوفاء
+          بالالتزامات النظامية، وتسوية النزاعات، وتطبيق اتفاقيات المنصة.
         </p>
         <p className="mt-3">
-          Upon account closure or integration disconnection, retention and deletion actions are
-          processed according to platform policies, system constraints, and applicable law.
+          عند إغلاق الحساب أو فصل التكامل، تتم معالجة إجراءات الاحتفاظ والحذف وفقًا لسياسات المنصة
+          وقيودها التقنية والأنظمة المعمول بها.
         </p>
       </section>
 
       <section>
-        <h2>8. Third-Party Services</h2>
+        <h2>8. خدمات الجهات الخارجية</h2>
         <p>
-          MADAR relies on third-party infrastructure providers (such as cloud hosting) to operate
-          the platform, and on third-party APIs (such as advertising and commerce platforms) to
-          retrieve data you authorize. These providers process data only as necessary to deliver the
-          MADAR service.
+          تعتمد مدار على مزوّدي بنية تحتية من جهات خارجية (مثل الاستضافة السحابية) لتشغيل المنصة،
+          وعلى واجهات برمجة تطبيقات لجهات خارجية (مثل منصات الإعلانات والتجارة) لاسترجاع البيانات
+          التي تصرّح بها. ولا يعالج هؤلاء المزوّدون البيانات إلا بالقدر اللازم لتقديم خدمة مدار.
         </p>
       </section>
 
       <section>
-        <h2>9. Cookies and Similar Technologies</h2>
+        <h2>9. ملفات تعريف الارتباط والتقنيات المشابهة</h2>
         <p>
-          MADAR may use cookies and similar technologies for session continuity, authentication,
-          security, and service performance. These technologies are used to operate and improve
-          platform functionality.
+          قد تستخدم مدار ملفات تعريف الارتباط (Cookies) والتقنيات المشابهة لاستمرارية الجلسة،
+          والمصادقة، والأمان، وأداء الخدمة. وتُستخدم هذه التقنيات لتشغيل وظائف المنصة وتحسينها.
         </p>
       </section>
 
       <section>
-        <h2>10. User Rights</h2>
+        <h2>10. حقوق المستخدمين</h2>
         <p>
-          Users may request access, correction, or deletion of eligible personal data where
-          applicable by law.
+          يمكن للمستخدمين طلب الوصول إلى بياناتهم الشخصية المؤهلة أو تصحيحها أو حذفها، وفقًا لما
+          تسمح به الأنظمة المعمول بها.
         </p>
         <p className="mt-3">
-          Users can disconnect advertising, analytics, or commerce integrations at any time from
-          within the platform, which stops future data synchronization under that connection.
+          ويمكن للمستخدمين فصل تكاملات الإعلانات أو التحليلات أو التجارة في أي وقت من داخل المنصة،
+          مما يوقف مزامنة البيانات مستقبلًا عبر ذلك الربط.
         </p>
       </section>
 
       <section>
-        <h2>11. Contact Information</h2>
+        <h2>11. معلومات التواصل</h2>
         <p>
-          For privacy questions or requests, contact:{" "}
+          للاستفسارات أو الطلبات المتعلقة بالخصوصية، تواصل معنا عبر:{" "}
           <a
-            className="font-medium text-slate-900 underline underline-offset-2"
+            className="font-semibold text-slate-900 underline underline-offset-2"
             href={`mailto:${MADAR_CONTACT_EMAIL}`}
+            dir="ltr"
           >
             {MADAR_CONTACT_EMAIL}
           </a>

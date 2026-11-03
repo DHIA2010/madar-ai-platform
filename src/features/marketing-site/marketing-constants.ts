@@ -26,6 +26,7 @@ export const MARKETING_NAV_LINKS = [
   { label: "التكاملات", href: ROUTES.marketing.integrations },
   { label: "الأسعار", href: ROUTES.marketing.pricing },
   { label: "الأسئلة الشائعة", href: ROUTES.marketing.faq },
+  { label: "المدونة", href: ROUTES.blog },
 ] as const
 
 export type IntegrationCategory = "stores" | "ads" | "analytics"

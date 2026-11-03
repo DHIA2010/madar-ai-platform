@@ -1,9 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useRef, useState } from "react"
+import Link from "next/link"
 import { ArrowLeft, Check, Crown, Gift, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 
 import { MADAR_REGISTER_URL } from "../marketing-constants"
 import type { PublicApplicationPricing, PublicPackage } from "../pricing-data"
@@ -27,57 +29,173 @@ const PACKAGE_LABEL: Record<string, string> = {
 }
 
 // The main apps, as tabs in this order.
-const TAB_ORDER = ["pos", "ecommerce", "advertising"]
-// Not shown on the website ("madarApps" is a retired bundle).
-const HIDDEN = ["madarApps", "customReports"]
+const MAIN_APPS = ["advertising", "ecommerce", "pos"]
+// Not shown as apps here ("madarApps" is a retired bundle; Madar Complete has its own banner).
+const HIDDEN = ["madarApps", "customReports", "madarComplete"]
 
 type Interval = "monthly" | "yearly"
 
 const sar = (halalas: number) =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(halalas / 100)
 
-function priceOf(pkg: PublicPackage, interval: Interval) {
-  return interval === "yearly" ? pkg.yearlyPriceHalalas : pkg.monthlyPriceHalalas
-}
-
 function freeLabel(days: number | null) {
   if (!days || days >= 365) return "مجانًا لمدة سنة"
   return `مجانًا لمدة ${days} يومًا`
 }
 
-export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[] }) {
-  const tiered = useMemo(
-    () =>
-      pricing
-        .filter(
-          (entry) =>
-            entry.mode === "packages" &&
-            entry.packages.length > 1 &&
-            TAB_ORDER.includes(entry.application)
-        )
-        .sort(
-          (left, right) =>
-            TAB_ORDER.indexOf(left.application) - TAB_ORDER.indexOf(right.application)
-        ),
-    [pricing]
+// What's actually on sale: every package for a tiered app, only the first one for a fixed-price
+// or free app (the marketplace ignores the rest).
+function offeredPackages(entry: PublicApplicationPricing) {
+  return entry.mode === "packages" ? entry.packages : entry.packages.slice(0, 1)
+}
+
+function PackageCard({
+  entry,
+  pkg,
+  interval,
+  single,
+}: {
+  entry: PublicApplicationPricing
+  pkg: PublicPackage | null
+  interval: Interval
+  single: boolean
+}) {
+  const isFree = entry.mode === "free"
+  const isContact = entry.mode === "contact" || (!pkg && !isFree)
+  const highlighted = Boolean(pkg?.isRecommended) && !single
+  const price = pkg
+    ? interval === "yearly"
+      ? pkg.yearlyPriceHalalas
+      : pkg.monthlyPriceHalalas
+    : null
+  const saving =
+    interval === "yearly" && pkg && price !== null && pkg.monthlyPriceHalalas !== null
+      ? pkg.monthlyPriceHalalas * 12 - price
+      : 0
+  const title =
+    entry.mode === "packages" && pkg
+      ? (PACKAGE_LABEL[pkg.name] ?? pkg.name)
+      : (APP_LABEL[entry.application] ?? entry.application)
+  const muted = highlighted ? "text-slate-300" : "text-slate-500"
+
+  return (
+    <div
+      className={cn(
+        "relative flex flex-col rounded-3xl border p-8",
+        highlighted
+          ? "border-transparent bg-[#0b1738] text-white shadow-[0_30px_70px_-25px_rgba(11,23,56,0.6)]"
+          : "border-slate-200 bg-white"
+      )}
+    >
+      {highlighted ? (
+        <span className="absolute -top-3.5 start-8 rounded-full bg-gradient-to-l from-[#12b5a6] to-[#2563eb] px-3.5 py-1 text-[12.5px] font-extrabold text-white">
+          الأكثر طلبًا
+        </span>
+      ) : null}
+      <h3 className={cn("text-xl font-extrabold", highlighted ? "text-white" : "text-[#0b1738]")}>
+        {title}
+      </h3>
+
+      <div className="mt-5 min-h-[60px]">
+        {isFree ? (
+          <>
+            <span className="text-4xl font-black tracking-tight text-emerald-600">مجانًا</span>
+            <p className="mt-1 text-[14px] font-bold text-emerald-700">
+              {freeLabel(entry.freeDays)} عند التفعيل
+            </p>
+          </>
+        ) : isContact ? (
+          <span className="text-3xl font-black">تواصل معنا</span>
+        ) : price === null ? (
+          <span className="text-2xl font-black">متاح بالاشتراك الشهري فقط</span>
+        ) : (
+          <div className="flex items-baseline gap-2">
+            <span className="text-5xl font-black tracking-tight">{sar(price)}</span>
+            <span className={cn("text-[15px] font-bold", muted)}>
+              ر.س / {interval === "yearly" ? "سنة" : "شهر"}
+            </span>
+          </div>
+        )}
+      </div>
+      <p
+        className={cn(
+          "mt-2 h-5 text-[13px] font-bold",
+          highlighted ? "text-[#5eead4]" : "text-emerald-600"
+        )}
+      >
+        {saving > 0 ? `توفّر ${sar(saving)} ر.س مقارنة بالدفع الشهري` : ""}
+      </p>
+
+      <ul className="mt-6 flex-1 space-y-3">
+        {(pkg?.features ?? []).map((feature) => (
+          <li key={feature} className="flex items-start gap-2.5 text-[15px] font-semibold">
+            <Check
+              className={cn(
+                "mt-0.5 size-5 shrink-0",
+                highlighted ? "text-[#5eead4]" : "text-[#12b5a6]"
+              )}
+              strokeWidth={3}
+            />
+            {feature}
+          </li>
+        ))}
+      </ul>
+
+      {isContact ? (
+        <Link
+          href={ROUTES.contactSales}
+          className="mt-8 rounded-full bg-slate-100 py-3.5 text-center text-[15px] font-bold text-[#0b1738] transition-all hover:-translate-y-px hover:bg-slate-200"
+        >
+          تحدث مع المبيعات
+        </Link>
+      ) : (
+        <a
+          href={MADAR_REGISTER_URL}
+          className={cn(
+            "mt-8 rounded-full py-3.5 text-center text-[15px] font-bold transition-all hover:-translate-y-px",
+            highlighted || single
+              ? "bg-[#2878ff] text-white hover:bg-[#1f63d6]"
+              : "bg-slate-100 text-[#0b1738] hover:bg-slate-200"
+          )}
+        >
+          {isFree ? "فعّله مجانًا" : "ابدأ التجربة المجانية"}
+        </a>
+      )}
+    </div>
   )
-  const extras = pricing.filter(
+}
+
+export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[] }) {
+  const visible = pricing.filter((entry) => !HIDDEN.includes(entry.application))
+  const tabs = MAIN_APPS.map((app) => visible.find((entry) => entry.application === app)).filter(
+    (entry): entry is PublicApplicationPricing => Boolean(entry)
+  )
+  const extras = visible.filter(
     (entry) =>
-      entry.application !== "madarComplete" &&
-      !HIDDEN.includes(entry.application) &&
-      !tiered.includes(entry) &&
-      (entry.mode === "free" || entry.packages.length > 0)
+      !MAIN_APPS.includes(entry.application) &&
+      (entry.mode === "free" || entry.mode === "contact" || entry.packages.length > 0)
   )
   const complete = pricing.find((entry) => entry.application === "madarComplete")
 
-  const [selected, setSelected] = useState(tiered[0]?.application ?? "")
+  const [selectedApp, setSelectedApp] = useState(tabs[0]?.application ?? extras[0]?.application)
   const [interval, setBillingInterval] = useState<Interval>("monthly")
-  const current = tiered.find((entry) => entry.application === selected) ?? tiered[0]
-  const hasYearly = current?.packages.some((p) => p.yearlyPriceHalalas !== null) ?? false
+  const plansRef = useRef<HTMLDivElement>(null)
+
+  const current = visible.find((entry) => entry.application === selectedApp) ?? tabs[0]
+  const packages = current ? offeredPackages(current) : []
+  const hasYearly =
+    current?.mode !== "free" && packages.some((pkg) => pkg.yearlyPriceHalalas !== null)
   const activeInterval: Interval = hasYearly ? interval : "monthly"
+  const single = packages.length <= 1
+
+  // Picking an extra app shows its plan where the main plans are.
+  function showExtra(application: string) {
+    setSelectedApp(application)
+    plansRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   return (
-    <section id="pricing" className="scroll-mt-20 bg-white py-24 sm:py-28">
+    <section id="pricing" className="scroll-mt-24 bg-white py-24 sm:py-28">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-extrabold text-[#2878ff]">الأسعار</p>
@@ -90,142 +208,86 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
           </p>
         </div>
 
-        {current ? (
-          <>
-            <div className="mt-12 flex flex-col items-center gap-4">
-              <div
-                role="tablist"
-                className="flex flex-wrap justify-center gap-1 rounded-2xl bg-slate-100 p-1.5"
-              >
-                {tiered.map((entry) => (
+        <div ref={plansRef} className="scroll-mt-28">
+          <div className="mt-12 flex flex-col items-center gap-4">
+            <div
+              role="tablist"
+              aria-label="التطبيقات"
+              className="flex flex-wrap justify-center gap-1 rounded-2xl bg-slate-100 p-1.5"
+            >
+              {tabs.map((entry) => (
+                <button
+                  key={entry.application}
+                  type="button"
+                  role="tab"
+                  aria-selected={entry.application === current?.application}
+                  onClick={() => setSelectedApp(entry.application)}
+                  className={cn(
+                    "rounded-xl px-5 py-2.5 text-[15px] font-bold transition-all",
+                    entry.application === current?.application
+                      ? "bg-white text-[#0b1738] shadow-sm"
+                      : "text-slate-500 hover:text-[#0b1738]"
+                  )}
+                >
+                  {APP_LABEL[entry.application] ?? entry.application}
+                </button>
+              ))}
+            </div>
+            {current && !MAIN_APPS.includes(current.application) ? (
+              <p className="text-[14px] font-bold text-[#2878ff]">
+                تعرض الآن: {APP_LABEL[current.application] ?? current.application}
+              </p>
+            ) : null}
+            {hasYearly ? (
+              <div className="flex items-center gap-1 rounded-full border border-slate-200 p-1 text-[14px] font-bold">
+                {(["monthly", "yearly"] as const).map((option) => (
                   <button
-                    key={entry.application}
+                    key={option}
                     type="button"
-                    role="tab"
-                    aria-selected={entry.application === current.application}
-                    onClick={() => setSelected(entry.application)}
+                    onClick={() => setBillingInterval(option)}
                     className={cn(
-                      "rounded-xl px-4 py-2.5 text-[14.5px] font-bold transition-all",
-                      entry.application === current.application
-                        ? "bg-white text-[#0b1738] shadow-sm"
+                      "rounded-full px-5 py-2 transition-colors",
+                      activeInterval === option
+                        ? "bg-[#0b1738] text-white"
                         : "text-slate-500 hover:text-[#0b1738]"
                     )}
                   >
-                    {APP_LABEL[entry.application] ?? entry.application}
+                    {option === "monthly" ? "شهري" : "سنوي"}
                   </button>
                 ))}
               </div>
-              {hasYearly ? (
-                <div className="flex items-center gap-1 rounded-full border border-slate-200 p-1 text-[14px] font-bold">
-                  {(["monthly", "yearly"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setBillingInterval(option)}
-                      className={cn(
-                        "rounded-full px-5 py-2 transition-colors",
-                        activeInterval === option
-                          ? "bg-[#0b1738] text-white"
-                          : "text-slate-500 hover:text-[#0b1738]"
-                      )}
-                    >
-                      {option === "monthly" ? "شهري" : "سنوي"}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            ) : null}
+          </div>
 
-            <div className="mx-auto mt-10 grid max-w-6xl gap-6 md:grid-cols-3">
-              {current.packages.map((pkg) => {
-                const price = priceOf(pkg, activeInterval)
-                const monthly = pkg.monthlyPriceHalalas
-                const saving =
-                  activeInterval === "yearly" && price !== null && monthly !== null
-                    ? monthly * 12 - price
-                    : 0
-                return (
-                  <div
+          {current ? (
+            <div
+              key={current.application}
+              className={cn(
+                "mx-auto mt-10 grid gap-6",
+                single ? "max-w-md" : "max-w-6xl md:grid-cols-3"
+              )}
+            >
+              {single ? (
+                <PackageCard
+                  entry={current}
+                  pkg={packages[0] ?? null}
+                  interval={activeInterval}
+                  single
+                />
+              ) : (
+                packages.map((pkg) => (
+                  <PackageCard
                     key={pkg.name}
-                    className={cn(
-                      "relative flex flex-col rounded-3xl border p-8",
-                      pkg.isRecommended
-                        ? "border-transparent bg-[#0b1738] text-white shadow-[0_30px_70px_-25px_rgba(11,23,56,0.6)]"
-                        : "border-slate-200 bg-white"
-                    )}
-                  >
-                    {pkg.isRecommended ? (
-                      <span className="absolute -top-3.5 start-8 rounded-full bg-gradient-to-l from-[#12b5a6] to-[#2563eb] px-3.5 py-1 text-[12.5px] font-extrabold text-white">
-                        الأكثر طلبًا
-                      </span>
-                    ) : null}
-                    <h3
-                      className={cn(
-                        "text-xl font-extrabold",
-                        pkg.isRecommended ? "text-white" : "text-[#0b1738]"
-                      )}
-                    >
-                      {PACKAGE_LABEL[pkg.name] ?? pkg.name}
-                    </h3>
-                    <div className="mt-5 flex items-baseline gap-2">
-                      {price === null ? (
-                        <span className="text-2xl font-black">غير متاح سنويًا</span>
-                      ) : (
-                        <>
-                          <span className="text-5xl font-black tracking-tight">{sar(price)}</span>
-                          <span
-                            className={cn(
-                              "text-[15px] font-bold",
-                              pkg.isRecommended ? "text-slate-300" : "text-slate-500"
-                            )}
-                          >
-                            ر.س / {activeInterval === "yearly" ? "سنة" : "شهر"}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    <p
-                      className={cn(
-                        "mt-2 h-5 text-[13px] font-bold",
-                        pkg.isRecommended ? "text-[#5eead4]" : "text-emerald-600"
-                      )}
-                    >
-                      {saving > 0 ? `توفّر ${sar(saving)} ر.س مقارنة بالدفع الشهري` : ""}
-                    </p>
-                    <ul className="mt-6 flex-1 space-y-3">
-                      {pkg.features.map((feature) => (
-                        <li
-                          key={feature}
-                          className="flex items-start gap-2.5 text-[15px] font-semibold"
-                        >
-                          <Check
-                            className={cn(
-                              "mt-0.5 size-5 shrink-0",
-                              pkg.isRecommended ? "text-[#5eead4]" : "text-[#12b5a6]"
-                            )}
-                            strokeWidth={3}
-                          />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <a
-                      href={MADAR_REGISTER_URL}
-                      className={cn(
-                        "mt-8 rounded-full py-3.5 text-center text-[15px] font-bold transition-all hover:-translate-y-px",
-                        pkg.isRecommended
-                          ? "bg-[#2878ff] text-white hover:bg-[#1f63d6]"
-                          : "bg-slate-100 text-[#0b1738] hover:bg-slate-200"
-                      )}
-                    >
-                      ابدأ التجربة المجانية
-                    </a>
-                  </div>
-                )
-              })}
+                    entry={current}
+                    pkg={pkg}
+                    interval={activeInterval}
+                    single={false}
+                  />
+                ))
+              )}
             </div>
-          </>
-        ) : null}
+          ) : null}
+        </div>
 
         {extras.length > 0 ? (
           <div className="mx-auto mt-14 max-w-6xl">
@@ -234,14 +296,21 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
             </h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {extras.map((entry) => {
-                const first = entry.packages[0]
+                const first = offeredPackages(entry)[0]
                 const isFree = entry.mode === "free"
+                const isSelected = entry.application === current?.application
                 return (
-                  <div
+                  <button
                     key={entry.application}
-                    className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5"
+                    type="button"
+                    onClick={() => showExtra(entry.application)}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      "flex items-center justify-between gap-4 rounded-2xl border-2 bg-white p-5 text-start transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-24px_rgba(11,23,56,0.35)]",
+                      isSelected ? "border-[#2878ff]" : "border-slate-200"
+                    )}
                   >
-                    <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-3">
                       <span
                         className={cn(
                           "flex size-10 items-center justify-center rounded-xl",
@@ -250,10 +319,15 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
                       >
                         {isFree ? <Gift className="size-5" /> : <Sparkles className="size-5" />}
                       </span>
-                      <span className="text-[15.5px] font-extrabold text-[#0b1738]">
-                        {APP_LABEL[entry.application] ?? entry.application}
+                      <span>
+                        <span className="block text-[15.5px] font-extrabold text-[#0b1738]">
+                          {APP_LABEL[entry.application] ?? entry.application}
+                        </span>
+                        <span className="text-[12.5px] font-semibold text-[#2878ff]">
+                          عرض التفاصيل
+                        </span>
                       </span>
-                    </div>
+                    </span>
                     <span className="text-end text-[14px] font-bold text-[#0b1738]">
                       {isFree
                         ? freeLabel(entry.freeDays)
@@ -265,7 +339,7 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
                               ? `${sar(first.yearlyPriceHalalas)} ر.س / سنة`
                               : "تواصل معنا"}
                     </span>
-                  </div>
+                  </button>
                 )
               })}
             </div>

@@ -50,28 +50,34 @@ export function MarketingHeader() {
           />
         </Link>
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="التنقل الرئيسي">
+        <nav className="hidden items-center gap-1 xl:flex" aria-label="التنقل الرئيسي">
           {MARKETING_NAV_LINKS.map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="rounded-full px-4 py-2 text-[15px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-[#0b1738]"
+              className="rounded-full px-4 py-2 text-[15px] font-semibold whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-[#0b1738]"
             >
               {link.label}
             </a>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 lg:flex">
+        <div className="hidden items-center gap-2 xl:flex">
           <a
             href={MADAR_LOGIN_URL}
-            className="rounded-full px-4 py-2.5 text-[15px] font-semibold text-[#0b1738] transition-colors hover:bg-slate-100"
+            className="rounded-full px-4 py-2.5 text-[15px] font-semibold whitespace-nowrap text-[#0b1738] transition-colors hover:bg-slate-100"
           >
             تسجيل الدخول
           </a>
+          <Link
+            href={ROUTES.contactSales}
+            className="rounded-full border border-slate-200 px-4 py-2.5 text-[15px] font-bold whitespace-nowrap text-[#0b1738] transition-colors hover:border-slate-300 hover:bg-slate-50"
+          >
+            تحدث مع المبيعات
+          </Link>
           <a
             href={MADAR_REGISTER_URL}
-            className="group inline-flex items-center gap-2 rounded-full bg-[#0b1738] px-5 py-2.5 text-[15px] font-bold text-white shadow-[0_10px_24px_rgba(11,23,56,0.22)] transition-all hover:-translate-y-px hover:bg-[#13245a]"
+            className="group inline-flex items-center gap-2 rounded-full bg-[#0b1738] px-5 py-2.5 text-[15px] font-bold whitespace-nowrap text-white shadow-[0_10px_24px_rgba(11,23,56,0.22)] transition-all hover:-translate-y-px hover:bg-[#13245a]"
           >
             ابدأ مجانًا
             <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
@@ -81,7 +87,7 @@ export function MarketingHeader() {
         <button
           type="button"
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="flex size-11 items-center justify-center rounded-full text-[#0b1738] hover:bg-slate-100 lg:hidden"
+          className="flex size-11 items-center justify-center rounded-full text-[#0b1738] hover:bg-slate-100 xl:hidden"
           aria-label={isMenuOpen ? "إغلاق القائمة" : "فتح القائمة"}
           aria-expanded={isMenuOpen}
         >
@@ -90,7 +96,7 @@ export function MarketingHeader() {
       </div>
 
       {isMenuOpen ? (
-        <div className="border-t border-slate-200 bg-white px-4 pt-3 pb-6 lg:hidden">
+        <div className="border-t border-slate-200 bg-white px-4 pt-3 pb-6 xl:hidden">
           <nav className="flex flex-col" aria-label="التنقل الرئيسي">
             {MARKETING_NAV_LINKS.map((link) => (
               <a
@@ -103,7 +109,14 @@ export function MarketingHeader() {
               </a>
             ))}
           </nav>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <Link
+            href={ROUTES.contactSales}
+            onClick={() => setIsMenuOpen(false)}
+            className="mt-4 block rounded-full border border-slate-200 py-3 text-center text-[15px] font-bold text-[#0b1738]"
+          >
+            تحدث مع المبيعات
+          </Link>
+          <div className="mt-3 grid grid-cols-2 gap-3">
             <a
               href={MADAR_LOGIN_URL}
               className="rounded-full border border-slate-200 py-3 text-center text-[15px] font-semibold text-[#0b1738]"

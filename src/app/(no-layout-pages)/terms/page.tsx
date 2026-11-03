@@ -1,163 +1,164 @@
 import type { Metadata } from "next"
 
+import { ROUTES } from "@/constants/routes"
+
 import { LegalPageShell } from "@/features/marketing-site/components/legal-page-shell"
-import { MADAR_CONTACT_EMAIL, MADAR_APP_URL } from "@/features/marketing-site/marketing-constants"
+import { MADAR_APP_URL, MADAR_CONTACT_EMAIL } from "@/features/marketing-site/marketing-constants"
 
 export const metadata: Metadata = {
-  title: "Terms of Service",
-  description:
-    "MADAR Terms of Service for the marketing intelligence platform and its integrations.",
-  alternates: { canonical: "https://madar.my/terms" },
+  title: { absolute: "شروط الاستخدام | مدار" },
+  description: "شروط استخدام منصة مدار لتحليلات التسويق وتكاملاتها.",
+  alternates: {
+    canonical: "https://madar.my/terms",
+    languages: { ar: "https://madar.my/terms", en: "https://madar.my/terms/en" },
+  },
 }
 
-const EFFECTIVE_DATE = "July 10, 2026"
+const EFFECTIVE_DATE = "10 يوليو 2026"
 
+// Arabic translation of terms/en/page.tsx -- keep the two in step.
 export default function TermsPage() {
   return (
     <LegalPageShell
-      title="Terms of Service"
+      title="شروط الاستخدام"
       effectiveDate={EFFECTIVE_DATE}
+      alternateHref={ROUTES.termsEnglish}
       intro={
         <>
-          These Terms of Service (&ldquo;Terms&rdquo;) govern access to and use of MADAR, a
-          marketing analytics and intelligence platform, available at{" "}
+          تحكم شروط الاستخدام هذه («الشروط») الوصول إلى مدار واستخدامها، وهي منصة لتحليلات التسويق
+          متاحة على{" "}
           <a
             href={MADAR_APP_URL}
-            className="font-medium text-slate-900 underline underline-offset-2"
+            className="font-semibold text-slate-900 underline underline-offset-2"
+            dir="ltr"
           >
             app.madar.my
           </a>
-          . By creating an account or using MADAR, you agree to these Terms.
+          . وبإنشائك حسابًا أو استخدامك لمدار، فإنك توافق على هذه الشروط.
         </>
       }
     >
       <section>
-        <h2>1. Acceptance of Terms</h2>
+        <h2>1. قبول الشروط</h2>
         <p>
-          By accessing or using MADAR, you confirm that you are authorized to act on behalf of the
-          business or organization using the platform, and that you accept these Terms in full. If
-          you do not agree with these Terms, do not use MADAR.
+          بوصولك إلى مدار أو استخدامها، فإنك تؤكد أنك مخوّل بالتصرف نيابةً عن المنشأة أو الجهة التي
+          تستخدم المنصة، وأنك تقبل هذه الشروط كاملةً. وإذا كنت لا توافق على هذه الشروط، فلا تستخدم
+          مدار.
         </p>
       </section>
 
       <section>
-        <h2>2. Description of Service</h2>
+        <h2>2. وصف الخدمة</h2>
         <p>
-          MADAR is a software-as-a-service marketing intelligence platform for e-commerce
-          businesses. MADAR connects to authorized advertising, analytics, and commerce platforms to
-          retrieve performance data and present it through dashboards, reports, and analytics tools.
+          مدار منصة برمجية تُقدَّم كخدمة (SaaS) لتحليلات التسويق موجهة لمنشآت التجارة الإلكترونية.
+          وترتبط مدار بالمنصات الإعلانية ومنصات التحليلات والتجارة المصرّح بها لاسترجاع بيانات
+          الأداء وعرضها عبر لوحات المعلومات والتقارير وأدوات التحليل.
         </p>
-        <p className="mt-3 font-medium">
-          MADAR only reads data from connected platforms. MADAR does not create, modify, publish,
-          pause, or otherwise manage advertising campaigns on any connected platform on your behalf.
-        </p>
-      </section>
-
-      <section>
-        <h2>3. User Accounts</h2>
-        <p>
-          You are responsible for maintaining the confidentiality of your account credentials and
-          for all activity that occurs under your account. You agree to provide accurate information
-          when creating an account and to keep that information up to date.
+        <p className="mt-3 font-semibold">
+          تقتصر مدار على قراءة البيانات من المنصات المرتبطة، ولا تنشئ الحملات الإعلانية أو تعدّلها
+          أو تنشرها أو توقفها أو تديرها بأي شكل آخر نيابةً عنك على أي منصة مرتبطة.
         </p>
       </section>
 
       <section>
-        <h2>4. Third-Party Integrations</h2>
+        <h2>3. حسابات المستخدمين</h2>
         <p>
-          MADAR integrates with third-party platforms, including advertising, analytics, and
-          e-commerce platforms, through each platform&rsquo;s official APIs and OAuth authorization
-          flows. Your use of those platforms remains subject to their own terms of service and
-          policies.
+          أنت مسؤول عن الحفاظ على سرية بيانات الدخول إلى حسابك، وعن جميع الأنشطة التي تتم من خلال
+          حسابك. وتوافق على تقديم معلومات دقيقة عند إنشاء الحساب، وعلى تحديث هذه المعلومات باستمرار.
+        </p>
+      </section>
+
+      <section>
+        <h2>4. تكاملات الجهات الخارجية</h2>
+        <p>
+          تتكامل مدار مع منصات تابعة لجهات خارجية، بما في ذلك منصات الإعلانات والتحليلات والتجارة
+          الإلكترونية، عبر واجهات برمجة التطبيقات الرسمية لكل منصة وآليات التصريح عبر OAuth. ويظل
+          استخدامك لتلك المنصات خاضعًا لشروط الخدمة والسياسات الخاصة بها.
         </p>
         <p className="mt-3">
-          MADAR is not responsible for the availability, accuracy, or behavior of third-party
-          platforms, and integration functionality may change if a third-party platform changes or
-          restricts its API.
+          لا تتحمل مدار المسؤولية عن توفر منصات الجهات الخارجية أو دقتها أو سلوكها، وقد تتغير وظائف
+          التكامل إذا غيّرت منصة خارجية واجهتها البرمجية أو قيّدتها.
         </p>
       </section>
 
       <section>
-        <h2>5. Authorized Data Access</h2>
+        <h2>5. الوصول المصرّح به إلى البيانات</h2>
         <p>
-          When you connect a third-party account to MADAR, you authorize MADAR to access and
-          retrieve data from that account through the applicable platform&rsquo;s API, for the
-          purpose of providing analytics and reporting within MADAR. You may disconnect an
-          integration at any time from within the platform, which stops future data synchronization
-          for that connection.
+          عند ربطك حسابًا تابعًا لجهة خارجية بمدار، فإنك تصرّح لمدار بالوصول إلى بيانات ذلك الحساب
+          واسترجاعها عبر الواجهة البرمجية للمنصة المعنية، بغرض تقديم التحليلات والتقارير داخل مدار.
+          ويمكنك فصل أي تكامل في أي وقت من داخل المنصة، مما يوقف مزامنة البيانات مستقبلًا لذلك
+          الربط.
         </p>
       </section>
 
       <section>
-        <h2>6. Acceptable Use</h2>
-        <p>You agree not to:</p>
+        <h2>6. الاستخدام المقبول</h2>
+        <p>توافق على عدم القيام بما يلي:</p>
         <ul>
-          <li>Use MADAR for any unlawful purpose or in violation of any applicable law.</li>
+          <li>استخدام مدار لأي غرض غير مشروع أو بما يخالف أي نظام معمول به.</li>
           <li>
-            Attempt to gain unauthorized access to MADAR, other users&rsquo; accounts, or connected
-            third-party accounts.
+            محاولة الوصول غير المصرّح به إلى مدار أو إلى حسابات المستخدمين الآخرين أو حسابات الجهات
+            الخارجية المرتبطة.
           </li>
-          <li>Interfere with or disrupt the integrity or performance of MADAR.</li>
-          <li>Reverse engineer, decompile, or attempt to extract the source code of MADAR.</li>
-          <li>Use MADAR to violate the terms of service of any connected third-party platform.</li>
+          <li>التدخل في سلامة مدار أو أدائها أو تعطيلهما.</li>
+          <li>إجراء الهندسة العكسية لمدار أو تفكيكها أو محاولة استخراج شيفرتها المصدرية.</li>
+          <li>استخدام مدار لمخالفة شروط الخدمة لأي منصة خارجية مرتبطة.</li>
         </ul>
       </section>
 
       <section>
-        <h2>7. Intellectual Property</h2>
+        <h2>7. الملكية الفكرية</h2>
         <p>
-          MADAR, including its software, design, branding, and underlying technology, is the
-          property of its operator. These Terms do not grant you any ownership rights in MADAR. You
-          retain ownership of the data you connect to MADAR from your own advertising and commerce
-          accounts.
+          مدار، بما في ذلك برمجياتها وتصميمها وعلامتها التجارية والتقنيات التي تقوم عليها، مملوكة
+          للجهة المشغّلة لها. ولا تمنحك هذه الشروط أي حقوق ملكية في مدار. وتظل مالكًا للبيانات التي
+          تربطها بمدار من حساباتك الإعلانية والتجارية.
         </p>
       </section>
 
       <section>
-        <h2>8. Service Availability</h2>
+        <h2>8. توفر الخدمة</h2>
         <p>
-          MADAR is provided on an &ldquo;as available&rdquo; basis. While we aim to keep the
-          platform reliable, we do not guarantee uninterrupted or error-free operation, and
-          scheduled maintenance or third-party platform changes may temporarily affect availability.
+          تُقدَّم مدار «حسب التوفر». ورغم سعينا للحفاظ على موثوقية المنصة، فإننا لا نضمن تشغيلها دون
+          انقطاع أو أخطاء، وقد تؤثر أعمال الصيانة المجدولة أو التغييرات في منصات الجهات الخارجية
+          مؤقتًا على توفرها.
         </p>
       </section>
 
       <section>
-        <h2>9. Limitation of Liability</h2>
+        <h2>9. حدود المسؤولية</h2>
         <p>
-          To the fullest extent permitted by law, MADAR and its operators are not liable for
-          indirect, incidental, or consequential damages arising from your use of the platform,
-          including damages resulting from third-party platform outages, data inaccuracies, or
-          decisions made based on MADAR&rsquo;s analytics and reporting.
+          إلى أقصى حد يسمح به النظام، لا تتحمل مدار ومشغّلوها المسؤولية عن الأضرار غير المباشرة أو
+          العرضية أو التبعية الناشئة عن استخدامك للمنصة، بما في ذلك الأضرار الناتجة عن انقطاع منصات
+          الجهات الخارجية، أو عدم دقة البيانات، أو القرارات المتخذة بناءً على تحليلات مدار
+          وتقاريرها.
         </p>
       </section>
 
       <section>
-        <h2>10. Termination</h2>
+        <h2>10. إنهاء الاستخدام</h2>
         <p>
-          You may stop using MADAR and disconnect your integrations at any time. We may suspend or
-          terminate access to MADAR for accounts that violate these Terms or that pose a security or
-          operational risk to the platform.
+          يمكنك التوقف عن استخدام مدار وفصل تكاملاتك في أي وقت. ويجوز لنا تعليق الوصول إلى مدار أو
+          إنهاؤه للحسابات التي تخالف هذه الشروط أو التي تشكّل خطرًا أمنيًا أو تشغيليًا على المنصة.
         </p>
       </section>
 
       <section>
-        <h2>11. Changes to Terms</h2>
+        <h2>11. التعديلات على الشروط</h2>
         <p>
-          We may update these Terms from time to time to reflect changes in the platform or
-          applicable law. Material changes will be communicated through the platform or by email
-          where reasonably possible. Continued use of MADAR after changes take effect constitutes
-          acceptance of the updated Terms.
+          قد نحدّث هذه الشروط من وقت لآخر لتعكس التغييرات في المنصة أو في الأنظمة المعمول بها. وسيتم
+          إبلاغك بالتغييرات الجوهرية عبر المنصة أو بالبريد الإلكتروني متى كان ذلك ممكنًا بشكل معقول.
+          ويُعد استمرارك في استخدام مدار بعد سريان التغييرات قبولًا للشروط المحدّثة.
         </p>
       </section>
 
       <section>
-        <h2>12. Contact Information</h2>
+        <h2>12. معلومات التواصل</h2>
         <p>
-          For questions about these Terms, contact:{" "}
+          للاستفسارات المتعلقة بهذه الشروط، تواصل معنا عبر:{" "}
           <a
-            className="font-medium text-slate-900 underline underline-offset-2"
+            className="font-semibold text-slate-900 underline underline-offset-2"
             href={`mailto:${MADAR_CONTACT_EMAIL}`}
+            dir="ltr"
           >
             {MADAR_CONTACT_EMAIL}
           </a>
