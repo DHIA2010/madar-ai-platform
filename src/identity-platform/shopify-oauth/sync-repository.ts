@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { announceNewStoreOrders, findUnseenOrders } from "../notifications/store-orders"
 import type { IntegrationRecordView, IntegrationSyncRunView } from "../integrations/provider-models"
 import { loadSyncComponents, type SyncComponentSettings } from "../integrations/sync-components"
 
@@ -170,6 +171,13 @@ export class ShopifySyncRepository {
     customerId: string
     records: ShopifySyncRecordInput[]
   }): Promise<number> {
+    // Orders this connection hasn't stored before -- announced once the batch is saved.
+    const unseenOrders = await findUnseenOrders(
+      this.db,
+      "shopify",
+      input.connectionId,
+      input.records
+    )
     let written = 0
     for (let offset = 0; offset < input.records.length; offset += UPSERT_BATCH_SIZE) {
       const batch = input.records.slice(offset, offset + UPSERT_BATCH_SIZE)
@@ -207,6 +215,7 @@ export class ShopifySyncRepository {
       )
       written += batch.length
     }
+    await announceNewStoreOrders(this.db, "shopify", input.connectionId, unseenOrders)
     return written
   }
 

@@ -4,6 +4,7 @@ import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { ERRORS } from "../../application/errors/IdentityError"
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { writeAuditLog } from "../../infrastructure/postgres/audit-log-writer"
+import { notify } from "../../notifications/service"
 import type { CouponService } from "../../coupons/service"
 import type { PricingService } from "../../pricing/service"
 import { activationSettingsPatch } from "../../subscriptions/activation"
@@ -208,6 +209,20 @@ export class MoyasarBillingService {
           },
         })
       }
+
+      // Tells the customer's owners/admins whether the payment went through.
+      await notify(this.db, {
+        organizationId: payment.organizationId,
+        type: isGenuinelyPaid ? "payment_succeeded" : "payment_failed",
+        audience: "admin",
+        params: {
+          application: payment.application,
+          amount: payment.amount / 100,
+          currency: payment.currency,
+        },
+        link: "/marketplace",
+        dedupeKey: `payment:${payment.id}`,
+      })
 
       return resolved
     })

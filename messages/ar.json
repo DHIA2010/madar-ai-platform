@@ -5866,43 +5866,86 @@
     "notificationDropdown": {
       "title": "الإشعارات",
       "unreadCount": "{count} غير مقروء",
-      "viewAll": "عرض كل الإشعارات",
-      "timeAgo": {
-        "minutes": "قبل {count} د",
-        "hours": "قبل {count} س"
+      "markAllRead": "تحديد الكل كمقروء",
+      "emptyTitle": "لا توجد إشعارات",
+      "emptyDescription": "ستظهر هنا تنبيهات المخزون والطلبات الجديدة والاشتراكات.",
+      "labels": {
+        "platforms": {
+          "salla": "سلة",
+          "zid": "زد",
+          "shopify": "Shopify",
+          "google": "Google",
+          "google-ads": "Google Ads",
+          "google-analytics": "Google Analytics",
+          "meta": "Meta",
+          "meta-ads": "Meta",
+          "snapchat-ads": "Snapchat",
+          "tiktok-ads": "TikTok"
+        },
+        "applications": {
+          "pos": "نقطة البيع",
+          "ecommerce": "المتاجر الإلكترونية",
+          "advertising": "الحملات الإعلانية",
+          "procurement": "الموردون والمشتريات",
+          "expenses": "المصروفات",
+          "ai": "الذكاء الاصطناعي",
+          "customReports": "التقارير المخصصة",
+          "madarApps": "تطبيقات مدار",
+          "madarComplete": "مدار الكامل"
+        }
       },
-      "items": {
-        "1": {
-          "title": "تم تقديم طلب جديد",
-          "description": "تم تقديم الطلب رقم 1234"
+      "types": {
+        "stock_low": {
+          "title": "مخزون منخفض: {productName}",
+          "description": "بقي {quantity} في {branchName} (الحد الأدنى {minStock})."
         },
-        "2": {
-          "title": "تم استلام الدفعة",
-          "description": "تم استلام 4,500 ر.س من العميل"
+        "stock_out": {
+          "title": "نفد المخزون: {productName}",
+          "description": "لم يتبقَّ شيء من هذا المنتج في {branchName}."
         },
-        "3": {
-          "title": "تسجيل مستخدم جديد",
-          "description": "انضم مستخدم جديد إلى منصتك"
+        "order_new": {
+          "title": "طلب جديد من {platform} #{orderNumber}",
+          "description": "{customerName} — {amount} {currency}"
         },
-        "4": {
-          "title": "تم تغيير كلمة المرور",
-          "description": "قام مستخدم بتحديث كلمة مرور حسابه"
+        "orders_new_batch": {
+          "title": "{count} طلبات جديدة من {platform}",
+          "description": "اطّلع عليها في صفحة الطلبات."
         },
-        "5": {
-          "title": "تم تجديد الاشتراك",
-          "description": "قام مستخدم بتجديد خطة اشتراكه"
+        "sync_failed": {
+          "title": "فشلت مزامنة {platform}",
+          "description": "تحقق من الربط في صفحة التكاملات وأعد المحاولة."
         },
-        "6": {
-          "title": "تم فتح تذكرة دعم",
-          "description": "قدّم مستخدم طلب دعم جديد"
+        "subscription_ending": {
+          "title": "ينتهي اشتراك {application} قريباً",
+          "description": "ينتهي في {date}. جدّد اشتراكك للاستمرار دون انقطاع."
         },
-        "7": {
-          "title": "تم استلام تقييم جديد",
-          "description": "ترك عميل تقييمًا من 5 نجوم"
+        "subscription_ending_trial": {
+          "title": "تنتهي الفترة التجريبية لـ {application} قريباً",
+          "description": "تنتهي في {date}. اشترك للاستمرار."
         },
-        "8": {
-          "title": "تمت إعادة تشغيل الخادم",
-          "description": "تمت إعادة تشغيل خادم الإنتاج بنجاح"
+        "subscription_expired": {
+          "title": "انتهى اشتراك {application}",
+          "description": "جدّد الاشتراك من صفحة التطبيقات لاستعادة الوصول."
+        },
+        "payment_succeeded": {
+          "title": "تمت عملية الدفع بنجاح",
+          "description": "{amount} {currency} — {application}"
+        },
+        "payment_failed": {
+          "title": "فشلت عملية الدفع",
+          "description": "لم تكتمل عملية دفع {application}. حاول مرة أخرى."
+        },
+        "activation_approved": {
+          "title": "تم تفعيل {application}",
+          "description": "تمت الموافقة على طلب التفعيل ويمكنك استخدامه الآن."
+        },
+        "activation_rejected": {
+          "title": "رُفض طلب تفعيل {application}",
+          "description": "السبب: {reason}"
+        },
+        "activation_rejected_no_reason": {
+          "title": "رُفض طلب تفعيل {application}",
+          "description": "تواصل مع الدعم لمعرفة التفاصيل."
         }
       }
     }

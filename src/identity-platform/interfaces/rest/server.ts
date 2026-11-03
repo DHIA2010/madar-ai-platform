@@ -81,6 +81,7 @@ import { requireProcurementEnabled } from "../../procurement/guards"
 import { requireCustomReportsEnabled } from "../../reports/custom-reports-guard"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { StockCountsService } from "../../inventory/stock-counts-service"
+import { notify, NotificationsService } from "../../notifications/service"
 import { StockTransfersService } from "../../inventory/transfers-service"
 import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
@@ -247,6 +248,7 @@ import {
   createProductCategorySchema,
   createStockCountSchema,
   createStockTransferSchema,
+  markNotificationsReadSchema,
   updateStockCountSchema,
   productCategoryStatusSchema,
   renameProductCategorySchema,
@@ -861,6 +863,9 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  const notificationsService = container.infrastructure.database
+    ? new NotificationsService(container.infrastructure.database)
+    : null
   const stockTransfersService = container.infrastructure.database
     ? new StockTransfersService(container.infrastructure.database)
     : null
@@ -3830,21 +3835,35 @@ export function createIdentityApiServer(
         requirePlatformPermission(actor, "requests:manage")
         const requestId = subscriptionRequestActionMatch[1]
         const action = subscriptionRequestActionMatch[2]
-        if (action === "approve") {
-          return send(
-            200,
-            await container.commands.approveSubscriptionActivationRequest(actor, requestId, context)
-          )
+        const decided =
+          action === "approve"
+            ? await container.commands.approveSubscriptionActivationRequest(
+                actor,
+                requestId,
+                context
+              )
+            : await container.commands.rejectSubscriptionActivationRequest(
+                actor,
+                requestId,
+                rejectSubscriptionActivationRequestSchema.parse(await readJsonBody(request)),
+                context
+              )
+        // Tells the customer's owners/admins how their activation request went.
+        if (container.infrastructure.database) {
+          await notify(container.infrastructure.database, {
+            organizationId: decided.organizationId,
+            type: action === "approve" ? "activation_approved" : "activation_rejected",
+            audience: "admin",
+            params: {
+              application: decided.application,
+              packageName: decided.packageName,
+              reason: decided.rejectionReason,
+            },
+            link: "/marketplace",
+            dedupeKey: `activation:${decided.id}`,
+          })
         }
-        return send(
-          200,
-          await container.commands.rejectSubscriptionActivationRequest(
-            actor,
-            requestId,
-            rejectSubscriptionActivationRequestSchema.parse(await readJsonBody(request)),
-            context
-          )
-        )
+        return send(200, decided)
       }
 
       const organizationSubscriptionRequestsMatch = url.pathname.match(
@@ -4980,6 +4999,25 @@ export function createIdentityApiServer(
       // Products -> Categories: every category the workspace's products carry plus the ones created
       // here, with each one's status (inactive ones are hidden from the cashier). See
       // products/categories-service.ts.
+      // The bell: this person's notifications, and marking them read.
+      if (url.pathname === "/v1/notifications" || url.pathname.startsWith("/v1/notifications/")) {
+        if (!notificationsService) {
+          return send(200, { items: [], unreadCount: 0 })
+        }
+        if (method === "GET" && url.pathname === "/v1/notifications") {
+          return send(200, await notificationsService.list(actor))
+        }
+        if (method === "POST" && url.pathname === "/v1/notifications/read") {
+          const { ids } = markNotificationsReadSchema.parse(await readJsonBody(request))
+          await notificationsService.markRead(actor, ids)
+          return send(200, { ok: true })
+        }
+        if (method === "POST" && url.pathname === "/v1/notifications/read-all") {
+          await notificationsService.markAllRead(actor)
+          return send(200, { ok: true })
+        }
+      }
+
       // Inventory -> stock transfers between branches, and stock takes.
       if (url.pathname.startsWith("/v1/inventory/")) {
         if (!stockTransfersService || !stockCountsService) {

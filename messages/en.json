@@ -5870,43 +5870,86 @@
     "notificationDropdown": {
       "title": "Notifications",
       "unreadCount": "{count} unread",
-      "viewAll": "View all notifications",
-      "timeAgo": {
-        "minutes": "{count}m ago",
-        "hours": "{count}h ago"
+      "markAllRead": "Mark all as read",
+      "emptyTitle": "No notifications",
+      "emptyDescription": "Stock alerts, new orders and subscription updates will show up here.",
+      "labels": {
+        "platforms": {
+          "salla": "Salla",
+          "zid": "Zid",
+          "shopify": "Shopify",
+          "google": "Google",
+          "google-ads": "Google Ads",
+          "google-analytics": "Google Analytics",
+          "meta": "Meta",
+          "meta-ads": "Meta",
+          "snapchat-ads": "Snapchat",
+          "tiktok-ads": "TikTok"
+        },
+        "applications": {
+          "pos": "Point of Sale",
+          "ecommerce": "Online Stores",
+          "advertising": "Ad Campaigns",
+          "procurement": "Supply & Purchase",
+          "expenses": "Expenses",
+          "ai": "AI",
+          "customReports": "Custom Reports",
+          "madarApps": "Madar Apps",
+          "madarComplete": "Madar Complete"
+        }
       },
-      "items": {
-        "1": {
-          "title": "New order placed",
-          "description": "Order #1234 has been placed"
+      "types": {
+        "stock_low": {
+          "title": "Low stock: {productName}",
+          "description": "{quantity} left in {branchName} (minimum {minStock})."
         },
-        "2": {
-          "title": "Payment received",
-          "description": "SAR 4,500 received from client"
+        "stock_out": {
+          "title": "Out of stock: {productName}",
+          "description": "None left in {branchName}."
         },
-        "3": {
-          "title": "New user registered",
-          "description": "A new user joined your platform"
+        "order_new": {
+          "title": "New {platform} order #{orderNumber}",
+          "description": "{customerName} — {amount} {currency}"
         },
-        "4": {
-          "title": "Password changed",
-          "description": "A user updated their account password"
+        "orders_new_batch": {
+          "title": "{count} new {platform} orders",
+          "description": "See them on the Orders page."
         },
-        "5": {
-          "title": "Subscription renewed",
-          "description": "A user renewed their subscription plan"
+        "sync_failed": {
+          "title": "{platform} sync failed",
+          "description": "Check the connection on the Integrations page and try again."
         },
-        "6": {
-          "title": "Support ticket opened",
-          "description": "A user submitted a new support request"
+        "subscription_ending": {
+          "title": "{application} subscription ends soon",
+          "description": "It ends on {date}. Renew to keep it running."
         },
-        "7": {
-          "title": "New review received",
-          "description": "A customer left a 5-star review"
+        "subscription_ending_trial": {
+          "title": "{application} trial ends soon",
+          "description": "It ends on {date}. Subscribe to keep using it."
         },
-        "8": {
-          "title": "Server restarted",
-          "description": "Production server was successfully restarted"
+        "subscription_expired": {
+          "title": "{application} subscription expired",
+          "description": "Renew it from the Apps page to get access back."
+        },
+        "payment_succeeded": {
+          "title": "Payment successful",
+          "description": "{amount} {currency} — {application}"
+        },
+        "payment_failed": {
+          "title": "Payment failed",
+          "description": "The {application} payment didn't go through. Please try again."
+        },
+        "activation_approved": {
+          "title": "{application} activated",
+          "description": "Your activation request was approved and it's ready to use."
+        },
+        "activation_rejected": {
+          "title": "{application} activation rejected",
+          "description": "Reason: {reason}"
+        },
+        "activation_rejected_no_reason": {
+          "title": "{application} activation rejected",
+          "description": "Contact support for details."
         }
       }
     }

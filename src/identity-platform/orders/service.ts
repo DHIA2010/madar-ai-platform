@@ -825,3 +825,16 @@ export class OrdersAggregationService {
     }
   }
 }
+
+// A synced store order's number, customer and total, read the same way the orders list reads
+// them -- for notifying about a new order the moment it's synced.
+export function summarizeStoreOrder(
+  platform: "salla" | "zid" | "shopify",
+  entityId: string,
+  payload: Record<string, unknown>
+): OrderSummaryView {
+  const row: OrderRecordRow = { entity_id: entityId, payload, updated_at: new Date() }
+  if (platform === "salla") return normalizeSallaOrder(row)
+  if (platform === "zid") return normalizeZidOrder(row)
+  return normalizeShopifyOrder(row)
+}

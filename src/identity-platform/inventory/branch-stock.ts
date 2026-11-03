@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { notify } from "../notifications/service"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -116,7 +117,63 @@ export async function recordBranchMovement(
   await settle(db, input, total - input.delta)
   const branch =
     (await ownBranch(db, input.organizationId, input.workspaceId)) ?? (await homeBranch(db, input))
-  if (branch) await addToBranch(db, input, branch, input.delta)
+  if (branch) {
+    await addToBranch(db, input, branch, input.delta)
+    if (input.delta < 0) await alertIfStockFell(db, input, branch, input.delta)
+  }
+}
+
+// Notifies when stock leaving a branch takes a product out of stock there, or to its minimum
+// stock or below -- only on the move that crosses the line (not again on every later sale), and
+// at most once per product, branch and day.
+async function alertIfStockFell(
+  db: PostgresDatabase,
+  key: StockKey,
+  workspaceId: string,
+  delta: number
+): Promise<void> {
+  if (key.variantId) return
+  const result = await db.query<{
+    name: string
+    min_stock: string | number | null
+    quantity: string | number | null
+    branch_name: string | null
+  }>(
+    `SELECT p.name, p.min_stock, b.quantity, w.name AS branch_name
+       FROM products p
+       LEFT JOIN branch_stock b
+         ON b.product_id = p.id AND b.variant_key = '' AND b.workspace_id = $3
+       LEFT JOIN workspaces w ON w.id = $3
+      WHERE p.id = $1 AND p.organization_id = $2`,
+    [key.productId, key.organizationId, workspaceId]
+  )
+  const row = result.rows[0]
+  if (!row) return
+  const after = Number(row.quantity ?? 0)
+  const before = after - delta
+  const minStock = row.min_stock === null ? null : Number(row.min_stock)
+  const type =
+    before > 0 && after <= 0
+      ? "stock_out"
+      : minStock !== null && before > minStock && after <= minStock
+        ? "stock_low"
+        : null
+  if (!type) return
+  await notify(db, {
+    organizationId: key.organizationId,
+    workspaceId,
+    type,
+    audience: "products:view",
+    params: {
+      productId: key.productId,
+      productName: row.name,
+      quantity: after,
+      minStock,
+      branchName: row.branch_name ?? "",
+    },
+    link: "/products",
+    dedupeKey: `${type}:${key.productId}:${workspaceId}:${new Date().toISOString().slice(0, 10)}`,
+  })
 }
 
 // Moves stock between two branches; the total doesn't change.
@@ -129,6 +186,7 @@ export async function moveBetweenBranches(
   await settle(db, input, total)
   await addToBranch(db, input, input.fromWorkspaceId, -input.quantity)
   await addToBranch(db, input, input.toWorkspaceId, input.quantity)
+  await alertIfStockFell(db, input, input.fromWorkspaceId, -input.quantity)
 }
 
 // Each stock-tracked product's quantity in one branch (product level, not variants). Settles every

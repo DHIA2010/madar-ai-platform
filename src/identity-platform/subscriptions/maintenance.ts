@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { EmailGateway } from "../application/ports"
 import { writeAuditLog } from "../infrastructure/postgres/audit-log-writer"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { notify } from "../notifications/service"
 import type { PlatformSettingsRepository } from "../platform-settings/types"
 import { applicationsCoveredBy, deactivationSettingsPatch } from "./activation"
 import { effectiveSubscriptionStatus } from "./lifecycle"
@@ -105,6 +106,18 @@ async function sendReminder(
     [randomUUID(), subscription.id, endsAt]
   )
   if (claimed.rows.length === 0) return false
+  await notify(input.db, {
+    organizationId: subscription.organizationId,
+    type: "subscription_ending",
+    audience: "admin",
+    params: {
+      application: subscription.application,
+      kind: subscription.status === "trial" || subscription.source === "free" ? "trial" : "paid",
+      endsAt,
+    },
+    link: "/marketplace",
+    dedupeKey: `subscription_ending:${subscription.id}:${endsAt}`,
+  })
 
   const owner = await input.db.query<{ name: string; email: string | null }>(
     `SELECT o.name, u.email
@@ -168,6 +181,14 @@ async function expire(
         JSON.stringify({ ...(existing.rows[0]?.settings ?? {}), ...patch }),
       ]
     )
+    await notify(db, {
+      organizationId: subscription.organizationId,
+      type: "subscription_expired",
+      audience: "admin",
+      params: { application: subscription.application },
+      link: "/marketplace",
+      dedupeKey: `subscription_expired:${subscription.id}:${subscription.currentPeriodEnd}`,
+    })
     await writeAuditLog(db, {
       action: "billing.subscription_expired",
       actorUserId: null,

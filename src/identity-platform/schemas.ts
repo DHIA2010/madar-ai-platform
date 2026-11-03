@@ -1358,6 +1358,10 @@ export const syncComponentsSchema = z
 // Products -> Categories (see products/categories-service.ts).
 // z.guid() rather than .uuid(): any UUID-shaped id, including hand-made seed ids that aren't
 // strictly RFC 4122 (the products table accepts them).
+export const markNotificationsReadSchema = z.object({
+  ids: z.array(z.guid()).min(1).max(200),
+})
+
 export const createStockTransferSchema = z.object({
   fromWorkspaceId: z.guid(),
   toWorkspaceId: z.guid(),

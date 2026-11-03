@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto"
 
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { createIdentityPlatformContainer } from "../../dependency-injection/container"
+import { notify } from "../../notifications/service"
 
 import { ScheduleFailureAlertRepository } from "./failure-alert-repository"
 import { computeNextRunAt } from "./next-run"
@@ -130,6 +131,16 @@ async function runTick() {
           scheduleId: schedule.id,
           errorCode: null,
           errorMessage: message,
+        })
+        await notify(database, {
+          organizationId: schedule.organizationId,
+          workspaceId: null,
+          type: "sync_failed",
+          audience: "connections:view",
+          params: { provider: schedule.providerId, connectionId: schedule.connectionId },
+          link: `/integrations/${schedule.connectionId}`,
+          // Once a day per connection, however often its schedule retries.
+          dedupeKey: `sync_failed:${schedule.connectionId}:${new Date().toISOString().slice(0, 10)}`,
         })
       }
     }
