@@ -83,6 +83,7 @@ import { SuppliersService } from "../../procurement/suppliers-service"
 import { StockCountsService } from "../../inventory/stock-counts-service"
 import { notify, NotificationsService } from "../../notifications/service"
 import { BillingOverviewService } from "../../billing/overview-service"
+import { SalesLeadService } from "../../sales-leads/service"
 import { StockTransfersService } from "../../inventory/transfers-service"
 import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
@@ -250,6 +251,7 @@ import {
   createStockCountSchema,
   createStockTransferSchema,
   markNotificationsReadSchema,
+  salesLeadSchema,
   updateStockCountSchema,
   productCategoryStatusSchema,
   renameProductCategorySchema,
@@ -515,7 +517,8 @@ function getCorsOrigins() {
     .map((value) => toOrigin(value))
     .filter((value): value is string => Boolean(value))
 
-  const defaults = ["http://localhost:3000"]
+  // madar.my is served by the same frontend as the app; its "talk to sales" form posts here.
+  const defaults = ["http://localhost:3000", "https://madar.my", "https://www.madar.my"]
   if (process.env.NODE_ENV !== "production") {
     defaults.push("http://localhost:3001")
   }
@@ -864,6 +867,13 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  const salesLeadService = container.infrastructure.database
+    ? new SalesLeadService(
+        container.infrastructure.database,
+        container.emailGateway,
+        container.config.salesLeadsEmail
+      )
+    : null
   const billingOverviewService = container.infrastructure.database
     ? new BillingOverviewService(container.infrastructure.database)
     : null
@@ -1560,6 +1570,30 @@ export function createIdentityApiServer(
       // claim token above.
       // Public on purpose -- the token in an e-mailed sign-in link *is* the credential (see
       // LoginLinkService). Signs in whichever account the link belongs to.
+      // Public: madar.my's "talk to sales" form.
+      if (method === "POST" && url.pathname === "/v1/public/sales-leads") {
+        if (!salesLeadService) {
+          return send(503, { code: "SALES_LEADS_UNAVAILABLE", message: "Unavailable." })
+        }
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `sales_lead:${context.ipAddress}`,
+          5,
+          10 * 60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "SALES_LEADS_RATE_LIMITED", message: "Too many requests." })
+        }
+        const body = salesLeadSchema.parse(await readJsonBody(request))
+        // The hidden field is only ever filled by bots: answer as if it worked, store nothing.
+        if (!body.website) {
+          await salesLeadService.submit(
+            { companyName: body.companyName, phone: body.phone, email: body.email },
+            { ipAddress: context.ipAddress, userAgent: context.userAgent }
+          )
+        }
+        return send(201, { ok: true })
+      }
+
       // Public: the prices madar.my shows -- the same catalog the marketplace shows signed-in
       // customers, limited to what's on sale.
       if (method === "GET" && url.pathname === "/v1/public/pricing") {

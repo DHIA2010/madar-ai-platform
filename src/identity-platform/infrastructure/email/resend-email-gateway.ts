@@ -1,4 +1,10 @@
-import type { EmailGateway, RenewalReminderEmail, StoreWelcomeEmail } from "../../application/ports"
+import type {
+  EmailGateway,
+  RenewalReminderEmail,
+  SalesLeadEmail,
+  StoreWelcomeEmail,
+} from "../../application/ports"
+import { salesLeadSubject, salesLeadText } from "./sales-lead-copy"
 import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
 
@@ -235,6 +241,31 @@ export class ResendEmailGateway implements EmailGateway {
         ctaLabel: input.kind === "trial" ? "اشترك الآن" : "جدّد الاشتراك",
         ctaUrl: input.renewUrl,
       }),
+    })
+  }
+
+  async sendSalesLeadEmail(input: SalesLeadEmail) {
+    const rows: [string, string][] = [
+      ["اسم الشركة", input.companyName],
+      ["رقم الجوال", input.phone],
+      ["البريد الإلكتروني", input.email ?? "—"],
+    ]
+    await this.send({
+      to: input.to,
+      subject: salesLeadSubject(input),
+      text: salesLeadText(input),
+      html: `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px;color:#111827">
+  <p style="font-size:17px;font-weight:700">طلب جديد للتواصل مع فريق المبيعات</p>
+  <table cellpadding="8" style="border-collapse:collapse">
+    ${rows
+      .map(
+        ([label, value]) =>
+          `<tr><td style="color:#6b7280">${label}</td><td style="font-weight:700">${escapeHtml(value)}</td></tr>`
+      )
+      .join("")}
+  </table>
+  <p style="color:#6b7280;font-size:13px">من موقع madar.my — ${escapeHtml(input.submittedAt)}</p>
+</div>`,
     })
   }
 }

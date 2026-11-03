@@ -66,6 +66,17 @@ export interface EmailGateway {
   // A store installed Madar from its platform's app store (Salla): a new account's sign-in
   // details, or -- password null -- that the store was linked to the merchant's existing account.
   sendStoreWelcomeEmail(input: StoreWelcomeEmail): Promise<void>
+  // Someone asked Madar's sales team to contact them (madar.my's "talk to sales" form).
+  sendSalesLeadEmail(input: SalesLeadEmail): Promise<void>
+}
+
+export interface SalesLeadEmail {
+  // Madar's own inbox, not the lead's.
+  to: string
+  companyName: string
+  phone: string
+  email: string | null
+  submittedAt: string
 }
 
 export interface StoreWelcomeEmail {

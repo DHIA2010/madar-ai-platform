@@ -1422,3 +1422,21 @@ export const productCategoryStatusSchema = z.object({
   name: z.string().trim().min(1).max(200),
   status: z.enum(["active", "inactive"]),
 })
+
+// madar.my's "talk to sales" form. `website` is a hidden field people never see: a bot that fills
+// it is answered as if it worked, and nothing is stored.
+export const salesLeadSchema = z.object({
+  companyName: z.string().trim().min(2).max(160),
+  phone: z
+    .string()
+    .trim()
+    .transform((value) =>
+      value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[\s-]/g, "")
+    )
+    .pipe(z.string().regex(/^\+?\d{7,15}$/)),
+  email: z
+    .union([z.literal(""), z.string().trim().toLowerCase().email().max(254)])
+    .optional()
+    .transform((value) => (value ? value : null)),
+  website: z.string().optional(),
+})

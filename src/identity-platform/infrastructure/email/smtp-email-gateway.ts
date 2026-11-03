@@ -1,6 +1,12 @@
 import nodemailer from "nodemailer"
 
-import type { EmailGateway, RenewalReminderEmail, StoreWelcomeEmail } from "../../application/ports"
+import type {
+  EmailGateway,
+  RenewalReminderEmail,
+  SalesLeadEmail,
+  StoreWelcomeEmail,
+} from "../../application/ports"
+import { salesLeadSubject, salesLeadText } from "./sales-lead-copy"
 import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
 
@@ -85,6 +91,15 @@ export class SmtpEmailGateway implements EmailGateway {
           ? `تنتهي تجربتك المجانية لـ ${input.applicationLabel} قريباً`
           : `اقترب موعد تجديد اشتراك ${input.applicationLabel}`,
       text: `${input.organizationName}: ${input.applicationLabel} -- ${endsOn}\n${input.renewUrl}`,
+    })
+  }
+
+  async sendSalesLeadEmail(input: SalesLeadEmail) {
+    await this.transport.sendMail({
+      from: this.config.emailFrom,
+      to: input.to,
+      subject: salesLeadSubject(input),
+      text: salesLeadText(input),
     })
   }
 }

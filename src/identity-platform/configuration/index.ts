@@ -23,6 +23,8 @@ export interface IdentityPlatformConfig {
   resendFromEmail?: string
   resendFromName?: string
   resendReplyTo?: string
+  // Where madar.my's "talk to sales" requests are emailed.
+  salesLeadsEmail: string
   appUrl: string
   shortLinkBaseUrl: string
   featureFlags: Record<string, boolean>
@@ -68,6 +70,7 @@ const configSchema = z.object({
   resendFromEmail: z.string().optional(),
   resendFromName: z.string().optional(),
   resendReplyTo: z.string().optional(),
+  salesLeadsEmail: z.string().email(),
   appUrl: z.string().min(1),
   shortLinkBaseUrl: z.string().min(1),
   featureFlags: z.record(z.string(), z.boolean()),
@@ -152,6 +155,10 @@ export function loadIdentityPlatformConfig(
     resendFromEmail: overrides.resendFromEmail ?? process.env.IDENTITY_PLATFORM_RESEND_FROM_EMAIL,
     resendFromName: overrides.resendFromName ?? process.env.IDENTITY_PLATFORM_RESEND_FROM_NAME,
     resendReplyTo: overrides.resendReplyTo ?? process.env.IDENTITY_PLATFORM_RESEND_REPLY_TO,
+    salesLeadsEmail:
+      overrides.salesLeadsEmail ??
+      process.env.IDENTITY_PLATFORM_SALES_LEADS_EMAIL ??
+      "support@madar.my",
     appUrl: resolvedAppUrl,
     // Falls back to appUrl only when it's already https:// (a real deployed domain, e.g.
     // https://app.madar.my) -- local dev's appUrl defaults to plain http://, which would

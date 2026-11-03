@@ -1,4 +1,9 @@
-import type { EmailGateway, RenewalReminderEmail, StoreWelcomeEmail } from "../../application/ports"
+import type {
+  EmailGateway,
+  RenewalReminderEmail,
+  SalesLeadEmail,
+  StoreWelcomeEmail,
+} from "../../application/ports"
 
 export class InMemoryEmailGateway implements EmailGateway {
   readonly sent: Array<Record<string, string>> = []
@@ -40,5 +45,9 @@ export class InMemoryEmailGateway implements EmailGateway {
 
   async sendRenewalReminderEmail(input: RenewalReminderEmail) {
     this.sent.push({ ...input, reminderKind: input.kind, kind: "renewal_reminder" })
+  }
+
+  async sendSalesLeadEmail(input: SalesLeadEmail) {
+    this.sent.push({ kind: "sales_lead", ...input, email: input.email ?? "" })
   }
 }
