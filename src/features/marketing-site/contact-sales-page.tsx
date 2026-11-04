@@ -1,18 +1,42 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useCallback, useState } from "react"
+import dynamic from "next/dynamic"
 import Image from "next/image"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { CalendarCheck, CheckCircle2, Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
 
 import { MADAR_REGISTER_URL } from "./marketing-constants"
+import type { BookedMeeting } from "./meeting-booker"
 
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 
 // Built with a join to satisfy the no-literal-route lint rule (same trick as the feature services).
 const SALES_LEADS_PATH = ["", "v1", "public", "sales-leads"].join(String.fromCharCode(47))
+
+// Loaded only once the form is sent: the calendar is the second step.
+const MeetingBooker = dynamic(() => import("./meeting-booker"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex min-h-[600px] items-center justify-center text-slate-400">
+      <Loader2 className="size-7 animate-spin" />
+    </div>
+  ),
+})
+
+// "الثلاثاء 10 نوفمبر، 12:00 م" in Saudi time.
+function formatMeeting(iso: string) {
+  return new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Riyadh",
+  }).format(new Date(iso))
+}
 
 type Field = "companyName" | "phone" | "email"
 
@@ -43,7 +67,32 @@ export function ContactSalesPage() {
   })
   const [website, setWebsite] = useState("")
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle")
+  const [status, setStatus] = useState<
+    "idle" | "sending" | "failed" | "booking" | "booked" | "skipped"
+  >("idle")
+  const [leadId, setLeadId] = useState<string | null>(null)
+  const [meeting, setMeeting] = useState<BookedMeeting | null>(null)
+
+  const onBooked = useCallback(
+    (booked: BookedMeeting) => {
+      setMeeting(booked)
+      setStatus("booked")
+      if (!leadId) return
+      // Best effort: the booking itself is already confirmed by Cal.com.
+      void fetch(
+        new URL(
+          [SALES_LEADS_PATH, leadId, "meeting"].join(String.fromCharCode(47)),
+          getClientEnvironment().API_BASE_URL
+        ),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(booked),
+        }
+      ).catch(() => undefined)
+    },
+    [leadId]
+  )
 
   const update = (field: Field) => (event: { target: { value: string } }) => {
     setValues((current) => ({ ...current, [field]: event.target.value }))
@@ -67,7 +116,13 @@ export function ContactSalesPage() {
           website,
         }),
       })
-      setStatus(response.ok ? "sent" : "failed")
+      if (!response.ok) {
+        setStatus("failed")
+        return
+      }
+      const body = (await response.json().catch(() => ({}))) as { id?: string }
+      setLeadId(body.id ?? null)
+      setStatus("booking")
     } catch {
       setStatus("failed")
     }
@@ -83,7 +138,12 @@ export function ContactSalesPage() {
         <div className="absolute -top-40 left-1/2 h-[480px] w-[820px] -translate-x-1/2 rounded-full bg-gradient-to-b from-[#dff7f3] via-[#e6efff] to-transparent opacity-90 blur-3xl" />
       </div>
 
-      <main className="relative w-full max-w-[560px]">
+      <main
+        className={cn(
+          "relative w-full transition-[max-width] duration-300",
+          status === "booking" ? "max-w-[1080px]" : "max-w-[560px]"
+        )}
+      >
         <div className="flex justify-center">
           <Image
             src={ASSETS.logo}
@@ -96,14 +156,60 @@ export function ContactSalesPage() {
         </div>
 
         <div className="mt-8 rounded-[32px] bg-white p-7 shadow-[0_30px_80px_-30px_rgba(11,23,56,0.35)] ring-1 ring-slate-100 sm:p-10">
-          {status === "sent" ? (
+          {status === "booking" ? (
+            <div>
+              <div className="flex flex-col items-center text-center">
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-[14px] font-bold text-emerald-700">
+                  <CheckCircle2 className="size-4" />
+                  تم استلام طلبك
+                </span>
+                <h1 className="mt-4 text-[28px] leading-tight font-black text-[#0b1738]">
+                  اختر موعدًا مناسبًا للعرض التوضيحي
+                </h1>
+                <p className="mt-2 text-[17px] leading-8 text-slate-600">
+                  اجتماع أونلاين لمدة 30 دقيقة نعرض لك فيه مدار ونجيب على أسئلتك.
+                </p>
+              </div>
+              <div className="mt-6 overflow-hidden rounded-3xl border border-slate-100">
+                <MeetingBooker
+                  onBooked={onBooked}
+                  prefill={{
+                    name: values.companyName.trim(),
+                    ...(values.email.trim() ? { email: values.email.trim() } : {}),
+                    notes: `رقم الجوال: ${normalizePhone(values.phone.trim())}`,
+                    ...(leadId ? { "metadata[leadId]": leadId } : {}),
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatus("skipped")}
+                className="mx-auto mt-6 flex h-12 items-center justify-center rounded-2xl px-6 text-[16px] font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-[#0b1738]"
+              >
+                لاحقًا، تواصلوا معي
+              </button>
+            </div>
+          ) : status === "booked" || status === "skipped" ? (
             <div className="py-6 text-center">
               <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                <CheckCircle2 className="size-11" />
+                {status === "booked" ? (
+                  <CalendarCheck className="size-10" />
+                ) : (
+                  <CheckCircle2 className="size-11" />
+                )}
               </span>
-              <h1 className="mt-6 text-[28px] font-black text-[#0b1738]">تم استلام طلبك</h1>
+              <h1 className="mt-6 text-[28px] font-black text-[#0b1738]">
+                {status === "booked" ? "تم حجز موعدك" : "تم استلام طلبك"}
+              </h1>
+              {status === "booked" && meeting ? (
+                <p className="mt-3 text-[19px] font-extrabold text-[#2878ff]">
+                  {formatMeeting(meeting.startTime)}
+                </p>
+              ) : null}
               <p className="mt-3 text-[17px] leading-8 text-slate-600">
-                شكرًا لك، سيتواصل معك فريق المبيعات قريبًا.
+                {status === "booked"
+                  ? "ستصلك دعوة الاجتماع ورابطه على بريدك الإلكتروني. نراك قريبًا!"
+                  : "شكرًا لك، سيتواصل معك فريق المبيعات قريبًا."}
               </p>
               <a
                 href={MADAR_REGISTER_URL}

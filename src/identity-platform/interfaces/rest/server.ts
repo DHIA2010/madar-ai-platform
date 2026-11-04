@@ -251,6 +251,7 @@ import {
   createStockCountSchema,
   createStockTransferSchema,
   markNotificationsReadSchema,
+  salesLeadMeetingSchema,
   salesLeadSchema,
   updateStockCountSchema,
   productCategoryStatusSchema,
@@ -1585,13 +1586,38 @@ export function createIdentityApiServer(
         }
         const body = salesLeadSchema.parse(await readJsonBody(request))
         // The hidden field is only ever filled by bots: answer as if it worked, store nothing.
-        if (!body.website) {
-          await salesLeadService.submit(
-            { companyName: body.companyName, phone: body.phone, email: body.email },
-            { ipAddress: context.ipAddress, userAgent: context.userAgent }
-          )
+        const id = body.website
+          ? randomUUID()
+          : await salesLeadService.submit(
+              { companyName: body.companyName, phone: body.phone, email: body.email },
+              { ipAddress: context.ipAddress, userAgent: context.userAgent }
+            )
+        return send(201, { ok: true, id })
+      }
+
+      // Public: the meeting that lead then booked on Cal.com. The lead's id is an unguessable
+      // uuid handed only to the browser that submitted it; an unknown id is ignored silently.
+      const salesLeadMeetingMatch = url.pathname.match(
+        /^\/v1\/public\/sales-leads\/([0-9a-f-]{36})\/meeting$/
+      )
+      if (method === "POST" && salesLeadMeetingMatch) {
+        if (!salesLeadService) {
+          return send(503, { code: "SALES_LEADS_UNAVAILABLE", message: "Unavailable." })
         }
-        return send(201, { ok: true })
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `sales_lead_meeting:${context.ipAddress}`,
+          10,
+          10 * 60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "SALES_LEADS_RATE_LIMITED", message: "Too many requests." })
+        }
+        const meeting = salesLeadMeetingSchema.parse(await readJsonBody(request))
+        await salesLeadService.recordMeeting(salesLeadMeetingMatch[1], {
+          startTime: meeting.startTime,
+          uid: meeting.uid ?? null,
+        })
+        return send(204, null)
       }
 
       // Public: the prices madar.my shows -- the same catalog the marketplace shows signed-in

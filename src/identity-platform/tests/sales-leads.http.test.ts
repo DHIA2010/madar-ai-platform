@@ -83,6 +83,45 @@ describe("sales leads", () => {
     ])
   })
 
+  it("attaches the meeting booked right after, once", async () => {
+    const created = await submitLead({ companyName: "شركة النخبة", phone: "0501112222" })
+    const { id } = (await created.json()) as { id: string }
+
+    const book = (startTime: string) =>
+      fetch(`${baseUrl}/v1/public/sales-leads/${id}/meeting`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://madar.my" },
+        body: JSON.stringify({ startTime, uid: "cal-booking-1" }),
+      })
+    expect((await book("2026-11-10T09:00:00.000Z")).status).toBe(204)
+    // A second call can't move it.
+    expect((await book("2026-12-01T09:00:00.000Z")).status).toBe(204)
+
+    const rows = await database.query<{ meeting_at: string | Date; meeting_uid: string }>(
+      "select meeting_at, meeting_uid from sales_leads where id = $1",
+      [id]
+    )
+    expect(new Date(rows.rows[0].meeting_at).toISOString()).toBe("2026-11-10T09:00:00.000Z")
+    expect(rows.rows[0].meeting_uid).toBe("cal-booking-1")
+
+    // An unknown lead is ignored without saying so; a bad time is rejected.
+    const unknown = await fetch(
+      `${baseUrl}/v1/public/sales-leads/00000000-0000-4000-8000-000000000000/meeting`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ startTime: "2026-11-10T09:00:00.000Z" }),
+      }
+    )
+    expect(unknown.status).toBe(204)
+    const invalid = await fetch(`${baseUrl}/v1/public/sales-leads/${id}/meeting`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ startTime: "tomorrow" }),
+    })
+    expect(invalid.status).toBe(400)
+  })
+
   it("rejects a missing company name or a bad phone, and quietly drops bots", async () => {
     expect((await submitLead({ companyName: "", phone: "0551234567" })).status).toBe(400)
     expect((await submitLead({ companyName: "شركة", phone: "12" })).status).toBe(400)

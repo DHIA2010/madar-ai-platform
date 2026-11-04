@@ -1440,3 +1440,9 @@ export const salesLeadSchema = z.object({
     .transform((value) => (value ? value : null)),
   website: z.string().optional(),
 })
+
+// The demo a lead booked on Cal.com right after the "talk to sales" form.
+export const salesLeadMeetingSchema = z.object({
+  startTime: z.string().datetime({ offset: true }),
+  uid: z.string().max(128).nullable().optional(),
+})

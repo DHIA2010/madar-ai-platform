@@ -18,16 +18,18 @@ export class SalesLeadService {
     private readonly notifyEmail: string
   ) {}
 
+  // Returns the new lead's id, so the meeting booked next can be attached to it.
   async submit(
     input: SalesLeadInput,
     context: { ipAddress?: string | null; userAgent?: string | null }
-  ): Promise<void> {
+  ): Promise<string> {
+    const id = randomUUID()
     const submittedAt = new Date().toISOString()
     await this.db.query(
       `INSERT INTO sales_leads (id, company_name, phone, email, ip_address, user_agent, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
-        randomUUID(),
+        id,
         input.companyName,
         input.phone,
         input.email,
@@ -43,5 +45,15 @@ export class SalesLeadService {
         message: error instanceof Error ? error.message : String(error),
       })
     }
+    return id
+  }
+
+  // The lead booked a demo on Cal.com. Recorded once: a later call can't move it.
+  async recordMeeting(leadId: string, meeting: { startTime: string; uid: string | null }) {
+    await this.db.query(
+      `UPDATE sales_leads SET meeting_at = $2, meeting_uid = $3, meeting_booked_at = now()
+        WHERE id = $1 AND meeting_at IS NULL`,
+      [leadId, meeting.startTime, meeting.uid]
+    )
   }
 }

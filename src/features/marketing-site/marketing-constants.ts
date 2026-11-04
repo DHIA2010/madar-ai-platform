@@ -7,6 +7,8 @@ export const MADAR_CONTACT_EMAIL = "support@madar.my"
 
 export const MADAR_REGISTER_URL = `${MADAR_APP_URL}${ROUTES.register}`
 export const MADAR_LOGIN_URL = `${MADAR_APP_URL}${ROUTES.login}`
+// Madar's demo meeting on Cal.com, booked right after the "talk to sales" form.
+export const MADAR_DEMO_CAL_LINK = "madar/30min"
 
 // madar.my and www.madar.my resolve to the same frontend service as app.madar.my (same ALB,
 // host-header routed) -- this is the single source of truth for which hostnames get the public
