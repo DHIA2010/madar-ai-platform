@@ -47,7 +47,7 @@ export default function MeetingBooker({
       namespace={NAMESPACE}
       calLink={MADAR_DEMO_CAL_LINK}
       config={{ ...prefill, layout: "month_view", theme: "light" }}
-      className="min-h-[600px] w-full overflow-auto"
+      className="w-full"
     />
   )
 }

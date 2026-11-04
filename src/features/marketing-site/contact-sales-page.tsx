@@ -20,7 +20,7 @@ const SALES_LEADS_PATH = ["", "v1", "public", "sales-leads"].join(String.fromCha
 const MeetingBooker = dynamic(() => import("./meeting-booker"), {
   ssr: false,
   loading: () => (
-    <div className="flex min-h-[600px] items-center justify-center text-slate-400">
+    <div className="flex h-[560px] items-center justify-center text-slate-400">
       <Loader2 className="size-7 animate-spin" />
     </div>
   ),
@@ -132,7 +132,10 @@ export function ContactSalesPage() {
     <div
       lang="ar"
       dir="rtl"
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f5f8fd] px-4 py-12"
+      className={cn(
+        "relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f5f8fd] px-4",
+        status === "booking" ? "py-4" : "py-12"
+      )}
     >
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/2 h-[480px] w-[820px] -translate-x-1/2 rounded-full bg-gradient-to-b from-[#dff7f3] via-[#e6efff] to-transparent opacity-90 blur-3xl" />
@@ -144,7 +147,7 @@ export function ContactSalesPage() {
           status === "booking" ? "max-w-[1080px]" : "max-w-[560px]"
         )}
       >
-        <div className="flex justify-center">
+        <div className={cn("flex justify-center", status === "booking" && "hidden")}>
           <Image
             src={ASSETS.logo}
             alt="مدار"
@@ -155,22 +158,43 @@ export function ContactSalesPage() {
           />
         </div>
 
-        <div className="mt-8 rounded-[32px] bg-white p-7 shadow-[0_30px_80px_-30px_rgba(11,23,56,0.35)] ring-1 ring-slate-100 sm:p-10">
+        <div
+          className={cn(
+            "rounded-[32px] bg-white shadow-[0_30px_80px_-30px_rgba(11,23,56,0.35)] ring-1 ring-slate-100",
+            status === "booking" ? "p-4 sm:p-6" : "mt-8 p-7 sm:p-10"
+          )}
+        >
           {status === "booking" ? (
             <div>
-              <div className="flex flex-col items-center text-center">
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-[14px] font-bold text-emerald-700">
-                  <CheckCircle2 className="size-4" />
-                  تم استلام طلبك
-                </span>
-                <h1 className="mt-4 text-[28px] leading-tight font-black text-[#0b1738]">
-                  اختر موعدًا مناسبًا للعرض التوضيحي
-                </h1>
-                <p className="mt-2 text-[17px] leading-8 text-slate-600">
-                  اجتماع أونلاين لمدة 30 دقيقة نعرض لك فيه مدار ونجيب على أسئلتك.
-                </p>
+              {/* Compact, so the whole step -- calendar and "later" -- fits on one screen. */}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+                <div className="flex items-center gap-3">
+                  <Image
+                    src={ASSETS.logo}
+                    alt="مدار"
+                    width={778}
+                    height={325}
+                    className="hidden h-9 w-auto sm:block"
+                  />
+                  <div>
+                    <p className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-700">
+                      <CheckCircle2 className="size-4" />
+                      تم استلام طلبك
+                    </p>
+                    <h1 className="text-[21px] leading-tight font-black text-[#0b1738] sm:text-[24px]">
+                      اختر موعدًا للعرض التوضيحي (30 دقيقة)
+                    </h1>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatus("skipped")}
+                  className="h-11 rounded-2xl border-2 border-slate-200 px-5 text-[15px] font-bold text-[#0b1738] transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  لاحقًا، تواصلوا معي
+                </button>
               </div>
-              <div className="mt-6 overflow-hidden rounded-3xl border border-slate-100">
+              <div className="mt-4 overflow-hidden rounded-3xl border border-slate-100">
                 <MeetingBooker
                   onBooked={onBooked}
                   prefill={{
@@ -181,13 +205,6 @@ export function ContactSalesPage() {
                   }}
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => setStatus("skipped")}
-                className="mx-auto mt-6 flex h-12 items-center justify-center rounded-2xl px-6 text-[16px] font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-[#0b1738]"
-              >
-                لاحقًا، تواصلوا معي
-              </button>
             </div>
           ) : status === "booked" || status === "skipped" ? (
             <div className="py-6 text-center">
