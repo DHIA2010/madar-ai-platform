@@ -17,6 +17,7 @@ import type {
   UploadAvatarRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
+import { type Attribution, readAttribution } from "@/lib/attribution"
 import type { ApiClient } from "@/infrastructure/http"
 
 const ROLE_PERMISSION_MAP: Record<string, string[]> = {
@@ -187,7 +188,11 @@ export class AuthenticationApiAdapter {
 
   async register(payload: RegisterRequestDto): Promise<LoginResponseDto> {
     const response = await this.client.post<
-      Omit<RegisterRequestDto, "rememberMe"> & { timezone: string; language: string },
+      Omit<RegisterRequestDto, "rememberMe"> & {
+        timezone: string
+        language: string
+        attribution: Attribution | null
+      },
       {
         userId: string
         organizationId: string
@@ -202,6 +207,8 @@ export class AuthenticationApiAdapter {
       invitationToken: payload.invitationToken,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       language: "en",
+      // Where they came from (a campaign's UTM tags...), for the CRM lead this sign-up becomes.
+      attribution: readAttribution(),
     })
 
     // register() leaves the account "pending_verification" (login is blocked until

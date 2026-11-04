@@ -160,6 +160,13 @@ export interface AdminPlatformSettings {
   trialDays: number
   renewalReminderDays: number
   gracePeriodDays: number
+  legalName: string
+  vatNumber: string
+  commercialRegistration: string
+  address: string
+  calcomWebhookSecret: string
+  quoteTerms: string
+  invoiceTerms: string
 }
 
 export type AdminCouponStatus = "active" | "disabled" | "expired" | "exhausted"
@@ -346,7 +353,7 @@ export interface AdminSystemHealth {
   }>
 }
 
-export type AdminStaffRole = "super_admin" | "operations" | "finance" | "support"
+export type AdminStaffRole = "super_admin" | "operations" | "finance" | "support" | "sales"
 
 export interface AdminStaffMember {
   userId: string | null

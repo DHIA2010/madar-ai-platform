@@ -150,6 +150,7 @@ export const STAFF_ROLE_LABEL: Record<string, string> = {
   operations: "العمليات",
   finance: "المالية",
   support: "الدعم",
+  sales: "المبيعات",
 }
 
 export const PLATFORM_PERMISSION_LABEL: Record<string, string> = {
@@ -163,6 +164,7 @@ export const PLATFORM_PERMISSION_LABEL: Record<string, string> = {
   "flags:manage": "Feature Flags",
   "settings:manage": "إعدادات المنصة",
   "staff:manage": "إدارة فريق مدار",
+  "crm:manage": "إدارة المبيعات (CRM)",
 }
 
 // Short Arabic descriptions of the audit actions the overview's "latest activity" shows.

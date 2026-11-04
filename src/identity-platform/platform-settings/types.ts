@@ -14,6 +14,16 @@ export interface PlatformSettings {
   // Renewal policy -- used by renewal reminders and lapsed-payment handling.
   renewalReminderDays: number
   gracePeriodDays: number
+  // Madar's own details, printed on the quotes and invoices the sales team sends.
+  legalName: string
+  vatNumber: string
+  commercialRegistration: string
+  address: string
+  // Signs Cal.com's booking webhook (Cal.com → Settings → Developer → Webhooks → Secret).
+  calcomWebhookSecret: string
+  // Terms and conditions printed on every quote / invoice (each can be changed for one document).
+  quoteTerms: string
+  invoiceTerms: string
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -25,6 +35,13 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   trialDays: 7,
   renewalReminderDays: 3,
   gracePeriodDays: 7,
+  legalName: "",
+  vatNumber: "",
+  commercialRegistration: "",
+  address: "",
+  calcomWebhookSecret: "",
+  quoteTerms: "",
+  invoiceTerms: "",
 }
 
 // The subset anyone may read (before signing in, too): what the login/sign-up pages and the

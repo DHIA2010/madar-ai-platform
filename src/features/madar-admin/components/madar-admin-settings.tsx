@@ -8,9 +8,28 @@ import { AppButton, AppCard, AppInput, AppSwitch, AppTextarea } from "@/componen
 import { platformAdminService } from "../services"
 import type { AdminPlatformSettings } from "../types/platform-admin.types"
 
+import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
+
+// Where Cal.com sends bookings: this backend's public webhook route.
+const CALCOM_WEBHOOK_URL = new URL(
+  ["", "v1", "public", "webhooks", "calcom"].join(String.fromCharCode(47)),
+  getClientEnvironment().API_BASE_URL
+).toString()
+
 type GeneralSettings = Pick<
   AdminPlatformSettings,
-  "platformName" | "supportEmail" | "announcementBanner" | "maintenanceMode" | "newSignupsEnabled"
+  | "platformName"
+  | "supportEmail"
+  | "announcementBanner"
+  | "maintenanceMode"
+  | "newSignupsEnabled"
+  | "legalName"
+  | "vatNumber"
+  | "commercialRegistration"
+  | "address"
+  | "calcomWebhookSecret"
+  | "quoteTerms"
+  | "invoiceTerms"
 >
 
 // Platform-wide settings, saved to the backend and applied immediately: the announcement banner
@@ -31,6 +50,13 @@ export function MadarAdminSettings() {
           announcementBanner: loaded.announcementBanner,
           maintenanceMode: loaded.maintenanceMode,
           newSignupsEnabled: loaded.newSignupsEnabled,
+          legalName: loaded.legalName ?? "",
+          vatNumber: loaded.vatNumber ?? "",
+          commercialRegistration: loaded.commercialRegistration ?? "",
+          address: loaded.address ?? "",
+          calcomWebhookSecret: loaded.calcomWebhookSecret ?? "",
+          quoteTerms: loaded.quoteTerms ?? "",
+          invoiceTerms: loaded.invoiceTerms ?? "",
         })
       )
       .catch(() => toast.error("تعذر تحميل إعدادات المنصة."))
@@ -151,6 +177,106 @@ export function MadarAdminSettings() {
           </div>
         </AppCard>
       </div>
+
+      <AppCard
+        title="بيانات الفوترة"
+        state={settings === null ? "loading" : "idle"}
+        className="rounded-2xl border-border/60 shadow-sm"
+      >
+        <p className="-mt-1 mb-4 text-sm text-muted-foreground">
+          تظهر على عروض الأسعار والفواتير التي يرسلها فريق المبيعات.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          {(
+            [
+              ["legalName", "الاسم القانوني للمنشأة", "rtl"],
+              ["vatNumber", "الرقم الضريبي", "ltr"],
+              ["commercialRegistration", "رقم السجل التجاري", "ltr"],
+              ["address", "العنوان", "rtl"],
+            ] as const
+          ).map(([key, label, direction]) => (
+            <div key={key}>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">{label}</label>
+              <AppInput
+                value={settings?.[key] ?? ""}
+                dir={direction}
+                onChange={(event) => update(key, event.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      </AppCard>
+
+      <AppCard
+        title="الشروط والأحكام"
+        state={settings === null ? "loading" : "idle"}
+        className="rounded-2xl border-border/60 shadow-sm"
+      >
+        <p className="-mt-1 mb-4 text-sm text-muted-foreground">
+          تُطبع أسفل كل عرض سعر وفاتورة. يمكن تعديلها لمستند واحد من صفحته دون تغيير البقية.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          {(
+            [
+              [
+                "quoteTerms",
+                "شروط عروض الأسعار",
+                "مثال: العرض صالح لمدة 14 يومًا من تاريخ الإصدار.",
+              ],
+              [
+                "invoiceTerms",
+                "شروط الفواتير",
+                "مثال: يُستحق الدفع خلال 7 أيام من تاريخ الفاتورة.",
+              ],
+            ] as const
+          ).map(([key, label, placeholder]) => (
+            <div key={key}>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">{label}</label>
+              <AppTextarea
+                rows={8}
+                value={settings?.[key] ?? ""}
+                placeholder={placeholder}
+                onChange={(event) => update(key, event.target.value)}
+                className="text-sm leading-6"
+              />
+            </div>
+          ))}
+        </div>
+      </AppCard>
+
+      <AppCard
+        title="ربط Cal.com"
+        state={settings === null ? "loading" : "idle"}
+        className="rounded-2xl border-border/60 shadow-sm"
+      >
+        <p className="-mt-1 mb-4 text-sm leading-6 text-muted-foreground">
+          تصل الاجتماعات المحجوزة من رابط Cal.com إلى العملاء المحتملين تلقائيًا. في Cal.com أضف
+          Webhook بالرابط أدناه، واختر أحداث الحجز (الإنشاء، الطلب، إعادة الجدولة، الإلغاء، الرفض)،
+          ثم الصق السر نفسه هنا.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">رابط المشترك</label>
+            <AppInput
+              readOnly
+              dir="ltr"
+              value={CALCOM_WEBHOOK_URL}
+              onFocus={(event) => event.target.select()}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">السر</label>
+            <AppInput
+              type="password"
+              dir="ltr"
+              autoComplete="off"
+              placeholder="نفس السر المكتوب في Cal.com"
+              value={settings?.calcomWebhookSecret ?? ""}
+              onChange={(event) => update("calcomWebhookSecret", event.target.value)}
+            />
+          </div>
+        </div>
+      </AppCard>
 
       <div className="flex justify-end">
         <AppButton

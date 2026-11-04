@@ -5750,7 +5750,9 @@
       },
       "methods": {
         "card": "Card",
-        "bank_transfer": "Bank transfer"
+        "bank_transfer": "Bank transfer",
+        "cash": "Cash",
+        "other": "Other"
       },
       "paymentStatus": {
         "paid": "Paid",
@@ -5802,7 +5804,8 @@
         "ai": "AI",
         "customReports": "Custom Reports",
         "madarApps": "Madar Apps",
-        "madarComplete": "Madar Complete"
+        "madarComplete": "Madar Complete",
+        "salesInvoice": "Sales invoice"
       }
     }
   },

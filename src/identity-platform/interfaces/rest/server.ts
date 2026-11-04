@@ -84,6 +84,20 @@ import { StockCountsService } from "../../inventory/stock-counts-service"
 import { notify, NotificationsService } from "../../notifications/service"
 import { BillingOverviewService } from "../../billing/overview-service"
 import { SalesLeadService } from "../../sales-leads/service"
+import {
+  activatePendingInvoices,
+  type CustomerAccountActivator,
+  SalesDocumentsService,
+} from "../../crm/sales-documents"
+import { publicInvoiceConfirmSchema } from "../../crm/schemas"
+import { parseCalcomBooking, verifyCalcomSignature } from "../../crm/calcom-webhook"
+import {
+  crmBookingReceived,
+  CrmService,
+  crmFromSignup,
+  crmPaymentReceived,
+} from "../../crm/service"
+import { provisionOwnerAccount } from "../../accounts/provision"
 import { StockTransfersService } from "../../inventory/transfers-service"
 import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
@@ -251,6 +265,8 @@ import {
   createStockCountSchema,
   createStockTransferSchema,
   markNotificationsReadSchema,
+  salesLeadCallSchema,
+  salesLeadInterestsSchema,
   salesLeadMeetingSchema,
   salesLeadSchema,
   updateStockCountSchema,
@@ -737,6 +753,84 @@ export function createIdentityApiServer(
         container.config.platformAdminEmails
       )
     : null
+  // The CRM's lead owners: active Super Admins and Sales staff.
+  const crmService =
+    container.infrastructure.database && platformGovernanceService
+      ? new CrmService(container.infrastructure.database, async () =>
+          (await platformGovernanceService.listStaff())
+            .filter(
+              (member) =>
+                member.userId &&
+                member.status === "active" &&
+                (member.role === "super_admin" || member.role === "sales")
+            )
+            .map((member) => ({
+              id: member.userId as string,
+              name: member.name || member.email,
+              email: member.email,
+            }))
+        )
+      : null
+  // "تفعيل الحساب" on a paid sales invoice: the customer's Madar account (found by email, or made
+  // like a registration) and the welcome email with a set-password link that lasts 7 days.
+  const provisionDeps = container.zidAutoProvisionDeps
+  const customerAccountActivator: CustomerAccountActivator | null = provisionDeps
+    ? {
+        findOrCreate: async (input) => {
+          const existing = await provisionDeps.users.findByEmail(input.email)
+          if (existing) {
+            if (!existing.primaryOrganizationId) {
+              throw ERRORS.validation({ email: "This email's account has no organization." })
+            }
+            return {
+              userId: existing.id,
+              organizationId: existing.primaryOrganizationId,
+              newAccount: false,
+            }
+          }
+          const created = await provisionOwnerAccount(provisionDeps, {
+            email: input.email,
+            fullName: input.fullName,
+            organizationName: input.companyName,
+            emailVerified: true,
+          })
+          return {
+            userId: created.userId,
+            organizationId: created.organizationId,
+            newAccount: true,
+          }
+        },
+        welcome: async (input) => {
+          const base = container.config.appUrl.replace(/\/$/, "")
+          const actionUrl = input.newAccount
+            ? `${base}/auth/basic/reset-password?token=${encodeURIComponent(
+                await container.commands.issuePasswordSetupToken(
+                  input.userId,
+                  7 * 24 * 60 * 60 * 1000
+                )
+              )}`
+            : `${base}/auth/basic/login`
+          await container.emailGateway.sendAccountActivatedEmail({
+            email: input.email,
+            fullName: input.fullName,
+            companyName: input.companyName,
+            applications: input.applications,
+            newAccount: input.newAccount,
+            actionUrl,
+          })
+        },
+      }
+    : null
+  // Quotes and invoices the CRM sends, and the customer's pay page for them.
+  const salesDocumentsService =
+    container.infrastructure.database && pricingService
+      ? new SalesDocumentsService(
+          container.infrastructure.database,
+          pricingService,
+          container.platformSettings,
+          customerAccountActivator
+        )
+      : null
   const posDevicesService = container.infrastructure.database
     ? new PosDevicesService(container.infrastructure.database)
     : null
@@ -1089,6 +1183,16 @@ export function createIdentityApiServer(
               singleUse: true,
               ttlMs: 5 * 60 * 1000,
             }),
+          onAccountCreated: async (account) => {
+            if (!container.infrastructure.database) return
+            const leadId = await crmFromSignup(container.infrastructure.database, {
+              organizationId: account.organizationId,
+              companyName: account.name,
+              contactName: account.name,
+              email: account.email,
+            })
+            if (leadId) await activatePendingInvoices(container.infrastructure.database, leadId)
+          },
         })
       : null
   // A Salla App Store install becomes a Madar account (or links to the merchant's existing one)
@@ -1257,13 +1361,21 @@ export function createIdentityApiServer(
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/register") {
-        return send(
-          201,
-          await container.commands.register(
-            registerSchema.parse(await readJsonBody(request)),
-            context
-          )
-        )
+        const command = registerSchema.parse(await readJsonBody(request))
+        const registered = await container.commands.register(command, context)
+        // A brand-new account (not someone joining by invitation) is a CRM lead: a trial.
+        if (container.infrastructure.database && !command.invitationToken) {
+          const leadId = await crmFromSignup(container.infrastructure.database, {
+            organizationId: registered.organizationId,
+            companyName: command.organizationName ?? command.fullName,
+            contactName: command.fullName,
+            email: command.email,
+            attribution: command.attribution ?? null,
+          })
+          // Invoices it paid before it had an account switch their apps on now.
+          if (leadId) await activatePendingInvoices(container.infrastructure.database, leadId)
+        }
+        return send(201, registered)
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/verify-email") {
@@ -1368,7 +1480,12 @@ export function createIdentityApiServer(
         // Only payment_paid moves money into a subscription flip -- every other event type
         // (refunded, voided, authorized, etc.) is acknowledged but not actionable here yet.
         if (payload.type === "payment_paid") {
-          await moyasarBillingService.handleWebhookEvent(payload)
+          // An invoice the sales team sent is settled by its own flow; anything else is a
+          // marketplace checkout.
+          const handledAsInvoice = salesDocumentsService
+            ? await salesDocumentsService.handleMoyasarWebhook(payload.data)
+            : false
+          if (!handledAsInvoice) await moyasarBillingService.handleWebhookEvent(payload)
         }
         return send(200, { received: true })
       }
@@ -1571,6 +1688,33 @@ export function createIdentityApiServer(
       // claim token above.
       // Public on purpose -- the token in an e-mailed sign-in link *is* the credential (see
       // LoginLinkService). Signs in whichever account the link belongs to.
+      // Public, server-to-server: Cal.com's booking webhook. A booked demo becomes (or updates) a
+      // CRM lead in "اجتماع محجوز" (or a cancelled one taken off it). Signed with the secret in
+      // Madar Admin's settings (or IDENTITY_PLATFORM_CALCOM_WEBHOOK_SECRET); without one, it's off.
+      if (method === "POST" && url.pathname === "/v1/public/webhooks/calcom") {
+        const secret =
+          process.env.IDENTITY_PLATFORM_CALCOM_WEBHOOK_SECRET ||
+          (await container.platformSettings.get()).calcomWebhookSecret
+        if (!secret || !container.infrastructure.database) {
+          return send(503, { code: "CALCOM_WEBHOOK_UNAVAILABLE", message: "Unavailable." })
+        }
+        const rawBody = await readRawBody(request)
+        if (!verifyCalcomSignature(rawBody, request.headers["x-cal-signature-256"], secret)) {
+          return send(401, { code: "INVALID_SIGNATURE", message: "Invalid signature." })
+        }
+        let parsed: unknown = null
+        try {
+          parsed = JSON.parse(rawBody.toString("utf8"))
+        } catch {
+          return send(400, { code: "INVALID_JSON", message: "Invalid JSON." })
+        }
+        const booking = parseCalcomBooking(parsed)
+        const leadId = booking
+          ? await crmBookingReceived(container.infrastructure.database, booking)
+          : null
+        return send(200, { ok: true, leadId })
+      }
+
       // Public: madar.my's "talk to sales" form.
       if (method === "POST" && url.pathname === "/v1/public/sales-leads") {
         if (!salesLeadService) {
@@ -1589,7 +1733,12 @@ export function createIdentityApiServer(
         const id = body.website
           ? randomUUID()
           : await salesLeadService.submit(
-              { companyName: body.companyName, phone: body.phone, email: body.email },
+              {
+                companyName: body.companyName,
+                phone: body.phone,
+                email: body.email,
+                attribution: body.attribution ?? null,
+              },
               { ipAddress: context.ipAddress, userAgent: context.userAgent }
             )
         return send(201, { ok: true, id })
@@ -1618,6 +1767,78 @@ export function createIdentityApiServer(
           uid: meeting.uid ?? null,
         })
         return send(204, null)
+      }
+
+      // Public: what that lead is interested in, the form's last step (same id rule).
+      const salesLeadInterestsMatch = url.pathname.match(
+        /^\/v1\/public\/sales-leads\/([0-9a-f-]{36})\/interests$/
+      )
+      if (method === "POST" && salesLeadInterestsMatch) {
+        if (!salesLeadService) {
+          return send(503, { code: "SALES_LEADS_UNAVAILABLE", message: "Unavailable." })
+        }
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `sales_lead_interests:${context.ipAddress}`,
+          10,
+          10 * 60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "SALES_LEADS_RATE_LIMITED", message: "Too many requests." })
+        }
+        const body = salesLeadInterestsSchema.parse(await readJsonBody(request))
+        await salesLeadService.recordInterests(salesLeadInterestsMatch[1], body)
+        return send(204, null)
+      }
+
+      // Public: or, instead of a meeting, the phone call that lead asked for (same id rule).
+      const salesLeadCallMatch = url.pathname.match(
+        /^\/v1\/public\/sales-leads\/([0-9a-f-]{36})\/call$/
+      )
+      if (method === "POST" && salesLeadCallMatch) {
+        if (!salesLeadService) {
+          return send(503, { code: "SALES_LEADS_UNAVAILABLE", message: "Unavailable." })
+        }
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `sales_lead_call:${context.ipAddress}`,
+          10,
+          10 * 60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "SALES_LEADS_RATE_LIMITED", message: "Too many requests." })
+        }
+        const { callAt } = salesLeadCallSchema.parse(await readJsonBody(request))
+        await salesLeadService.recordCallRequest(salesLeadCallMatch[1], callAt)
+        return send(204, null)
+      }
+
+      // Public: an invoice from Madar's sales team, opened from the link in it (the secret token
+      // is the key), and paying it by card.
+      const publicInvoiceMatch = url.pathname.match(
+        /^\/v1\/public\/invoices\/([A-Za-z0-9_-]{20,64})(\/checkout|\/confirm)?$/
+      )
+      if (publicInvoiceMatch) {
+        if (!salesDocumentsService) {
+          return send(503, { code: "INVOICES_UNAVAILABLE", message: "Unavailable." })
+        }
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `public_invoice:${context.ipAddress}`,
+          60,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "INVOICES_RATE_LIMITED", message: "Too many requests." })
+        }
+        const [, token, action] = publicInvoiceMatch
+        if (!action && method === "GET") {
+          return send(200, await salesDocumentsService.publicInvoice(token))
+        }
+        if (action === "/checkout" && method === "POST") {
+          return send(200, await salesDocumentsService.publicCheckout(token))
+        }
+        if (action === "/confirm" && method === "POST") {
+          const body = publicInvoiceConfirmSchema.parse(await readJsonBody(request))
+          return send(200, await salesDocumentsService.publicConfirm(token, body.moyasarPaymentId))
+        }
       }
 
       // Public: the prices madar.my shows -- the same catalog the marketplace shows signed-in
@@ -2252,6 +2473,8 @@ export function createIdentityApiServer(
         service: platformAdminService,
         operations: platformOperationsService,
         governance: platformGovernanceService,
+        crm: crmService,
+        salesDocuments: salesDocumentsService,
         send,
         readJsonBody: () => readJsonBody(request),
       })
@@ -3953,6 +4176,14 @@ export function createIdentityApiServer(
             link: "/marketplace",
             dedupeKey: `activation:${decided.id}`,
           })
+          // A paid bank transfer wins the account's CRM lead.
+          if (action === "approve") {
+            await crmPaymentReceived(container.infrastructure.database, {
+              organizationId: decided.organizationId,
+              amountHalalas: decided.priceHalalas ?? 0,
+              application: decided.application,
+            })
+          }
         }
         return send(200, decided)
       }

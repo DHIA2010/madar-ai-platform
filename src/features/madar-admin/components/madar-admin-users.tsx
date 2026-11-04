@@ -30,7 +30,7 @@ import {
 import { formatDate, platformAdminService, STAFF_ROLE_LABEL } from "../services"
 import type { AdminStaffMember, AdminStaffRole } from "../types/platform-admin.types"
 
-const ROLES: AdminStaffRole[] = ["super_admin", "operations", "finance", "support"]
+const ROLES: AdminStaffRole[] = ["super_admin", "operations", "finance", "support", "sales"]
 
 // Madar's own team with access to this console. A staff member is an existing Madar account
 // given one of the fixed roles; the PLATFORM_ADMIN_EMAILS owners are permanent and locked here.

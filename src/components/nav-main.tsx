@@ -64,6 +64,8 @@ type NavItem = {
   url: string
   icon?: React.ReactNode
   items?: NavLeafItem[]
+  // Active only on exactly this page, not the pages under it (e.g. a console's home link).
+  exact?: boolean
 }
 
 type NavWithChildren = NavItem & { items: NavLeafItem[] }
@@ -159,8 +161,13 @@ export function NavMain({ items }: { items: NavItem[] }) {
   // prefix of another's (e.g. "/campaigns" and "/campaigns/links"), only the most specific
   // match should light up -- a plain prefix check would highlight both.
   const bestMatchUrl = items
+    .filter(
+      (item) =>
+        pathname === item.url ||
+        pathname === `${item.url}/` ||
+        (!item.exact && pathname.startsWith(item.url + "/"))
+    )
     .map((item) => item.url)
-    .filter((url) => pathname === url || pathname.startsWith(url + "/"))
     .sort((a, b) => b.length - a.length)[0]
 
   const isActive = (url: string) => url === bestMatchUrl

@@ -3,11 +3,14 @@
 import { type FormEvent, useCallback, useState } from "react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
-import { CalendarCheck, CheckCircle2, Loader2 } from "lucide-react"
+import { CalendarCheck, CalendarDays, CheckCircle2, Loader2, PhoneCall } from "lucide-react"
 
+import { readAttribution } from "@/lib/attribution"
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
 
+import { callDays, CallPicker } from "./call-picker"
+import { InterestPicker } from "./interest-picker"
 import { MADAR_REGISTER_URL } from "./marketing-constants"
 import type { BookedMeeting } from "./meeting-booker"
 
@@ -67,11 +70,90 @@ export function ContactSalesPage() {
   })
   const [website, setWebsite] = useState("")
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
+  // After the form: choose (meeting or call) → booking (calendar) or calling (day and time).
   const [status, setStatus] = useState<
-    "idle" | "sending" | "failed" | "booking" | "booked" | "skipped"
+    | "idle"
+    | "sending"
+    | "failed"
+    | "choose"
+    | "booking"
+    | "booked"
+    | "calling"
+    | "called"
+    | "skipped"
   >("idle")
   const [leadId, setLeadId] = useState<string | null>(null)
   const [meeting, setMeeting] = useState<BookedMeeting | null>(null)
+  // The call times on offer, worked out when the lead picks "phone call".
+  const [days, setDays] = useState<ReturnType<typeof callDays>>([])
+  const [callAt, setCallAt] = useState<string | null>(null)
+  const [sendingCall, setSendingCall] = useState(false)
+  const [callFailed, setCallFailed] = useState(false)
+  // After the meeting or call: what the lead is interested in (answered or skipped).
+  const [interestsDone, setInterestsDone] = useState(false)
+  const [sendingInterests, setSendingInterests] = useState(false)
+  const [interestsFailed, setInterestsFailed] = useState(false)
+
+  async function sendInterests(input: { interests: string[]; other: string | null }) {
+    if (!leadId) {
+      setInterestsDone(true)
+      return
+    }
+    setSendingInterests(true)
+    setInterestsFailed(false)
+    try {
+      const response = await fetch(
+        new URL(
+          [SALES_LEADS_PATH, leadId, "interests"].join(String.fromCharCode(47)),
+          getClientEnvironment().API_BASE_URL
+        ),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        }
+      )
+      if (!response.ok) {
+        setInterestsFailed(true)
+        return
+      }
+      setInterestsDone(true)
+    } catch {
+      setInterestsFailed(true)
+    } finally {
+      setSendingInterests(false)
+    }
+  }
+
+  async function requestCall(at: string) {
+    setSendingCall(true)
+    setCallFailed(false)
+    try {
+      const response = leadId
+        ? await fetch(
+            new URL(
+              [SALES_LEADS_PATH, leadId, "call"].join(String.fromCharCode(47)),
+              getClientEnvironment().API_BASE_URL
+            ),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ callAt: at }),
+            }
+          )
+        : null
+      if (response && !response.ok) {
+        setCallFailed(true)
+        return
+      }
+      setCallAt(at)
+      setStatus("called")
+    } catch {
+      setCallFailed(true)
+    } finally {
+      setSendingCall(false)
+    }
+  }
 
   const onBooked = useCallback(
     (booked: BookedMeeting) => {
@@ -114,6 +196,7 @@ export function ContactSalesPage() {
           phone: normalizePhone(values.phone.trim()),
           email: values.email.trim(),
           website,
+          attribution: readAttribution(),
         }),
       })
       if (!response.ok) {
@@ -122,7 +205,7 @@ export function ContactSalesPage() {
       }
       const body = (await response.json().catch(() => ({}))) as { id?: string }
       setLeadId(body.id ?? null)
-      setStatus("booking")
+      setStatus("choose")
     } catch {
       setStatus("failed")
     }
@@ -188,10 +271,10 @@ export function ContactSalesPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setStatus("skipped")}
+                  onClick={() => setStatus("choose")}
                   className="h-11 rounded-2xl border-2 border-slate-200 px-5 text-[15px] font-bold text-[#0b1738] transition-colors hover:border-slate-300 hover:bg-slate-50"
                 >
-                  لاحقًا، تواصلوا معي
+                  رجوع
                 </button>
               </div>
               <div className="mt-4 overflow-hidden rounded-3xl border border-slate-100">
@@ -206,27 +289,135 @@ export function ContactSalesPage() {
                 />
               </div>
             </div>
-          ) : status === "booked" || status === "skipped" ? (
+          ) : status === "choose" ? (
+            <div className="text-center">
+              <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="size-9" />
+              </span>
+              <h1 className="mt-5 text-[28px] leading-tight font-black text-[#0b1738]">
+                تم استلام طلبك
+              </h1>
+              <p className="mt-2 text-[17px] text-slate-600">كيف تفضّل أن نتواصل معك؟</p>
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    {
+                      key: "booking",
+                      icon: CalendarDays,
+                      title: "حجز اجتماع",
+                      text: "عرض توضيحي أونلاين لمدة 30 دقيقة",
+                    },
+                    {
+                      key: "calling",
+                      icon: PhoneCall,
+                      title: "مكالمة هاتفية",
+                      text: "اختر اليوم والوقت ونتصل بك",
+                    },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => {
+                      if (option.key === "calling") setDays(callDays(Date.now()))
+                      setStatus(option.key)
+                    }}
+                    className="group flex flex-col items-center rounded-3xl border-2 border-slate-200 px-5 py-7 transition-all hover:-translate-y-0.5 hover:border-[#2878ff] hover:shadow-[0_18px_40px_-20px_rgba(40,120,255,0.5)]"
+                  >
+                    <span className="flex size-14 items-center justify-center rounded-2xl bg-[#2878ff]/10 text-[#2878ff] transition-colors group-hover:bg-[#2878ff] group-hover:text-white">
+                      <option.icon className="size-7" />
+                    </span>
+                    <span className="mt-4 text-[19px] font-black text-[#0b1738]">
+                      {option.title}
+                    </span>
+                    <span className="mt-1 text-[14px] text-slate-500">{option.text}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatus("skipped")}
+                className="mt-5 h-12 w-full rounded-2xl text-[15px] font-bold text-slate-500 hover:text-[#0b1738]"
+              >
+                لاحقًا، تواصلوا معي
+              </button>
+            </div>
+          ) : status === "calling" ? (
+            <>
+              <CallPicker
+                days={days}
+                sending={sendingCall}
+                onConfirm={(at) => void requestCall(at)}
+                onBack={() => setStatus("choose")}
+              />
+              {callFailed ? (
+                <p className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-center text-[15px] font-semibold text-rose-700">
+                  تعذر حفظ الموعد، حاول مرة أخرى.
+                </p>
+              ) : null}
+            </>
+          ) : (status === "booked" || status === "called") && !interestsDone ? (
+            <div>
+              <div className="mb-6 flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-600">
+                  {status === "booked" ? (
+                    <CalendarCheck className="size-5" />
+                  ) : (
+                    <PhoneCall className="size-5" />
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-extrabold text-emerald-800">
+                    {status === "booked" ? "تم حجز موعدك" : "تم تحديد موعد المكالمة"}
+                  </p>
+                  {(status === "booked" ? meeting?.startTime : callAt) ? (
+                    <p className="text-[13.5px] font-semibold text-emerald-700">
+                      {formatMeeting((status === "booked" ? meeting?.startTime : callAt) as string)}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <InterestPicker
+                sending={sendingInterests}
+                failed={interestsFailed}
+                onSubmit={(input) => void sendInterests(input)}
+                onSkip={() => setInterestsDone(true)}
+              />
+            </div>
+          ) : status === "booked" || status === "skipped" || status === "called" ? (
             <div className="py-6 text-center">
               <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 {status === "booked" ? (
                   <CalendarCheck className="size-10" />
+                ) : status === "called" ? (
+                  <PhoneCall className="size-10" />
                 ) : (
                   <CheckCircle2 className="size-11" />
                 )}
               </span>
               <h1 className="mt-6 text-[28px] font-black text-[#0b1738]">
-                {status === "booked" ? "تم حجز موعدك" : "تم استلام طلبك"}
+                {status === "booked"
+                  ? "تم حجز موعدك"
+                  : status === "called"
+                    ? "سنتصل بك في موعدك"
+                    : "تم استلام طلبك"}
               </h1>
               {status === "booked" && meeting ? (
                 <p className="mt-3 text-[19px] font-extrabold text-[#2878ff]">
                   {formatMeeting(meeting.startTime)}
                 </p>
               ) : null}
+              {status === "called" && callAt ? (
+                <p className="mt-3 text-[19px] font-extrabold text-[#2878ff]">
+                  {formatMeeting(callAt)}
+                </p>
+              ) : null}
               <p className="mt-3 text-[17px] leading-8 text-slate-600">
                 {status === "booked"
                   ? "ستصلك دعوة الاجتماع ورابطه على بريدك الإلكتروني. نراك قريبًا!"
-                  : "شكرًا لك، سيتواصل معك فريق المبيعات قريبًا."}
+                  : status === "called"
+                    ? "سيتصل بك فريق المبيعات على رقم جوالك في هذا الموعد."
+                    : "شكرًا لك، سيتواصل معك فريق المبيعات قريبًا."}
               </p>
               <a
                 href={MADAR_REGISTER_URL}

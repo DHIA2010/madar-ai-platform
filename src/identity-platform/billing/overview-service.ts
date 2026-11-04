@@ -23,7 +23,7 @@ export interface BillingSubscriptionView {
   endsAt: string | null
 }
 
-export type BillingPaymentMethod = "card" | "bank_transfer"
+export type BillingPaymentMethod = "card" | "bank_transfer" | "cash" | "other"
 export type BillingPaymentStatus = "paid" | "failed" | "pending" | "rejected"
 
 export interface BillingPaymentView {
@@ -75,55 +75,84 @@ export class BillingOverviewService {
     const organizationId = actor.organizationId
     const now = new Date().toISOString()
 
-    const [organization, subscriptionRows, cardRows, transferRows] = await Promise.all([
-      this.db.query<{ id: string; name: string; settings: Record<string, unknown> | null }>(
-        "SELECT id, name, settings FROM organizations WHERE id = $1",
-        [organizationId]
-      ),
-      this.db.query<Record<string, unknown>>(
-        "SELECT * FROM organization_subscriptions WHERE organization_id = $1 ORDER BY created_at ASC",
-        [organizationId]
-      ),
-      this.db.query<{
-        id: string
-        application: string
-        package_name: string | null
-        billing_interval: BillingInterval | null
-        amount: number
-        original_amount: number | null
-        discount_halalas: number | null
-        currency: string
-        moyasar_payment_id: string | null
-        status: "paid" | "failed"
-        created_at: string | Date
-        updated_at: string | Date
-      }>(
-        `SELECT p.id, p.application, k.name AS package_name, p.billing_interval, p.amount,
+    const [organization, subscriptionRows, cardRows, transferRows, salesInvoiceRows] =
+      await Promise.all([
+        this.db.query<{ id: string; name: string; settings: Record<string, unknown> | null }>(
+          "SELECT id, name, settings FROM organizations WHERE id = $1",
+          [organizationId]
+        ),
+        this.db.query<Record<string, unknown>>(
+          "SELECT * FROM organization_subscriptions WHERE organization_id = $1 ORDER BY created_at ASC",
+          [organizationId]
+        ),
+        this.db.query<{
+          id: string
+          application: string
+          package_name: string | null
+          billing_interval: BillingInterval | null
+          amount: number
+          original_amount: number | null
+          discount_halalas: number | null
+          currency: string
+          moyasar_payment_id: string | null
+          status: "paid" | "failed"
+          created_at: string | Date
+          updated_at: string | Date
+        }>(
+          `SELECT p.id, p.application, k.name AS package_name, p.billing_interval, p.amount,
                 p.original_amount, p.discount_halalas, p.currency, p.moyasar_payment_id,
                 p.status, p.created_at, p.updated_at
            FROM billing_moyasar_payments p
            LEFT JOIN platform_packages k ON k.id = p.package_id
           WHERE p.organization_id = $1 AND p.status IN ('paid', 'failed')`,
-        [organizationId]
-      ),
-      this.db.query<{
-        id: string
-        application: string
-        package_name: string | null
-        billing_interval: BillingInterval | null
-        price_halalas: number | null
-        status: "pending" | "approved" | "rejected"
-        rejection_reason: string | null
-        created_at: string | Date
-        reviewed_at: string | Date | null
-      }>(
-        `SELECT id, application, package_name, billing_interval, price_halalas, status,
+          [organizationId]
+        ),
+        this.db.query<{
+          id: string
+          application: string
+          package_name: string | null
+          billing_interval: BillingInterval | null
+          price_halalas: number | null
+          status: "pending" | "approved" | "rejected"
+          rejection_reason: string | null
+          created_at: string | Date
+          reviewed_at: string | Date | null
+        }>(
+          `SELECT id, application, package_name, billing_interval, price_halalas, status,
                 rejection_reason, created_at, reviewed_at
            FROM subscription_activation_requests
           WHERE organization_id = $1 AND deleted_at IS NULL`,
-        [organizationId]
-      ),
-    ])
+          [organizationId]
+        ),
+        // Invoices Madar's sales team issued this account (through its CRM lead).
+        this.db.query<{
+          id: string
+          number: string
+          status: "unpaid" | "paid"
+          items:
+            | {
+                kind: string
+                application?: string
+                packageName?: string
+                interval?: BillingInterval
+              }[]
+            | null
+          discount_halalas: number
+          subtotal_halalas: number
+          total_halalas: number
+          payment_method: "card" | "bank_transfer" | "cash" | "other" | null
+          payment_reference: string | null
+          paid_at: string | Date | null
+          created_at: string | Date
+        }>(
+          `SELECT i.id, i.number, i.status, i.items, i.discount_halalas, i.subtotal_halalas,
+                i.total_halalas, i.payment_method, i.payment_reference, i.paid_at, i.created_at
+           FROM crm_invoices i
+           JOIN crm_leads l ON l.id = i.lead_id
+          WHERE l.organization_id = $1 AND i.status IN ('unpaid', 'paid')`,
+          [organizationId]
+        ),
+      ])
 
     const org = organization.rows[0]
     if (!org) throw ERRORS.notFound("Organization")
@@ -184,6 +213,26 @@ export class BillingOverviewService {
           currency: "SAR",
           reference: null,
           rejectionReason: row.rejection_reason,
+        }
+      }),
+      ...salesInvoiceRows.rows.map((row): BillingPaymentView => {
+        const firstPackage = (row.items ?? []).find((item) => item.kind === "package")
+        const date = new Date(row.paid_at ?? row.created_at)
+        return {
+          id: row.id,
+          invoiceNumber: row.number,
+          date: date.toISOString(),
+          application: firstPackage?.application ?? "salesInvoice",
+          packageName: firstPackage?.packageName ?? null,
+          billingInterval: firstPackage?.interval ?? null,
+          method: row.payment_method ?? "bank_transfer",
+          status: row.status === "paid" ? "paid" : "pending",
+          amount: halalasToSar(row.total_halalas),
+          originalAmount: null,
+          discount: row.discount_halalas ? halalasToSar(row.discount_halalas) : null,
+          currency: "SAR",
+          reference: row.payment_reference,
+          rejectionReason: null,
         }
       }),
     ].sort((left, right) => right.date.localeCompare(left.date))

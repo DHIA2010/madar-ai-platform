@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 
 import {
   AppButton,
+  AppDateField,
   AppDialog,
   AppInput,
   AppSelect,
@@ -338,12 +339,7 @@ export function CouponEditorDialog({
           </div>
           <div>
             <label className={FIELD_LABEL}>آخر يوم للاستخدام (اختياري)</label>
-            <AppInput
-              type="date"
-              value={expiresOn}
-              onChange={(event) => setExpiresOn(event.target.value)}
-              className="h-11 rounded-[10px]"
-            />
+            <AppDateField value={expiresOn} onChange={setExpiresOn} />
           </div>
         </div>
 

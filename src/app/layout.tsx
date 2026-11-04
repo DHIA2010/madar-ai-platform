@@ -13,6 +13,7 @@ import { isMarketingHostname } from "@/features/marketing-site/marketing-constan
 import { cairo } from "@/components/design/fonts"
 import StoreContextProvider from "@/providers/store-context-provider"
 import QueryProvider from "../providers/query-provider"
+import { AttributionCapture } from "@/components/attribution-capture"
 
 /* SEO Metadata */
 export const metadata: Metadata = {
@@ -111,6 +112,8 @@ export default async function RootLayout({
   return (
     <html lang={htmlLang} dir={htmlDir} className={cairo.variable} suppressHydrationWarning>
       <body className={`${cairo.className} antialiased`} suppressHydrationWarning>
+        {/* Where this visitor came from (UTM tags, ad click ids), for the CRM. */}
+        <AttributionCapture />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider
             attribute="class"

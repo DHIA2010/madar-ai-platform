@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { CalendarClock, Clock3, MoreHorizontal, Timer, UserCheck, Users } from "lucide-react"
 import { toast } from "sonner"
 
@@ -78,7 +79,9 @@ export function MadarAdminCustomers() {
     fetchSummary: platformAdminService.getCustomerSummary,
     onError,
   })
-  const [detailId, setDetailId] = useState<string | null>(null)
+  // Opened straight away when linked from elsewhere (the CRM), via ?customer=<id>.
+  const linkedCustomer = useSearchParams().get("customer")
+  const [detailId, setDetailId] = useState<string | null>(linkedCustomer)
   const [grantTarget, setGrantTarget] = useState<{ id: string; name: string } | null>(null)
   const [detailReloadKey, setDetailReloadKey] = useState(0)
 

@@ -4,6 +4,7 @@ import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { ERRORS } from "../../application/errors/IdentityError"
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { writeAuditLog } from "../../infrastructure/postgres/audit-log-writer"
+import { crmPaymentReceived } from "../../crm/service"
 import { notify } from "../../notifications/service"
 import type { CouponService } from "../../coupons/service"
 import type { PricingService } from "../../pricing/service"
@@ -223,6 +224,13 @@ export class MoyasarBillingService {
         link: "/marketplace",
         dedupeKey: `payment:${payment.id}`,
       })
+      if (isGenuinelyPaid) {
+        await crmPaymentReceived(this.db, {
+          organizationId: payment.organizationId,
+          amountHalalas: payment.amount,
+          application: payment.application,
+        })
+      }
 
       return resolved
     })

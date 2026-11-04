@@ -47,11 +47,14 @@ export function AppDateField({
   onChange,
   placeholder,
   ariaLabel,
+  triggerClassName,
 }: {
   value: string
   onChange: (next: string) => void
   placeholder?: string
   ariaLabel?: string
+  // Overrides for the field itself, e.g. a shorter height in a compact row.
+  triggerClassName?: string
 }) {
   const locale = useLocale()
   const t = useTranslations("dateRangeFilter")
@@ -90,7 +93,8 @@ export function AppDateField({
             aria-label={ariaLabel ?? tField("ariaLabel")}
             className={cn(
               "flex h-11 w-full cursor-pointer items-center gap-2 rounded-[12px] border border-[#e1e7f0] bg-white px-2.5 text-right text-[13px] transition-colors hover:border-[#c4d5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/35",
-              selected ? "text-[#0b1738]" : "text-[#95a4bd]"
+              selected ? "text-[#0b1738]" : "text-[#95a4bd]",
+              triggerClassName
             )}
           >
             {/* RTL: the tile is written first so it lands to the right of the label, matching

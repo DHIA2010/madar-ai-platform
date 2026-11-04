@@ -1,5 +1,6 @@
 import type {
   EmailGateway,
+  AccountActivatedEmail,
   RenewalReminderEmail,
   SalesLeadEmail,
   StoreWelcomeEmail,
@@ -49,5 +50,17 @@ export class InMemoryEmailGateway implements EmailGateway {
 
   async sendSalesLeadEmail(input: SalesLeadEmail) {
     this.sent.push({ kind: "sales_lead", ...input, email: input.email ?? "" })
+  }
+
+  async sendAccountActivatedEmail(input: AccountActivatedEmail) {
+    this.sent.push({
+      kind: "account_activated",
+      email: input.email,
+      fullName: input.fullName,
+      companyName: input.companyName,
+      applications: input.applications.join(","),
+      newAccount: String(input.newAccount),
+      actionUrl: input.actionUrl,
+    })
   }
 }

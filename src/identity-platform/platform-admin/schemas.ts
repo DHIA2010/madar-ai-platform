@@ -81,6 +81,13 @@ export const platformSettingsPatchSchema = z
     trialDays: z.number().int().min(1).max(90),
     renewalReminderDays: z.number().int().min(1).max(30),
     gracePeriodDays: z.number().int().min(0).max(60),
+    legalName: z.string().trim().max(160),
+    vatNumber: z.string().trim().max(32),
+    commercialRegistration: z.string().trim().max(32),
+    address: z.string().trim().max(300),
+    calcomWebhookSecret: z.string().trim().max(200),
+    quoteTerms: z.string().trim().max(5000),
+    invoiceTerms: z.string().trim().max(5000),
   })
   .partial()
 

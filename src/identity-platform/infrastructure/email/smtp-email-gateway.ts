@@ -1,11 +1,13 @@
 import nodemailer from "nodemailer"
 
 import type {
+  AccountActivatedEmail,
   EmailGateway,
   RenewalReminderEmail,
   SalesLeadEmail,
   StoreWelcomeEmail,
 } from "../../application/ports"
+import { accountActivatedSubject, accountActivatedText } from "./account-activated-copy"
 import { salesLeadSubject, salesLeadText } from "./sales-lead-copy"
 import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
@@ -100,6 +102,15 @@ export class SmtpEmailGateway implements EmailGateway {
       to: input.to,
       subject: salesLeadSubject(input),
       text: salesLeadText(input),
+    })
+  }
+
+  async sendAccountActivatedEmail(input: AccountActivatedEmail) {
+    await this.transport.sendMail({
+      from: this.config.emailFrom,
+      to: input.email,
+      subject: accountActivatedSubject(input),
+      text: accountActivatedText(input),
     })
   }
 }

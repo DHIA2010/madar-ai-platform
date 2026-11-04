@@ -1,9 +1,11 @@
 import type {
+  AccountActivatedEmail,
   EmailGateway,
   RenewalReminderEmail,
   SalesLeadEmail,
   StoreWelcomeEmail,
 } from "../../application/ports"
+import { accountActivatedSubject, accountActivatedText } from "./account-activated-copy"
 import { salesLeadSubject, salesLeadText } from "./sales-lead-copy"
 import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
@@ -266,6 +268,27 @@ export class ResendEmailGateway implements EmailGateway {
   </table>
   <p style="color:#6b7280;font-size:13px">من موقع madar.my — ${escapeHtml(input.submittedAt)}</p>
 </div>`,
+    })
+  }
+
+  async sendAccountActivatedEmail(input: AccountActivatedEmail) {
+    const apps = input.applications.length
+      ? `<p style="margin:0 0 12px">التطبيقات المفعّلة: <strong>${escapeHtml(input.applications.join("، "))}</strong></p>`
+      : ""
+    const body = input.newAccount
+      ? `تم إنشاء حساب <strong>${escapeHtml(input.companyName)}</strong> في مدار وتفعيل اشتراكك.<br><br>${apps}بريد الدخول: <strong>${escapeHtml(input.email)}</strong><br>اضغط الزر لتعيين كلمة المرور والدخول إلى حسابك. الرابط صالح لمدة 7 أيام.`
+      : `تم تفعيل اشتراكك في مدار لـ <strong>${escapeHtml(input.companyName)}</strong>.<br><br>${apps}`
+    await this.send({
+      to: input.email,
+      subject: accountActivatedSubject(input),
+      text: accountActivatedText(input),
+      html: renderLayout({
+        preheader: accountActivatedSubject(input),
+        heading: `مرحبًا ${input.fullName}`,
+        bodyHtml: `<div dir="rtl" style="text-align:right">${body}</div>`,
+        ctaLabel: input.newAccount ? "تعيين كلمة المرور والدخول" : "الدخول إلى مدار",
+        ctaUrl: input.actionUrl,
+      }),
     })
   }
 }

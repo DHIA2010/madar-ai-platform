@@ -7,7 +7,6 @@ import { toast } from "sonner"
 import {
   AppButton,
   AppCard,
-  AppInput,
   AppSearchInput,
   AppSelect,
   AppSelectContent,
@@ -35,6 +34,7 @@ import {
   platformAdminService,
 } from "../services"
 import type { AdminPayment, AdminPaymentFilters } from "../types/platform-admin.types"
+import { CrmDateRange } from "./crm-filters"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
 import { ReceiptDialog } from "./receipt-dialog"
 
@@ -174,22 +174,15 @@ export function MadarAdminPayments() {
               ))}
           </AppSelectContent>
         </AppSelect>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">من</span>
-          <AppInput
-            type="date"
-            value={list.filters.from ?? ""}
-            onChange={(event) => list.setFilter("from", event.target.value)}
-            className="h-10 w-[150px] rounded-[10px]"
-          />
-          <span className="text-xs text-muted-foreground">إلى</span>
-          <AppInput
-            type="date"
-            value={list.filters.to ?? ""}
-            onChange={(event) => list.setFilter("to", event.target.value)}
-            className="h-10 w-[150px] rounded-[10px]"
-          />
-        </div>
+        <CrmDateRange
+          from={list.filters.from || undefined}
+          to={list.filters.to || undefined}
+          placeholder="تاريخ الدفع"
+          onChange={(range) => {
+            list.setFilter("from", range.from ?? "")
+            list.setFilter("to", range.to ?? "")
+          }}
+        />
       </div>
 
       <AppCard

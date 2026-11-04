@@ -1,12 +1,6 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
 
-import type { Role } from "../types"
-import {
-  MembershipEntity,
-  OrganizationEntity,
-  UserEntity,
-  WorkspaceEntity,
-} from "../domain/entities"
+import { provisionOwnerAccount } from "../accounts/provision"
 import type {
   MembershipRepository,
   OrganizationRepository,
@@ -33,6 +27,12 @@ export interface GoogleSignInDeps {
   stateSecret: string
   // A short-lived, single-use sign-in link for the account (see LoginLinkService).
   createSignInLink: (input: { userId: string; organizationId: string }) => Promise<string>
+  // A brand-new account was just created (e.g. it becomes a CRM lead). Must not throw.
+  onAccountCreated?: (input: {
+    organizationId: string
+    name: string
+    email: string
+  }) => Promise<void>
 }
 
 interface GoogleProfile {
@@ -188,61 +188,15 @@ export class GoogleSignInService {
     }
   }
 
-  // Same shape as a normal registration (and the Salla install's account): the person owns a new
-  // organization with one branch. No password is set that anyone knows -- they sign in with
-  // Google, or set one later with "forgot password".
+  // A new account for this Google profile (Google has already confirmed the email).
   private async createAccount(profile: GoogleProfile) {
-    const now = this.deps.clock.nowIso()
-    const userId = randomUUID()
-    const organizationId = randomUUID()
-    const workspaceId = randomUUID()
-
-    const user = UserEntity.register({
-      id: userId,
+    const { userId, organizationId } = await provisionOwnerAccount(this.deps, {
       email: profile.email,
-      passwordHash: this.deps.hasher.hash(randomBytes(32).toString("hex")),
       fullName: profile.name,
-      timezone: "Asia/Riyadh",
-      language: "ar",
-      organizationId,
-      workspaceId,
-      now,
+      organizationName: profile.name,
+      emailVerified: true,
     })
-    // Google has already confirmed the email.
-    user.verifyEmail(now)
-    const organization = OrganizationEntity.create({
-      id: organizationId,
-      ownerUserId: userId,
-      name: profile.name,
-      settings: {},
-      now,
-    })
-    const workspace = WorkspaceEntity.create({
-      id: workspaceId,
-      organizationId,
-      name: `${profile.name} - الفرع الرئيسي`,
-      now,
-    })
-    const membership = MembershipEntity.create({
-      id: randomUUID(),
-      organizationId,
-      workspaceId,
-      userId,
-      role: "owner" as Role,
-      now,
-    })
-
-    // users and organizations reference each other: insert the user without those links, then
-    // re-save it once the organization and workspace exist (same as register()).
-    await this.deps.users.save({
-      ...user.toState(),
-      primaryOrganizationId: null,
-      activeWorkspaceId: null,
-    })
-    await this.deps.organizations.save(organization.toState())
-    await this.deps.workspaces.save(workspace.toState())
-    await this.deps.users.save(user.toState())
-    await this.deps.memberships.save(membership.toState())
+    await this.deps.onAccountCreated?.({ organizationId, name: profile.name, email: profile.email })
     return { userId, organizationId }
   }
 }

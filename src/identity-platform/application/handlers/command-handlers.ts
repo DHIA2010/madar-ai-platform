@@ -791,6 +791,22 @@ export class IdentityCommandHandlers {
     ])
   }
 
+  // A link for someone who has never had a password (an account Madar's sales team activated) to
+  // set one: the same token the reset-password page takes, but valid for days, not an hour.
+  async issuePasswordSetupToken(userId: string, ttlMs: number): Promise<string> {
+    const token = this.deps.tokenService.generateOpaqueToken()
+    const entry = PasswordResetEntity.create({
+      id: this.deps.uuid.generate(),
+      userId,
+      tokenHash: this.deps.tokenService.hashOpaqueToken(token),
+      expiresAt: new Date(Date.now() + ttlMs).toISOString(),
+      consumedAt: null,
+      createdAt: this.now,
+    })
+    await this.deps.repositories.passwordResets.save(entry.toState())
+    return token
+  }
+
   async createPasswordReset(command: ForgotPasswordCommand, context: RequestContext) {
     await this.enforceRateLimit(`password_reset:${context.ipAddress}`, 10, 60_000)
     const userState = await this.deps.repositories.users.findByEmail(command.email.toLowerCase())

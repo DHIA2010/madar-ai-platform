@@ -13,9 +13,14 @@ import {
   Inbox,
   Layers,
   LayoutGrid,
+  ListChecks,
+  ReceiptText,
+  UserCheck,
   Settings2,
   ShieldCheck,
   ShoppingBag,
+  Target,
+  TrendingUp,
   Sparkles,
   Ticket,
   UserCog,
@@ -52,11 +57,23 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
   // permissions on every route -- hiding is just so nobody lands on a page that would refuse).
   const { currentUser } = useAuth()
   const granted = new Set(currentUser?.platformPermissions ?? [])
-  type Item = { title: string; url: string; icon: React.ReactNode; permission: string }
+  type Item = {
+    title: string
+    url: string
+    icon: React.ReactNode
+    permission: string
+    exact?: boolean
+  }
   const visible = (items: Item[]) => items.filter((item) => granted.has(item.permission))
 
   const groupOne = visible([
-    { title: "الرئيسية", url: ROUTES.madarAdmin, icon: <House />, permission: "customers:view" },
+    {
+      title: "الرئيسية",
+      url: ROUTES.madarAdmin,
+      icon: <House />,
+      permission: "customers:view",
+      exact: true,
+    },
     {
       title: "طلبات الاشتراك",
       url: ROUTES.madarAdminRequests,
@@ -128,6 +145,45 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       permission: "operations:view",
     },
   ])
+  // Madar's sales team: the CRM.
+  const groupSales = visible([
+    {
+      title: "العملاء المحتملون",
+      url: ROUTES.madarAdminCrm,
+      icon: <Target />,
+      permission: "crm:manage",
+    },
+    {
+      title: "عروض الأسعار",
+      url: ROUTES.madarAdminCrmQuotes,
+      icon: <FileText />,
+      permission: "crm:manage",
+    },
+    {
+      title: "فواتير المبيعات",
+      url: ROUTES.madarAdminCrmInvoices,
+      icon: <ReceiptText />,
+      permission: "crm:manage",
+    },
+    {
+      title: "بانتظار التفعيل",
+      url: ROUTES.madarAdminCrmActivations,
+      icon: <UserCheck />,
+      permission: "crm:manage",
+    },
+    {
+      title: "المتابعات",
+      url: ROUTES.madarAdminCrmTasks,
+      icon: <ListChecks />,
+      permission: "crm:manage",
+    },
+    {
+      title: "تقارير المبيعات",
+      url: ROUTES.madarAdminCrmDashboard,
+      icon: <TrendingUp />,
+      permission: "crm:manage",
+    },
+  ])
   const groupFour = visible([
     {
       title: "المستخدمون",
@@ -195,7 +251,7 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
         <SidebarContent className="overflow-hidden">
           <ScrollArea className="h-full">
             <div className="flex min-h-full flex-col gap-2">
-              {[groupOne, groupTwo, groupThree, groupFour]
+              {[groupOne, groupSales, groupTwo, groupThree, groupFour]
                 .filter((group) => group.length > 0)
                 .map((group) => (
                   <NavMain key={group[0].url} items={group} />

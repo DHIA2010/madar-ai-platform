@@ -48,7 +48,7 @@ export interface BillingPayment {
   application: string
   packageName: string | null
   billingInterval: BillingInterval | null
-  method: "card" | "bank_transfer"
+  method: "card" | "bank_transfer" | "cash" | "other"
   status: "paid" | "failed" | "pending" | "rejected"
   amount: number | null
   originalAmount: number | null

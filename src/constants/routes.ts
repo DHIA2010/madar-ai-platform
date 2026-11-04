@@ -89,6 +89,8 @@ export const ROUTES = {
   madarAdmin: "/madar-admin",
   madarAdminRequests: "/madar-admin/requests",
   madarAdminCustomers: "/madar-admin/customers",
+  madarAdminCustomer: (organizationId: string) =>
+    `/madar-admin/customers?customer=${organizationId}`,
   madarAdminSubscriptions: "/madar-admin/subscriptions",
   madarAdminPackages: "/madar-admin/packages",
   madarAdminCoupons: "/madar-admin/coupons",
@@ -102,6 +104,19 @@ export const ROUTES = {
   madarAdminUsers: "/madar-admin/users",
   madarAdminRoles: "/madar-admin/roles",
   madarAdminFeatureFlags: "/madar-admin/feature-flags",
+  madarAdminCrm: "/madar-admin/crm",
+  madarAdminCrmLead: (leadId: string) => `/madar-admin/crm/lead?id=${leadId}`,
+  madarAdminCrmTasks: "/madar-admin/crm/tasks",
+  madarAdminCrmDashboard: "/madar-admin/crm/dashboard",
+  madarAdminCrmQuotes: "/madar-admin/crm/quotes",
+  madarAdminCrmQuote: (quoteId: string) => `/madar-admin/crm/quote?id=${quoteId}`,
+  madarAdminCrmNewQuote: (leadId: string) => `/madar-admin/crm/quote?leadId=${leadId}`,
+  madarAdminCrmNewInvoice: (leadId: string) =>
+    `/madar-admin/crm/quote?leadId=${leadId}&type=invoice`,
+  madarAdminCrmInvoices: "/madar-admin/crm/invoices",
+  madarAdminCrmActivations: "/madar-admin/crm/activations",
+  madarAdminCrmInvoice: (invoiceId: string) => `/madar-admin/crm/invoice?id=${invoiceId}`,
+  payInvoice: (token: string) => `/pay/invoice?token=${token}`,
   auth: {
     basic: {
       login: "/auth/basic/login",

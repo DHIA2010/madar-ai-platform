@@ -18,6 +18,34 @@ import {
   WEIGHT_UNITS,
 } from "./pos/device-settings-types"
 
+// Where a visitor came from (see src/lib/attribution.ts), sent with a lead or a sign-up. Lenient:
+// a malformed value is dropped rather than failing the form.
+const attributionText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => value?.trim() || null)
+const attributionTouchSchema = z.object({
+  source: attributionText(200),
+  medium: attributionText(200),
+  campaign: attributionText(200),
+  content: attributionText(200),
+  term: attributionText(200),
+  clickId: attributionText(300),
+  clickIdType: attributionText(40),
+  referrer: attributionText(200),
+  landingPage: attributionText(300),
+  at: z.string().datetime({ offset: true }),
+})
+export const attributionSchema = z
+  .object({ first: attributionTouchSchema, last: attributionTouchSchema })
+  .nullable()
+  .optional()
+  .catch(null)
+export type LeadAttribution = NonNullable<z.infer<typeof attributionSchema>>
+
 export const registerSchema = z
   .object({
     email: z.string().email(),
@@ -28,6 +56,7 @@ export const registerSchema = z
     rememberMe: z.boolean().optional(),
     timezone: z.string().default("UTC"),
     language: z.string().default("en"),
+    attribution: attributionSchema,
   })
   .refine((value) => Boolean(value.organizationName) || Boolean(value.invitationToken), {
     message: "organizationName is required unless registering via an invitation",
@@ -1439,6 +1468,35 @@ export const salesLeadSchema = z.object({
     .optional()
     .transform((value) => (value ? value : null)),
   website: z.string().optional(),
+  attribution: attributionSchema,
+})
+
+// The form's last step: which Madar apps the lead is interested in, and anything else in words.
+export const salesLeadInterestsSchema = z
+  .object({
+    interests: z
+      .array(z.enum(["advertising", "ecommerce", "pos"]))
+      .max(3)
+      .default([]),
+    other: z
+      .string()
+      .trim()
+      .max(200)
+      .nullable()
+      .optional()
+      .transform((value) => value || null),
+  })
+  .refine((value) => value.interests.length > 0 || value.other, "Pick at least one.")
+
+// A phone call the lead picked a time for: in the future, within the next month.
+export const salesLeadCallSchema = z.object({
+  callAt: z
+    .string()
+    .datetime({ offset: true })
+    .refine((value) => {
+      const at = new Date(value).getTime()
+      return at > Date.now() - 5 * 60_000 && at < Date.now() + 31 * 86_400_000
+    }, "Pick a time in the coming month."),
 })
 
 // The demo a lead booked on Cal.com right after the "talk to sales" form.

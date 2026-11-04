@@ -1,5 +1,5 @@
-import { MadarAdminOverview } from "@/features/madar-admin"
+import { MadarAdminHome } from "@/components/madar-admin-home"
 
 export default function Page() {
-  return <MadarAdminOverview />
+  return <MadarAdminHome />
 }

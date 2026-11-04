@@ -68,6 +68,19 @@ export interface EmailGateway {
   sendStoreWelcomeEmail(input: StoreWelcomeEmail): Promise<void>
   // Someone asked Madar's sales team to contact them (madar.my's "talk to sales" form).
   sendSalesLeadEmail(input: SalesLeadEmail): Promise<void>
+  // Madar's sales team activated the customer's account after it paid an invoice.
+  sendAccountActivatedEmail(input: AccountActivatedEmail): Promise<void>
+}
+
+export interface AccountActivatedEmail {
+  email: string
+  fullName: string
+  companyName: string
+  // The apps just switched on, already in words.
+  applications: string[]
+  // A new account: set a password (and sign in). An existing one: sign in.
+  newAccount: boolean
+  actionUrl: string
 }
 
 export interface SalesLeadEmail {

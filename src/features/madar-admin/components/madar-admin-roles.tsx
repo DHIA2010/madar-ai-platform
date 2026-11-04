@@ -17,7 +17,7 @@ import {
 import { PLATFORM_PERMISSION_LABEL, platformAdminService, STAFF_ROLE_LABEL } from "../services"
 import type { AdminStaffRole } from "../types/platform-admin.types"
 
-const ROLES: AdminStaffRole[] = ["super_admin", "operations", "finance", "support"]
+const ROLES: AdminStaffRole[] = ["super_admin", "operations", "finance", "support", "sales"]
 
 // The fixed staff roles and exactly what each can do -- read straight from the backend's own
 // permission table, so this page can never drift from what's actually enforced.

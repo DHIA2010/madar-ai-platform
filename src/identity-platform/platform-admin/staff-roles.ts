@@ -12,10 +12,11 @@ export const PLATFORM_PERMISSIONS = [
   "flags:manage",
   "settings:manage",
   "staff:manage",
+  "crm:manage",
 ] as const
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[number]
 
-export const PLATFORM_ROLES = ["super_admin", "operations", "finance", "support"] as const
+export const PLATFORM_ROLES = ["super_admin", "operations", "finance", "support", "sales"] as const
 export type PlatformRole = (typeof PLATFORM_ROLES)[number]
 
 export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, readonly PlatformPermission[]> = {
@@ -40,6 +41,8 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, readonly PlatformPe
   ],
   // Helps customers: read-only customers and operational views.
   support: ["customers:view", "operations:view"],
+  // Madar's sales team: the CRM only (leads, follow-ups, the sales dashboard).
+  sales: ["crm:manage"],
 }
 
 export function permissionsForRole(role: PlatformRole | null | undefined): PlatformPermission[] {
