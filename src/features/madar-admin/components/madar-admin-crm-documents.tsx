@@ -28,7 +28,7 @@ import {
   AppSelectValue,
 } from "@/components/app"
 
-import { crmService, formatDate, platformAdminService } from "../services"
+import { crmService, formatDate } from "../services"
 import type {
   CrmInvoice,
   CrmQuote,
@@ -36,12 +36,10 @@ import type {
   InvoiceStatus,
   QuoteStatus,
 } from "../types/crm.types"
-import type { AdminReceipt } from "../types/platform-admin.types"
 import { CustomerPickerDialog } from "./crm-customer-picker"
 import { CrmDateRange, SavedViews } from "./crm-filters"
 import { INVOICE_STATUS_META, PAYMENT_METHOD_LABEL } from "./madar-admin-crm-invoice"
 import { QUOTE_STATUS_META } from "./madar-admin-crm-quote"
-import { ReceiptDialog } from "./receipt-dialog"
 
 const money = (amount: number) =>
   `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)} ر.س`
@@ -274,47 +272,14 @@ export function MadarAdminCrmQuotes() {
 }
 
 // فواتير المبيعات: invoices made from quotes, paid online or by bank transfer.
-// One row of the merged list: a sales invoice, or an invoice Madar issued automatically when a
-// customer paid a subscription in the app (by card, or a bank transfer staff approved).
-type InvoiceRowItem =
-  | { kind: "sales"; invoice: CrmInvoice }
-  | { kind: "auto"; receipt: AdminReceipt }
-
-const AUTO_SOURCE_LABEL: Record<AdminReceipt["sourceType"], string> = {
+// Where an invoice came from, when it wasn't written by the sales team.
+const AUTO_SOURCE_LABEL: Record<string, string> = {
   card: "تلقائية — دفع بالبطاقة",
   bank_transfer: "تلقائية — تحويل بنكي",
 }
 
-// Every automatic invoice (the receipts list is paged: up to 500 here).
-async function loadAutoInvoices(): Promise<AdminReceipt[]> {
-  const all: AdminReceipt[] = []
-  for (let page = 1; page <= 5; page++) {
-    const result = await platformAdminService.listReceipts({}, page, 100)
-    all.push(...result.items)
-    if (all.length >= result.total || result.items.length === 0) break
-  }
-  return all
-}
-
-function autoMatches(receipt: AdminReceipt, filters: InvoiceFilters) {
-  if (filters.source === "sales") return false
-  if (filters.status === "unpaid" || filters.status === "void") return false
-  if (filters.activation === "pending") return false
-  if (filters.method !== "all" && filters.method !== receipt.sourceType) return false
-  const day = receipt.paidAt.slice(0, 10)
-  if (filters.from && day < filters.from) return false
-  if (filters.to && day > filters.to) return false
-  const search = filters.search.trim().toLowerCase()
-  return (
-    !search ||
-    [receipt.number, receipt.customer.name, receipt.customer.email]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(search))
-  )
-}
-
-// فواتير المبيعات: the sales team's invoices and the ones issued automatically for in-app payments,
-// in one list (newest first) -- the source column says which.
+// فواتير المبيعات: the sales team's invoices and the tax invoices issued automatically for in-app
+// payments (their payment receipts are under المدفوعات) -- the source column says which.
 export function MadarAdminCrmInvoices() {
   const router = useRouter()
   const [filters, setFilters] = useState<InvoiceFilters>({
@@ -329,37 +294,12 @@ export function MadarAdminCrmInvoices() {
   const update = (patch: Partial<InvoiceFilters>) =>
     setFilters((current) => ({ ...current, ...patch }))
   const [invoices, setInvoices] = useState<CrmInvoice[] | null>(null)
-  // Staff without billing access (the Sales role) just don't get the automatic ones.
-  const [autoInvoices, setAutoInvoices] = useState<AdminReceipt[] | null>(null)
-  const [receiptId, setReceiptId] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   // When the list arrived: "overdue" is judged from then.
   const [loadedAt, setLoadedAt] = useState(0)
 
   useEffect(() => {
     let active = true
-    loadAutoInvoices()
-      .then((result) => {
-        if (active) setAutoInvoices(result)
-      })
-      .catch(() => {
-        if (active) setAutoInvoices([])
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    if (query.source === "auto") {
-      Promise.resolve().then(() => {
-        if (active) setInvoices([])
-      })
-      return () => {
-        active = false
-      }
-    }
     crmService
       .listInvoices({
         status: query.status,
@@ -381,18 +321,10 @@ export function MadarAdminCrmInvoices() {
     }
   }, [query])
 
-  const loading = invoices === null || autoInvoices === null
-  const rows: InvoiceRowItem[] = [
-    ...(invoices ?? []).map((invoice) => ({ kind: "sales" as const, invoice })),
-    ...(autoInvoices ?? [])
-      .filter((receipt) => autoMatches(receipt, query))
-      .map((receipt) => ({ kind: "auto" as const, receipt })),
-  ].sort((left, right) => {
-    const at = (row: InvoiceRowItem) =>
-      row.kind === "sales" ? row.invoice.createdAt : row.receipt.paidAt
-    return at(right).localeCompare(at(left))
-  })
-  const hasAuto = (autoInvoices ?? []).length > 0
+  const rows = (invoices ?? []).filter(
+    (invoice) => query.source === "all" || invoice.source === query.source
+  )
+  const hasAuto = (invoices ?? []).some((invoice) => invoice.source === "auto")
 
   const unpaidTotal = (invoices ?? [])
     .filter((invoice) => invoice.status === "unpaid")
@@ -406,13 +338,12 @@ export function MadarAdminCrmInvoices() {
         onClose={() => setPicking(false)}
         onPick={(leadId) => router.push(ROUTES.madarAdminCrmNewInvoice(leadId))}
       />
-      <ReceiptDialog receiptId={receiptId} onClose={() => setReceiptId(null)} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">فواتير المبيعات</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            فواتير فريق المبيعات، والفواتير التي تصدر تلقائيًا عند دفع العملاء اشتراكاتهم من
-            التطبيق.
+            فواتير فريق المبيعات، والفواتير الضريبية التي تصدر تلقائيًا عند دفع العملاء اشتراكاتهم
+            من التطبيق (إيصالات الدفع في صفحة المدفوعات).
             {unpaidTotal > 0 ? (
               <span className="ms-2 font-semibold text-amber-700">مستحق: {money(unpaidTotal)}</span>
             ) : null}
@@ -533,61 +464,7 @@ export function MadarAdminCrmInvoices() {
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
-            {rows.map((row) => {
-              if (row.kind === "auto") {
-                const receipt = row.receipt
-                return (
-                  <AppTableRow
-                    key={`auto-${receipt.id}`}
-                    className="cursor-pointer"
-                    onClick={() => setReceiptId(receipt.id)}
-                  >
-                    <AppTableCell className="font-mono text-sm font-bold">
-                      {receipt.number}
-                    </AppTableCell>
-                    <AppTableCell>
-                      <Link
-                        href={ROUTES.madarAdminCustomer(receipt.organizationId)}
-                        onClick={(event) => event.stopPropagation()}
-                        className="font-semibold text-primary hover:underline"
-                      >
-                        {receipt.customer.name}
-                      </Link>
-                    </AppTableCell>
-                    <AppTableCell className="text-sm text-muted-foreground">
-                      {formatDate(receipt.paidAt)}
-                    </AppTableCell>
-                    <AppTableCell className="text-sm text-muted-foreground">—</AppTableCell>
-                    <AppTableCell className="font-semibold">
-                      {money(receipt.amountHalalas / 100)}
-                    </AppTableCell>
-                    <AppTableCell className="text-sm text-muted-foreground">
-                      {PAYMENT_METHOD_LABEL[receipt.sourceType]}
-                    </AppTableCell>
-                    <AppTableCell>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-bold",
-                          INVOICE_STATUS_META.paid.chip
-                        )}
-                      >
-                        {INVOICE_STATUS_META.paid.label}
-                      </span>
-                    </AppTableCell>
-                    <AppTableCell>
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                        مُفعّل
-                      </span>
-                    </AppTableCell>
-                    <AppTableCell>
-                      <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold whitespace-nowrap text-sky-700">
-                        {AUTO_SOURCE_LABEL[receipt.sourceType]}
-                      </span>
-                    </AppTableCell>
-                  </AppTableRow>
-                )
-              }
-              const invoice = row.invoice
+            {rows.map((invoice) => {
               const overdue =
                 invoice.status === "unpaid" &&
                 invoice.dueDate !== null &&
@@ -653,14 +530,23 @@ export function MadarAdminCrmInvoices() {
                     )}
                   </AppTableCell>
                   {hasAuto ? (
-                    <AppTableCell className="text-sm text-muted-foreground">—</AppTableCell>
+                    <AppTableCell>
+                      {invoice.source === "auto" ? (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold whitespace-nowrap text-sky-700">
+                          {AUTO_SOURCE_LABEL[invoice.paymentMethod ?? "card"] ??
+                            AUTO_SOURCE_LABEL.card}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </AppTableCell>
                   ) : null}
                 </AppTableRow>
               )
             })}
           </AppTableBody>
         </AppTable>
-        {loading ? (
+        {invoices === null ? (
           <div className="h-32 animate-pulse bg-muted/40" />
         ) : rows.length === 0 ? (
           <AppTableEmpty

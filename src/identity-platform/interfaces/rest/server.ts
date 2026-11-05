@@ -89,7 +89,7 @@ import {
   type CustomerAccountActivator,
   SalesDocumentsService,
 } from "../../crm/sales-documents"
-import { publicInvoiceConfirmSchema } from "../../crm/schemas"
+import { publicInvoiceConfirmSchema, publicInvoiceCouponSchema } from "../../crm/schemas"
 import { parseCalcomBooking, verifyCalcomSignature } from "../../crm/calcom-webhook"
 import {
   crmBookingReceived,
@@ -1814,7 +1814,7 @@ export function createIdentityApiServer(
       // Public: an invoice from Madar's sales team, opened from the link in it (the secret token
       // is the key), and paying it by card.
       const publicInvoiceMatch = url.pathname.match(
-        /^\/v1\/public\/invoices\/([A-Za-z0-9_-]{20,64})(\/checkout|\/confirm)?$/
+        /^\/v1\/public\/invoices\/([A-Za-z0-9_-]{20,64})(\/checkout|\/confirm|\/coupon)?$/
       )
       if (publicInvoiceMatch) {
         if (!salesDocumentsService) {
@@ -1838,6 +1838,22 @@ export function createIdentityApiServer(
         if (action === "/confirm" && method === "POST") {
           const body = publicInvoiceConfirmSchema.parse(await readJsonBody(request))
           return send(200, await salesDocumentsService.publicConfirm(token, body.moyasarPaymentId))
+        }
+        if (action === "/coupon" && (method === "POST" || method === "DELETE")) {
+          // Tighter than the page itself: codes shouldn't be guessable by trying many.
+          const attempts = await container.infrastructure.rateLimiter?.check(
+            `public_invoice_coupon:${context.ipAddress}`,
+            10,
+            10 * 60_000
+          )
+          if (attempts && !attempts.allowed) {
+            return send(429, { code: "COUPON_RATE_LIMITED", message: "Too many attempts." })
+          }
+          if (method === "DELETE") {
+            return send(200, await salesDocumentsService.removeCoupon(token))
+          }
+          const body = publicInvoiceCouponSchema.parse(await readJsonBody(request))
+          return send(200, await salesDocumentsService.applyCoupon(token, body.code))
         }
       }
 

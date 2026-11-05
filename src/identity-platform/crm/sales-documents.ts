@@ -1,13 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
-import { ERRORS } from "../application/errors/IdentityError"
+import { ERRORS, IdentityError } from "../application/errors/IdentityError"
 import { MoyasarApiClient } from "../billing/moyasar/client"
 import { resolveMoyasarCredentials } from "../billing/moyasar/credentials"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { requirePlatformPermission } from "../platform-admin/guard"
 import type { PlatformSettingsRepository } from "../platform-settings/types"
 import type { PricingService } from "../pricing/service"
+import { ReceiptService } from "../billing/receipts"
+import { CouponService, MINIMUM_CHARGE_HALALAS, normalizeCouponCode } from "../coupons/service"
 import { activationSettingsPatch } from "../subscriptions/activation"
 import { activatePaid, addBillingInterval } from "../subscriptions/lifecycle"
 import { PostgresOrganizationSubscriptionRepository } from "../subscriptions/repository"
@@ -118,6 +120,12 @@ export interface InvoiceView {
   activatedAt: string | null
   // Its own terms and conditions, when changed for this invoice (else the seller's invoiceTerms).
   terms: string | null
+  // sales: written by the sales team. auto: issued for a payment made in the app (by card, or an
+  // approved bank transfer) -- its payment receipt is receiptNumber, under المدفوعات.
+  source: "sales" | "auto"
+  receiptNumber: string | null
+  // A coupon the customer applied on the pay page (its discount is part of totals.discount).
+  coupon: { code: string; discount: number } | null
   // The subscription period it covers (yyyy-mm-dd), worked out from its packages unless set by hand.
   subscriptionStart: string | null
   subscriptionEnd: string | null
@@ -141,6 +149,8 @@ export interface PublicInvoiceView {
   subscriptionEnd: string | null
   // Its terms and conditions (its own, or the default).
   terms: string
+  // A coupon applied on this page (its discount is part of totals.discount).
+  coupon: { code: string; discount: number } | null
   customer: SalesParty
   seller: SellerInfo
 }
@@ -192,6 +202,11 @@ type InvoiceRow = {
   activated_at: string | Date | null
   activated_organization_id?: string | null
   subscription_start?: string | Date | null
+  source?: "sales" | "auto" | null
+  coupon_id?: string | null
+  coupon_code?: string | null
+  coupon_discount_halalas?: number | null
+  receipt_id?: string | null
   subscription_end?: string | Date | null
   subscription_dates_manual?: boolean | null
   created_at: string | Date
@@ -376,6 +391,7 @@ export async function activatePendingInvoices(db: PostgresDatabase, leadId: stri
     for (const invoice of pending.rows) {
       const items = invoice.items ?? []
       if (!items.some((item) => item.kind === "package")) continue
+      await redeemInvoiceCoupon(db, invoice, String(organizationId))
       const manual = invoice.subscription_dates_manual ? invoicePeriod(invoice) : null
       const furthestEnd = await activateItems(
         db,
@@ -432,6 +448,147 @@ export function activationState(invoice: InvoiceView): "activated" | "pending" |
   if (invoice.activatedAt) return "activated"
   if (invoice.status !== "paid") return null
   return invoice.hasPackages || !invoice.organizationId ? "pending" : null
+}
+
+// A tax invoice for every payment made in the app (card, or approved bank transfer) -- the same
+// document the sales team issues, paid and already switched on. Issued lazily, like the receipts
+// themselves (see ReceiptService), whenever sales invoices are read. The amount paid is taken as
+// VAT-inclusive (in-app prices are charged as listed), so 15% VAT is broken out of it.
+export async function issueAutoInvoices(db: PostgresDatabase) {
+  await new ReceiptService(db).ensureReceipts()
+  const receipts = await db.query<{
+    id: string
+    organization_id: string
+    source_type: "card" | "bank_transfer"
+    application: string
+    package_name: string | null
+    billing_interval: BillingInterval | null
+    amount_halalas: number
+    original_amount_halalas: number | null
+    payment_reference: string | null
+    customer_snapshot: { name?: string; email?: string | null; phone?: string | null } | null
+    paid_at: string | Date
+  }>(
+    `SELECT r.* FROM platform_receipts r
+       LEFT JOIN crm_invoices i ON i.receipt_id = r.id
+      WHERE i.id IS NULL
+      ORDER BY r.sequence`
+  )
+  for (const receipt of receipts.rows) {
+    try {
+      const organizationId = String(receipt.organization_id)
+      const leads = await db.query<{ id: string }>(
+        "SELECT id FROM crm_leads WHERE organization_id = $1 ORDER BY created_at",
+        [organizationId]
+      )
+      let leadId = leads.rows[0]?.id ? String(leads.rows[0].id) : null
+      if (!leadId) {
+        // A customer who never went through the CRM: a lead for it, already won.
+        leadId = randomUUID()
+        const customer = receipt.customer_snapshot ?? {}
+        await db.query(
+          `INSERT INTO crm_leads (id, company_name, email, phone, source, stage, organization_id,
+             won_at, stage_changed_at)
+           VALUES ($1, $2, $3, $4, 'signup', 'won', $5, $6, $6)`,
+          [
+            leadId,
+            customer.name || "عميل مدار",
+            customer.email ?? null,
+            customer.phone ?? null,
+            organizationId,
+            receipt.paid_at,
+          ]
+        )
+      }
+      const total = Number(receipt.amount_halalas)
+      const net = Math.round(total / (1 + VAT_RATE))
+      const listed = Math.max(
+        net,
+        Math.round(Number(receipt.original_amount_halalas ?? total) / (1 + VAT_RATE))
+      )
+      const interval = receipt.billing_interval ?? "monthly"
+      const item: SalesDocumentItem = {
+        kind: "package",
+        description: `${APPLICATION_NAME[receipt.application] ?? receipt.application}${
+          receipt.package_name ? ` — باقة ${receipt.package_name}` : ""
+        } (${interval === "yearly" ? "اشتراك سنوي" : "اشتراك شهري"})`,
+        quantity: 1,
+        unitPriceHalalas: listed,
+        application: receipt.application as PurchasableApplication,
+        packageName: receipt.package_name ?? undefined,
+        interval,
+      }
+      const paidAt = new Date(receipt.paid_at).toISOString()
+      // The payment's day in Saudi time (UTC+3), not UTC.
+      const start = new Date(new Date(paidAt).getTime() + 3 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10)
+      const end = addBillingInterval(`${start}T12:00:00.000Z`, interval).slice(0, 10)
+      const invoiceId = randomUUID()
+      const number = await nextNumber(db, "crm_invoices", "INV")
+      await db.query(
+        `INSERT INTO crm_invoices (id, number, lead_id, status, items, discount_halalas,
+           subtotal_halalas, vat_halalas, total_halalas, pay_token, paid_at, payment_method,
+           payment_reference, activated_at, activated_organization_id, subscription_start,
+           subscription_end, source, receipt_id, created_at)
+         VALUES ($1, $2, $3, 'paid', $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $10, $13, $14,
+           $15, 'auto', $16, $10)`,
+        [
+          invoiceId,
+          number,
+          leadId,
+          JSON.stringify([item]),
+          listed - net,
+          listed,
+          total - net,
+          total,
+          randomBytes(24).toString("base64url"),
+          paidAt,
+          receipt.source_type,
+          receipt.payment_reference,
+          organizationId,
+          start,
+          end,
+          receipt.id,
+        ]
+      )
+      await addActivity(db, {
+        leadId,
+        kind: "invoice",
+        meta: { action: "auto", number, method: receipt.source_type, total: total / 100 },
+      })
+    } catch (error) {
+      // Another backend task issued it at the same moment: the next read picks up the rest.
+      console.warn("crm.auto_invoice_conflict", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      break
+    }
+  }
+}
+
+function couponView(row: InvoiceRow) {
+  return row.coupon_code
+    ? { code: row.coupon_code, discount: sar(Number(row.coupon_discount_halalas ?? 0)) }
+    : null
+}
+
+const couponRejected = (code: string, message: string) =>
+  new IdentityError(code, 422, "business", message)
+
+// A paid invoice's coupon counts as used (once -- keyed by the invoice), for the account it paid for.
+async function redeemInvoiceCoupon(
+  db: PostgresDatabase,
+  invoice: InvoiceRow,
+  organizationId: string
+) {
+  if (!invoice.coupon_id) return
+  await new CouponService(db).redeem({
+    couponId: String(invoice.coupon_id),
+    organizationId,
+    paymentId: String(invoice.id),
+    discountHalalas: Number(invoice.coupon_discount_halalas ?? 0),
+  })
 }
 
 export class SalesDocumentsService {
@@ -539,11 +696,22 @@ export class SalesDocumentsService {
       paymentReference: row.payment_reference,
       activatedAt: iso(row.activated_at),
       terms: row.terms ?? null,
+      source: row.source === "auto" ? "auto" : "sales",
+      coupon: couponView(row),
+      receiptNumber: row.receipt_id ? await this.receiptNumber(String(row.receipt_id)) : null,
       ...invoicePeriodView(row),
       hasPackages: items.some((item) => item.kind === "package"),
       organizationId: lead.organization_id ? String(lead.organization_id) : null,
       createdAt: iso(row.created_at) as string,
     }
+  }
+
+  private async receiptNumber(receiptId: string) {
+    const rows = await this.db.query<{ number: string }>(
+      "SELECT number FROM platform_receipts WHERE id = $1",
+      [receiptId]
+    )
+    return rows.rows[0]?.number ?? null
   }
 
   async seller(): Promise<SellerInfo> {
@@ -858,6 +1026,7 @@ export class SalesDocumentsService {
     }
   ) {
     requirePlatformPermission(actor, "crm:manage")
+    await issueAutoInvoices(this.db)
     const rows = await this.db.query<InvoiceRow>(
       "SELECT * FROM crm_invoices ORDER BY created_at DESC LIMIT 2000"
     )
@@ -915,6 +1084,7 @@ export class SalesDocumentsService {
   // has no Madar account yet.
   async listAwaitingActivation(actor: AuthenticatedActor, filters: { search?: string } = {}) {
     requirePlatformPermission(actor, "crm:manage")
+    await issueAutoInvoices(this.db)
     const rows = await this.db.query<InvoiceRow>(
       "SELECT * FROM crm_invoices WHERE status = 'paid' AND activated_at IS NULL ORDER BY paid_at DESC"
     )
@@ -1139,8 +1309,102 @@ export class SalesDocumentsService {
           [invoice.lead_id, invoice.total_halalas]
         )
       }
+      if (lead.organization_id) {
+        await redeemInvoiceCoupon(this.db, invoice, String(lead.organization_id))
+      }
       await activatePendingInvoices(this.db, String(invoice.lead_id))
     })
+  }
+
+  // ---- A coupon on the pay page ----
+
+  // Checks a coupon against this invoice and applies its discount (replacing any coupon already
+  // on it). Same rules as in-app checkout: active, not expired, not used up, and for the
+  // application / package / period of at least one package line -- or for anything when the
+  // coupon isn't limited. The discount comes off before VAT. Its use is counted once paid.
+  async applyCoupon(token: string, code: string) {
+    const row = await this.invoiceByToken(token)
+    if (row.status !== "unpaid") {
+      throw ERRORS.validation({ status: "This invoice is already paid." })
+    }
+    const normalized = normalizeCouponCode(code)
+    const coupon = (await new CouponService(this.db).list()).find(
+      (entry) => entry.code === normalized
+    )
+    if (!coupon) throw couponRejected("COUPON_NOT_FOUND", "This coupon code doesn't exist.")
+    if (coupon.status === "disabled") {
+      throw couponRejected("COUPON_DISABLED", "This coupon is no longer active.")
+    }
+    if (coupon.status === "expired") {
+      throw couponRejected("COUPON_EXPIRED", "This coupon has expired.")
+    }
+    if (coupon.status === "exhausted") {
+      throw couponRejected("COUPON_EXHAUSTED", "This coupon has reached its usage limit.")
+    }
+    const items = row.items ?? []
+    const salesDiscount = Number(row.discount_halalas) - Number(row.coupon_discount_halalas ?? 0)
+    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPriceHalalas, 0)
+    const unrestricted = coupon.applications.length === 0 && coupon.packageIds.length === 0
+    const eligible = items.filter(
+      (item) =>
+        item.kind === "package" &&
+        item.application &&
+        item.interval &&
+        (coupon.applications.length === 0 || coupon.applications.includes(item.application)) &&
+        (coupon.packageIds.length === 0 ||
+          (item.packageId !== undefined && coupon.packageIds.includes(item.packageId))) &&
+        coupon.billingIntervals.includes(item.interval)
+    )
+    const base = unrestricted
+      ? subtotal - salesDiscount
+      : eligible.reduce((sum, item) => sum + item.quantity * item.unitPriceHalalas, 0)
+    // An unlimited coupon still has its periods: the invoice's packages must include one of them.
+    const packageLines = items.filter((item) => item.kind === "package")
+    const periodFits =
+      packageLines.length === 0 ||
+      packageLines.some((item) => item.interval && coupon.billingIntervals.includes(item.interval))
+    if (base <= 0 || (unrestricted ? !periodFits : eligible.length === 0)) {
+      throw couponRejected("COUPON_NOT_APPLICABLE", "This coupon doesn't apply to this invoice.")
+    }
+    const raw =
+      coupon.discountType === "percentage"
+        ? Math.round((base * coupon.discountValue) / 100)
+        : Math.min(coupon.discountValue, base)
+    // Never below the smallest card charge.
+    const discount = Math.max(0, Math.min(raw, subtotal - salesDiscount - MINIMUM_CHARGE_HALALAS))
+    const totals = computeTotals(items, salesDiscount + discount)
+    await this.db.query(
+      `UPDATE crm_invoices SET coupon_id = $2, coupon_code = $3, coupon_discount_halalas = $4,
+         discount_halalas = $5, subtotal_halalas = $6, vat_halalas = $7, total_halalas = $8,
+         updated_at = now()
+       WHERE id = $1 AND status = 'unpaid'`,
+      [
+        row.id,
+        coupon.id,
+        coupon.code,
+        discount,
+        totals.discount,
+        totals.subtotal,
+        totals.vat,
+        totals.total,
+      ]
+    )
+    return this.publicInvoice(token)
+  }
+
+  async removeCoupon(token: string) {
+    const row = await this.invoiceByToken(token)
+    if (row.status !== "unpaid" || !row.coupon_id) return this.publicInvoice(token)
+    const salesDiscount = Number(row.discount_halalas) - Number(row.coupon_discount_halalas ?? 0)
+    const totals = computeTotals(row.items ?? [], salesDiscount)
+    await this.db.query(
+      `UPDATE crm_invoices SET coupon_id = NULL, coupon_code = NULL, coupon_discount_halalas = 0,
+         discount_halalas = $2, subtotal_halalas = $3, vat_halalas = $4, total_halalas = $5,
+         updated_at = now()
+       WHERE id = $1 AND status = 'unpaid'`,
+      [row.id, totals.discount, totals.subtotal, totals.vat, totals.total]
+    )
+    return this.publicInvoice(token)
   }
 
   // ---- The customer's pay page (by the secret token in its link) ----
@@ -1174,6 +1438,7 @@ export class SalesDocumentsService {
       subscriptionStart: invoicePeriod(row)?.start ?? null,
       subscriptionEnd: invoicePeriod(row)?.end ?? null,
       terms: row.terms ?? (await this.settings.get()).invoiceTerms,
+      coupon: couponView(row),
       customer: party(lead),
       seller: await this.seller(),
     }

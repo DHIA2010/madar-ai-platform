@@ -279,6 +279,10 @@ export interface CrmInvoice {
   activatedAt: string | null
   // Its own terms and conditions, when changed for this invoice (else seller.invoiceTerms).
   terms: string | null
+  // sales: written by the sales team. auto: issued for a payment made in the app (card or an
+  // approved bank transfer); its payment receipt (receiptNumber) is under المدفوعات.
+  source: "sales" | "auto"
+  receiptNumber: string | null
   // The subscription period it covers (yyyy-mm-dd): worked out from its packages unless set by hand.
   subscriptionStart: string | null
   subscriptionEnd: string | null

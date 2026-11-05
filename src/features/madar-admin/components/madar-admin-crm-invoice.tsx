@@ -293,7 +293,20 @@ export function MadarAdminCrmInvoice() {
                     </dd>
                   </div>
                 ) : null}
+                {invoice.receiptNumber ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">إيصال الدفع</dt>
+                    <dd className="font-mono text-xs font-semibold">{invoice.receiptNumber}</dd>
+                  </div>
+                ) : null}
               </dl>
+              {invoice.source === "auto" ? (
+                <p className="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800">
+                  صدرت تلقائيًا عند دفع العميل اشتراكه من التطبيق
+                  {invoice.paymentMethod === "bank_transfer" ? " (تحويل بنكي معتمد)" : " بالبطاقة"}.
+                  إيصال الدفع في صفحة المدفوعات.
+                </p>
+              ) : null}
             </AppCard>
           ) : null}
 

@@ -338,6 +338,131 @@ describe("CRM quotes and invoices", () => {
     expect(await subscription(shop.actor.organizationId, "pos")).toMatchObject({ status: "active" })
   })
 
+  it("issues a tax invoice for every payment made in the app, beside its receipt", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const shop = await signIn("card@shop.test", "Card Shop")
+    // A card payment's receipt (as ReceiptService issues them).
+    await database.query(
+      `insert into platform_receipts (id, sequence, number, organization_id, source_type, source_id,
+         application, package_name, billing_interval, amount_halalas, original_amount_halalas,
+         discount_halalas, payment_method, payment_reference, customer_snapshot, paid_at)
+       values ('11111111-1111-4111-8111-111111111111', 1, 'MDR-000001', $1, 'card',
+         '22222222-2222-4222-8222-222222222222', 'pos', 'Growth', 'monthly', 17910, 19900, 1990,
+         'mada', 'pay_123', '{"name":"Card Shop","email":"card@shop.test"}'::jsonb,
+         '2026-11-01T10:00:00Z')`,
+      [shop.actor.organizationId]
+    )
+    type AutoInvoice = Invoice & {
+      source: string
+      receiptNumber: string | null
+      activatedAt: string | null
+      subscriptionStart: string
+      subscriptionEnd: string
+    }
+    const list = await call<AutoInvoice[]>("GET", staff.token, "/crm/invoices")
+    const auto = list.body.filter((invoice) => invoice.source === "auto")
+    expect(auto).toHaveLength(1)
+    // 179.10 paid, VAT-inclusive: 155.74 + 23.36 VAT, after a discount off the listed 173.04.
+    expect(auto[0]).toMatchObject({
+      status: "paid",
+      paymentMethod: "card",
+      receiptNumber: "MDR-000001",
+      subscriptionStart: "2026-11-01",
+      subscriptionEnd: "2026-12-01",
+      totals: { subtotal: 173.04, discount: 17.3, vat: 23.36, total: 179.1 },
+    })
+    expect(auto[0].activatedAt).not.toBeNull()
+    // Issued once, however often the list is read.
+    const again = await call<AutoInvoice[]>("GET", staff.token, "/crm/invoices")
+    expect(again.body.filter((invoice) => invoice.source === "auto")).toHaveLength(1)
+    // Its customer is a won lead in the CRM, and nothing waits on activation.
+    const leads = await call<{ items: { companyName: string; stage: string }[] }>(
+      "GET",
+      staff.token,
+      "/crm/leads"
+    )
+    expect(leads.body.items).toEqual([
+      expect.objectContaining({ companyName: "Card Shop", stage: "won" }),
+    ])
+    expect((await call<unknown[]>("GET", staff.token, "/crm/activations")).body).toHaveLength(0)
+  })
+
+  it("lets the customer apply a coupon on the pay page, counted once the invoice is paid", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const shop = await signIn("coupon@shop.test", "Coupon Shop")
+    const leadId = await newLead(staff.token, "Coupon Shop", "coupon@shop.test")
+    await crmFromSignup(database, {
+      organizationId: shop.actor.organizationId,
+      companyName: "Coupon Shop",
+      contactName: "Owner",
+      email: "coupon@shop.test",
+    })
+    const { invoice } = await quoteAndInvoice(staff.token, leadId)
+    expect(
+      (
+        await call("POST", staff.token, "/coupons", {
+          code: "WELCOME20",
+          discountType: "percentage",
+          discountValue: 20,
+          applications: ["pos"],
+          billingIntervals: ["monthly"],
+        })
+      ).status
+    ).toBe(201)
+    await call("POST", staff.token, "/coupons", {
+      code: "YEARLY",
+      discountType: "percentage",
+      discountValue: 50,
+      billingIntervals: ["yearly"],
+    })
+    const coupon = (code: string, method = "POST") =>
+      fetch(`${baseUrl}/v1/public/invoices/${invoice.payUrlToken}/coupon`, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: method === "POST" ? JSON.stringify({ code }) : undefined,
+      })
+    type Page = { totals: Totals; coupon: { code: string; discount: number } | null }
+
+    expect((await coupon("NOPE")).status).toBe(422)
+    // Only for yearly subscriptions: not this monthly invoice.
+    const wrong = await coupon("YEARLY")
+    expect(wrong.status).toBe(422)
+    expect(((await wrong.json()) as { code: string }).code).toBe("COUPON_NOT_APPLICABLE")
+
+    // 20% off the POS package line, before VAT; the training line keeps its price.
+    const applied = await coupon("welcome20")
+    expect(applied.status).toBe(200)
+    const page = (await applied.json()) as Page
+    expect(page.coupon?.code).toBe("WELCOME20")
+    expect(page.totals.discount).toBeCloseTo(50 + page.coupon!.discount, 2)
+    expect(page.totals.total).toBeLessThan(invoice.totals.total)
+    // Card checkout charges the new total.
+    const checkout = await fetch(`${baseUrl}/v1/public/invoices/${invoice.payUrlToken}/checkout`, {
+      method: "POST",
+    })
+    if (checkout.status === 200) {
+      const body = (await checkout.json()) as { amount: number }
+      expect(body.amount).toBe(Math.round(page.totals.total * 100))
+    }
+
+    // Removing it restores the invoice.
+    const removed = (await (await coupon("", "DELETE")).json()) as Page
+    expect(removed.coupon).toBeNull()
+    expect(removed.totals.total).toBe(invoice.totals.total)
+
+    // Paid with the coupon on: one use counted.
+    await coupon("WELCOME20")
+    await call("POST", staff.token, `/crm/invoices/${invoice.id}/mark-paid`, { method: "cash" })
+    const coupons = await call<{ code: string; usedCount: number }[]>(
+      "GET",
+      staff.token,
+      "/coupons"
+    )
+    expect(coupons.body.find((entry) => entry.code === "WELCOME20")?.usedCount).toBe(1)
+    // Nothing to change once paid.
+    expect((await coupon("WELCOME20")).status).toBe(400)
+  })
+
   it("prints the default terms on every document, or a document's own", async () => {
     const staff = await signIn(STAFF_EMAIL, "Madar HQ")
     await call("PATCH", staff.token, "/settings", {

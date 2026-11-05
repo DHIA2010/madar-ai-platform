@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
-import { BadgeCheck, Loader2, Lock } from "lucide-react"
+import { BadgeCheck, Loader2, Lock, TicketPercent } from "lucide-react"
 
 import { ASSETS } from "@/constants/assets"
 
@@ -27,6 +27,8 @@ interface PublicInvoice {
   subscriptionStart: string | null
   subscriptionEnd: string | null
   terms: string
+  // A coupon the customer applied here (its discount is part of totals.discount).
+  coupon: { code: string; discount: number } | null
   customer: { companyName: string }
   seller: {
     name: string
@@ -48,6 +50,16 @@ const api = (path: string, init?: RequestInit) =>
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   })
+
+// Why a coupon can't be used, as the customer reads it.
+const COUPON_ERROR: Record<string, string> = {
+  COUPON_NOT_FOUND: "رمز الكوبون غير صحيح.",
+  COUPON_DISABLED: "هذا الكوبون لم يعد فعّالًا.",
+  COUPON_EXPIRED: "انتهت صلاحية هذا الكوبون.",
+  COUPON_EXHAUSTED: "استُخدم هذا الكوبون بالحد الأقصى.",
+  COUPON_NOT_APPLICABLE: "هذا الكوبون لا ينطبق على هذه الفاتورة.",
+  COUPON_RATE_LIMITED: "محاولات كثيرة، حاول بعد قليل.",
+}
 
 const money = (amount: number) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
@@ -74,6 +86,35 @@ export function InvoicePayPage() {
     "loading"
   )
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  // The coupon box: closed until "have a coupon?" is clicked.
+  const [couponOpen, setCouponOpen] = useState(false)
+  const [couponCode, setCouponCode] = useState("")
+  const [couponBusy, setCouponBusy] = useState(false)
+  const [couponError, setCouponError] = useState<string | null>(null)
+
+  async function changeCoupon(remove: boolean) {
+    if (!remove && !couponCode.trim()) return
+    setCouponBusy(true)
+    setCouponError(null)
+    try {
+      const response = await api(invoicePath(token, "coupon"), {
+        method: remove ? "DELETE" : "POST",
+        body: remove ? undefined : JSON.stringify({ code: couponCode.trim() }),
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { code?: string }
+        setCouponError(COUPON_ERROR[body.code ?? ""] ?? "تعذر تطبيق الكوبون، حاول مرة أخرى.")
+        return
+      }
+      setInvoice((await response.json()) as PublicInvoice)
+      setCouponCode("")
+      setCouponOpen(false)
+    } catch {
+      setCouponError("تعذر تطبيق الكوبون، حاول مرة أخرى.")
+    } finally {
+      setCouponBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!token) return
@@ -121,6 +162,8 @@ export function InvoicePayPage() {
           currency: string
           publishableKey: string
         }
+        // A new total (a coupon applied or removed) redraws the form with the new amount.
+        formRef.current.innerHTML = ""
         const callback = new URL(window.location.href)
         callback.search = ""
         callback.searchParams.set("token", token)
@@ -217,10 +260,33 @@ export function InvoicePayPage() {
                   <dt>المجموع الفرعي</dt>
                   <dd>{money(invoice.totals.subtotal)} ر.س</dd>
                 </div>
-                {invoice.totals.discount > 0 ? (
+                {invoice.totals.discount - (invoice.coupon?.discount ?? 0) > 0.004 ? (
                   <div className="flex justify-between text-emerald-700">
                     <dt>الخصم</dt>
-                    <dd>− {money(invoice.totals.discount)} ر.س</dd>
+                    <dd>
+                      − {money(invoice.totals.discount - (invoice.coupon?.discount ?? 0))} ر.س
+                    </dd>
+                  </div>
+                ) : null}
+                {invoice.coupon ? (
+                  <div className="flex items-center justify-between text-emerald-700">
+                    <dt className="flex items-center gap-2">
+                      خصم الكوبون
+                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 font-mono text-xs font-bold">
+                        {invoice.coupon.code}
+                      </span>
+                      {invoice.status === "unpaid" ? (
+                        <button
+                          type="button"
+                          disabled={couponBusy}
+                          onClick={() => void changeCoupon(true)}
+                          className="text-xs font-semibold text-slate-500 underline hover:text-rose-600"
+                        >
+                          إزالة
+                        </button>
+                      ) : null}
+                    </dt>
+                    <dd>− {money(invoice.coupon.discount)} ر.س</dd>
                   </div>
                 ) : null}
                 <div className="flex justify-between text-slate-600">
@@ -232,6 +298,52 @@ export function InvoicePayPage() {
                   <dd>{money(invoice.totals.total)} ر.س</dd>
                 </div>
               </dl>
+              {invoice.status === "unpaid" && !invoice.coupon ? (
+                <div className="mt-4">
+                  {couponOpen ? (
+                    <div className="rounded-xl border border-slate-200 p-3">
+                      <p className="text-sm font-bold text-[#0b1738]">كوبون الخصم</p>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          autoFocus
+                          value={couponCode}
+                          dir="ltr"
+                          placeholder="CODE"
+                          onChange={(event) => {
+                            setCouponCode(event.target.value.toUpperCase())
+                            setCouponError(null)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") void changeCoupon(false)
+                          }}
+                          className="h-11 min-w-0 flex-1 rounded-xl border-2 border-slate-200 px-3 text-right font-mono text-[15px] font-bold tracking-wider text-[#0b1738] outline-none focus:border-[#2878ff]"
+                        />
+                        <button
+                          type="button"
+                          disabled={couponBusy || !couponCode.trim()}
+                          onClick={() => void changeCoupon(false)}
+                          className="flex h-11 items-center gap-1.5 rounded-xl bg-[#0b1738] px-5 text-sm font-bold text-white disabled:opacity-50"
+                        >
+                          {couponBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+                          تطبيق
+                        </button>
+                      </div>
+                      {couponError ? (
+                        <p className="mt-2 text-sm font-semibold text-rose-600">{couponError}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCouponOpen(true)}
+                      className="flex items-center gap-1.5 text-sm font-bold text-[#2878ff] hover:underline"
+                    >
+                      <TicketPercent className="size-4" />
+                      عندك كوبون خصم؟
+                    </button>
+                  )}
+                </div>
+              ) : null}
               {invoice.terms?.trim() ? (
                 <details className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm">
                   <summary className="cursor-pointer font-bold text-[#0b1738]">

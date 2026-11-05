@@ -149,7 +149,8 @@ export class BillingOverviewService {
                 i.total_halalas, i.payment_method, i.payment_reference, i.paid_at, i.created_at
            FROM crm_invoices i
            JOIN crm_leads l ON l.id = i.lead_id
-          WHERE l.organization_id = $1 AND i.status IN ('unpaid', 'paid')`,
+          WHERE l.organization_id = $1 AND i.status IN ('unpaid', 'paid')
+            AND COALESCE(i.source, 'sales') = 'sales'`,
           [organizationId]
         ),
       ])

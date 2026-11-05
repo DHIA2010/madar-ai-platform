@@ -187,6 +187,8 @@ export const crmInvoicePeriodSchema = z.object({
 
 export const crmTermsSchema = z.object({ terms: z.string().max(5000).nullable() })
 
+export const publicInvoiceCouponSchema = z.object({ code: z.string().trim().min(1).max(40) })
+
 export const publicInvoiceConfirmSchema = z.object({
   moyasarPaymentId: z.string().trim().min(1).max(100),
 })
