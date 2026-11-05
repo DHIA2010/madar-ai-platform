@@ -99,16 +99,8 @@ import { issueSessionForMember } from "../session-issuer"
 import { permissionsForRole, type PlatformRole } from "../../platform-admin/staff-roles"
 import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../../billing/moyasar/plan-pricing"
 import { activationSettingsPatch } from "../../subscriptions/activation"
-import {
-  activateFree,
-  activatePaid,
-  cancelSubscription,
-  startTrial,
-} from "../../subscriptions/lifecycle"
-import {
-  applicationsBeingDisabled,
-  findBillingSettingsViolations,
-} from "../../subscriptions/billing-controlled-settings"
+import { activateFree, activatePaid, startTrial } from "../../subscriptions/lifecycle"
+import { findBillingSettingsViolations } from "../../subscriptions/billing-controlled-settings"
 
 // Approving/rejecting a request someone already reviewed (two staff at once, or a double click)
 // is a 409, not the 500 the entity's own plain Error used to surface as.
@@ -1326,21 +1318,6 @@ export class IdentityCommandHandlers {
     const organization = OrganizationEntity.rehydrate(organizationState)
     organization.update(command, this.now)
     await this.deps.repositories.organizations.save(organization.toState())
-
-    // A customer switching an app off ends its subscription too, so Madar Admin never shows an
-    // app as active that the customer can't use.
-    const subscriptions = this.deps.repositories.organizationSubscriptions
-    for (const application of applicationsBeingDisabled(command.settings)) {
-      const existing = await subscriptions.findByOrganizationAndApplication(
-        organizationId,
-        application
-      )
-      if (existing && existing.status !== "cancelled") {
-        await subscriptions.save(
-          cancelSubscription(existing, { cancelledByUserId: actor.userId, now: this.now })
-        )
-      }
-    }
 
     await this.audit(
       "organization.updated",

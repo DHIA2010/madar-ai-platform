@@ -318,10 +318,11 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     const yearLong = await activate("ai")
     expect(yearLong.status).toBe(201)
     expect(yearLong.body.settings?.aiEnabled).toBe(true)
-    // A free period is claimed once; deactivating and re-activating doesn't refill it.
-    await call("PATCH", `/v1/organizations/${organizationId}`, customer.token, {
+    // A free period is claimed once, and the customer can't switch it off from their settings.
+    const switchOff = await call("PATCH", `/v1/organizations/${organizationId}`, customer.token, {
       settings: { expensesEnabled: false },
     })
+    expect(switchOff.status).toBe(403)
     expect((await activate("expenses")).status).toBe(400)
   })
 

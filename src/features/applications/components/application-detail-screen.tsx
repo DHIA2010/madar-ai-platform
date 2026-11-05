@@ -10,14 +10,15 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton } from "@/components/app"
 
+import { useSubscriptionPeriods } from "../hooks"
 import type { ApplicationCatalogEntry } from "../types"
 import { isMadarCompleteBundle } from "../types"
-import { ActivationConfirmDialog, type ActivationTarget } from "./activation-confirm-dialog"
 import {
   ActivationRequestDialog,
   type ActivationRequestInput,
   type ActivationRequestTarget,
 } from "./activation-request-dialog"
+import { periodFor, SubscriptionRemaining } from "./subscription-remaining"
 
 import { cairo } from "@/components/design/fonts"
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -33,15 +34,12 @@ const PRICING_BADGE_CLASS: Record<"free" | "paid", string> = {
 export function ApplicationDetailScreen({
   entry,
   trialAvailable,
-  onConfirmActivation,
   onSubmitActivationRequest,
   onStartTrial,
   onActivateFree,
 }: {
   entry: ApplicationCatalogEntry
   trialAvailable: boolean
-  // Deactivation + the مدار الكامل bundle's instant activation -- both still a plain confirm.
-  onConfirmActivation: (target: ActivationTarget) => Promise<void>
   // A single paid application's activation -- now a tier + receipt request, not an instant confirm.
   onSubmitActivationRequest: (input: ActivationRequestInput) => Promise<void>
   onStartTrial: (applicationId: string) => Promise<void>
@@ -49,7 +47,7 @@ export function ApplicationDetailScreen({
 }) {
   const t = useTranslations("applications")
   const locale = useLocale()
-  const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
+  const { periods, loadedAt } = useSubscriptionPeriods()
   const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
   const isBundle = isMadarCompleteBundle(entry)
 
@@ -128,22 +126,12 @@ export function ApplicationDetailScreen({
           ) : entry.primaryCta.label ? (
             <div className="flex shrink-0 items-center gap-2">
               {entry.subscriptionStatus === "subscribed" || entry.subscriptionStatus === "trial" ? (
-                <AppButton
-                  variant="outline"
-                  className="h-11 rounded-[10px] border-[#e1e7f0] text-[13px] font-semibold text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
-                  onClick={() =>
-                    setPendingActivation({
-                      id: entry.id,
-                      name: entry.name,
-                      confirmLabel: t("card.deactivate"),
-                      icon: entry.icon,
-                      iconWrapperClassName: entry.accent.iconWrapperClassName,
-                      intent: "deactivate",
-                    })
-                  }
-                >
-                  {t("card.deactivate")}
-                </AppButton>
+                <SubscriptionRemaining
+                  trial={entry.subscriptionStatus === "trial"}
+                  period={periodFor(entry, periods)}
+                  now={loadedAt}
+                  className="w-64"
+                />
               ) : entry.subscriptionStatus === "pending_review" ? (
                 <span className="flex h-11 items-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-4 text-[13px] font-semibold text-[#b45309]">
                   <Clock className="size-4" />
@@ -188,14 +176,6 @@ export function ApplicationDetailScreen({
           )}
         </div>
       </div>
-
-      <ActivationConfirmDialog
-        target={pendingActivation}
-        onOpenChange={(open) => {
-          if (!open) setPendingActivation(null)
-        }}
-        onConfirm={onConfirmActivation}
-      />
 
       <ActivationRequestDialog
         key={pendingRequest?.applicationId ?? "none"}

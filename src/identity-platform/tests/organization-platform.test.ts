@@ -424,15 +424,24 @@ describe("organization platform", () => {
       ).rejects.toMatchObject({ code: "BILLING_CONTROLLED_SETTING", status: 403 })
     }
 
-    // Switching an application off (and clearing its trial marker) is still self-service.
+    // Nor can they switch an application off (or end its trial): it runs to the end of its
+    // subscription or trial.
+    const switchOffs: Array<Record<string, string | boolean>> = [
+      { ecommerceEnabled: false },
+      { ecommerceTrialEndsAt: "" },
+    ]
+    for (const settings of switchOffs) {
+      await expect(
+        container.commands.updateOrganization(owner.actor, organization.id, { settings }, context)
+      ).rejects.toMatchObject({ code: "BILLING_CONTROLLED_SETTING", status: 403 })
+    }
+
     const updated = await container.commands.updateOrganization(
       owner.actor,
       organization.id,
-      { settings: { ecommerceEnabled: false, ecommerceTrialEndsAt: "" } },
+      { settings: { storeName: "متجر الاختبار" } },
       context
     )
-
-    expect(updated.settings.ecommerceEnabled).toBe(false)
     expect(updated.settings.storeName).toBe("متجر الاختبار")
   })
 })

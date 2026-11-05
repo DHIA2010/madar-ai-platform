@@ -9,7 +9,9 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton } from "@/components/app"
 
+import type { SubscriptionPeriod } from "../hooks"
 import type { ApplicationDefinition } from "../types"
+import { SubscriptionRemaining } from "./subscription-remaining"
 
 const PAGE_TEXT = "text-[#0b1738]"
 const MUTED_TEXT = "text-[#6b7b96]"
@@ -23,19 +25,22 @@ export function ApplicationCard({
   application,
   activating,
   onActivate,
-  onDeactivate,
+  period,
+  now,
 }: {
   application: ApplicationDefinition
   activating: boolean
   onActivate: (application: ApplicationDefinition) => void
-  onDeactivate: (application: ApplicationDefinition) => void
+  // Its running subscription, for the time left (active apps can't be cancelled).
+  period: SubscriptionPeriod | undefined
+  now: number
 }) {
   const t = useTranslations("applications.card")
   const Icon = application.icon
   const isSubscribed = application.subscriptionStatus === "subscribed"
   const isTrial = application.subscriptionStatus === "trial"
-  // Both "subscribed" and "trial" are a real, currently-active application -- deactivating works
-  // (and reads as "إلغاء التفعيل") the same way in either state.
+  // Both "subscribed" and "trial" are a real, currently-active application: it shows the time left
+  // instead of an action -- it runs to the end of its period and can't be cancelled.
   const isActive = isSubscribed || isTrial
   const isPendingReview = application.subscriptionStatus === "pending_review"
 
@@ -107,7 +112,21 @@ export function ApplicationCard({
           <p className={cn("text-[12.5px] font-bold", PAGE_TEXT)}>{application.priceLabel}</p>
         ) : null}
 
-        <div className={cn("flex items-center gap-2", application.priceLabel && "mt-4")}>
+        {isActive ? (
+          <SubscriptionRemaining
+            trial={isTrial}
+            period={period}
+            now={now}
+            className={application.priceLabel ? "mt-3" : undefined}
+          />
+        ) : null}
+
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            (application.priceLabel || isActive) && (isActive ? "mt-3" : "mt-4")
+          )}
+        >
           <Link href={ROUTES.marketplaceDetails(application.id)} className="flex-1">
             <AppButton
               variant="outline"
@@ -122,19 +141,16 @@ export function ApplicationCard({
               <Clock className="size-3.5" />
               {t("pendingReview")}
             </span>
-          ) : application.primaryCta.label ? (
+          ) : application.primaryCta.label && !isActive ? (
             <AppButton
-              variant={isActive ? "outline" : "default"}
               className={cn(
                 "h-10 flex-1 rounded-[10px] text-[12.5px] font-semibold",
-                isActive
-                  ? "border-[#e1e7f0] text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
-                  : application.accent.primaryButtonClassName
+                application.accent.primaryButtonClassName
               )}
               loading={activating}
-              onClick={() => (isActive ? onDeactivate(application) : onActivate(application))}
+              onClick={() => onActivate(application)}
             >
-              {isActive ? t("deactivate") : application.primaryCta.label}
+              {application.primaryCta.label}
             </AppButton>
           ) : null}
         </div>

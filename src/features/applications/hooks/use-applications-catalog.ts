@@ -6,8 +6,6 @@ import { useTranslations } from "next-intl"
 import { useWorkspace } from "@/features/workspace"
 
 import {
-  APPLICATION_SETTINGS_KEY,
-  APPLICATION_TRIAL_ENDS_AT_KEY,
   buildApplicationCatalog,
   buildMadarCompleteBundle,
   isTrialAvailable,
@@ -77,12 +75,11 @@ function priceLabelFor(pricing: ApplicationPricing | undefined, t: Translator): 
 
 // Activating a paid application now submits a SubscriptionActivationRequestDto (tier + receipt)
 // instead of flipping organizations.settings directly -- only a Madar staff approval in the
-// internal admin console does that (see submitActivationRequest below). Deactivation stays
-// instant/self-service, same as before -- no approval needed to turn something off.
+// internal admin console does that (see submitActivationRequest below). An active application
+// can't be switched off by the customer: it runs to the end of its subscription or trial.
 export function useApplicationsCatalog() {
   const {
     currentOrganization,
-    updateOrganization,
     requestApplicationActivation,
     listMyOrganizationSubscriptionRequests,
     startApplicationTrial,
@@ -227,29 +224,6 @@ export function useApplicationsCatalog() {
     )
   }, [activeCategory, searchMatchedApplications])
 
-  async function deactivateApplication(id: string) {
-    if (!currentOrganization) return
-    const application = catalog.find((entry) => entry.id === id)
-    if (!application) return
-
-    setActivatingId(id)
-    try {
-      await updateOrganization(currentOrganization.id, {
-        settings: {
-          [APPLICATION_SETTINGS_KEY[application.category]]: false,
-          // resolveApplicationStatus treats a still-unexpired trial as "trial" (effectively
-          // active) REGARDLESS of *Enabled -- clearing only *Enabled left a trial app showing
-          // as still active after "cancel activation" (confirmed as a real production bug,
-          // 2026-10-05: the toast succeeded but the card never updated). APPLICATION_TRIAL_USED_KEY
-          // deliberately stays untouched -- cancelling must not grant a second free trial.
-          [APPLICATION_TRIAL_ENDS_AT_KEY[application.category]]: "",
-        },
-      })
-    } finally {
-      setActivatingId(null)
-    }
-  }
-
   async function startTrial(id: string) {
     if (!currentOrganization) return
     const application = catalog.find((entry) => entry.id === id)
@@ -326,7 +300,6 @@ export function useApplicationsCatalog() {
     trialAvailableByCategory,
     bundle,
     bundleVisible: pricingByApplication.get("madarComplete")?.visible !== false,
-    deactivateApplication,
     submitActivationRequest,
     startTrial,
     activateFreeApplication,

@@ -1,4 +1,4 @@
-import { SUBSCRIPTION_APPLICATIONS, type SubscriptionApplication } from "./types"
+import { SUBSCRIPTION_APPLICATIONS } from "./types"
 
 // The organizations.settings keys that grant paid access. Only billing paths (trial, payment,
 // bank-transfer approval, Madar Admin) may turn them on -- a customer's own settings update may
@@ -11,7 +11,7 @@ export function findBillingSettingsViolations(
 ): BillingSettingsViolation[] {
   if (!settings) return []
   const violations: BillingSettingsViolation[] = []
-  for (const [key, value] of Object.entries(settings)) {
+  for (const key of Object.keys(settings)) {
     if (key === "currentPlanTier") {
       violations.push({ key, reason: "The plan is set by billing, not by settings." })
       continue
@@ -20,24 +20,18 @@ export function findBillingSettingsViolations(
       (app) => key === `${app}Enabled` || key === `${app}TrialEndsAt` || key === `${app}TrialUsed`
     )
     if (!application) continue
-    if (key === `${application}Enabled` && value !== false) {
+    // Switching an application on or off is billing's: it's activated by subscribing (or a trial)
+    // and runs to the end of its period -- customers can't cancel it from their settings.
+    if (key === `${application}Enabled`) {
       violations.push({
         key,
-        reason: "Applications are activated by subscribing, not by settings.",
+        reason: "Applications are switched on and off by their subscription, not by settings.",
       })
-    } else if (key === `${application}TrialEndsAt` && value !== "") {
+    } else if (key === `${application}TrialEndsAt`) {
       violations.push({ key, reason: "Trial dates are set by billing, not by settings." })
     } else if (key === `${application}TrialUsed`) {
       violations.push({ key, reason: "Trial usage is set by billing, not by settings." })
     }
   }
   return violations
-}
-
-// Apps a settings update is switching off -- their subscriptions end with it.
-export function applicationsBeingDisabled(
-  settings: Record<string, unknown> | undefined
-): SubscriptionApplication[] {
-  if (!settings) return []
-  return SUBSCRIPTION_APPLICATIONS.filter((app) => settings[`${app}Enabled`] === false)
 }

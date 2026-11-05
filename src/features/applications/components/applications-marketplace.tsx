@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils"
 
 import { AppInput } from "@/components/app"
 
-import { useApplicationsCatalog } from "../hooks"
+import { useApplicationsCatalog, useSubscriptionPeriods } from "../hooks"
 import type { ApplicationDefinition } from "../types"
-import { ActivationConfirmDialog, type ActivationTarget } from "./activation-confirm-dialog"
 import { ActivationRequestDialog, type ActivationRequestTarget } from "./activation-request-dialog"
 import { ApplicationCard } from "./application-card"
 import { ApplicationCategoryTabs } from "./application-category-tabs"
 import { MadarCompleteCard } from "./madar-complete-card"
+import { periodFor } from "./subscription-remaining"
 
 import { cairo } from "@/components/design/fonts"
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -32,14 +32,13 @@ export function ApplicationsMarketplace() {
     bundle,
     bundleVisible,
     submitActivationRequest,
-    deactivateApplication,
     activatingId,
     trialAvailableByCategory,
     startTrial,
     activateFreeApplication,
   } = useApplicationsCatalog()
 
-  const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
+  const { periods, loadedAt } = useSubscriptionPeriods()
   const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
 
   function requestApplicationActivation(application: ApplicationDefinition) {
@@ -51,17 +50,6 @@ export function ApplicationsMarketplace() {
       icon: application.icon,
       iconWrapperClassName: application.accent.iconWrapperClassName,
       trialAvailable: trialAvailableByCategory[application.category],
-    })
-  }
-
-  function requestApplicationDeactivation(application: ApplicationDefinition) {
-    setPendingActivation({
-      id: application.id,
-      name: application.name,
-      confirmLabel: t("card.deactivate"),
-      icon: application.icon,
-      iconWrapperClassName: application.accent.iconWrapperClassName,
-      intent: "deactivate",
     })
   }
 
@@ -153,7 +141,8 @@ export function ApplicationsMarketplace() {
                   application={application}
                   activating={activatingId === application.id}
                   onActivate={requestApplicationActivation}
-                  onDeactivate={requestApplicationDeactivation}
+                  period={periodFor(application, periods)}
+                  now={loadedAt}
                 />
               ))}
             </div>
@@ -167,16 +156,6 @@ export function ApplicationsMarketplace() {
           <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
         </div>
       ) : null}
-
-      <ActivationConfirmDialog
-        target={pendingActivation}
-        onOpenChange={(open) => {
-          if (!open) setPendingActivation(null)
-        }}
-        onConfirm={async (target) => {
-          await deactivateApplication(target.id)
-        }}
-      />
 
       <ActivationRequestDialog
         key={pendingRequest?.applicationId ?? "none"}
