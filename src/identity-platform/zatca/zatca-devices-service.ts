@@ -6,6 +6,7 @@ import {
   compressEcPublicKey,
   decryptZatcaSecret,
   encryptZatcaSecret,
+  environmentFromCsr,
   generateZatcaCsr,
   resolveZatcaEncryptionKey,
   type ZatcaCsrEnvironment,
@@ -14,6 +15,8 @@ import {
   exchangeZatcaProductionCsid,
   submitZatcaComplianceCheck,
   submitZatcaComplianceCsid,
+  ZatcaApiError,
+  zatcaErrorMessage,
 } from "./zatca-api-client"
 import {
   buildZatcaUblInvoiceXml,
@@ -45,6 +48,8 @@ export interface ZatcaDeviceView {
   commonName: string
   csr: string
   status: ZatcaDeviceStatus
+  // The ZATCA environment it was onboarded for (null: an old device whose CSR doesn't say).
+  environment: ZatcaCsrEnvironment | null
   lastIcv: number
   createdAt: string
   updatedAt: string
@@ -66,6 +71,7 @@ interface ZatcaDeviceRow {
   production_secret_encrypted: string | null
   last_icv: string | number
   last_invoice_hash: string | null
+  environment: string | null
   created_at: Date | string
   updated_at: Date | string
   [key: string]: unknown
@@ -73,6 +79,40 @@ interface ZatcaDeviceRow {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+}
+
+// A device's ZATCA environment: stored since migration 146, else read from its CSR.
+function deviceEnvironment(row: ZatcaDeviceRow): ZatcaCsrEnvironment | null {
+  if (row.environment === "sandbox" || row.environment === "simulation") return row.environment
+  if (row.environment === "production") return "production"
+  return environmentFromCsr(row.csr)
+}
+
+function requireEnvironment(row: ZatcaDeviceRow): ZatcaCsrEnvironment {
+  const environment = deviceEnvironment(row)
+  if (!environment) {
+    throw new IdentityError(
+      "ZATCA_DEVICE_ENVIRONMENT_UNKNOWN",
+      409,
+      "business",
+      "This device's ZATCA environment is unknown -- add it again."
+    )
+  }
+  return environment
+}
+
+// ZATCA refused a request: its own reason, for the user (not a generic failure).
+function zatcaRejected(error: unknown): never {
+  if (error instanceof ZatcaApiError) {
+    throw new IdentityError(
+      "ZATCA_REJECTED",
+      422,
+      "business",
+      zatcaErrorMessage(error.body) ?? `ZATCA refused the request (${error.status}).`,
+      { status: error.status }
+    )
+  }
+  throw error
 }
 
 function mapDevice(row: ZatcaDeviceRow): ZatcaDeviceView {
@@ -83,6 +123,7 @@ function mapDevice(row: ZatcaDeviceRow): ZatcaDeviceView {
     commonName: row.common_name,
     csr: row.csr,
     status: row.status as ZatcaDeviceStatus,
+    environment: deviceEnvironment(row),
     lastIcv: Number(row.last_icv) || 0,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
@@ -93,7 +134,7 @@ const DEVICE_SELECT = `
   SELECT id, organization_id, workspace_id, common_name, csr, private_key_encrypted,
          public_key_pem, status, compliance_request_id, compliance_csid_encrypted,
          compliance_secret_encrypted, production_csid_encrypted, production_secret_encrypted,
-         last_icv, last_invoice_hash, created_at, updated_at
+         last_icv, last_invoice_hash, environment, created_at, updated_at
     FROM zatca_devices
 `
 
@@ -187,8 +228,8 @@ export class ZatcaDevicesService {
     await this.database.query(
       `INSERT INTO zatca_devices
          (id, organization_id, workspace_id, common_name, csr, private_key_encrypted,
-          public_key_pem, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft')`,
+          public_key_pem, status, environment)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8)`,
       [
         id,
         organizationId,
@@ -197,6 +238,7 @@ export class ZatcaDevicesService {
         csrPem,
         encryptZatcaSecret(keyPair.privateKeyPem, key),
         keyPair.publicKeyPem,
+        input.environment,
       ]
     )
     return mapDevice(await this.getRow(organizationId, id))
@@ -211,7 +253,9 @@ export class ZatcaDevicesService {
     const row = await this.getRow(organizationId, deviceId)
     if (row.status !== "draft") throw ZATCA_DEVICE_ERRORS.wrongStatus("draft", row.status)
 
-    const result = await submitZatcaComplianceCsid(row.csr, otp)
+    const result = await submitZatcaComplianceCsid(requireEnvironment(row), row.csr, otp).catch(
+      zatcaRejected
+    )
     const key = this.encryptionKey()
     await this.database.query(
       `UPDATE zatca_devices
@@ -407,6 +451,7 @@ export class ZatcaDevicesService {
         advanceChain: false,
       })
       const checkResult = await submitZatcaComplianceCheck(
+        requireEnvironment(row),
         signed.invoiceHash.toString("base64"),
         signed.uuid,
         signed.signedXmlBase64,
@@ -426,7 +471,11 @@ export class ZatcaDevicesService {
       binarySecurityToken: decryptZatcaSecret(row.compliance_csid_encrypted ?? "", key),
       secret: decryptZatcaSecret(row.compliance_secret_encrypted ?? "", key),
     }
-    const result = await exchangeZatcaProductionCsid(row.compliance_request_id ?? "", credentials)
+    const result = await exchangeZatcaProductionCsid(
+      requireEnvironment(row),
+      row.compliance_request_id ?? "",
+      credentials
+    ).catch(zatcaRejected)
     await this.database.query(
       `UPDATE zatca_devices
           SET status = 'production', production_csid_encrypted = $2,
@@ -464,11 +513,16 @@ export class ZatcaDevicesService {
   async getProductionCredentials(
     organizationId: string,
     deviceId: string
-  ): Promise<{ binarySecurityToken: string; secret: string }> {
+  ): Promise<{
+    binarySecurityToken: string
+    secret: string
+    environment: ZatcaCsrEnvironment
+  }> {
     const row = await this.getRow(organizationId, deviceId)
     if (row.status !== "production") throw ZATCA_DEVICE_ERRORS.wrongStatus("production", row.status)
     const key = this.encryptionKey()
     return {
+      environment: requireEnvironment(row),
       binarySecurityToken: decryptZatcaSecret(row.production_csid_encrypted ?? "", key),
       secret: decryptZatcaSecret(row.production_secret_encrypted ?? "", key),
     }

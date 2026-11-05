@@ -51,10 +51,30 @@ const OID = {
 
 export type ZatcaCsrEnvironment = "sandbox" | "simulation" | "production"
 
+// The template name ZATCA's own SDK puts in each environment's CSR.
 const CERT_TEMPLATE_VALUE: Record<ZatcaCsrEnvironment, string> = {
-  sandbox: "TESTZATCA-Code-Signing",
+  sandbox: "TSTZATCA-Code-Signing",
   simulation: "PREZATCA-Code-Signing",
   production: "ZATCA-Code-Signing",
+}
+
+// The environment a CSR was made for, from the template name inside it (older sandbox CSRs used
+// "TESTZATCA"). Null when it can't be told.
+export function environmentFromCsr(csrPem: string): ZatcaCsrEnvironment | null {
+  try {
+    const der = Buffer.from(
+      csrPem.replace(/-----[^-]+-----/g, "").replace(/\s/g, ""),
+      "base64"
+    ).toString("latin1")
+    if (der.includes("PREZATCA-Code-Signing")) return "simulation"
+    if (der.includes("TSTZATCA-Code-Signing") || der.includes("TESTZATCA-Code-Signing")) {
+      return "sandbox"
+    }
+    if (der.includes("ZATCA-Code-Signing")) return "production"
+    return null
+  } catch {
+    return null
+  }
 }
 
 export interface ZatcaKeyPair {

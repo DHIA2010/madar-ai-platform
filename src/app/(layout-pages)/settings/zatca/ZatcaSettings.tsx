@@ -163,13 +163,23 @@ export default function ZatcaSettings() {
   const failed = (error: unknown, fallback: string) => {
     const status = error instanceof AppError ? error.status : undefined
     const code = error instanceof AppError ? error.code : undefined
+    // ZATCA itself refused: its own reason (in English), under our message.
+    const zatcaReason =
+      code === "ZATCA_REJECTED" && error instanceof AppError ? error.message : undefined
     toast.error(
       status === 403
         ? t("toasts.forbiddenManage")
         : code === "ZATCA_DEVICE_WRONG_STATUS"
           ? t("toasts.wrongStatus")
           : fallback,
-      { description: status === 403 ? t("toasts.forbiddenDescription") : undefined }
+      {
+        description:
+          status === 403
+            ? t("toasts.forbiddenDescription")
+            : zatcaReason
+              ? t("toasts.zatcaSaid", { reason: zatcaReason })
+              : undefined,
+      }
     )
   }
 
@@ -339,6 +349,18 @@ export default function ZatcaSettings() {
                       <span className={cn("size-1.5 rounded-full", tint.dot)} />
                       {statusLabel(device.status, t)}
                     </span>
+                    {device.environment ? (
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                          device.environment === "production"
+                            ? "bg-[#e6f9ee] text-[#16a34a]"
+                            : "bg-[#fff6e5] text-[#b45309]"
+                        )}
+                      >
+                        {environmentLabel(device.environment, t)}
+                      </span>
+                    ) : null}
                   </div>
                   <span className={cn("text-[11px]", MUTED)}>
                     {t("device.createdAt", {
@@ -388,6 +410,11 @@ export default function ZatcaSettings() {
                           setOtpByDevice((prev) => ({ ...prev, [device.id]: event.target.value }))
                         }
                       />
+                      {device.environment ? (
+                        <p className={cn("mt-1.5 text-[11px] leading-5", MUTED)}>
+                          {t(`device.otpHint.${device.environment}` as "device.otpHint.sandbox")}
+                        </p>
+                      ) : null}
                     </div>
                     <Button
                       className="h-11 gap-2 rounded-[10px] bg-[#2878ff] text-[13px] font-bold text-white hover:bg-[#1f66e0]"

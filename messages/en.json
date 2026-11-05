@@ -4376,7 +4376,12 @@
         "submitOtp": "Onboard via OTP",
         "runComplianceChecks": "Run compliance checks",
         "getProductionCert": "Get production certificate",
-        "productionBanner": "Device activated -- every new sale is signed automatically and can be reported to the authority from the invoice detail panel."
+        "productionBanner": "Device activated -- every new sale is signed automatically and can be reported to the authority from the invoice detail panel.",
+        "otpHint": {
+          "sandbox": "Sandbox: the OTP is always 123345 -- don't use a code from the Fatoora portal.",
+          "simulation": "Simulation: use an OTP from the Fatoora portal in Simulation mode.",
+          "production": "Production: use an OTP from the real Fatoora portal (valid for a few minutes)."
+        }
       },
       "validation": {
         "deviceNameRequired": "Enter a name for this device.",
@@ -4400,7 +4405,8 @@
         "complianceChecksRun": "Compliance checks ran.",
         "complianceChecksFailed": "Couldn't run compliance checks.",
         "productionActivated": "Device activated for production -- upcoming invoices will be signed automatically.",
-        "productionFailed": "Couldn't get the production certificate."
+        "productionFailed": "Couldn't get the production certificate.",
+        "zatcaSaid": "ZATCA said: {reason}"
       },
       "dialog": {
         "title": "Add new device",

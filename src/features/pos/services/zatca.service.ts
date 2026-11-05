@@ -40,6 +40,8 @@ export interface ZatcaDevice {
   // it through the Fatoora portal flow alongside the OTP.
   csr: string
   status: ZatcaDeviceStatus
+  // The ZATCA environment it was onboarded for (null: an old device whose CSR doesn't say).
+  environment: ZatcaCsrEnvironment | null
   lastIcv: number
   createdAt: string
   updatedAt: string

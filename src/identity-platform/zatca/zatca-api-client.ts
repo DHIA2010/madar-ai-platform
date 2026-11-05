@@ -1,13 +1,18 @@
-// Thin HTTP client for ZATCA's own onboarding/submission APIs. Base URL is configurable (env)
-// rather than hardcoded per environment -- the sandbox URL below is what this session's research
-// consistently found across multiple sources for the Integration Sandbox developer portal; it was
-// not independently confirmed by an actual authenticated call (that needs the OTP the user
-// doesn't have yet -- see zatca-devices-service.ts), so it's worth re-checking against ZATCA's
-// current developer portal docs before the first real onboarding attempt.
-const DEFAULT_BASE_URL = "https://gw-fatoora.zatca.gov.sa/e-invoicing/developer-portal"
+import type { ZatcaCsrEnvironment } from "./zatca-crypto"
 
-function resolveBaseUrl(): string {
-  return (process.env.ZATCA_API_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "")
+// Thin HTTP client for ZATCA's onboarding/submission APIs. Each environment has its own gateway:
+// the developer sandbox (fixed test OTP 123345), the simulation (OTP from the Fatoora simulation
+// portal) and production ("core", OTP from the real Fatoora portal). A device's calls must go to
+// the environment its CSR was made for. ZATCA_API_BASE_URL, when set, overrides all of them.
+const GATEWAY = "https://gw-fatoora.zatca.gov.sa/e-invoicing"
+const BASE_URL: Record<ZatcaCsrEnvironment, string> = {
+  sandbox: `${GATEWAY}/developer-portal`,
+  simulation: `${GATEWAY}/simulation`,
+  production: `${GATEWAY}/core`,
+}
+
+function resolveBaseUrl(environment: ZatcaCsrEnvironment): string {
+  return (process.env.ZATCA_API_BASE_URL || BASE_URL[environment]).replace(/\/$/, "")
 }
 
 export class ZatcaApiError extends Error {
@@ -21,12 +26,33 @@ export class ZatcaApiError extends Error {
   }
 }
 
+// ZATCA's own explanation of a refused request, in whichever of its shapes it came back.
+export function zatcaErrorMessage(body: unknown): string | null {
+  if (!body) return null
+  if (typeof body === "string") return body.trim().slice(0, 300) || null
+  const typed = body as {
+    message?: string
+    errors?: Array<{ message?: string; code?: string } | string>
+    validationResults?: { errorMessages?: Array<{ message?: string }> }
+  }
+  const fromErrors = typed.errors
+    ?.map((entry) => (typeof entry === "string" ? entry : (entry.message ?? entry.code)))
+    .filter(Boolean)
+    .join(" — ")
+  const fromValidation = typed.validationResults?.errorMessages
+    ?.map((entry) => entry.message)
+    .filter(Boolean)
+    .join(" — ")
+  return fromErrors || fromValidation || typed.message || null
+}
+
 async function postJson(
+  environment: ZatcaCsrEnvironment,
   path: string,
   body: unknown,
   headers: Record<string, string>
 ): Promise<unknown> {
-  const response = await fetch(`${resolveBaseUrl()}${path}`, {
+  const response = await fetch(`${resolveBaseUrl(environment)}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
@@ -40,6 +66,12 @@ async function postJson(
     // throwing a confusing JSON-parse error over a real API error.
   }
   if (!response.ok) {
+    console.error("zatca.request_refused", {
+      environment,
+      path,
+      status: response.status,
+      body: typeof parsed === "string" ? parsed.slice(0, 500) : parsed,
+    })
     throw new ZatcaApiError(
       `ZATCA API request to ${path} failed (${response.status})`,
       response.status,
@@ -58,6 +90,7 @@ export interface ZatcaComplianceCsidResult {
 // Step 2 of onboarding -- the one call this whole feature is gated behind: needs a real OTP from
 // the taxpayer's own Fatoora portal account (never something this app can obtain itself).
 export async function submitZatcaComplianceCsid(
+  environment: ZatcaCsrEnvironment,
   csrPem: string,
   otp: string
 ): Promise<ZatcaComplianceCsidResult> {
@@ -66,6 +99,7 @@ export async function submitZatcaComplianceCsid(
     .replace(/-----END CERTIFICATE REQUEST-----/, "")
     .replace(/\s/g, "")
   const result = (await postJson(
+    environment,
     "/compliance",
     { csr: csrBase64 },
     { OTP: otp, "Accept-Version": "V2" }
@@ -93,12 +127,14 @@ export interface ZatcaComplianceCheckResult {
 // (ZATCA specifies a fixed set of sample invoices/notes to run through this before Production
 // CSID is granted); the caller runs this in a loop per zatca-devices-service.ts.
 export async function submitZatcaComplianceCheck(
+  environment: ZatcaCsrEnvironment,
   invoiceHashBase64: string,
   uuid: string,
   signedInvoiceBase64: string,
   credentials: { binarySecurityToken: string; secret: string }
 ): Promise<ZatcaComplianceCheckResult> {
   const result = await postJson(
+    environment,
     "/compliance/invoices",
     { invoiceHash: invoiceHashBase64, uuid, invoice: signedInvoiceBase64 },
     {
@@ -120,10 +156,12 @@ export interface ZatcaProductionCsidResult {
 // Step 4 -- exchange the compliance credentials for real Production ones, once every required
 // Compliance Check has passed.
 export async function exchangeZatcaProductionCsid(
+  environment: ZatcaCsrEnvironment,
   complianceRequestId: string,
   credentials: { binarySecurityToken: string; secret: string }
 ): Promise<ZatcaProductionCsidResult> {
   const result = (await postJson(
+    environment,
     "/production/csids",
     { compliance_request_id: complianceRequestId },
     {
@@ -148,12 +186,14 @@ export interface ZatcaReportingResult {
 // The real Reporting call -- POST .../invoices/reporting/single. Only ever called manually from
 // InvoicesPage.tsx's "الإبلاغ إلى الهيئة" action (see the plan), never automatically at checkout.
 export async function submitZatcaReporting(
+  environment: ZatcaCsrEnvironment,
   invoiceHashBase64: string,
   uuid: string,
   signedInvoiceBase64: string,
   credentials: { binarySecurityToken: string; secret: string }
 ): Promise<ZatcaReportingResult> {
   const result = await postJson(
+    environment,
     "/invoices/reporting/single",
     { invoiceHash: invoiceHashBase64, uuid, invoice: signedInvoiceBase64 },
     {

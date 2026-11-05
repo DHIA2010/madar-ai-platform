@@ -11,6 +11,7 @@ import {
   compressEcPublicKey,
   decryptZatcaSecret,
   encryptZatcaSecret,
+  environmentFromCsr,
   generateZatcaCsr,
   generateZatcaKeyPair,
 } from "../zatca/zatca-crypto"
@@ -76,7 +77,7 @@ describe("generateZatcaCsr", () => {
     expect(text).toContain(`businessCategory=${BASE_INPUT.industry}`)
     // Curve and the sandbox ZATCA-Code-Signing attribute.
     expect(text).toContain("ASN1 OID: secp256k1")
-    expect(text).toContain("TESTZATCA-Code-Signing")
+    expect(text).toContain("TSTZATCA-Code-Signing")
   })
 
   it("returns the matching key pair alongside the CSR", () => {
@@ -98,9 +99,17 @@ describe("generateZatcaCsr", () => {
       generateZatcaCsr({ ...BASE_INPUT, environment: "production" }).csrPem,
       ["-noout", "-text"]
     )
-    expect(sandboxText).toContain("TESTZATCA-Code-Signing")
-    expect(productionText).not.toContain("TESTZATCA-Code-Signing")
+    expect(sandboxText).toContain("TSTZATCA-Code-Signing")
+    expect(productionText).not.toContain("TSTZATCA-Code-Signing")
     expect(productionText).toContain("ZATCA-Code-Signing")
+  })
+
+  it("tells which environment a CSR was made for", () => {
+    for (const environment of ["sandbox", "simulation", "production"] as const) {
+      const { csrPem } = generateZatcaCsr({ ...BASE_INPUT, environment })
+      expect(environmentFromCsr(csrPem)).toBe(environment)
+    }
+    expect(environmentFromCsr("not a csr")).toBeNull()
   })
 
   it("generates a fresh key pair (and therefore a different CSR) on every call", () => {

@@ -1455,6 +1455,7 @@ export class PosInvoicesService {
     )
     const signedXmlBase64 = Buffer.from(row.zatca_signed_xml, "utf8").toString("base64")
     const reportResult = await submitZatcaReporting(
+      credentials.environment,
       row.invoice_hash,
       row.zatca_uuid,
       signedXmlBase64,
