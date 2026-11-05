@@ -1,5 +1,6 @@
-import { MadarAdminInvoices } from "@/features/madar-admin"
+import { MadarAdminCrmInvoices } from "@/features/madar-admin"
 
+// The old "الفواتير" tab: its automatic invoices are now part of فواتير المبيعات.
 export default function Page() {
-  return <MadarAdminInvoices />
+  return <MadarAdminCrmInvoices />
 }

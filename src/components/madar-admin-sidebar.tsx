@@ -118,12 +118,6 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       icon: <Wallet />,
       permission: "billing:view",
     },
-    {
-      title: "الفواتير",
-      url: ROUTES.madarAdminInvoices,
-      icon: <FileText />,
-      permission: "billing:view",
-    },
   ])
   const groupThree = visible([
     {
