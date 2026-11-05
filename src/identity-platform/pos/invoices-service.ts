@@ -19,7 +19,7 @@ import { submitZatcaReporting } from "../zatca/zatca-api-client"
 import type { ZatcaUblAddress } from "../zatca/zatca-ubl-invoice"
 import type { PosPaymentMethodsService } from "./payment-methods-service"
 import { parseNoteLines, type NoteLine } from "./saved-notes-service"
-import { appendZatcaStampTag, generateZatcaQrCode } from "./zatca-qr-code"
+import { generateZatcaQrCode } from "./zatca-qr-code"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -1462,10 +1462,8 @@ export class PosInvoicesService {
       credentials
     )
 
-    let qrCode = row.qr_code
-    if (reportResult.stampSignatureBase64 && qrCode) {
-      qrCode = appendZatcaStampTag(qrCode, Buffer.from(reportResult.stampSignatureBase64, "base64"))
-    }
+    // The QR already carries tag 9 (the certificate's signature) from signing -- nothing to add.
+    const qrCode = row.qr_code
 
     await this.database.query(
       `UPDATE pos_invoices

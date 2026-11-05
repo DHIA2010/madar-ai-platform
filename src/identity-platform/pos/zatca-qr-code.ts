@@ -38,10 +38,14 @@ export interface ZatcaQrInput {
 
 // The three Phase 2 fields produced by actually signing the invoice (zatca-signing.ts) -- see the
 // module comment above for each field's exact shape.
+// Phase 2 tags as ZATCA's validator reads them (confirmed against the developer-portal
+// sandbox): 6 and 7 are the base64 *text* of the invoice hash and the digital signature, 8 the
+// certificate's public key (SubjectPublicKeyInfo DER), 9 the certificate's own signature.
 export interface ZatcaPhase2QrExtras {
-  invoiceHash: Buffer
-  digitalSignature: Buffer
-  publicKey: Buffer
+  invoiceHashBase64: string
+  digitalSignatureBase64: string
+  publicKeyDer: Buffer
+  certificateSignature: Buffer
 }
 
 function encodeTextTlv(tag: number, value: string): Buffer {
@@ -83,19 +87,10 @@ export function generateZatcaPhase2QrCode(
 ): string {
   const buffer = Buffer.concat([
     buildPhase1Buffer(input),
-    encodeBinaryTlv(ZATCA_QR_TAGS.invoiceHash, extras.invoiceHash),
-    encodeBinaryTlv(ZATCA_QR_TAGS.digitalSignature, extras.digitalSignature),
-    encodeBinaryTlv(ZATCA_QR_TAGS.publicKey, extras.publicKey),
+    encodeTextTlv(ZATCA_QR_TAGS.invoiceHash, extras.invoiceHashBase64),
+    encodeTextTlv(ZATCA_QR_TAGS.digitalSignature, extras.digitalSignatureBase64),
+    encodeBinaryTlv(ZATCA_QR_TAGS.publicKey, extras.publicKeyDer),
+    encodeBinaryTlv(ZATCA_QR_TAGS.stampSignature, extras.certificateSignature),
   ])
   return buffer.toString("base64")
-}
-
-// Appends tag 9 (ZATCA's own cryptographic stamp signature) to an already-built Phase 2 QR, once
-// a Reporting call actually returns one -- see invoices-service.ts's reportToZatca().
-export function appendZatcaStampTag(existingQrCode: string, stampSignature: Buffer): string {
-  const existing = Buffer.from(existingQrCode, "base64")
-  return Buffer.concat([
-    existing,
-    encodeBinaryTlv(ZATCA_QR_TAGS.stampSignature, stampSignature),
-  ]).toString("base64")
 }

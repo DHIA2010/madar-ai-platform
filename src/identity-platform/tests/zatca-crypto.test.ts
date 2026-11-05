@@ -63,14 +63,16 @@ describe("generateZatcaCsr", () => {
     )
 
     const text = opensslReq(csrPem, ["-noout", "-text", "-nameopt", "oid"])
-    // Subject DN (CN, organizationIdentifier, OU, O, C).
+    // Subject DN in ZATCA's order (C, OU, O, CN) -- the VAT number only in the SAN, as UID.
     expect(text).toContain(`2.5.4.3=${BASE_INPUT.commonName}`)
-    expect(text).toContain(`2.5.4.97=${BASE_INPUT.vatNumber}`)
+    expect(text).not.toContain(`2.5.4.97=${BASE_INPUT.vatNumber}`)
+    expect(text).not.toContain("organizationIdentifier")
     expect(text).toContain(`2.5.4.11=${BASE_INPUT.organizationUnit}`)
     expect(text).toContain(`2.5.4.10=${BASE_INPUT.organizationName}`)
     expect(text).toContain(`2.5.4.6=${BASE_INPUT.countryCode}`)
     // SAN dirName (EGS serial number, VAT/UID, invoice-type bitmask, address, industry).
-    expect(text).toContain(`serialNumber=${BASE_INPUT.egsSerialNumber}`)
+    // The EGS serial as ZATCA's SDK writes it ("SN =", which openssl prints as SN / surname).
+    expect(text).toContain(`SN=${BASE_INPUT.egsSerialNumber}`)
     expect(text).toContain(`UID=${BASE_INPUT.vatNumber}`)
     expect(text).toContain(`title=${BASE_INPUT.invoiceTypeBitmask}`)
     expect(text).toContain(`registeredAddress=${BASE_INPUT.location}`)

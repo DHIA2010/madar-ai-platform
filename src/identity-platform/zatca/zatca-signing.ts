@@ -1,217 +1,228 @@
-// XAdES-B-B enveloped signing for a ZATCA Phase 2 UBL invoice -- canonicalization, hashing, and
-// the XMLDSig/XAdES structure, following the exact element table in ZATCA's own "Security
-// Features Implementation Standards" (v1.2, section 2.3.3), fetched and read directly this
-// session.
+// ZATCA Phase 2 signing for a simplified (B2C) UBL invoice: the invoice hash, the digital
+// signature, and the XAdES block ZATCA expects inside ext:UBLExtensions.
 //
-// One deliberate, documented simplification: the spec's required XPath-Filtering transforms
-// (`not(//ancestor-or-self::ext:UBLExtensions)`, etc.) are implemented here as removing those
-// exact element subtrees from a cloned DOM before canonicalizing, rather than hand-rolling the
-// generic W3C XPath-Filtering transform algorithm -- xml-crypto has no built-in implementation of
-// that transform (checked directly in its source), and for this specific, fixed set of excluded
-// elements, node removal produces byte-identical canonical output to the generic algorithm. This
-// matches how other real-world ZATCA implementations (checked directly, not assumed) do the same
-// thing.
-//
-// What this CANNOT be fully verified against without ZATCA's own tooling: whether every micro
-// detail of the XAdES structure (SigningCertificateV2's cert-chain depth, and especially
-// SignaturePolicyIdentifier's exact policy identifier/hash, which ZATCA publishes but wasn't
-// available to fetch this session) exactly matches what ZATCA's Compliance Checks API expects.
-// That is precisely what Compliance Checks exists to catch -- even experienced ZATCA integrators
-// don't get this byte-perfect without that feedback loop. See zatca-devices-service.ts.
-import { createHash, sign as cryptoSign } from "node:crypto"
-import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
-import type { Node as XmldomNode } from "@xmldom/xmldom"
+// ZATCA's validator follows its own rules rather than textbook XMLDSig, so this mirrors exactly
+// what its Compliance Checks API accepts (verified against the live developer-portal sandbox:
+// PASS / REPORTED, no warnings):
+//   - Invoice hash: SHA-256 over the C14N of the invoice without ext:UBLExtensions, cac:Signature
+//     and the QR AdditionalDocumentReference (the XPath-filter transforms the signature names).
+//   - Digital signature (SignatureValue, QR tag 7): ECDSA-SHA256, DER-encoded, over the 32 invoice
+//     hash bytes -- not over SignedInfo.
+//   - Certificate: the base64 body ZATCA returns (binarySecurityToken, base64-decoded once). Its
+//     digest is base64 of the *hex* SHA-256 of that base64 text; issuer is its DN in reverse order
+//     ("CN=..., DC=..."), serial in decimal.
+//   - SignedProperties digest: base64 of the hex SHA-256 of ZATCA's own reference rendering of the
+//     element (SIGNED_PROPERTIES_FOR_HASH below, whitespace included) -- the embedded copy is
+//     minified.
+import { createHash, createSign, X509Certificate } from "node:crypto"
+import { DOMParser } from "@xmldom/xmldom"
+import forge from "node-forge"
 import { C14nCanonicalization } from "xml-crypto"
-import * as xpath from "xpath"
 
-// xmldom's own Document/Node/Element types don't structurally match TypeScript's ambient
-// lib.dom.d.ts ones (which is what both xml-crypto's and xpath's own .d.ts files are written
-// against) -- a well-known friction point mixing these three packages. Every xmldom
-// parse/serialize call is cast at that one boundary rather than threading `any` through the rest
-// of this file.
-function asDomDocument(value: unknown): Document {
-  return value as Document
-}
-
-const XMLDSIG_NS = "http://www.w3.org/2000/09/xmldsig#"
-const XADES_NS = "http://uri.etsi.org/01903/v1.3.2#"
-const C14N11_ALGORITHM = "http://www.w3.org/2006/12/xml-c14n11"
-const ECDSA_SHA256_ALGORITHM = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"
-const SHA256_ALGORITHM = "http://www.w3.org/2001/04/xmlenc#sha256"
-const SIGNED_PROPERTIES_ID = "xadesSignedProperties"
-
-// The three XPath-Filtering transforms, written out once (used both inside the embedded
-// ds:Reference and to document the equivalent node-removal step in stripUnsignedElements below).
-const XPATH_TRANSFORMS_XML =
-  `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">` +
-  `<ds:XPath>not(//ancestor-or-self::ext:UBLExtensions)</ds:XPath></ds:Transform>` +
-  `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">` +
-  `<ds:XPath>not(//ancestor-or-self::cac:Signature)</ds:XPath></ds:Transform>` +
-  `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">` +
-  `<ds:XPath>not(//ancestor-or-self::cac:AdditionalDocumentReference[cbc:ID='QR'])</ds:XPath></ds:Transform>`
+// The placeholders zatca-ubl-invoice.ts leaves for the signature block and the QR data.
+export const ZATCA_SIGNATURE_PLACEHOLDER = "__ZATCA_SIGNATURE__"
+export const ZATCA_QR_PLACEHOLDER = "__ZATCA_QR__"
 
 const c14n = new C14nCanonicalization()
 
-function parseXml(xml: string): Document {
-  return asDomDocument(new DOMParser().parseFromString(xml, "text/xml"))
+// The invoice without the three parts the signature excludes (all built by zatca-ubl-invoice.ts
+// with no surrounding whitespace, so plain removal is exact).
+function stripUnsignedElements(xml: string): string {
+  return xml
+    .replace(/<ext:UBLExtensions>[\s\S]*?<\/ext:UBLExtensions>/, "")
+    .replace(/<cac:Signature>[\s\S]*?<\/cac:Signature>/, "")
+    .replace(
+      /<cac:AdditionalDocumentReference><cbc:ID>QR<\/cbc:ID>[\s\S]*?<\/cac:AdditionalDocumentReference>/,
+      ""
+    )
 }
 
-function serialize(node: Node): string {
-  return new XMLSerializer().serializeToString(node as unknown as XmldomNode)
-}
-
-function canonicalize(xml: string): string {
-  return c14n.process(parseXml(xml).documentElement, {})
-}
-
-function base64(buffer: Buffer): string {
-  return buffer.toString("base64")
-}
-
-function selectNodes(expression: string, node: Node): Node[] {
-  return xpath.select(expression, node) as Node[]
-}
-
-function selectFirstNode(expression: string, node: Node): Node | undefined {
-  return selectNodes(expression, node)[0]
-}
-
-// Removes the same three subtrees the signature's own References exclude via XPath-Filtering --
-// see the module comment for why this is equivalent for this fixed, known set of elements.
-function stripUnsignedElements(doc: Document): Document {
-  const clone = doc.cloneNode(true) as Document
-  const toRemove = [
-    ...selectNodes('//*[local-name()="UBLExtensions"]', clone),
-    ...selectNodes('//*[local-name()="Signature"][namespace-uri()!="' + XMLDSIG_NS + '"]', clone),
-    ...selectNodes(
-      '//*[local-name()="AdditionalDocumentReference"][*[local-name()="ID" and text()="QR"]]',
-      clone
-    ),
-  ]
-  for (const node of toRemove) {
-    node.parentNode?.removeChild(node)
-  }
-  return clone
-}
-
-// The invoice hash -- QR tag 6, the `invoice_hash` DB column, and the first ds:Reference's
-// digest are all this exact same value.
+// The invoice hash -- QR tag 6, the PIH of the next invoice, and the first Reference's digest.
 export function hashZatcaInvoiceXml(xml: string): Buffer {
-  const filtered = stripUnsignedElements(parseXml(xml))
-  const canonical = c14n.process(filtered.documentElement, {})
+  const doc = new DOMParser().parseFromString(stripUnsignedElements(xml), "text/xml")
+  const canonical = c14n.process(doc.documentElement as unknown as Node, {})
   return createHash("sha256").update(canonical, "utf8").digest()
 }
 
-// QR tag 7 -- a separate, simpler operation from the XAdES SignatureValue below: a raw ECDSA
-// signature (IEEE P1363 r||s, not the DER SEQUENCE{r,s} X.509/CSR signatures use) directly over
-// the invoice hash bytes.
+// ECDSA-SHA256 (DER) over the invoice hash bytes.
 export function signZatcaInvoiceHash(invoiceHash: Buffer, privateKeyPem: string): Buffer {
-  return cryptoSign("sha256", invoiceHash, { key: privateKeyPem, dsaEncoding: "ieee-p1363" })
+  const signer = createSign("sha256")
+  signer.update(invoiceHash)
+  return signer.sign(privateKeyPem)
 }
 
-function buildSignedProperties(certDigest: Buffer, signingTimeIso: string): string {
+export interface ZatcaCertificateInfo {
+  // The base64 certificate body, as embedded in X509Certificate.
+  base64: string
+  // base64(hex(sha256(base64 body))) -- ZATCA's CertDigest.
+  digest: string
+  issuer: string
+  serialNumber: string
+  // QR tag 8: the certificate's public key (SubjectPublicKeyInfo DER).
+  publicKeyDer: Buffer
+  // QR tag 9: the certificate's own signature (by ZATCA's CA).
+  signature: Buffer
+}
+
+// What ZATCA returns as binarySecurityToken: base64 of the certificate's base64 body.
+export function certificateBase64FromToken(binarySecurityToken: string): string {
+  return Buffer.from(binarySecurityToken, "base64")
+    .toString("utf8")
+    .replace(/-----[^-]+-----/g, "")
+    .replace(/\s/g, "")
+}
+
+export function zatcaCertificateInfo(certificateBase64: string): ZatcaCertificateInfo {
+  const pem = `-----BEGIN CERTIFICATE-----\n${certificateBase64}\n-----END CERTIFICATE-----`
+  const certificate = new X509Certificate(pem)
+  // Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue BIT STRING }
+  const asn1 = forge.asn1.fromDer(
+    forge.util.createBuffer(Buffer.from(certificateBase64, "base64").toString("binary"))
+  )
+  // forge decodes a BIT STRING that looks like DER (an ECDSA signature does) into its parts, but
+  // keeps the original bytes in bitStringContents.
+  const signatureNode = (asn1.value as forge.asn1.Asn1[])[2] as forge.asn1.Asn1 & {
+    bitStringContents?: string
+  }
+  const signatureBits =
+    signatureNode.bitStringContents ??
+    (typeof signatureNode.value === "string" ? signatureNode.value : "")
+  return {
+    base64: certificateBase64,
+    digest: Buffer.from(createHash("sha256").update(certificateBase64).digest("hex")).toString(
+      "base64"
+    ),
+    issuer: certificate.issuer.split("\n").reverse().join(", "),
+    serialNumber: BigInt(`0x${certificate.serialNumber}`).toString(10),
+    publicKeyDer: certificate.publicKey.export({ type: "spki", format: "der" }),
+    // Drop the BIT STRING's leading "unused bits" byte.
+    signature: Buffer.from(signatureBits, "binary").subarray(1),
+  }
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// ZATCA's reference rendering of SignedProperties -- hashed exactly as written (whitespace and
+// per-element ds namespaces included); see the module comment.
+function signedPropertiesForHash(time: string, certificate: ZatcaCertificateInfo): string {
+  return `<xades:SignedProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" Id="xadesSignedProperties">
+                                    <xades:SignedSignatureProperties>
+                                        <xades:SigningTime>${time}</xades:SigningTime>
+                                        <xades:SigningCertificate>
+                                            <xades:Cert>
+                                                <xades:CertDigest>
+                                                    <ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                                                    <ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certificate.digest}</ds:DigestValue>
+                                                </xades:CertDigest>
+                                                <xades:IssuerSerial>
+                                                    <ds:X509IssuerName xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${escapeXml(certificate.issuer)}</ds:X509IssuerName>
+                                                    <ds:X509SerialNumber xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certificate.serialNumber}</ds:X509SerialNumber>
+                                                </xades:IssuerSerial>
+                                            </xades:Cert>
+                                        </xades:SigningCertificate>
+                                    </xades:SignedSignatureProperties>
+                                </xades:SignedProperties>`
+}
+
+function signedPropertiesEmbedded(time: string, certificate: ZatcaCertificateInfo): string {
   return (
-    `<xades:SignedProperties xmlns:xades="${XADES_NS}" xmlns:ds="${XMLDSIG_NS}" Id="${SIGNED_PROPERTIES_ID}">` +
-    `<xades:SignedSignatureProperties>` +
-    `<xades:SigningTime>${signingTimeIso}</xades:SigningTime>` +
-    `<xades:SigningCertificate><xades:Cert><xades:CertDigest>` +
-    `<ds:DigestMethod Algorithm="${SHA256_ALGORITHM}"/>` +
-    `<ds:DigestValue>${base64(certDigest)}</ds:DigestValue>` +
-    `</xades:CertDigest><xades:IssuerSerial/></xades:Cert></xades:SigningCertificate>` +
-    // ZATCA publishes a specific signature-policy identifier/hash for this field that wasn't
-    // obtainable this session (not part of the security-standards PDF this was built from) --
-    // left as an explicit placeholder rather than a fabricated value. Must be filled in with
-    // ZATCA's real published policy identifier before a real Compliance/Production submission;
-    // Compliance Checks will report this precisely if it's wrong.
-    `<xades:SignaturePolicyIdentifier><xades:SignaturePolicyId>` +
-    `<xades:SigPolicyId><xades:Identifier>TODO-ZATCA-SIGNATURE-POLICY-ID</xades:Identifier></xades:SigPolicyId>` +
-    `<xades:SigPolicyHash><ds:DigestMethod Algorithm="${SHA256_ALGORITHM}"/>` +
-    `<ds:DigestValue>TODO-ZATCA-SIGNATURE-POLICY-HASH</ds:DigestValue></xades:SigPolicyHash>` +
-    `</xades:SignaturePolicyId></xades:SignaturePolicyIdentifier>` +
-    `</xades:SignedSignatureProperties>` +
-    `<xades:SignedDataObjectProperties>` +
-    `<xades:DataObjectFormat ObjectReference="#invoiceSignedData">` +
-    `<xades:MimeType>text/xml</xades:MimeType></xades:DataObjectFormat>` +
-    `</xades:SignedDataObjectProperties>` +
-    `</xades:SignedProperties>`
+    `<xades:SignedProperties Id="xadesSignedProperties"><xades:SignedSignatureProperties>` +
+    `<xades:SigningTime>${time}</xades:SigningTime><xades:SigningCertificate><xades:Cert>` +
+    `<xades:CertDigest><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"></ds:DigestMethod>` +
+    `<ds:DigestValue>${certificate.digest}</ds:DigestValue></xades:CertDigest>` +
+    `<xades:IssuerSerial><ds:X509IssuerName>${escapeXml(certificate.issuer)}</ds:X509IssuerName>` +
+    `<ds:X509SerialNumber>${certificate.serialNumber}</ds:X509SerialNumber></xades:IssuerSerial>` +
+    `</xades:Cert></xades:SigningCertificate></xades:SignedSignatureProperties></xades:SignedProperties>`
   )
 }
 
-function buildSignedInfo(invoiceHash: Buffer, signedPropertiesDigest: Buffer): string {
+const XPATH_TRANSFORM = (expression: string) =>
+  `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116"><ds:XPath>${expression}</ds:XPath></ds:Transform>`
+
+function signatureExtension(input: {
+  invoiceHashBase64: string
+  signedPropertiesDigest: string
+  signatureBase64: string
+  certificate: ZatcaCertificateInfo
+  signedProperties: string
+}): string {
   return (
-    `<ds:SignedInfo xmlns:ds="${XMLDSIG_NS}" ` +
-    `xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" ` +
-    `xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" ` +
-    `xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">` +
-    `<ds:CanonicalizationMethod Algorithm="${C14N11_ALGORITHM}"/>` +
-    `<ds:SignatureMethod Algorithm="${ECDSA_SHA256_ALGORITHM}"/>` +
-    `<ds:Reference URI=""><ds:Transforms>${XPATH_TRANSFORMS_XML}` +
-    `<ds:Transform Algorithm="${C14N11_ALGORITHM}"/></ds:Transforms>` +
-    `<ds:DigestMethod Algorithm="${SHA256_ALGORITHM}"/>` +
-    `<ds:DigestValue>${base64(invoiceHash)}</ds:DigestValue></ds:Reference>` +
-    `<ds:Reference Type="http://uri.etsi.org/01903#SignedProperties" URI="#${SIGNED_PROPERTIES_ID}">` +
-    `<ds:Transforms><ds:Transform Algorithm="${C14N11_ALGORITHM}"/></ds:Transforms>` +
-    `<ds:DigestMethod Algorithm="${SHA256_ALGORITHM}"/>` +
-    `<ds:DigestValue>${base64(signedPropertiesDigest)}</ds:DigestValue></ds:Reference>` +
-    `</ds:SignedInfo>`
+    `<ext:UBLExtension><ext:ExtensionURI>urn:oasis:names:specification:ubl:dsig:enveloped:xades</ext:ExtensionURI>` +
+    `<ext:ExtensionContent><sig:UBLDocumentSignatures ` +
+    `xmlns:sac="urn:oasis:names:specification:ubl:schema:xsd:SignatureAggregateComponents-2" ` +
+    `xmlns:sbc="urn:oasis:names:specification:ubl:schema:xsd:SignatureBasicComponents-2" ` +
+    `xmlns:sig="urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2">` +
+    `<sac:SignatureInformation><cbc:ID>urn:oasis:names:specification:ubl:signature:1</cbc:ID>` +
+    `<sbc:ReferencedSignatureID>urn:oasis:names:specification:ubl:signature:Invoice</sbc:ReferencedSignatureID>` +
+    `<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="signature"><ds:SignedInfo>` +
+    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>` +
+    `<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/>` +
+    `<ds:Reference Id="invoiceSignedData" URI=""><ds:Transforms>` +
+    XPATH_TRANSFORM("not(//ancestor-or-self::ext:UBLExtensions)") +
+    XPATH_TRANSFORM("not(//ancestor-or-self::cac:Signature)") +
+    XPATH_TRANSFORM("not(//ancestor-or-self::cac:AdditionalDocumentReference[cbc:ID='QR'])") +
+    `<ds:Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/></ds:Transforms>` +
+    `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
+    `<ds:DigestValue>${input.invoiceHashBase64}</ds:DigestValue></ds:Reference>` +
+    `<ds:Reference Type="http://www.w3.org/2000/09/xmldsig#SignatureProperties" URI="#xadesSignedProperties">` +
+    `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
+    `<ds:DigestValue>${input.signedPropertiesDigest}</ds:DigestValue></ds:Reference></ds:SignedInfo>` +
+    `<ds:SignatureValue>${input.signatureBase64}</ds:SignatureValue>` +
+    `<ds:KeyInfo><ds:X509Data><ds:X509Certificate>${input.certificate.base64}</ds:X509Certificate></ds:X509Data></ds:KeyInfo>` +
+    `<ds:Object><xades:QualifyingProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" Target="signature">` +
+    input.signedProperties +
+    `</xades:QualifyingProperties></ds:Object></ds:Signature>` +
+    `</sac:SignatureInformation></sig:UBLDocumentSignatures></ext:ExtensionContent></ext:UBLExtension>`
   )
 }
 
 export interface ZatcaSignInput {
+  // From zatca-ubl-invoice.ts: carries the signature and QR placeholders.
   unsignedXml: string
   privateKeyPem: string
-  // The device's own X.509 certificate (DER) -- only ever available once the device has reached
-  // `production` status; ZATCA returns it as part of the Production CSID exchange. This signer
-  // has nothing to embed as X509Certificate before that.
-  certificateDer: Buffer
+  // The device's certificate body (see certificateBase64FromToken).
+  certificateBase64: string
   signingTime: Date
 }
 
 export interface ZatcaSignResult {
   invoiceHash: Buffer
   digitalSignature: Buffer
+  certificate: ZatcaCertificateInfo
+  // Signed, with the QR placeholder still in place (the QR needs this result).
   signedXml: string
 }
 
-// Full pipeline: hash the unsigned invoice, sign it, build the XAdES block, and embed it (plus a
-// matching cac:Signature reference) back into the XML -- the caller (zatca-ubl-invoice.ts /
-// invoices-service.ts) still owns building the QR code from the returned invoiceHash/signature
-// and embedding it into the AdditionalDocumentReference[QR] placeholder afterward, since the
-// signature itself deliberately never covers that element.
 export function signZatcaInvoice(input: ZatcaSignInput): ZatcaSignResult {
   const invoiceHash = hashZatcaInvoiceXml(input.unsignedXml)
   const digitalSignature = signZatcaInvoiceHash(invoiceHash, input.privateKeyPem)
-
-  const signingTimeIso = input.signingTime.toISOString().replace(/\.\d{3}Z$/, "Z")
-  const certDigest = createHash("sha256").update(input.certificateDer).digest()
-
-  const signedPropertiesXml = buildSignedProperties(certDigest, signingTimeIso)
-  const signedPropertiesDigest = createHash("sha256")
-    .update(canonicalize(signedPropertiesXml), "utf8")
-    .digest()
-
-  const signedInfoXml = buildSignedInfo(invoiceHash, signedPropertiesDigest)
-  const signatureValue = cryptoSign("sha256", Buffer.from(canonicalize(signedInfoXml), "utf8"), {
-    key: input.privateKeyPem,
-    dsaEncoding: "ieee-p1363",
+  const certificate = zatcaCertificateInfo(input.certificateBase64)
+  const time = input.signingTime.toISOString().slice(0, 19) + "Z"
+  const signedPropertiesDigest = Buffer.from(
+    createHash("sha256").update(signedPropertiesForHash(time, certificate)).digest("hex")
+  ).toString("base64")
+  const extension = signatureExtension({
+    invoiceHashBase64: invoiceHash.toString("base64"),
+    signedPropertiesDigest,
+    signatureBase64: digitalSignature.toString("base64"),
+    certificate,
+    signedProperties: signedPropertiesEmbedded(time, certificate),
   })
+  if (!input.unsignedXml.includes(ZATCA_SIGNATURE_PLACEHOLDER)) {
+    throw new Error("ZATCA_UBL_MISSING_EXTENSION_CONTENT_PLACEHOLDER")
+  }
+  return {
+    invoiceHash,
+    digitalSignature,
+    certificate,
+    signedXml: input.unsignedXml.replace(ZATCA_SIGNATURE_PLACEHOLDER, extension),
+  }
+}
 
-  const signatureXml =
-    `<ds:Signature xmlns:ds="${XMLDSIG_NS}" Id="signature">` +
-    signedInfoXml +
-    `<ds:SignatureValue>${base64(signatureValue)}</ds:SignatureValue>` +
-    `<ds:KeyInfo><ds:X509Data><ds:X509Certificate>${base64(input.certificateDer)}</ds:X509Certificate></ds:X509Data></ds:KeyInfo>` +
-    `<ds:Object><xades:QualifyingProperties xmlns:xades="${XADES_NS}" Target="signature">` +
-    signedPropertiesXml +
-    `</xades:QualifyingProperties></ds:Object>` +
-    `</ds:Signature>`
-
-  const doc = parseXml(input.unsignedXml)
-  const extensionContent = selectFirstNode('//*[local-name()="ExtensionContent"]', doc) as
-    | Element
-    | undefined
-  if (!extensionContent) throw new Error("ZATCA_UBL_MISSING_EXTENSION_CONTENT_PLACEHOLDER")
-  extensionContent.appendChild(doc.importNode(parseXml(signatureXml).documentElement, true))
-
-  return { invoiceHash, digitalSignature, signedXml: serialize(doc) }
+// Puts the QR data in its placeholder (outside what the signature covers).
+export function embedZatcaQrCode(signedXml: string, qrCodeBase64: string): string {
+  if (!signedXml.includes(ZATCA_QR_PLACEHOLDER)) throw new Error("ZATCA_UBL_MISSING_QR_PLACEHOLDER")
+  return signedXml.replace(ZATCA_QR_PLACEHOLDER, qrCodeBase64)
 }

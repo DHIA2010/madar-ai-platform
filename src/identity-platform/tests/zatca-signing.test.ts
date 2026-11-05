@@ -1,27 +1,58 @@
-// Covers the XAdES signing pipeline (zatca-signing.ts) and the UBL invoice builder
-// (zatca-ubl-invoice.ts): that a signed invoice's ds:SignatureValue self-verifies against the
-// device's own public key using nothing but an independent XML canonicalizer (not the module's
-// own hashing/signing code), that the invoice hash is stable across the QR-embedding step that
-// necessarily happens after hashing, and that the raw QR-tag-7 signature (over the hash alone)
-// also self-verifies.
-import { createHash, generateKeyPairSync, verify as cryptoVerify } from "node:crypto"
-import { DOMParser } from "@xmldom/xmldom"
-import { C14nCanonicalization } from "xml-crypto"
-import * as xpath from "xpath"
+// Covers ZATCA signing (zatca-signing.ts) and the UBL builder (zatca-ubl-invoice.ts) against
+// the format ZATCA's sandbox accepts (see zatca-signing.ts's module comment): the invoice hash and
+// what it excludes, the DER digital signature over that hash, the certificate details in
+// SignedProperties, and the QR's tags 6-9. Uses a real self-signed secp256k1 certificate made with
+// openssl, since the signer reads issuer, serial, public key and signature out of it.
+import { execFileSync } from "node:child_process"
+import { createVerify, X509Certificate } from "node:crypto"
+import { mkdtempSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
 import { generateZatcaPhase2QrCode } from "../pos/zatca-qr-code"
-import { hashZatcaInvoiceXml, signZatcaInvoice, signZatcaInvoiceHash } from "../zatca/zatca-signing"
+import {
+  embedZatcaQrCode,
+  hashZatcaInvoiceXml,
+  signZatcaInvoice,
+  ZATCA_QR_PLACEHOLDER,
+  ZATCA_SIGNATURE_PLACEHOLDER,
+  zatcaCertificateInfo,
+} from "../zatca/zatca-signing"
 import {
   buildZatcaUblInvoiceXml,
-  embedZatcaQrCode,
   ZATCA_GENESIS_PIH_BASE64,
   type ZatcaUblInvoiceInput,
 } from "../zatca/zatca-ubl-invoice"
 
-const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "secp256k1" })
-const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString()
-const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString()
+// A device key and a certificate for it (self-signed: issuer = subject).
+const dir = mkdtempSync(join(tmpdir(), "zatca-signing-"))
+execFileSync("openssl", [
+  "ecparam",
+  "-name",
+  "secp256k1",
+  "-genkey",
+  "-noout",
+  "-out",
+  join(dir, "key.pem"),
+])
+execFileSync("openssl", [
+  "req",
+  "-new",
+  "-x509",
+  "-key",
+  join(dir, "key.pem"),
+  "-out",
+  join(dir, "cert.pem"),
+  "-days",
+  "1",
+  "-subj",
+  "/CN=eInvoicing/DC=gov/DC=local",
+])
+const privateKeyPem = readFileSync(join(dir, "key.pem"), "utf8")
+const certificatePem = readFileSync(join(dir, "cert.pem"), "utf8")
+const certificateBase64 = certificatePem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "")
+const publicKey = new X509Certificate(certificatePem).publicKey
 
 function buildInvoiceInput(overrides: Partial<ZatcaUblInvoiceInput> = {}): ZatcaUblInvoiceInput {
   return {
@@ -64,177 +95,85 @@ function buildInvoiceInput(overrides: Partial<ZatcaUblInvoiceInput> = {}): Zatca
   }
 }
 
-// A minimal placeholder "certificate" -- signZatcaInvoice only ever base64-embeds and hashes this
-// buffer, it never parses it as real X.509, so any fixed bytes are enough to exercise the pipeline.
-const FAKE_CERTIFICATE_DER = Buffer.from("fake-zatca-device-certificate-for-tests")
-
-function canonicalizeNode(node: Node): string {
-  return new C14nCanonicalization().process(node, {})
-}
-
 describe("hashZatcaInvoiceXml", () => {
-  it("is deterministic for the same XML", () => {
+  it("is deterministic and changes when the invoice changes", () => {
     const xml = buildZatcaUblInvoiceXml(buildInvoiceInput())
     expect(hashZatcaInvoiceXml(xml).equals(hashZatcaInvoiceXml(xml))).toBe(true)
+    const other = buildZatcaUblInvoiceXml(buildInvoiceInput({ totalAmount: 116 }))
+    expect(hashZatcaInvoiceXml(other).equals(hashZatcaInvoiceXml(xml))).toBe(false)
   })
 
-  it("changes when invoice content changes", () => {
-    const base = hashZatcaInvoiceXml(buildZatcaUblInvoiceXml(buildInvoiceInput()))
-    const changed = hashZatcaInvoiceXml(
-      buildZatcaUblInvoiceXml(
-        buildInvoiceInput({ totalAmount: 230, taxAmount: 30, subtotalAmount: 200 })
-      )
-    )
-    expect(changed.equals(base)).toBe(false)
-  })
-
-  it("is unaffected by the QR AdditionalDocumentReference's own content (excluded by design)", () => {
-    const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
-    const withQrFilledIn = embedZatcaQrCode(unsignedXml, "some-fake-qr-payload-base64")
-    expect(hashZatcaInvoiceXml(withQrFilledIn).equals(hashZatcaInvoiceXml(unsignedXml))).toBe(true)
-  })
-})
-
-describe("signZatcaInvoiceHash", () => {
-  it("produces a raw IEEE P1363 signature (r||s, 64 bytes for a 32-byte-order curve) that verifies", () => {
-    const hash = createHash("sha256").update("some invoice bytes").digest()
-    const signature = signZatcaInvoiceHash(hash, privateKeyPem)
-    expect(signature.length).toBe(64)
-    expect(
-      cryptoVerify("sha256", hash, { key: publicKeyPem, dsaEncoding: "ieee-p1363" }, signature)
-    ).toBe(true)
-  })
-
-  it("does not verify against a different hash", () => {
-    const hash = createHash("sha256").update("invoice A").digest()
-    const otherHash = createHash("sha256").update("invoice B").digest()
-    const signature = signZatcaInvoiceHash(hash, privateKeyPem)
-    expect(
-      cryptoVerify("sha256", otherHash, { key: publicKeyPem, dsaEncoding: "ieee-p1363" }, signature)
-    ).toBe(false)
+  it("ignores the signature block and the QR data (both filled in after hashing)", () => {
+    const xml = buildZatcaUblInvoiceXml(buildInvoiceInput())
+    const filled = xml
+      .replace(ZATCA_SIGNATURE_PLACEHOLDER, "<ext:UBLExtension>anything</ext:UBLExtension>")
+      .replace(ZATCA_QR_PLACEHOLDER, "QRDATA")
+    expect(hashZatcaInvoiceXml(filled).equals(hashZatcaInvoiceXml(xml))).toBe(true)
   })
 })
 
 describe("signZatcaInvoice", () => {
-  it("returns an invoiceHash matching hashZatcaInvoiceXml of the original unsigned XML", () => {
-    const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
-    const result = signZatcaInvoice({
-      unsignedXml,
-      privateKeyPem,
-      certificateDer: FAKE_CERTIFICATE_DER,
-      signingTime: new Date("2026-01-01T10:00:00.000Z"),
-    })
+  const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
+  const result = signZatcaInvoice({
+    unsignedXml,
+    privateKeyPem,
+    certificateBase64,
+    signingTime: new Date("2026-01-01T10:00:00.000Z"),
+  })
+
+  it("signs the invoice hash (DER ECDSA-SHA256) with the device key", () => {
     expect(result.invoiceHash.equals(hashZatcaInvoiceXml(unsignedXml))).toBe(true)
+    const verifier = createVerify("sha256")
+    verifier.update(result.invoiceHash)
+    expect(verifier.verify(publicKey, result.digitalSignature)).toBe(true)
+    expect(result.digitalSignature[0]).toBe(0x30)
   })
 
-  it("returns a digitalSignature (QR tag 7) that self-verifies against the invoice hash", () => {
-    const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
-    const result = signZatcaInvoice({
-      unsignedXml,
-      privateKeyPem,
-      certificateDer: FAKE_CERTIFICATE_DER,
-      signingTime: new Date("2026-01-01T10:00:00.000Z"),
-    })
-    expect(
-      cryptoVerify(
-        "sha256",
-        result.invoiceHash,
-        { key: publicKeyPem, dsaEncoding: "ieee-p1363" },
-        result.digitalSignature
-      )
-    ).toBe(true)
+  it("embeds the XAdES block ZATCA expects, with the certificate's details", () => {
+    const info = zatcaCertificateInfo(certificateBase64)
+    // Node lists the DN in the order given (CN, DC, DC); ZATCA wants it reversed.
+    expect(info.issuer).toBe("DC=local, DC=gov, CN=eInvoicing")
+    expect(result.signedXml).not.toContain(ZATCA_SIGNATURE_PLACEHOLDER)
+    expect(result.signedXml).toContain(
+      "<sac:SignatureInformation><cbc:ID>urn:oasis:names:specification:ubl:signature:1</cbc:ID>"
+    )
+    expect(result.signedXml).toContain(
+      `<ds:DigestValue>${result.invoiceHash.toString("base64")}</ds:DigestValue>`
+    )
+    expect(result.signedXml).toContain(
+      `<ds:SignatureValue>${result.digitalSignature.toString("base64")}</ds:SignatureValue>`
+    )
+    expect(result.signedXml).toContain(
+      `<ds:X509Certificate>${certificateBase64}</ds:X509Certificate>`
+    )
+    expect(result.signedXml).toContain(
+      `<ds:X509SerialNumber>${info.serialNumber}</ds:X509SerialNumber>`
+    )
+    // ZATCA's digests are base64 of a hex SHA-256 (64 hex characters).
+    expect(Buffer.from(info.digest, "base64").toString("utf8")).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  it("embeds a ds:Signature whose SignatureValue self-verifies against the canonicalized SignedInfo", () => {
-    const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
-    const result = signZatcaInvoice({
-      unsignedXml,
-      privateKeyPem,
-      certificateDer: FAKE_CERTIFICATE_DER,
-      signingTime: new Date("2026-01-01T10:00:00.000Z"),
-    })
-
-    const doc = new DOMParser().parseFromString(result.signedXml, "text/xml") as unknown as Node
-    const signedInfoNodes = xpath.select('//*[local-name()="SignedInfo"]', doc) as Node[]
-    const signatureValueNodes = xpath.select('//*[local-name()="SignatureValue"]', doc) as Node[]
-    expect(signedInfoNodes).toHaveLength(1)
-    expect(signatureValueNodes).toHaveLength(1)
-
-    const canonicalSignedInfo = canonicalizeNode(signedInfoNodes[0])
-    const signatureValue = Buffer.from(signatureValueNodes[0].textContent ?? "", "base64")
-
-    expect(
-      cryptoVerify(
-        "sha256",
-        Buffer.from(canonicalSignedInfo, "utf8"),
-        { key: publicKeyPem, dsaEncoding: "ieee-p1363" },
-        signatureValue
-      )
-    ).toBe(true)
-  })
-
-  it("still self-verifies after the QR code is embedded into the signed XML (QR excluded from what was signed)", () => {
-    const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
-    const result = signZatcaInvoice({
-      unsignedXml,
-      privateKeyPem,
-      certificateDer: FAKE_CERTIFICATE_DER,
-      signingTime: new Date("2026-01-01T10:00:00.000Z"),
-    })
-    const finalXml = embedZatcaQrCode(result.signedXml, "final-qr-payload-base64")
-
-    const doc = new DOMParser().parseFromString(finalXml, "text/xml") as unknown as Node
-    const signedInfoNodes = xpath.select('//*[local-name()="SignedInfo"]', doc) as Node[]
-    const signatureValueNodes = xpath.select('//*[local-name()="SignatureValue"]', doc) as Node[]
-    const canonicalSignedInfo = canonicalizeNode(signedInfoNodes[0])
-    const signatureValue = Buffer.from(signatureValueNodes[0].textContent ?? "", "base64")
-
-    expect(
-      cryptoVerify(
-        "sha256",
-        Buffer.from(canonicalSignedInfo, "utf8"),
-        { key: publicKeyPem, dsaEncoding: "ieee-p1363" },
-        signatureValue
-      )
-    ).toBe(true)
-  })
-})
-
-describe("QR round-trip through the full signing pipeline", () => {
-  it("decodes tags 6-8 out of a Phase 2 QR back to the exact bytes signZatcaInvoice produced", () => {
-    const unsignedXml = buildZatcaUblInvoiceXml(buildInvoiceInput())
-    const result = signZatcaInvoice({
-      unsignedXml,
-      privateKeyPem,
-      certificateDer: FAKE_CERTIFICATE_DER,
-      signingTime: new Date("2026-01-01T10:00:00.000Z"),
-    })
+  it("leaves the invoice hash unchanged once signed and the QR is embedded", () => {
     const qr = generateZatcaPhase2QrCode(
       {
         sellerName: "Al Salam Restaurant",
         vatRegistrationNumber: "399999999900003",
-        timestamp: "2026-01-01T10:00:00.000Z",
+        timestamp: "2026-01-01T10:00:00",
         invoiceTotal: 115,
         vatTotal: 15,
       },
       {
-        invoiceHash: result.invoiceHash,
-        digitalSignature: result.digitalSignature,
-        publicKey: Buffer.from("c".repeat(33)),
+        invoiceHashBase64: result.invoiceHash.toString("base64"),
+        digitalSignatureBase64: result.digitalSignature.toString("base64"),
+        publicKeyDer: result.certificate.publicKeyDer,
+        certificateSignature: result.certificate.signature,
       }
     )
-
-    const buffer = Buffer.from(qr, "base64")
-    let offset = 0
-    const tags: Array<{ tag: number; value: Buffer }> = []
-    while (offset < buffer.length) {
-      const tag = buffer[offset]
-      const length = buffer[offset + 1]
-      tags.push({ tag, value: buffer.subarray(offset + 2, offset + 2 + length) })
-      offset += 2 + length
-    }
-    expect(tags[5].value.equals(result.invoiceHash)).toBe(true)
-    expect(tags[6].value.equals(result.digitalSignature)).toBe(true)
+    const finalXml = embedZatcaQrCode(result.signedXml, qr)
+    expect(finalXml).not.toContain(ZATCA_QR_PLACEHOLDER)
+    expect(hashZatcaInvoiceXml(finalXml).equals(result.invoiceHash)).toBe(true)
+    // Tag 9 is the certificate's own signature (a DER ECDSA signature).
+    expect(result.certificate.signature[0]).toBe(0x30)
   })
 })
 

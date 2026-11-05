@@ -36,7 +36,10 @@ const OID = {
   organizationalUnitName: "2.5.4.11",
   organizationName: "2.5.4.10",
   countryName: "2.5.4.6",
-  serialNumber: "2.5.4.5", // EGS serial number, inside the SAN dirName
+  // EGS serial number, inside the SAN dirName. ZATCA's SDK config writes it as "SN = ...", which
+  // openssl encodes as 2.5.4.4 (surname) -- and that, not serialNumber (2.5.4.5), is what ZATCA
+  // accepts.
+  serialNumber: "2.5.4.4",
   userId: "0.9.2342.19200300.100.1.1", // UID, inside the SAN dirName
   title: "2.5.4.12", // invoice-type support bitmask, inside the SAN dirName
   registeredAddress: "2.5.4.26",
@@ -134,31 +137,55 @@ export interface ZatcaCsr {
   keyPair: ZatcaKeyPair
 }
 
+// An RDNSequence from [oid, value] pairs, one attribute per RDN, in the order given. Values are
+// UTF8String (so an Arabic name encodes correctly -- PrintableString can't carry it), except the
+// country code, which X.520 requires as PrintableString. This is exactly what openssl produces
+// from ZATCA's own SDK config, which the sandbox was confirmed to issue certificates for.
+function rdnSequenceAsn1(attributes: Array<[oid: string, value: string]>) {
+  return asn1.create(
+    asn1.Class.UNIVERSAL,
+    asn1.Type.SEQUENCE,
+    true,
+    attributes.map(([oid, value]) =>
+      asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, [
+        asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+          asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OID, false, asn1.oidToDer(oid).getBytes()),
+          oid === OID.countryName
+            ? asn1.create(asn1.Class.UNIVERSAL, asn1.Type.PRINTABLESTRING, false, value)
+            : asn1.create(
+                asn1.Class.UNIVERSAL,
+                asn1.Type.UTF8,
+                false,
+                forge.util.encodeUtf8(value)
+              ),
+        ]),
+      ])
+    )
+  )
+}
+
+// Subject in ZATCA's SDK order: C, OU, O, CN. The VAT number goes only in the SAN (as UID) --
+// an organizationIdentifier in the subject makes ZATCA reject the CSR ("Invalid Request").
 function subjectDnAsn1(input: ZatcaCsrInput) {
-  return forge.pki.distinguishedNameToAsn1({
-    attributes: [
-      { type: OID.commonName, value: input.commonName },
-      { type: OID.organizationIdentifier, value: input.vatNumber },
-      { type: OID.organizationalUnitName, value: input.organizationUnit },
-      { type: OID.organizationName, value: input.organizationName },
-      { type: OID.countryName, value: input.countryCode },
-    ],
-  })
+  return rdnSequenceAsn1([
+    [OID.countryName, input.countryCode],
+    [OID.organizationalUnitName, input.organizationUnit],
+    [OID.organizationName, input.organizationName],
+    [OID.commonName, input.commonName],
+  ])
 }
 
 // SAN as a single GeneralName of type [4] directoryName -- itself a full RDN sequence, per the
 // real generator this was validated against (not an `otherName`, which earlier research
 // mistakenly assumed before that generator's config file was actually read).
 function subjectAltNameExtensionAsn1(input: ZatcaCsrInput) {
-  const dirName = forge.pki.distinguishedNameToAsn1({
-    attributes: [
-      { type: OID.serialNumber, value: input.egsSerialNumber },
-      { type: OID.userId, value: input.vatNumber },
-      { type: OID.title, value: input.invoiceTypeBitmask },
-      { type: OID.registeredAddress, value: input.location },
-      { type: OID.businessCategory, value: input.industry },
-    ],
-  })
+  const dirName = rdnSequenceAsn1([
+    [OID.serialNumber, input.egsSerialNumber],
+    [OID.userId, input.vatNumber],
+    [OID.title, input.invoiceTypeBitmask],
+    [OID.registeredAddress, input.location],
+    [OID.businessCategory, input.industry],
+  ])
   // GeneralName ::= CHOICE { ... directoryName [4] Name ... } -- Name is itself a CHOICE, so the
   // context tag must be EXPLICIT (wraps the RDNSequence rather than replacing its own tag).
   const generalName = asn1.create(asn1.Class.CONTEXT_SPECIFIC, 4, true, [dirName])
@@ -225,8 +252,8 @@ export function generateZatcaCsr(input: ZatcaCsrInput): ZatcaCsr {
     ),
     asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, [
       asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
-        subjectAltNameExtensionAsn1(input),
         certificateTemplateExtensionAsn1(input.environment),
+        subjectAltNameExtensionAsn1(input),
       ]),
     ]),
   ])

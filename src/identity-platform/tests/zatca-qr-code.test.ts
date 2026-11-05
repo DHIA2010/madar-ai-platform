@@ -2,11 +2,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import {
-  appendZatcaStampTag,
-  generateZatcaPhase2QrCode,
-  generateZatcaQrCode,
-} from "../pos/zatca-qr-code"
+import { generateZatcaPhase2QrCode, generateZatcaQrCode } from "../pos/zatca-qr-code"
 
 // Decodes a Base64 ZATCA QR payload back into its 5 {tag, value} entries, so a test can assert
 // the exact TLV byte structure without needing to hand-encode a full expected buffer.
@@ -97,39 +93,23 @@ function decodeTlvBinary(base64: string): Array<{ tag: number; value: Buffer }> 
 
 describe("generateZatcaPhase2QrCode", () => {
   const extras = {
-    invoiceHash: Buffer.from("a".repeat(32)),
-    digitalSignature: Buffer.from("b".repeat(64)),
-    publicKey: Buffer.from("c".repeat(33)),
+    invoiceHashBase64: Buffer.from("a".repeat(32)).toString("base64"),
+    digitalSignatureBase64: Buffer.from("b".repeat(70)).toString("base64"),
+    publicKeyDer: Buffer.from("c".repeat(88)),
+    certificateSignature: Buffer.from("d".repeat(71)),
   }
 
-  it("produces the same 5 Phase 1 tags plus tags 6-8, in order, with the extras as raw bytes", () => {
+  it("adds tags 6-9: hash and signature as base64 text, then the key and certificate signature", () => {
     const decoded = decodeTlvBinary(generateZatcaPhase2QrCode(INPUT, extras))
-    expect(decoded.map((entry) => entry.tag)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
-    expect(decoded[5].value.equals(extras.invoiceHash)).toBe(true)
-    expect(decoded[6].value.equals(extras.digitalSignature)).toBe(true)
-    expect(decoded[7].value.equals(extras.publicKey)).toBe(true)
+    expect(decoded.map((entry) => entry.tag)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(decoded[5].value.toString("utf8")).toBe(extras.invoiceHashBase64)
+    expect(decoded[6].value.toString("utf8")).toBe(extras.digitalSignatureBase64)
+    expect(decoded[7].value.equals(extras.publicKeyDer)).toBe(true)
+    expect(decoded[8].value.equals(extras.certificateSignature)).toBe(true)
   })
 
   it("keeps the Phase 1 fields readable as text even though the QR now also carries binary tags", () => {
     const decoded = decodeTlvBinary(generateZatcaPhase2QrCode(INPUT, extras))
     expect(decoded[0].value.toString("utf8")).toBe(INPUT.sellerName)
-  })
-})
-
-describe("appendZatcaStampTag", () => {
-  it("appends tag 9 after the existing 8 tags without disturbing them", () => {
-    const extras = {
-      invoiceHash: Buffer.from("a".repeat(32)),
-      digitalSignature: Buffer.from("b".repeat(64)),
-      publicKey: Buffer.from("c".repeat(33)),
-    }
-    const base = generateZatcaPhase2QrCode(INPUT, extras)
-    const stampSignature = Buffer.from("d".repeat(64))
-    const decoded = decodeTlvBinary(appendZatcaStampTag(base, stampSignature))
-
-    expect(decoded.map((entry) => entry.tag)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
-    expect(decoded[8].value.equals(stampSignature)).toBe(true)
-    // Every earlier tag is untouched.
-    expect(decoded[5].value.equals(extras.invoiceHash)).toBe(true)
   })
 })

@@ -94,10 +94,10 @@ export async function submitZatcaComplianceCsid(
   csrPem: string,
   otp: string
 ): Promise<ZatcaComplianceCsidResult> {
-  const csrBase64 = csrPem
-    .replace(/-----BEGIN CERTIFICATE REQUEST-----/, "")
-    .replace(/-----END CERTIFICATE REQUEST-----/, "")
-    .replace(/\s/g, "")
+  // ZATCA wants the whole PEM file (headers included) base64-encoded -- not the bare DER base64
+  // inside it, which it refuses as "Invalid Request".
+  const pem = csrPem.trim().endsWith("-----") ? `${csrPem.trim()}\n` : csrPem
+  const csrBase64 = Buffer.from(pem, "utf8").toString("base64")
   const result = (await postJson(
     environment,
     "/compliance",
@@ -143,7 +143,11 @@ export async function submitZatcaComplianceCheck(
     }
   )
   return {
-    status: (result as { clearanceStatus?: string })?.clearanceStatus ?? "UNKNOWN",
+    // Simplified invoices are reported (not cleared): their verdict is reportingStatus.
+    status:
+      (result as { reportingStatus?: string; clearanceStatus?: string })?.reportingStatus ??
+      (result as { clearanceStatus?: string })?.clearanceStatus ??
+      "UNKNOWN",
     raw: result,
   }
 }

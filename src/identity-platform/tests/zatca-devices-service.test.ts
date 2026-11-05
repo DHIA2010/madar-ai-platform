@@ -3,6 +3,11 @@
 // reused, PIH of invoice N+1 matches the hash of invoice N, and a compliance-check-only signing
 // (advanceChain: false) never moves the device's persisted chain position. Runs against pg-mem
 // directly (no HTTP layer) since these are service-level invariants, not endpoint contracts.
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
@@ -10,6 +15,35 @@ import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { encryptZatcaSecret, resolveZatcaEncryptionKey } from "../zatca/zatca-crypto"
 import { ZatcaDevicesService } from "../zatca/zatca-devices-service"
+import { ZATCA_GENESIS_PIH_BASE64 } from "../zatca/zatca-ubl-invoice"
+
+// The signer reads issuer, serial, key and signature out of the certificate, so it must be real.
+const certificateDir = mkdtempSync(join(tmpdir(), "zatca-devices-"))
+execFileSync("openssl", [
+  "ecparam",
+  "-name",
+  "secp256k1",
+  "-genkey",
+  "-noout",
+  "-out",
+  join(certificateDir, "key.pem"),
+])
+execFileSync("openssl", [
+  "req",
+  "-new",
+  "-x509",
+  "-key",
+  join(certificateDir, "key.pem"),
+  "-out",
+  join(certificateDir, "cert.pem"),
+  "-days",
+  "1",
+  "-subj",
+  "/CN=eInvoicing",
+])
+const TEST_CERTIFICATE_BASE64 = readFileSync(join(certificateDir, "cert.pem"), "utf8")
+  .replace(/-----[^-]+-----/g, "")
+  .replace(/\s/g, "")
 
 let database: PostgresDatabase
 let organizationId: string
@@ -56,7 +90,8 @@ async function createComplianceReadyDevice(service: ZatcaDevicesService) {
     industry: "Retail",
   })
   const key = resolveZatcaEncryptionKey()
-  const fakeCertificate = Buffer.from("fake-compliance-certificate-der-bytes").toString("base64")
+  // A real (self-signed) certificate, stored the way ZATCA returns it: base64 of its base64 body.
+  const fakeCertificate = Buffer.from(TEST_CERTIFICATE_BASE64).toString("base64")
   await database.query(
     `update zatca_devices set status = 'compliance', compliance_csid_encrypted = $2 where id = $1`,
     [device.id, encryptZatcaSecret(fakeCertificate, key)]
@@ -132,7 +167,7 @@ describe("ZatcaDevicesService.signInvoice -- ICV/PIH chain", () => {
     })
 
     expect(signed.icv).toBe(1)
-    expect(signed.previousInvoiceHashBase64).toBe(Buffer.alloc(32).toString("base64"))
+    expect(signed.previousInvoiceHashBase64).toBe(ZATCA_GENESIS_PIH_BASE64)
   })
 
   it("strictly increases ICV and chains PIH to the previous invoice's hash across advanced calls", async () => {
@@ -184,10 +219,10 @@ describe("ZatcaDevicesService.signInvoice -- ICV/PIH chain", () => {
       advanceChain: true,
     })
     expect(realInvoice.icv).toBe(1)
-    expect(realInvoice.previousInvoiceHashBase64).toBe(Buffer.alloc(32).toString("base64"))
+    expect(realInvoice.previousInvoiceHashBase64).toBe(ZATCA_GENESIS_PIH_BASE64)
   })
 
-  it("produces a qrCodeBase64 whose tags 6-7 match the returned invoiceHash/digitalSignature", async () => {
+  it("produces a qrCodeBase64 whose tags 6-7 carry the returned invoiceHash/digitalSignature", async () => {
     const service = new ZatcaDevicesService(database)
     const device = await createComplianceReadyDevice(service)
 
@@ -205,7 +240,9 @@ describe("ZatcaDevicesService.signInvoice -- ICV/PIH chain", () => {
       tags.push({ tag, value: buffer.subarray(offset + 2, offset + 2 + length) })
       offset += 2 + length
     }
-    expect(tags[5].value.equals(signed.invoiceHash)).toBe(true)
-    expect(tags[6].value.equals(signed.digitalSignature)).toBe(true)
+    // Tags 6 and 7 carry the base64 text of the hash and the signature; 9 is present too.
+    expect(tags[5].value.toString("utf8")).toBe(signed.invoiceHash.toString("base64"))
+    expect(tags[6].value.toString("utf8")).toBe(signed.digitalSignature.toString("base64"))
+    expect(tags.map((entry) => entry.tag)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
   })
 })

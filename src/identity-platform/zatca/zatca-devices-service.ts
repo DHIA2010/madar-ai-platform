@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import {
-  compressEcPublicKey,
   decryptZatcaSecret,
   encryptZatcaSecret,
   environmentFromCsr,
@@ -20,11 +19,10 @@ import {
 } from "./zatca-api-client"
 import {
   buildZatcaUblInvoiceXml,
-  embedZatcaQrCode,
   ZATCA_GENESIS_PIH_BASE64,
   type ZatcaUblAddress,
 } from "./zatca-ubl-invoice"
-import { signZatcaInvoice } from "./zatca-signing"
+import { certificateBase64FromToken, embedZatcaQrCode, signZatcaInvoice } from "./zatca-signing"
 import { generateZatcaPhase2QrCode } from "../pos/zatca-qr-code"
 
 const ZATCA_DEVICE_ERRORS = {
@@ -72,6 +70,8 @@ interface ZatcaDeviceRow {
   last_icv: string | number
   last_invoice_hash: string | null
   environment: string | null
+  vat_number: string | null
+  organization_name: string | null
   created_at: Date | string
   updated_at: Date | string
   [key: string]: unknown
@@ -115,6 +115,14 @@ function zatcaRejected(error: unknown): never {
   throw error
 }
 
+// The VAT number the device's certificate carries: stored since migration 147, else the 15-digit
+// number (starting and ending with 3) inside its CSR.
+function sellerVatNumber(row: ZatcaDeviceRow): string {
+  if (row.vat_number) return row.vat_number
+  const der = Buffer.from(row.csr.replace(/-----[^-]+-----/g, "").replace(/\s/g, ""), "base64")
+  return der.toString("latin1").match(/3\d{13}3/)?.[0] ?? ""
+}
+
 function mapDevice(row: ZatcaDeviceRow): ZatcaDeviceView {
   return {
     id: row.id,
@@ -134,7 +142,8 @@ const DEVICE_SELECT = `
   SELECT id, organization_id, workspace_id, common_name, csr, private_key_encrypted,
          public_key_pem, status, compliance_request_id, compliance_csid_encrypted,
          compliance_secret_encrypted, production_csid_encrypted, production_secret_encrypted,
-         last_icv, last_invoice_hash, environment, created_at, updated_at
+         last_icv, last_invoice_hash, environment, vat_number, organization_name,
+         created_at, updated_at
     FROM zatca_devices
 `
 
@@ -228,8 +237,8 @@ export class ZatcaDevicesService {
     await this.database.query(
       `INSERT INTO zatca_devices
          (id, organization_id, workspace_id, common_name, csr, private_key_encrypted,
-          public_key_pem, status, environment)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8)`,
+          public_key_pem, status, environment, vat_number, organization_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10)`,
       [
         id,
         organizationId,
@@ -239,6 +248,8 @@ export class ZatcaDevicesService {
         encryptZatcaSecret(keyPair.privateKeyPem, key),
         keyPair.publicKeyPem,
         input.environment,
+        input.vatNumber,
+        input.organizationName,
       ]
     )
     return mapDevice(await this.getRow(organizationId, id))
@@ -345,16 +356,13 @@ export class ZatcaDevicesService {
     const certificateSource = row.production_csid_encrypted ?? row.compliance_csid_encrypted
     if (!certificateSource)
       throw ZATCA_DEVICE_ERRORS.wrongStatus("compliance or production", row.status)
-    const certificatePem = decryptZatcaSecret(certificateSource, key)
-    const certificateDer = Buffer.from(
-      certificatePem.replace(/-----[^-]+-----/g, "").replace(/\s/g, ""),
-      "base64"
-    )
+    // Stored as ZATCA returned it (binarySecurityToken: base64 of the certificate's base64 body).
+    const certificateBase64 = certificateBase64FromToken(decryptZatcaSecret(certificateSource, key))
 
     const signResult = signZatcaInvoice({
       unsignedXml,
       privateKeyPem,
-      certificateDer,
+      certificateBase64,
       signingTime: input.issuedAt,
     })
 
@@ -362,14 +370,15 @@ export class ZatcaDevicesService {
       {
         sellerName: input.sellerName,
         vatRegistrationNumber: input.sellerVatNumber,
-        timestamp: input.issuedAt.toISOString(),
+        timestamp: input.issuedAt.toISOString().slice(0, 19),
         invoiceTotal: input.totalAmount,
         vatTotal: input.taxAmount,
       },
       {
-        invoiceHash: signResult.invoiceHash,
-        digitalSignature: signResult.digitalSignature,
-        publicKey: compressEcPublicKey(row.public_key_pem),
+        invoiceHashBase64: signResult.invoiceHash.toString("base64"),
+        digitalSignatureBase64: signResult.digitalSignature.toString("base64"),
+        publicKeyDer: signResult.certificate.publicKeyDer,
+        certificateSignature: signResult.certificate.signature,
       }
     )
     const finalXml = embedZatcaQrCode(signResult.signedXml, qrCodeBase64)
@@ -391,6 +400,17 @@ export class ZatcaDevicesService {
       icv,
       previousInvoiceHashBase64,
     }
+  }
+
+  // The registered name the device's certificate was issued for (stored since migration 147; for
+  // older devices, the organization's own name).
+  private async sellerName(row: ZatcaDeviceRow): Promise<string> {
+    if (row.organization_name) return row.organization_name
+    const organization = await this.database.query<{ name: string }>(
+      "SELECT name FROM organizations WHERE id = $1",
+      [row.organization_id]
+    )
+    return organization.rows[0]?.name ?? row.common_name
   }
 
   // Step 3 -- a small built-in set of representative Simplified Tax Invoice scenarios (a plain
@@ -426,8 +446,8 @@ export class ZatcaDevicesService {
       const signed = await this.signInvoice(organizationId, deviceId, {
         invoiceNumber: `COMPLIANCE-${scenario.name}`,
         issuedAt: new Date(),
-        sellerName: row.common_name,
-        sellerVatNumber: "",
+        sellerName: await this.sellerName(row),
+        sellerVatNumber: sellerVatNumber(row),
         sellerAddress: null,
         customerName: null,
         customerVatNumber: null,
