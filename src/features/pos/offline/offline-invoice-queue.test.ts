@@ -56,6 +56,7 @@ function fakeInvoice(): Invoice {
     zatcaStatus: null,
     zatcaReportedAt: null,
     zatcaLastError: null,
+    zatcaLastErrorAr: null,
   }
 }
 

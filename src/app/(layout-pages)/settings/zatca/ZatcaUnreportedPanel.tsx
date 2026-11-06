@@ -168,7 +168,7 @@ export function ZatcaUnreportedPanel() {
                     </span>
                   </td>
                   <td className={cn("max-w-[320px] px-2 py-2.5 leading-5", MUTED)}>
-                    {item.lastError ?? "—"}
+                    {(locale === "ar" ? item.lastErrorAr : null) ?? item.lastError ?? "—"}
                   </td>
                 </tr>
               )

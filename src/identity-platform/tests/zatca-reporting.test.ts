@@ -207,6 +207,7 @@ describe("PosZatcaReporting.report", () => {
       result: "rejected",
       status: "NOT_REPORTED",
       error: "Invalid invoice hash",
+      errorAr: "Invalid invoice hash",
     })
 
     const [listed] = await reporting.listUnreported(organizationId)
@@ -249,6 +250,7 @@ describe("PosZatcaReporting.report", () => {
       result: "failed",
       status: null,
       error: "network down",
+      errorAr: null,
     })
     expect((await invoiceRow(id)).zatca_reported_at).toBeNull()
 
@@ -280,6 +282,44 @@ describe("PosZatcaReporting.report", () => {
       code: "ZATCA_REJECTED",
       message: "Bad VAT",
     })
+  })
+})
+
+describe("Arabic reasons", () => {
+  it("asks ZATCA again in Arabic and words technical checks in Arabic itself", async () => {
+    const id = await insertSignedInvoice()
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const arabic = (init?.headers as Record<string, string>)["Accept-Language"] === "ar"
+      return new Response(
+        JSON.stringify({
+          reportingStatus: "NOT_REPORTED",
+          validationResults: {
+            errorMessages: [
+              { code: "certificate-permissions", message: "User only allowed to use the vat" },
+              {
+                code: "BR-KSA-37",
+                message: arabic
+                  ? "يجب أن يكون رقم المبنى مؤلفاً من 4 أرقام."
+                  : "The building number must contain 4 digits.",
+              },
+            ],
+          },
+        }),
+        { status: 400 }
+      )
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const outcome = await reporting.report("invoice", id)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(outcome).toMatchObject({
+      result: "rejected",
+      error: "User only allowed to use the vat — The building number must contain 4 digits.",
+      errorAr:
+        "الرقم الضريبي في الفاتورة لا يطابق الرقم الضريبي في شهادة الجهاز. — يجب أن يكون رقم المبنى مؤلفاً من 4 أرقام.",
+    })
+    const [listed] = await reporting.listUnreported(organizationId)
+    expect(listed.lastErrorAr).toContain("يجب أن يكون رقم المبنى")
   })
 })
 

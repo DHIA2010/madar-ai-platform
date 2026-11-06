@@ -253,6 +253,7 @@ export interface InvoiceView {
   zatcaReportedAt: string | null
   // Why the last attempt to report it didn't go through (ZATCA's reason or the network error).
   zatcaLastError: string | null
+  zatcaLastErrorAr: string | null
 }
 
 export interface InvoiceSummary {
@@ -329,6 +330,7 @@ export interface InvoiceReturnView {
   zatcaStatus: string | null
   zatcaReportedAt: string | null
   zatcaLastError: string | null
+  zatcaLastErrorAr: string | null
 }
 
 // 15% is Saudi Arabia's statutory standard VAT rate -- used as the last-resort fallback only if
@@ -364,6 +366,7 @@ interface InvoiceRow {
   zatca_status: string | null
   zatca_reported_at: Date | string | null
   zatca_last_error: string | null
+  zatca_last_error_ar: string | null
   [key: string]: unknown
 }
 
@@ -459,6 +462,7 @@ function mapInvoice(
     zatcaStatus: row.zatca_status,
     zatcaReportedAt: row.zatca_reported_at ? toIso(row.zatca_reported_at) : null,
     zatcaLastError: row.zatca_last_error,
+    zatcaLastErrorAr: row.zatca_last_error_ar,
   }
 }
 
@@ -483,6 +487,7 @@ interface InvoiceReturnRow {
   zatca_status: string | null
   zatca_reported_at: Date | string | null
   zatca_last_error: string | null
+  zatca_last_error_ar: string | null
   [key: string]: unknown
 }
 
@@ -556,6 +561,7 @@ function mapReturn(
     zatcaStatus: row.zatca_status,
     zatcaReportedAt: row.zatca_reported_at ? toIso(row.zatca_reported_at) : null,
     zatcaLastError: row.zatca_last_error,
+    zatcaLastErrorAr: row.zatca_last_error_ar,
   }
 }
 
@@ -564,7 +570,7 @@ const INVOICE_SELECT = `
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
          total_amount, notes, notes_lines, created_at, qr_code, seller_name, seller_vat_number,
          seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at,
-         zatca_last_error
+         zatca_last_error, zatca_last_error_ar
     FROM pos_invoices
 `
 
@@ -1923,7 +1929,7 @@ export class PosInvoicesService {
               r.refund_payment_method_code, r.notes, r.created_at, r.qr_code, r.seller_name,
               r.seller_vat_number, r.seller_address, i.invoice_number,
               (r.zatca_signed_xml IS NOT NULL) AS zatca_signed, r.zatca_status,
-              r.zatca_reported_at, r.zatca_last_error
+              r.zatca_reported_at, r.zatca_last_error, r.zatca_last_error_ar
          FROM pos_invoice_returns r
          JOIN pos_invoices i ON i.id = r.invoice_id
         WHERE ${conditions.join(" AND ")}
@@ -1981,7 +1987,7 @@ export class PosInvoicesService {
               r.refund_payment_method_code, r.notes, r.created_at, r.qr_code, r.seller_name,
               r.seller_vat_number, r.seller_address, i.invoice_number,
               (r.zatca_signed_xml IS NOT NULL) AS zatca_signed, r.zatca_status,
-              r.zatca_reported_at, r.zatca_last_error
+              r.zatca_reported_at, r.zatca_last_error, r.zatca_last_error_ar
          FROM pos_invoice_returns r
          JOIN pos_invoices i ON i.id = r.invoice_id
         WHERE r.organization_id = $1 AND r.id = $2`,

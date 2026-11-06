@@ -356,14 +356,21 @@ export default function InvoicesPage() {
         zatcaStatus: result.status,
         zatcaReportedAt: reportedAt,
         zatcaLastError: null,
+        zatcaLastErrorAr: null,
       })
       toast.success(t("detail.toasts.reportSuccess", { status: result.status }))
     } catch (error) {
       const code = error instanceof AppError ? error.code : undefined
       // ZATCA itself refused or couldn't be reached: its reason, shown and kept on the invoice.
-      const zatcaReason =
-        code === "ZATCA_REJECTED" && error instanceof AppError ? error.message : undefined
-      if (zatcaReason) patchInvoice(invoice.id, { zatcaLastError: zatcaReason })
+      const rejected = code === "ZATCA_REJECTED" && error instanceof AppError ? error : undefined
+      const reasonAr =
+        (rejected?.details as { reasonAr?: string | null } | undefined)?.reasonAr ?? null
+      const zatcaReason = rejected
+        ? ((locale === "ar" ? reasonAr : null) ?? rejected.message)
+        : undefined
+      if (rejected) {
+        patchInvoice(invoice.id, { zatcaLastError: rejected.message, zatcaLastErrorAr: reasonAr })
+      }
       toast.error(
         code === "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA"
           ? t("detail.toasts.alreadyReported")
@@ -708,7 +715,7 @@ export default function InvoicesPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-center">
+                <table className="w-full min-w-[860px] text-center">
                   <thead>
                     <tr>
                       {[
@@ -741,6 +748,11 @@ export default function InvoicesPage() {
                         {
                           key: "status",
                           label: t("page.table.columns.status"),
+                          align: "text-center",
+                        },
+                        {
+                          key: "zatca",
+                          label: t("page.table.columns.zatca"),
                           align: "text-center",
                         },
                         {
@@ -811,6 +823,9 @@ export default function InvoicesPage() {
                               <span className={cn("size-1.5 rounded-full", meta.dot)} />
                               {getStatusLabel(invoice.status, t)}
                             </span>
+                          </td>
+                          <td className="px-3 py-3.5">
+                            <ZatcaStatusBadge invoice={invoice} />
                           </td>
                           <td className="px-3 py-3.5" onClick={(event) => event.stopPropagation()}>
                             <DropdownMenu>
@@ -1100,7 +1115,7 @@ function InvoiceDetailPanel({
             </dd>
             {!invoice.zatcaReportedAt && invoice.zatcaLastError ? (
               <dd className="col-span-2 rounded-[8px] bg-[#fdecec] px-2.5 py-1.5 text-[11px] leading-5 text-[#b42318]">
-                {t("detail.zatcaReason", { reason: invoice.zatcaLastError })}
+                {t("detail.zatcaReason", { reason: zatcaReasonText(invoice, locale) ?? "" })}
               </dd>
             ) : null}
           </>
@@ -1770,5 +1785,45 @@ function CreateInvoiceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ZATCA's reason for not accepting a sale, in Arabic when the page is (ZATCA's own Arabic wording,
+// stored next to the English one).
+function zatcaReasonText(invoice: Invoice, locale: Locale): string | null {
+  return (locale === "ar" ? invoice.zatcaLastErrorAr : null) ?? invoice.zatcaLastError
+}
+
+// Where a sale stands with ZATCA: reported, refused (with ZATCA's reason on hover), couldn't be
+// sent yet (retried automatically), or being sent. Unsigned sales (no production device at the
+// time) have nothing to report.
+function ZatcaStatusBadge({ invoice }: { invoice: Invoice }) {
+  const t = useTranslations("invoices")
+  const locale = useLocale() as Locale
+  if (!invoice.zatcaSigned) return <span className={cn("text-[12px]", MUTED)}>—</span>
+  const state = invoice.zatcaReportedAt
+    ? "reported"
+    : invoice.zatcaStatus === "NOT_REPORTED"
+      ? "rejected"
+      : invoice.zatcaLastError
+        ? "failed"
+        : "pending"
+  const tint = {
+    reported: { tint: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
+    rejected: { tint: "bg-[#fdecec] text-[#d92d20]", dot: "bg-[#d92d20]" },
+    failed: { tint: "bg-[#fff6e5] text-[#b45309]", dot: "bg-[#f59e0b]" },
+    pending: { tint: "bg-[#eef4ff] text-[#2878ff]", dot: "bg-[#2878ff]" },
+  }[state]
+  return (
+    <span
+      title={state === "reported" ? undefined : (zatcaReasonText(invoice, locale) ?? undefined)}
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
+        tint.tint
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", tint.dot)} />
+      {t(`page.table.zatca.${state}`)}
+    </span>
   )
 }

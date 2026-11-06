@@ -72,6 +72,7 @@ export interface ZatcaUnreportedDocument {
   // "NOT_REPORTED" once ZATCA refused it; null while ZATCA never answered (down, network).
   zatcaStatus: string | null
   lastError: string | null
+  lastErrorAr: string | null
   attempts: number
   lastAttemptAt: string | null
 }

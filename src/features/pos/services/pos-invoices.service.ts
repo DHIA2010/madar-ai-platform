@@ -116,6 +116,8 @@ export interface Invoice {
   zatcaStatus: string | null
   zatcaReportedAt: string | null
   zatcaLastError: string | null
+  // The same reason in Arabic (ZATCA's own wording), when there is one.
+  zatcaLastErrorAr: string | null
 }
 
 export interface InvoiceSummary {
@@ -186,6 +188,8 @@ export interface InvoiceReturn {
   zatcaStatus: string | null
   zatcaReportedAt: string | null
   zatcaLastError: string | null
+  // The same reason in Arabic (ZATCA's own wording), when there is one.
+  zatcaLastErrorAr: string | null
 }
 
 export interface CreateInvoiceReturnItemInput {

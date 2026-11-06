@@ -1721,6 +1721,7 @@ export default function CashierPage() {
       zatcaStatus: null,
       zatcaReportedAt: null,
       zatcaLastError: null,
+      zatcaLastErrorAr: null,
     }
   }
 

@@ -26,21 +26,43 @@ export class ZatcaApiError extends Error {
   }
 }
 
-// ZATCA's own explanation of a refused request, in whichever of its shapes it came back.
-export function zatcaErrorMessage(body: unknown): string | null {
+// ZATCA answers business rules (BR-...) in Arabic when asked, but its technical checks only ever
+// in English -- Madar's own Arabic wording for those.
+const TECHNICAL_REASON_AR: Record<string, string> = {
+  "certificate-permissions": "الرقم الضريبي في الفاتورة لا يطابق الرقم الضريبي في شهادة الجهاز.",
+  "signed-properties-hashing":
+    "توقيع الفاتورة لا يطابق شهادة الجهاز (بصمة الخصائص الموقّعة غير صحيحة).",
+  "invalid-invoice-hash": "بصمة الفاتورة (Hash) غير صحيحة.",
+  invoiceHash_QRCODE_INVALID: "بصمة الفاتورة في رمز QR غير صحيحة.",
+  QRCODE_INVALID: "رمز الاستجابة السريعة (QR) في الفاتورة غير صحيح.",
+  XSD_ZATCA_INVALID: "بنية ملف الفاتورة (XML) لا تطابق مواصفات الهيئة.",
+  "signature-validation": "التوقيع الرقمي للفاتورة غير صحيح.",
+  "certificate-issuer-name": "اسم جهة إصدار الشهادة في الفاتورة غير صحيح.",
+  "certificate-serial-number": "الرقم التسلسلي للشهادة في الفاتورة غير صحيح.",
+  "certificate-expired": "انتهت صلاحية شهادة الجهاز.",
+}
+
+// ZATCA's own explanation of a refused request, in whichever of its shapes it came back. With
+// "ar", technical reasons are replaced by Madar's Arabic wording (business rules already come
+// back in Arabic when the request asked for it).
+export function zatcaErrorMessage(body: unknown, language: "en" | "ar" = "en"): string | null {
   if (!body) return null
   if (typeof body === "string") return body.trim().slice(0, 300) || null
   const typed = body as {
     message?: string
     errors?: Array<{ message?: string; code?: string } | string>
-    validationResults?: { errorMessages?: Array<{ message?: string }> }
+    validationResults?: { errorMessages?: Array<{ message?: string; code?: string }> }
   }
   const fromErrors = typed.errors
     ?.map((entry) => (typeof entry === "string" ? entry : (entry.message ?? entry.code)))
     .filter(Boolean)
     .join(" — ")
   const fromValidation = typed.validationResults?.errorMessages
-    ?.map((entry) => entry.message)
+    ?.map((entry) =>
+      language === "ar" && entry.code && TECHNICAL_REASON_AR[entry.code]
+        ? TECHNICAL_REASON_AR[entry.code]
+        : entry.message
+    )
     .filter(Boolean)
     .join(" — ")
   return fromErrors || fromValidation || typed.message || null
@@ -187,14 +209,15 @@ export interface ZatcaReportingResult {
   stampSignatureBase64: string | null
 }
 
-// The real Reporting call -- POST .../invoices/reporting/single. Only ever called manually from
-// InvoicesPage.tsx's "الإبلاغ إلى الهيئة" action (see the plan), never automatically at checkout.
+// The real Reporting call -- POST .../invoices/reporting/single. See pos/zatca-reporting.ts.
 export async function submitZatcaReporting(
   environment: ZatcaCsrEnvironment,
   invoiceHashBase64: string,
   uuid: string,
   signedInvoiceBase64: string,
-  credentials: { binarySecurityToken: string; secret: string }
+  credentials: { binarySecurityToken: string; secret: string },
+  // The language ZATCA words its validation messages in.
+  language: "en" | "ar" = "en"
 ): Promise<ZatcaReportingResult> {
   const result = await postJson(
     environment,
@@ -203,7 +226,7 @@ export async function submitZatcaReporting(
     {
       Authorization: basicAuthHeader(credentials.binarySecurityToken, credentials.secret),
       "Accept-Version": "V2",
-      "Accept-Language": "en",
+      "Accept-Language": language,
     }
   )
   const typed = result as {

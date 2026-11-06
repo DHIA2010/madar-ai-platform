@@ -27,8 +27,10 @@ const NUMBER_COLUMN: Record<ZatcaDocumentKind, string> = {
 
 export type ZatcaReportOutcome =
   | { result: "reported"; status: string }
-  | { result: "rejected"; status: string; error: string }
-  | { result: "failed"; status: null; error: string }
+  // error is in English; errorAr is ZATCA's Arabic wording of the same reason (null when there
+  // is none, e.g. a network failure).
+  | { result: "rejected"; status: string; error: string; errorAr: string | null }
+  | { result: "failed"; status: null; error: string; errorAr: string | null }
 
 export interface ZatcaUnreportedDocument {
   kind: ZatcaDocumentKind
@@ -39,6 +41,7 @@ export interface ZatcaUnreportedDocument {
   // NOT_REPORTED once ZATCA refused it; null while it was never answered.
   zatcaStatus: string | null
   lastError: string | null
+  lastErrorAr: string | null
   attempts: number
   lastAttemptAt: string | null
 }
@@ -103,7 +106,8 @@ export class PosZatcaReporting {
       `UPDATE ${table}
           SET zatca_attempts = zatca_attempts + 1, zatca_last_error = $2, zatca_status = $3,
               zatca_response = COALESCE($4::jsonb, zatca_response),
-              zatca_reported_at = CASE WHEN $5 THEN now() ELSE zatca_reported_at END
+              zatca_reported_at = CASE WHEN $5 THEN now() ELSE zatca_reported_at END,
+              zatca_last_error_ar = $6
         WHERE id = $1`,
       [
         id,
@@ -111,6 +115,7 @@ export class PosZatcaReporting {
         outcome.status,
         outcome.raw === undefined ? null : JSON.stringify(outcome.raw),
         outcome.result === "reported",
+        outcome.result === "reported" ? null : outcome.errorAr,
       ]
     )
     if (outcome.result !== "reported") {
@@ -119,28 +124,38 @@ export class PosZatcaReporting {
     return outcome.result === "reported"
       ? { result: "reported", status: outcome.status }
       : outcome.result === "rejected"
-        ? { result: "rejected", status: outcome.status, error: outcome.error }
-        : { result: "failed", status: null, error: outcome.error }
+        ? {
+            result: "rejected",
+            status: outcome.status,
+            error: outcome.error,
+            errorAr: outcome.errorAr,
+          }
+        : { result: "failed", status: null, error: outcome.error, errorAr: outcome.errorAr }
   }
 
   private async send(row: ReportableRow): Promise<ZatcaReportOutcome & { raw?: unknown }> {
+    let submit: ((language: "en" | "ar") => ReturnType<typeof submitZatcaReporting>) | null = null
     try {
       const credentials = await this.devicesService.getProductionCredentials(
         row.organization_id,
         row.zatca_device_id!
       )
-      const report = await submitZatcaReporting(
-        credentials.environment,
-        row.invoice_hash!,
-        row.zatca_uuid!,
-        Buffer.from(row.zatca_signed_xml!, "utf8").toString("base64"),
-        credentials
-      )
+      submit = (language) =>
+        submitZatcaReporting(
+          credentials.environment,
+          row.invoice_hash!,
+          row.zatca_uuid!,
+          Buffer.from(row.zatca_signed_xml!, "utf8").toString("base64"),
+          credentials,
+          language
+        )
+      const report = await submit("en")
       if (report.status === "NOT_REPORTED") {
         return {
           result: "rejected",
           status: report.status,
           error: zatcaErrorMessage(report.raw) ?? "ZATCA did not accept the document.",
+          errorAr: await this.arabicReason(submit),
           raw: report.raw,
         }
       }
@@ -151,6 +166,7 @@ export class PosZatcaReporting {
           result: "rejected",
           status: "NOT_REPORTED",
           error: zatcaErrorMessage(error.body) ?? "ZATCA did not accept the document.",
+          errorAr: submit ? await this.arabicReason(submit) : null,
           raw: error.body,
         }
       }
@@ -165,7 +181,25 @@ export class PosZatcaReporting {
           : error instanceof Error
             ? error.message
             : String(error)
-      return { result: "failed", status: null, error: message.slice(0, 500) }
+      return {
+        result: "failed",
+        status: null,
+        error: message.slice(0, 500),
+        errorAr: error instanceof ZatcaApiError ? zatcaErrorMessage(error.body, "ar") : null,
+      }
+    }
+  }
+
+  // ZATCA words its business rules in Arabic when asked, so a refused document is sent once more
+  // asking for Arabic -- it's refused again (nothing about it changed), this time in Arabic.
+  private async arabicReason(
+    submit: (language: "en" | "ar") => ReturnType<typeof submitZatcaReporting>
+  ): Promise<string | null> {
+    try {
+      const report = await submit("ar")
+      return report.status === "NOT_REPORTED" ? zatcaErrorMessage(report.raw, "ar") : null
+    } catch (error) {
+      return error instanceof ZatcaApiError ? zatcaErrorMessage(error.body, "ar") : null
     }
   }
 
@@ -214,6 +248,7 @@ export class PosZatcaReporting {
     if (outcome.result !== "reported") {
       throw new IdentityError("ZATCA_REJECTED", 422, "business", outcome.error, {
         result: outcome.result,
+        reasonAr: outcome.errorAr,
       })
     }
     return { status: outcome.status }
@@ -230,11 +265,12 @@ export class PosZatcaReporting {
         created_at: Date | string
         zatca_status: string | null
         zatca_last_error: string | null
+        zatca_last_error_ar: string | null
         zatca_attempts: number
         zatca_last_attempt_at: Date | string | null
       }>(
         `SELECT id, ${NUMBER_COLUMN[kind]} AS number, total_amount, created_at, zatca_status,
-                zatca_last_error, zatca_attempts, zatca_last_attempt_at
+                zatca_last_error, zatca_last_error_ar, zatca_attempts, zatca_last_attempt_at
            FROM ${TABLE[kind]}
           WHERE organization_id = $1 AND zatca_signed_xml IS NOT NULL
             AND zatca_reported_at IS NULL`,
@@ -249,6 +285,7 @@ export class PosZatcaReporting {
           createdAt: toIso(row.created_at)!,
           zatcaStatus: row.zatca_status,
           lastError: row.zatca_last_error,
+          lastErrorAr: row.zatca_last_error_ar,
           attempts: Number(row.zatca_attempts),
           lastAttemptAt: toIso(row.zatca_last_attempt_at),
         })

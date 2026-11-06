@@ -8311,11 +8311,18 @@
           "payment": "طريقة الدفع",
           "amount": "المبلغ",
           "status": "الحالة",
-          "actions": "الإجراءات"
+          "actions": "الإجراءات",
+          "zatca": "الهيئة (ZATCA)"
         },
         "rowActionsAriaLabel": "إجراءات الفاتورة",
         "viewDetails": "عرض التفاصيل",
-        "registerReturnAction": "تسجيل إرجاع"
+        "registerReturnAction": "تسجيل إرجاع",
+        "zatca": {
+          "reported": "مُبلَّغة",
+          "rejected": "مرفوضة",
+          "failed": "تعذّر الإرسال",
+          "pending": "قيد الإرسال"
+        }
       },
       "pagination": {
         "previousAriaLabel": "الصفحة السابقة",
