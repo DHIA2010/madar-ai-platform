@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { newDb } from "pg-mem"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
@@ -244,5 +244,71 @@ describe("ZatcaDevicesService.signInvoice -- ICV/PIH chain", () => {
     expect(tags[5].value.toString("utf8")).toBe(signed.invoiceHash.toString("base64"))
     expect(tags[6].value.toString("utf8")).toBe(signed.digitalSignature.toString("base64"))
     expect(tags.map((entry) => entry.tag)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+})
+
+describe("ZatcaDevicesService.runComplianceChecks", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("sends an invoice, a credit note and a debit note, and counts 'Submitted before' as passed", async () => {
+    const service = new ZatcaDevicesService(database)
+    const device = await createComplianceReadyDevice(service)
+    await database.query(
+      `update zatca_devices set compliance_secret_encrypted = $2 where id = $1`,
+      [device.id, encryptZatcaSecret("secret", resolveZatcaEncryptionKey()!)]
+    )
+    const answers = [
+      { status: 200, body: { reportingStatus: "REPORTED" } },
+      {
+        status: 406,
+        body: {
+          validationResults: {
+            errorMessages: [
+              {
+                code: "Submitted before",
+                message: "Compliance check already completed for SIMPLIFIED.",
+              },
+            ],
+          },
+        },
+      },
+      {
+        status: 400,
+        body: {
+          validationResults: { errorMessages: [{ code: "BR-KSA-37", message: "Building number" }] },
+        },
+      },
+      // The same credit note asked again in Arabic.
+      {
+        status: 400,
+        body: {
+          validationResults: { errorMessages: [{ code: "BR-KSA-37", message: "رقم المبنى" }] },
+        },
+      },
+      { status: 200, body: { reportingStatus: "REPORTED" } },
+    ]
+    const bodies: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(Buffer.from(JSON.parse(String(init?.body)).invoice, "base64").toString("utf8"))
+        const answer = answers.shift()!
+        return new Response(JSON.stringify(answer.body), { status: answer.status })
+      })
+    )
+
+    expect(await service.runComplianceChecks(organizationId, device.id)).toEqual([
+      { scenario: "sale-no-discount", status: "REPORTED", reason: null, reasonAr: null },
+      { scenario: "sale-with-discount", status: "PASSED_BEFORE", reason: null, reasonAr: null },
+      {
+        scenario: "credit-note",
+        status: "NOT_REPORTED",
+        reason: "Building number",
+        reasonAr: "رقم المبنى",
+      },
+      { scenario: "debit-note", status: "REPORTED", reason: null, reasonAr: null },
+    ])
+    expect(bodies[2]).toContain(">381</cbc:InvoiceTypeCode>")
+    expect(bodies[4]).toContain(">383</cbc:InvoiceTypeCode>")
   })
 })

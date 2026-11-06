@@ -116,6 +116,14 @@ function zatcaRejected(error: unknown): never {
   throw error
 }
 
+function isSubmittedBefore(error: unknown): boolean {
+  if (!(error instanceof ZatcaApiError) || error.status !== 406) return false
+  const messages =
+    (error.body as { validationResults?: { errorMessages?: Array<{ code?: string }> } } | null)
+      ?.validationResults?.errorMessages ?? []
+  return messages.some((message) => message.code === "Submitted before")
+}
+
 // The VAT number the device's certificate carries: stored since migration 147, else the 15-digit
 // number (starting and ending with 3) inside its CSR.
 function sellerVatNumber(row: ZatcaDeviceRow): string {
@@ -532,6 +540,17 @@ export class ZatcaDevicesService {
           reasonAr: null,
         })
       } catch (error) {
+        // ZATCA counts each document type once: a type that already passed (e.g. the second
+        // simplified-invoice sample, or a re-run) answers 406 "Submitted before" -- passed.
+        if (isSubmittedBefore(error)) {
+          results.push({
+            scenario: scenario.name,
+            status: "PASSED_BEFORE",
+            reason: null,
+            reasonAr: null,
+          })
+          continue
+        }
         if (!(error instanceof ZatcaApiError) || error.status !== 400) throw zatcaRejected(error)
         // Asked again in Arabic for ZATCA's Arabic wording of the same reason.
         const reasonAr = await submit("ar").then(

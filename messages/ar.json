@@ -4388,7 +4388,8 @@
           "credit-note": "إشعار دائن",
           "debit-note": "إشعار مدين"
         },
-        "checkRefused": "رفضتها الهيئة"
+        "checkRefused": "رفضتها الهيئة",
+        "checkPassedBefore": "اجتاز سابقاً"
       },
       "validation": {
         "deviceNameRequired": "أدخل اسماً لهذا الجهاز.",

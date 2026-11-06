@@ -478,7 +478,11 @@ export default function ZatcaSettings() {
                                     passed ? "text-[#1f9d55]" : "text-[#d92d20]"
                                   )}
                                 >
-                                  {passed ? result.status : t("device.checkRefused")}
+                                  {!passed
+                                    ? t("device.checkRefused")
+                                    : result.status === "PASSED_BEFORE"
+                                      ? t("device.checkPassedBefore")
+                                      : result.status}
                                 </span>
                               </div>
                               {reason ? (

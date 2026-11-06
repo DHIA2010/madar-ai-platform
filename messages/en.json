@@ -4388,7 +4388,8 @@
           "credit-note": "Credit note",
           "debit-note": "Debit note"
         },
-        "checkRefused": "Refused by ZATCA"
+        "checkRefused": "Refused by ZATCA",
+        "checkPassedBefore": "Passed before"
       },
       "validation": {
         "deviceNameRequired": "Enter a name for this device.",
