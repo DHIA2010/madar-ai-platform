@@ -44,8 +44,31 @@ export interface ZatcaDevice {
   // The ZATCA environment it was onboarded for (null: an old device whose CSR doesn't say).
   environment: ZatcaCsrEnvironment | null
   lastIcv: number
+  // When the device's ZATCA certificate expires (production once issued, else compliance); null
+  // before onboarding. After it, the device must be renewed in the Fatoora portal.
+  certificateExpiresAt: string | null
+  // The certificate ZATCA issued (production once issued, else compliance); null before onboarding.
+  certificate: { validFrom: string; validTo: string; serialNumber: string; issuer: string } | null
+  // What the device's CSR registered with ZATCA.
+  details: ZatcaDeviceDetails
+  // Sales and returns this device signed.
+  signedDocuments: number
+  // Set once the device was stopped (removed while it had signed invoices).
+  deactivatedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface ZatcaDeviceDetails {
+  commonName: string | null
+  organizationName: string | null
+  organizationUnit: string | null
+  country: string | null
+  egsSerialNumber: string | null
+  vatNumber: string | null
+  invoiceTypes: string | null
+  location: string | null
+  industry: string | null
 }
 
 export interface CreateZatcaDeviceInput {
@@ -132,6 +155,13 @@ export const zatcaService = {
     return client.post<undefined, ZatcaDevice>(
       [DEVICES_ENDPOINT, encodeURIComponent(deviceId), "production"].join(PATH_SEPARATOR),
       undefined
+    )
+  },
+
+  // Deleted when it never signed an invoice; stopped (kept for its invoices) otherwise.
+  async removeDevice(deviceId: string): Promise<{ result: "deleted" | "deactivated" }> {
+    return client.delete<{ result: "deleted" | "deactivated" }>(
+      [DEVICES_ENDPOINT, encodeURIComponent(deviceId)].join(PATH_SEPARATOR)
     )
   },
 

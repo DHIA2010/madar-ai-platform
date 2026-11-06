@@ -5216,6 +5216,23 @@ export function createIdentityApiServer(
         }
       }
 
+      // Removing a device: deleted when it never signed an invoice, stopped otherwise -- see
+      // ZatcaDevicesService.removeDevice().
+      const zatcaDeviceMatch = url.pathname.match(/^\/v1\/zatca\/devices\/([^/]+)$/)
+      if (zatcaDeviceMatch && method === "DELETE") {
+        if (!zatcaDevicesService) {
+          return send(503, {
+            code: "ZATCA_DEVICES_UNAVAILABLE",
+            message: "ZATCA device management is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        return send(
+          200,
+          await zatcaDevicesService.removeDevice(actor.organizationId, zatcaDeviceMatch[1])
+        )
+      }
+
       const zatcaDeviceActionMatch = url.pathname.match(
         /^\/v1\/zatca\/devices\/([^/]+)\/(compliance|compliance-checks|production)$/
       )

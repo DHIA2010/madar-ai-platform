@@ -61,6 +61,76 @@ const CERT_TEMPLATE_VALUE: Record<ZatcaCsrEnvironment, string> = {
   production: "ZATCA-Code-Signing",
 }
 
+// What a device's CSR registers with ZATCA: its subject (C, O, OU, CN) and the details in its SAN
+// (EGS serial, VAT number, invoice types, address, activity).
+export interface ZatcaCsrDetails {
+  commonName: string | null
+  organizationName: string | null
+  organizationUnit: string | null
+  country: string | null
+  egsSerialNumber: string | null
+  vatNumber: string | null
+  invoiceTypes: string | null
+  location: string | null
+  industry: string | null
+}
+
+const CSR_FIELD_BY_OID: Record<string, keyof ZatcaCsrDetails> = {
+  [OID.commonName]: "commonName",
+  [OID.organizationName]: "organizationName",
+  [OID.organizationalUnitName]: "organizationUnit",
+  [OID.countryName]: "country",
+  [OID.serialNumber]: "egsSerialNumber",
+  [OID.userId]: "vatNumber",
+  [OID.title]: "invoiceTypes",
+  [OID.registeredAddress]: "location",
+  [OID.businessCategory]: "industry",
+}
+
+// Reads every (attribute OID, value) pair out of a CSR -- the subject's and the SAN dirName's
+// (the SAN extension's value is an OCTET STRING holding its own DER, so it is parsed in turn).
+export function readZatcaCsr(csrPem: string): ZatcaCsrDetails {
+  const details: ZatcaCsrDetails = {
+    commonName: null,
+    organizationName: null,
+    organizationUnit: null,
+    country: null,
+    egsSerialNumber: null,
+    vatNumber: null,
+    invoiceTypes: null,
+    location: null,
+    industry: null,
+  }
+  const visit = (node: forge.asn1.Asn1) => {
+    if (Array.isArray(node.value)) {
+      const [first, second] = node.value
+      if (
+        node.value.length === 2 &&
+        first.type === asn1.Type.OID &&
+        typeof first.value === "string" &&
+        typeof second.value === "string"
+      ) {
+        const field = CSR_FIELD_BY_OID[asn1.derToOid(first.value)]
+        if (field && details[field] === null) details[field] = forge.util.decodeUtf8(second.value)
+      }
+      node.value.forEach(visit)
+    } else if (node.type === asn1.Type.OCTETSTRING && typeof node.value === "string") {
+      try {
+        visit(asn1.fromDer(node.value))
+      } catch {
+        // Not nested DER -- nothing to read.
+      }
+    }
+  }
+  try {
+    const der = Buffer.from(csrPem.replace(/-----[^-]+-----/g, "").replace(/\s/g, ""), "base64")
+    visit(asn1.fromDer(forge.util.createBuffer(der.toString("binary"))))
+  } catch {
+    // An unreadable CSR just has no details to show.
+  }
+  return details
+}
+
 // The environment a CSR was made for, from the template name inside it (older sandbox CSRs used
 // "TESTZATCA"). Null when it can't be told.
 export function environmentFromCsr(csrPem: string): ZatcaCsrEnvironment | null {

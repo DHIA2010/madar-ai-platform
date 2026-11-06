@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { randomUUID, X509Certificate } from "node:crypto"
 
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
@@ -6,6 +6,8 @@ import {
   decryptZatcaSecret,
   encryptZatcaSecret,
   environmentFromCsr,
+  readZatcaCsr,
+  type ZatcaCsrDetails,
   generateZatcaCsr,
   resolveZatcaEncryptionKey,
   type ZatcaCsrEnvironment,
@@ -50,6 +52,18 @@ export interface ZatcaDeviceView {
   // The ZATCA environment it was onboarded for (null: an old device whose CSR doesn't say).
   environment: ZatcaCsrEnvironment | null
   lastIcv: number
+  // When the device's certificate from ZATCA stops being valid -- the production one once issued,
+  // else the compliance one; null before onboarding. After this date the device can't sign or
+  // report until its certificate is renewed in the Fatoora portal.
+  certificateExpiresAt: string | null
+  // The certificate ZATCA issued (production once issued, else compliance); null before onboarding.
+  certificate: { validFrom: string; validTo: string; serialNumber: string; issuer: string } | null
+  // What the device's CSR registered with ZATCA.
+  details: ZatcaCsrDetails
+  // Sales and returns this device signed.
+  signedDocuments: number
+  // Set once the device was stopped (removed while it had signed invoices) -- it signs nothing new.
+  deactivatedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -73,6 +87,7 @@ interface ZatcaDeviceRow {
   environment: string | null
   vat_number: string | null
   organization_name: string | null
+  deactivated_at: Date | string | null
   created_at: Date | string
   updated_at: Date | string
   [key: string]: unknown
@@ -132,7 +147,28 @@ function sellerVatNumber(row: ZatcaDeviceRow): string {
   return der.toString("latin1").match(/3\d{13}3/)?.[0] ?? ""
 }
 
-function mapDevice(row: ZatcaDeviceRow): ZatcaDeviceView {
+function deviceCertificate(row: ZatcaDeviceRow): ZatcaDeviceView["certificate"] {
+  const source = row.production_csid_encrypted ?? row.compliance_csid_encrypted
+  const key = resolveZatcaEncryptionKey()
+  if (!source || !key) return null
+  try {
+    const body = certificateBase64FromToken(decryptZatcaSecret(source, key))
+    const certificate = new X509Certificate(
+      `-----BEGIN CERTIFICATE-----\n${body}\n-----END CERTIFICATE-----`
+    )
+    return {
+      validFrom: new Date(certificate.validFrom).toISOString(),
+      validTo: new Date(certificate.validTo).toISOString(),
+      serialNumber: BigInt(`0x${certificate.serialNumber}`).toString(10),
+      issuer: certificate.issuer.split("\n").reverse().join(", "),
+    }
+  } catch {
+    return null
+  }
+}
+
+function mapDevice(row: ZatcaDeviceRow, signedDocuments = 0): ZatcaDeviceView {
+  const certificate = deviceCertificate(row)
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -142,6 +178,11 @@ function mapDevice(row: ZatcaDeviceRow): ZatcaDeviceView {
     status: row.status as ZatcaDeviceStatus,
     environment: deviceEnvironment(row),
     lastIcv: Number(row.last_icv) || 0,
+    certificateExpiresAt: certificate?.validTo ?? null,
+    certificate,
+    details: readZatcaCsr(row.csr),
+    signedDocuments,
+    deactivatedAt: row.deactivated_at ? toIso(row.deactivated_at) : null,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   }
@@ -152,7 +193,7 @@ const DEVICE_SELECT = `
          public_key_pem, status, compliance_request_id, compliance_csid_encrypted,
          compliance_secret_encrypted, production_csid_encrypted, production_secret_encrypted,
          last_icv, last_invoice_hash, environment, vat_number, organization_name,
-         created_at, updated_at
+         deactivated_at, created_at, updated_at
     FROM zatca_devices
 `
 
@@ -217,7 +258,50 @@ export class ZatcaDevicesService {
       `${DEVICE_SELECT} WHERE organization_id = $1 ORDER BY created_at DESC`,
       [organizationId]
     )
-    return result.rows.map(mapDevice)
+    const counts = await this.signedDocumentCounts(organizationId)
+    return result.rows.map((row) => mapDevice(row, counts.get(row.id) ?? 0))
+  }
+
+  // Sales and returns each device of this organization signed.
+  private async signedDocumentCounts(organizationId: string): Promise<Map<string, number>> {
+    const counts = new Map<string, number>()
+    for (const table of ["pos_invoices", "pos_invoice_returns"]) {
+      const result = await this.database.query<{ zatca_device_id: string; count: string | number }>(
+        `SELECT zatca_device_id, COUNT(*) AS count FROM ${table}
+          WHERE organization_id = $1 AND zatca_device_id IS NOT NULL
+          GROUP BY zatca_device_id`,
+        [organizationId]
+      )
+      for (const row of result.rows) {
+        counts.set(row.zatca_device_id, (counts.get(row.zatca_device_id) ?? 0) + Number(row.count))
+      }
+    }
+    return counts
+  }
+
+  // Removes a device. One that never signed an invoice is deleted outright (whatever its status --
+  // if it was linked with an OTP, its certificate can also be revoked in the Fatoora portal). One
+  // that did is stopped instead: its invoices reference it and must be kept, and any of them not
+  // yet reported still need its certificate to be sent.
+  async removeDevice(
+    organizationId: string,
+    deviceId: string
+  ): Promise<{ result: "deleted" | "deactivated" }> {
+    await this.getRow(organizationId, deviceId)
+    const signed = (await this.signedDocumentCounts(organizationId)).get(deviceId) ?? 0
+    if (signed === 0) {
+      await this.database.query(
+        "DELETE FROM zatca_devices WHERE id = $1 AND organization_id = $2",
+        [deviceId, organizationId]
+      )
+      return { result: "deleted" }
+    }
+    await this.database.query(
+      `UPDATE zatca_devices SET deactivated_at = COALESCE(deactivated_at, now()), updated_at = now()
+        WHERE id = $1 AND organization_id = $2`,
+      [deviceId, organizationId]
+    )
+    return { result: "deactivated" }
   }
 
   private async getRow(organizationId: string, deviceId: string): Promise<ZatcaDeviceRow> {
@@ -630,6 +714,7 @@ export class ZatcaDevicesService {
   ): Promise<ZatcaDeviceView | null> {
     const result = await this.database.query<ZatcaDeviceRow>(
       `${DEVICE_SELECT} WHERE organization_id = $1 AND status = 'production'
+         AND deactivated_at IS NULL
          AND (workspace_id IS NULL OR workspace_id = $2)
         ORDER BY workspace_id NULLS LAST, created_at DESC
         LIMIT 1`,

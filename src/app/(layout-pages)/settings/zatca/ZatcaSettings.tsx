@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react"
 import {
   Check,
   Copy,
+  Eye,
   FileText,
   Info,
   KeyRound,
@@ -18,6 +19,7 @@ import {
   Plus,
   RotateCcw,
   ShieldCheck,
+  Trash2,
 } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
@@ -34,6 +36,7 @@ import {
   type ZatcaDevice,
 } from "@/features/pos/services/zatca.service"
 
+import { ZatcaDeviceDetailsDialog, ZatcaRemoveDeviceDialog } from "./ZatcaDeviceDialogs"
 import { ZatcaUnreportedPanel } from "./ZatcaUnreportedPanel"
 
 import { Button } from "@/components/ui/button"
@@ -135,6 +138,8 @@ export default function ZatcaSettings() {
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const [creating, setCreating] = useState(false)
+  const [detailsDevice, setDetailsDevice] = useState<ZatcaDevice | null>(null)
+  const [removingDevice, setRemovingDevice] = useState<ZatcaDevice | null>(null)
   const [draft, setDraft] = useState<Draft>(
     emptyDraft({ organizationName: "", vatNumber: "", location: "" })
   )
@@ -365,13 +370,41 @@ export default function ZatcaSettings() {
                         {environmentLabel(device.environment, t)}
                       </span>
                     ) : null}
+                    {device.deactivatedAt ? (
+                      <span className="rounded-full bg-[#f2f4f8] px-2.5 py-1 text-[11px] font-bold text-[#667085]">
+                        {t("device.stopped")}
+                      </span>
+                    ) : null}
                   </div>
-                  <span className={cn("text-[11px]", MUTED)}>
-                    {t("device.createdAt", {
-                      date: dateFormatter(locale).format(new Date(device.createdAt)),
-                      icv: device.lastIcv,
-                    })}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={cn("text-[11px]", MUTED)}>
+                      {t("device.createdAt", {
+                        date: dateFormatter(locale).format(new Date(device.createdAt)),
+                        icv: device.lastIcv,
+                      })}
+                    </span>
+                    <CertificateExpiry expiresAt={device.certificateExpiresAt} />
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        className="h-8 gap-1.5 px-2.5 text-[11.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
+                        onClick={() => setDetailsDevice(device)}
+                      >
+                        <Eye className="size-3.5" />
+                        {t("device.viewDetails")}
+                      </Button>
+                      {device.deactivatedAt ? null : (
+                        <Button
+                          variant="ghost"
+                          className="h-8 gap-1.5 px-2.5 text-[11.5px] font-semibold text-[#d92d20] hover:bg-[#fdecec]"
+                          onClick={() => setRemovingDevice(device)}
+                        >
+                          <Trash2 className="size-3.5" />
+                          {t("device.remove")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -400,7 +433,7 @@ export default function ZatcaSettings() {
                   </pre>
                 </div>
 
-                {device.status === "draft" ? (
+                {device.status === "draft" && !device.deactivatedAt ? (
                   <div className="flex flex-col gap-2 border-t border-[#eef2f8] pt-3.5 sm:flex-row sm:items-end">
                     <div className="flex-1">
                       <Label className={cn("mb-1.5 block text-[12px] font-bold", HEADING)}>
@@ -435,7 +468,7 @@ export default function ZatcaSettings() {
                   </div>
                 ) : null}
 
-                {device.status === "compliance" ? (
+                {device.status === "compliance" && !device.deactivatedAt ? (
                   <div className="flex flex-col gap-3 border-t border-[#eef2f8] pt-3.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
@@ -496,7 +529,12 @@ export default function ZatcaSettings() {
                   </div>
                 ) : null}
 
-                {device.status === "production" ? (
+                {device.deactivatedAt ? (
+                  <div className="flex items-center gap-2 rounded-[10px] bg-[#f2f4f8] px-3.5 py-3 text-[12.5px] font-semibold text-[#667085]">
+                    <Info className="size-4" />
+                    {t("device.stoppedBanner", { count: device.signedDocuments })}
+                  </div>
+                ) : device.status === "production" ? (
                   <div className="flex items-center gap-2 rounded-[10px] bg-[#e9f8ef] px-3.5 py-3 text-[12.5px] font-semibold text-[#1f9d55]">
                     <ShieldCheck className="size-4" />
                     {t("device.productionBanner")}
@@ -507,6 +545,13 @@ export default function ZatcaSettings() {
           })}
         </div>
       )}
+
+      <ZatcaDeviceDetailsDialog device={detailsDevice} onClose={() => setDetailsDevice(null)} />
+      <ZatcaRemoveDeviceDialog
+        device={removingDevice}
+        onClose={() => setRemovingDevice(null)}
+        onRemoved={() => void load()}
+      />
 
       <Dialog open={creating} onOpenChange={(open) => !open && setCreating(false)}>
         <DialogContent
@@ -642,5 +687,37 @@ export default function ZatcaSettings() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// When the device's ZATCA certificate expires -- red once expired, amber in its last 30 days.
+function CertificateExpiry({ expiresAt }: { expiresAt: string | null }) {
+  const t = useTranslations("settings.zatca")
+  const locale = useLocale() as Locale
+  // Read once per mount -- "now" shouldn't change between renders.
+  const [now] = useState(() => Date.now())
+  if (!expiresAt) return null
+  const expires = new Date(expiresAt)
+  const daysLeft = Math.ceil((expires.getTime() - now) / 86_400_000)
+  const date = new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(expires)
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+        daysLeft <= 0
+          ? "bg-[#fdecec] text-[#d92d20]"
+          : daysLeft <= 30
+            ? "bg-[#fff6e5] text-[#b45309]"
+            : "bg-[#f2f4f8] text-[#475467]"
+      )}
+    >
+      {daysLeft <= 0
+        ? t("device.certificateExpired", { date })
+        : t("device.certificateExpires", { date })}
+    </span>
   )
 }

@@ -312,3 +312,79 @@ describe("ZatcaDevicesService.runComplianceChecks", () => {
     expect(bodies[4]).toContain(">383</cbc:InvoiceTypeCode>")
   })
 })
+
+describe("ZatcaDevicesService certificate expiry", () => {
+  it("shows when the device's certificate expires, read from the certificate itself", async () => {
+    const service = new ZatcaDevicesService(database)
+    const draft = await service.createDevice(organizationId, {
+      workspaceId: null,
+      commonName: "EGS-EXPIRY",
+      environment: "sandbox",
+      vatNumber: "310000000000003",
+      organizationName: "Test Org",
+      organizationUnit: "Main Branch",
+      egsSerialNumber: "1-TestMfr|2-Model1|3-SN9",
+      invoiceTypeBitmask: "0100",
+      location: "Riyadh",
+      industry: "Retail",
+    })
+    expect(draft.certificateExpiresAt).toBeNull()
+
+    const device = await createComplianceReadyDevice(service)
+    const [listed] = (await service.list(organizationId)).filter((item) => item.id === device.id)
+    // The test certificate is made valid for one day.
+    const expiresIn = new Date(listed.certificateExpiresAt!).getTime() - Date.now()
+    expect(expiresIn).toBeGreaterThan(0)
+    expect(expiresIn).toBeLessThanOrEqual(86_400_000 + 60_000)
+  })
+})
+
+describe("ZatcaDevicesService.removeDevice", () => {
+  it("deletes a device that never signed an invoice", async () => {
+    const service = new ZatcaDevicesService(database)
+    const device = await createComplianceReadyDevice(service)
+    expect(await service.removeDevice(organizationId, device.id)).toEqual({ result: "deleted" })
+    expect(await service.list(organizationId)).toEqual([])
+  })
+
+  it("stops, rather than deletes, a device whose invoices must be kept", async () => {
+    const service = new ZatcaDevicesService(database)
+    const device = await createComplianceReadyDevice(service)
+    await database.query(`update zatca_devices set status = 'production' where id = $1`, [
+      device.id,
+    ])
+    const workspaceId = "30000000-0000-0000-0000-000000000001"
+    await database.query(
+      `insert into workspaces (id, organization_id, name, status) values ($1, $2, 'Main', 'active')`,
+      [workspaceId, organizationId]
+    )
+    await database.query(
+      `insert into pos_invoices
+         (id, organization_id, workspace_id, invoice_number, payment_method_code, subtotal_amount,
+          tax_amount, total_amount, zatca_device_id)
+       values ('40000000-0000-0000-0000-000000000001', $1, $2, 'INV-1', 'cash', 100, 15, 115, $3)`,
+      [organizationId, workspaceId, device.id]
+    )
+    expect((await service.findProductionDevice(organizationId, workspaceId))?.id).toBe(device.id)
+
+    expect(await service.removeDevice(organizationId, device.id)).toEqual({ result: "deactivated" })
+    const [listed] = await service.list(organizationId)
+    expect(listed.deactivatedAt).not.toBeNull()
+    expect(listed.signedDocuments).toBe(1)
+    // A stopped device signs no new sales.
+    expect(await service.findProductionDevice(organizationId, workspaceId)).toBeNull()
+  })
+
+  it("shows what the device's CSR registered", async () => {
+    const service = new ZatcaDevicesService(database)
+    const device = await createComplianceReadyDevice(service)
+    expect(device.details).toMatchObject({
+      commonName: "EGS-TEST-1",
+      vatNumber: "310000000000003",
+      organizationUnit: "Main Branch",
+      egsSerialNumber: "1-TestMfr|2-Model1|3-SN1",
+      location: "Riyadh",
+      industry: "Retail",
+    })
+  })
+})

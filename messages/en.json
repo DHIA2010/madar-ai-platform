@@ -4376,7 +4376,7 @@
         "submitOtp": "Onboard via OTP",
         "runComplianceChecks": "Run compliance checks",
         "getProductionCert": "Get production certificate",
-        "productionBanner": "Device activated -- every new sale is signed automatically and can be reported to the authority from the invoice detail panel.",
+        "productionBanner": "Device active -- every new sale and return is signed and reported to ZATCA automatically.",
         "otpHint": {
           "sandbox": "Sandbox: the OTP is always 123345 -- don't use a code from the Fatoora portal.",
           "simulation": "Simulation: use an OTP from the Fatoora portal in Simulation mode.",
@@ -4389,7 +4389,13 @@
           "debit-note": "Debit note"
         },
         "checkRefused": "Refused by ZATCA",
-        "checkPassedBefore": "Passed before"
+        "checkPassedBefore": "Passed before",
+        "certificateExpires": "Certificate valid until {date}",
+        "certificateExpired": "Certificate expired on {date} -- renew it in the Fatoora portal",
+        "viewDetails": "Details",
+        "remove": "Remove",
+        "stopped": "Stopped",
+        "stoppedBanner": "This device is stopped -- it signs no new sales. It's kept because it signed {count} invoices that must be retained."
       },
       "validation": {
         "deviceNameRequired": "Enter a name for this device.",
@@ -4464,6 +4470,43 @@
           "someLeft": "{reported} reported, {left} still not reported.",
           "someLeftDescription": "Check the reason next to each one.",
           "failed": "Couldn't report the invoices. Try again."
+        }
+      },
+      "details": {
+        "title": "Device details: {name}",
+        "certificateTitle": "ZATCA certificate",
+        "noCertificate": "ZATCA hasn't issued a certificate for this device yet (not linked with an OTP).",
+        "fields": {
+          "commonName": "Device name",
+          "organizationName": "Registered business name",
+          "vatNumber": "VAT number",
+          "organizationUnit": "Unit / branch",
+          "egsSerialNumber": "Device serial number",
+          "location": "Address",
+          "industry": "Business activity",
+          "country": "Country",
+          "signedDocuments": "Signed invoices",
+          "lastIcv": "Last counter (ICV)",
+          "createdAt": "Created",
+          "validFrom": "Issued",
+          "validTo": "Expires",
+          "certificateSerial": "Certificate serial number",
+          "issuer": "Issuer"
+        }
+      },
+      "remove": {
+        "titleDelete": "Delete device {name}?",
+        "titleStop": "Stop device {name}?",
+        "deleteBody": "This device hasn't signed any invoice, so it will be deleted from Madar permanently.",
+        "stopBody": "This device signed {count} invoices, which ZATCA requires you to keep -- so it won't be deleted but stopped: it signs no new sales, and its invoices and any pending reports stay as they are.",
+        "revokeHint": "This device is linked to ZATCA. To cancel it there too: Fatoora portal → list of linked units/devices → select it → revoke.",
+        "cancel": "Cancel",
+        "confirmDelete": "Delete device",
+        "confirmStop": "Stop device",
+        "toasts": {
+          "deleted": "Device deleted.",
+          "deactivated": "Device stopped.",
+          "failed": "Couldn't remove the device."
         }
       }
     },
