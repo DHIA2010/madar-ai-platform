@@ -4,7 +4,7 @@
 // SignedProperties, and the QR's tags 6-9. Uses a real self-signed secp256k1 certificate made with
 // openssl, since the signer reads issuer, serial, public key and signature out of it.
 import { execFileSync } from "node:child_process"
-import { createVerify, X509Certificate } from "node:crypto"
+import { createHash, createVerify, X509Certificate } from "node:crypto"
 import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -151,6 +151,27 @@ describe("signZatcaInvoice", () => {
     )
     // ZATCA's digests are base64 of a hex SHA-256 (64 hex characters).
     expect(Buffer.from(info.digest, "base64").toString("utf8")).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it("digests SignedProperties the way ZATCA canonicalizes it: no whitespace, namespaces on the elements", () => {
+    // ZATCA refuses an indented rendering's digest ("signed-properties-hashing") for real
+    // certificates -- the embedded element, with its namespaces declared where each is used.
+    const embedded = /<xades:SignedProperties [\s\S]*?<\/xades:SignedProperties>/.exec(
+      result.signedXml
+    )![0]
+    const canonical = embedded
+      .replace(
+        "<xades:SignedProperties ",
+        '<xades:SignedProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" '
+      )
+      .replace(/<ds:(\w+)/g, '<ds:$1 xmlns:ds="http://www.w3.org/2000/09/xmldsig#"')
+      .replace(/(<ds:DigestMethod [^>]*)><\/ds:DigestMethod>/, "$1/>")
+    const expected = Buffer.from(createHash("sha256").update(canonical).digest("hex")).toString(
+      "base64"
+    )
+    expect(result.signedXml).toContain(
+      `URI="#xadesSignedProperties"><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>${expected}</ds:DigestValue>`
+    )
   })
 
   it("leaves the invoice hash unchanged once signed and the QR is embedded", () => {

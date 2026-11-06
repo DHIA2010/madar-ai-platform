@@ -11,9 +11,10 @@
 //   - Certificate: the base64 body ZATCA returns (binarySecurityToken, base64-decoded once). Its
 //     digest is base64 of the *hex* SHA-256 of that base64 text; issuer is its DN in reverse order
 //     ("CN=..., DC=..."), serial in decimal.
-//   - SignedProperties digest: base64 of the hex SHA-256 of ZATCA's own reference rendering of the
-//     element (SIGNED_PROPERTIES_FOR_HASH below, whitespace included) -- the embedded copy is
-//     minified.
+//   - SignedProperties digest: base64 of the hex SHA-256 of the element as ZATCA canonicalizes it --
+//     no whitespace, xmlns:xades on the element and xmlns:ds on each ds element. (Hashing an
+//     indented rendering passes the developer sandbox's compliance certificate but is refused as
+//     "signed-properties-hashing" by real certificates, e.g. simulation's; verified live.)
 import { createHash, createSign, X509Certificate } from "node:crypto"
 import { DOMParser } from "@xmldom/xmldom"
 import forge from "node-forge"
@@ -104,8 +105,8 @@ function escapeXml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
-// ZATCA's reference rendering of SignedProperties -- hashed exactly as written (whitespace and
-// per-element ds namespaces included); see the module comment.
+// SignedProperties as ZATCA canonicalizes it for its digest (see the module comment): written
+// indented here for reading, hashed with the whitespace between elements removed.
 function signedPropertiesForHash(time: string, certificate: ZatcaCertificateInfo): string {
   return `<xades:SignedProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" Id="xadesSignedProperties">
                                     <xades:SignedSignatureProperties>
@@ -123,7 +124,7 @@ function signedPropertiesForHash(time: string, certificate: ZatcaCertificateInfo
                                             </xades:Cert>
                                         </xades:SigningCertificate>
                                     </xades:SignedSignatureProperties>
-                                </xades:SignedProperties>`
+                                </xades:SignedProperties>`.replace(/>\s+</g, "><")
 }
 
 function signedPropertiesEmbedded(time: string, certificate: ZatcaCertificateInfo): string {
