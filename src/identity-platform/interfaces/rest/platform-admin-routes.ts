@@ -19,6 +19,8 @@ import {
   reorderPackagesSchema,
   storeListQuerySchema,
   subscriptionListQuerySchema,
+  whatsAppPlatformConfigPatchSchema,
+  whatsAppWebhookActivationSchema,
 } from "../../platform-admin/schemas"
 import {
   crmActivateAccountSchema,
@@ -59,6 +61,7 @@ import {
   type PlatformPermission,
 } from "../../platform-admin/staff-roles"
 import type { PlatformAdminService } from "../../platform-admin/service"
+import type { WhatsAppPlatformService } from "../../whatsapp/platform-config"
 
 type Send = (status: number, body: unknown) => void
 
@@ -109,11 +112,22 @@ export async function handlePlatformAdminRoute(input: {
   governance: PlatformGovernanceService | null
   crm: CrmService | null
   salesDocuments: SalesDocumentsService | null
+  whatsapp: WhatsAppPlatformService | null
   send: Send
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
-  const { method, url, actor, service, operations, governance, crm, salesDocuments, readJsonBody } =
-    input
+  const {
+    method,
+    url,
+    actor,
+    service,
+    operations,
+    governance,
+    crm,
+    salesDocuments,
+    whatsapp,
+    readJsonBody,
+  } = input
   const send = (status: number, body: unknown) => {
     input.send(status, body)
     return true
@@ -304,6 +318,25 @@ export async function handlePlatformAdminRoute(input: {
   if (couponMatch && method === "DELETE") {
     await service.deleteCoupon(actor, couponMatch[1])
     return send(200, { ok: true })
+  }
+
+  // WhatsApp Business Platform setup -- see whatsapp/platform-config.ts. Holds secrets, so even
+  // reading it needs settings:manage.
+  if (path.startsWith("/settings/whatsapp")) {
+    requirePlatformPermission(actor, "settings:manage")
+    if (!whatsapp) return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "Unavailable." })
+    if (method === "GET" && path === "/settings/whatsapp") return send(200, await whatsapp.get())
+    if (method === "PATCH" && path === "/settings/whatsapp") {
+      const patch = whatsAppPlatformConfigPatchSchema.parse(await readJsonBody())
+      return send(200, await whatsapp.update(patch, actor.userId))
+    }
+    if (method === "POST" && path === "/settings/whatsapp/test") {
+      return send(200, await whatsapp.testConnection())
+    }
+    if (method === "POST" && path === "/settings/whatsapp/webhook") {
+      const { callbackUrl } = whatsAppWebhookActivationSchema.parse(await readJsonBody())
+      return send(200, await whatsapp.activateWebhook(callbackUrl))
+    }
   }
 
   if (method === "GET" && path === "/settings") {

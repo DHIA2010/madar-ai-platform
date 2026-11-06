@@ -91,6 +91,22 @@ export const platformSettingsPatchSchema = z
   })
   .partial()
 
+// Madar Admin -> settings -> WhatsApp. Secrets are write-only: omitted keeps, "" clears.
+export const whatsAppPlatformConfigPatchSchema = z
+  .object({
+    appId: z.string().trim().max(40).regex(/^\d*$/, "Digits only"),
+    embeddedSignupConfigId: z.string().trim().max(40).regex(/^\d*$/, "Digits only"),
+    madarWabaId: z.string().trim().max(40).regex(/^\d*$/, "Digits only"),
+    madarPhoneNumberId: z.string().trim().max(40).regex(/^\d*$/, "Digits only"),
+    appSecret: z.string().trim().max(200),
+    systemUserToken: z.string().trim().max(1000),
+  })
+  .partial()
+
+export const whatsAppWebhookActivationSchema = z.object({
+  callbackUrl: z.string().trim().url().startsWith("https://"),
+})
+
 export const renewSubscriptionSchema = z.object({
   interval: billingInterval,
 })

@@ -28,6 +28,9 @@ import type {
   AdminSubscriptionView,
   AdminSystemHealth,
   AdminTracking,
+  AdminWhatsAppCheck,
+  AdminWhatsAppConfig,
+  AdminWhatsAppConfigPatch,
   BillingInterval,
   GrantSubscriptionInput,
   PackageInput,
@@ -160,6 +163,24 @@ export const platformAdminService = {
 
   updateSettings(patch: Partial<AdminPlatformSettings>): Promise<AdminPlatformSettings> {
     return client.patch(`${ENDPOINT}/settings`, patch)
+  },
+
+  getWhatsAppConfig(): Promise<AdminWhatsAppConfig> {
+    return client.get(`${ENDPOINT}/settings/whatsapp`)
+  },
+
+  updateWhatsAppConfig(patch: AdminWhatsAppConfigPatch): Promise<AdminWhatsAppConfig> {
+    return client.patch(`${ENDPOINT}/settings/whatsapp`, patch)
+  },
+
+  testWhatsAppConnection(): Promise<{ checks: AdminWhatsAppCheck[] }> {
+    return client.post(`${ENDPOINT}/settings/whatsapp/test`, {})
+  },
+
+  activateWhatsAppWebhook(
+    callbackUrl: string
+  ): Promise<{ appSubscribed: boolean; accountSubscribed: boolean }> {
+    return client.post(`${ENDPOINT}/settings/whatsapp/webhook`, { callbackUrl })
   },
 
   listCoupons(): Promise<AdminCoupon[]> {

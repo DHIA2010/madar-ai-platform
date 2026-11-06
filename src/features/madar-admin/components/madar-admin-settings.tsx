@@ -7,6 +7,7 @@ import { AppButton, AppCard, AppInput, AppSwitch, AppTextarea } from "@/componen
 
 import { platformAdminService } from "../services"
 import type { AdminPlatformSettings } from "../types/platform-admin.types"
+import { MadarAdminWhatsAppSettings } from "./madar-admin-whatsapp-settings"
 
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 
@@ -288,6 +289,8 @@ export function MadarAdminSettings() {
           حفظ الإعدادات
         </AppButton>
       </div>
+
+      <MadarAdminWhatsAppSettings />
     </div>
   )
 }

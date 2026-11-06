@@ -109,6 +109,8 @@ import { ExpenseCategoriesService } from "../../expenses/expense-categories-serv
 import { ExpensesService } from "../../expenses/expenses-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
+import { AwsSecretsWhatsAppCredentialsSource } from "../../whatsapp/credentials"
+import { verifyWhatsAppSignature, WhatsAppPlatformService } from "../../whatsapp/platform-config"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
@@ -840,6 +842,12 @@ export function createIdentityApiServer(
     : null
   const taxRatesService = container.infrastructure.database
     ? new TaxRatesService(container.infrastructure.database)
+    : null
+  const whatsAppPlatformService = container.infrastructure.database
+    ? new WhatsAppPlatformService(
+        container.infrastructure.database,
+        new AwsSecretsWhatsAppCredentialsSource()
+      )
     : null
   const zatcaDevicesService = container.infrastructure.database
     ? new ZatcaDevicesService(container.infrastructure.database)
@@ -1721,6 +1729,44 @@ export function createIdentityApiServer(
         return send(200, { ok: true, leadId })
       }
 
+      // Public, server-to-server: Meta's WhatsApp webhook. GET is Meta checking the URL (echo the
+      // challenge when the verify token matches); POST is an event, signed with the app secret.
+      if (
+        url.pathname === "/v1/public/webhooks/whatsapp" &&
+        (method === "GET" || method === "POST")
+      ) {
+        if (!whatsAppPlatformService) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (method === "GET") {
+          const verifyToken = await whatsAppPlatformService.verifyToken()
+          if (
+            url.searchParams.get("hub.mode") === "subscribe" &&
+            url.searchParams.get("hub.verify_token") === verifyToken
+          ) {
+            response.writeHead(200, { "content-type": "text/plain" })
+            response.end(url.searchParams.get("hub.challenge") ?? "")
+            return
+          }
+          return send(403, { code: "INVALID_VERIFY_TOKEN", message: "Invalid verify token." })
+        }
+        const appSecret = await whatsAppPlatformService.appSecret()
+        if (!appSecret)
+          return send(503, { code: "WHATSAPP_NOT_CONFIGURED", message: "Unavailable." })
+        const rawBody = await readRawBody(request)
+        if (!verifyWhatsAppSignature(rawBody, request.headers["x-hub-signature-256"], appSecret)) {
+          return send(401, { code: "INVALID_SIGNATURE", message: "Invalid signature." })
+        }
+        let payload: unknown = null
+        try {
+          payload = JSON.parse(rawBody.toString("utf8"))
+        } catch {
+          return send(400, { code: "INVALID_JSON", message: "Invalid JSON." })
+        }
+        await whatsAppPlatformService.recordWebhookEvent(payload)
+        return send(200, { ok: true })
+      }
+
       // Public: madar.my's "talk to sales" form.
       if (method === "POST" && url.pathname === "/v1/public/sales-leads") {
         if (!salesLeadService) {
@@ -2497,6 +2543,7 @@ export function createIdentityApiServer(
         governance: platformGovernanceService,
         crm: crmService,
         salesDocuments: salesDocumentsService,
+        whatsapp: whatsAppPlatformService,
         send,
         readJsonBody: () => readJsonBody(request),
       })

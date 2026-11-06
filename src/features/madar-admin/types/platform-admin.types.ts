@@ -408,3 +408,37 @@ export interface AdminOverview {
     createdAt: string
   }>
 }
+
+// Madar Admin -> settings -> WhatsApp: Madar's WhatsApp Business Platform setup. The app secret
+// and System User token are write-only -- only whether they're set comes back.
+export interface AdminWhatsAppConfig {
+  appId: string
+  embeddedSignupConfigId: string
+  madarWabaId: string
+  madarPhoneNumberId: string
+  apiVersion: string
+  hasAppSecret: boolean
+  hasSystemUserToken: boolean
+  systemUserTokenHint: string | null
+  // Values taken from AWS Secrets Manager (madar/Whatsapp/production) -- read-only here.
+  fromAws: Array<
+    "appId" | "appSecret" | "systemUserToken" | "madarWabaId" | "madarPhoneNumberId" | "apiVersion"
+  >
+  webhookVerifyToken: string
+  updatedAt: string | null
+}
+
+export interface AdminWhatsAppConfigPatch {
+  appId?: string
+  embeddedSignupConfigId?: string
+  madarWabaId?: string
+  madarPhoneNumberId?: string
+  appSecret?: string
+  systemUserToken?: string
+}
+
+export interface AdminWhatsAppCheck {
+  key: "token" | "tokenExpiry" | "permissions" | "account" | "phoneNumbers" | "configuredNumber"
+  ok: boolean
+  detail: string
+}
