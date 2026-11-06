@@ -84,9 +84,12 @@ export interface ZatcaReportAllResult {
   skipped: number
 }
 
+// One compliance sample's verdict: REPORTED (passed), or NOT_REPORTED with ZATCA's reason.
 export interface ZatcaComplianceCheckResult {
   scenario: string
   status: string
+  reason: string | null
+  reasonAr: string | null
 }
 
 const sessionManager = createSessionManager()

@@ -20,6 +20,7 @@ import {
 import {
   buildZatcaUblInvoiceXml,
   ZATCA_GENESIS_PIH_BASE64,
+  type ZatcaInvoiceAdjustment,
   type ZatcaUblAddress,
 } from "./zatca-ubl-invoice"
 import { certificateBase64FromToken, embedZatcaQrCode, signZatcaInvoice } from "./zatca-signing"
@@ -146,6 +147,14 @@ const DEVICE_SELECT = `
          created_at, updated_at
     FROM zatca_devices
 `
+
+// One compliance sample's verdict: REPORTED (passed), or NOT_REPORTED with ZATCA's reason.
+export interface ZatcaComplianceCheckView {
+  scenario: string
+  status: string
+  reason: string | null
+  reasonAr: string | null
+}
 
 export interface CreateZatcaDeviceInput {
   workspaceId: string | null
@@ -316,8 +325,8 @@ export class ZatcaDevicesService {
         taxRatePercent: number
       }>
       notes: string | null
-      // Set when signing a credit note instead of an invoice -- see zatca-ubl-invoice.ts.
-      creditNote?: { originalInvoiceNumber: string; reason: string } | null
+      // Set when signing a credit/debit note instead of an invoice -- see zatca-ubl-invoice.ts.
+      adjustment?: ZatcaInvoiceAdjustment | null
       // When true (compliance-check sampling), the device's own persisted ICV/PIH chain is left
       // untouched -- a compliance test invoice never really happened, so it must never occupy a
       // real chain position.
@@ -355,7 +364,7 @@ export class ZatcaDevicesService {
       taxRatePercent: input.taxRatePercent,
       lines: input.lines,
       notes: input.notes,
-      creditNote: input.creditNote ?? null,
+      adjustment: input.adjustment ?? null,
     })
 
     // The device's own certificate -- ZATCA returns it as the binarySecurityToken from the
@@ -428,7 +437,7 @@ export class ZatcaDevicesService {
   async runComplianceChecks(
     organizationId: string,
     deviceId: string
-  ): Promise<Array<{ scenario: string; status: string }>> {
+  ): Promise<ZatcaComplianceCheckView[]> {
     const row = await this.getRow(organizationId, deviceId)
     if (row.status !== "compliance") throw ZATCA_DEVICE_ERRORS.wrongStatus("compliance", row.status)
     const key = this.encryptionKey()
@@ -437,33 +446,52 @@ export class ZatcaDevicesService {
       secret: decryptZatcaSecret(row.compliance_secret_encrypted ?? "", key),
     }
 
+    // ZATCA's simulation and production refuse to issue the production certificate until a
+    // simplified invoice, a credit note and a debit note have each passed.
     const scenarios: Array<{
       name: string
       subtotal: number
       discount: number
-      creditNote?: { originalInvoiceNumber: string; reason: string }
+      adjustment?: ZatcaInvoiceAdjustment
     }> = [
       { name: "sale-no-discount", subtotal: 100, discount: 0 },
       { name: "sale-with-discount", subtotal: 100, discount: 10 },
-      // Returns are reported as credit notes, so the device is checked against one too.
       {
         name: "credit-note",
         subtotal: 100,
         discount: 0,
-        creditNote: { originalInvoiceNumber: "COMPLIANCE-sale-no-discount", reason: "Return" },
+        adjustment: {
+          type: "credit",
+          originalInvoiceNumber: "COMPLIANCE-sale-no-discount",
+          reason: "Goods returned",
+        },
+      },
+      {
+        name: "debit-note",
+        subtotal: 20,
+        discount: 0,
+        adjustment: {
+          type: "debit",
+          originalInvoiceNumber: "COMPLIANCE-sale-no-discount",
+          reason: "Price adjustment",
+        },
       },
     ]
 
-    const results: Array<{ scenario: string; status: string }> = []
+    const sellerName = await this.sellerName(row)
+    const sellerAddress = await this.organizationAddress(organizationId)
+    const environment = requireEnvironment(row)
+    // Every sample is sent even when one is refused, so ZATCA's reasons for all of them show at once.
+    const results: ZatcaComplianceCheckView[] = []
     for (const scenario of scenarios) {
       const taxAmount = Math.round((scenario.subtotal - scenario.discount) * 0.15 * 100) / 100
       const totalAmount = scenario.subtotal - scenario.discount + taxAmount
       const signed = await this.signInvoice(organizationId, deviceId, {
         invoiceNumber: `COMPLIANCE-${scenario.name}`,
         issuedAt: new Date(),
-        sellerName: await this.sellerName(row),
+        sellerName,
         sellerVatNumber: sellerVatNumber(row),
-        sellerAddress: null,
+        sellerAddress,
         customerName: null,
         customerVatNumber: null,
         subtotalAmount: scenario.subtotal,
@@ -483,19 +511,66 @@ export class ZatcaDevicesService {
           },
         ],
         notes: null,
-        creditNote: scenario.creditNote ?? null,
+        adjustment: scenario.adjustment ?? null,
         advanceChain: false,
       })
-      const checkResult = await submitZatcaComplianceCheck(
-        requireEnvironment(row),
-        signed.invoiceHash.toString("base64"),
-        signed.uuid,
-        signed.signedXmlBase64,
-        credentials
-      )
-      results.push({ scenario: scenario.name, status: checkResult.status })
+      const submit = (language: "en" | "ar") =>
+        submitZatcaComplianceCheck(
+          environment,
+          signed.invoiceHash.toString("base64"),
+          signed.uuid,
+          signed.signedXmlBase64,
+          credentials,
+          language
+        )
+      try {
+        const checkResult = await submit("en")
+        results.push({
+          scenario: scenario.name,
+          status: checkResult.status,
+          reason: null,
+          reasonAr: null,
+        })
+      } catch (error) {
+        if (!(error instanceof ZatcaApiError) || error.status !== 400) throw zatcaRejected(error)
+        // Asked again in Arabic for ZATCA's Arabic wording of the same reason.
+        const reasonAr = await submit("ar").then(
+          () => null,
+          (arabic: unknown) =>
+            arabic instanceof ZatcaApiError ? zatcaErrorMessage(arabic.body, "ar") : null
+        )
+        results.push({
+          scenario: scenario.name,
+          status: "NOT_REPORTED",
+          reason: zatcaErrorMessage(error.body) ?? `ZATCA refused it (${error.status}).`,
+          reasonAr,
+        })
+      }
     }
     return results
+  }
+
+  // The organization's national address (Settings -> الإعدادات العامة), for the compliance samples
+  // -- ZATCA checks the seller address on every invoice. Null when none of it is filled in.
+  private async organizationAddress(organizationId: string): Promise<ZatcaUblAddress | null> {
+    const result = await this.database.query<{ settings: Record<string, unknown> | null }>(
+      "SELECT settings FROM organizations WHERE id = $1",
+      [organizationId]
+    )
+    const settings = result.rows[0]?.settings ?? {}
+    const field = (key: string) =>
+      typeof settings[key] === "string" && (settings[key] as string).trim()
+        ? (settings[key] as string).trim()
+        : null
+    const address: ZatcaUblAddress = {
+      streetName: field("street"),
+      buildingNumber: field("buildingNumber"),
+      plotIdentification: field("secondaryNumber"),
+      citySubdivisionName: field("district"),
+      cityName: field("city"),
+      postalZone: field("postalCode"),
+    }
+    return Object.values(address).some(Boolean) ? address : null
   }
 
   // Step 4 -- exchange compliance credentials for real production ones.

@@ -1715,7 +1715,8 @@ export class PosInvoicesService {
             taxRatePercent: line.taxRatePercent,
           })),
           notes: null,
-          creditNote: {
+          adjustment: {
+            type: "credit",
             originalInvoiceNumber: invoiceRow.invoice_number,
             reason: input.notes?.trim() || "Goods returned",
           },

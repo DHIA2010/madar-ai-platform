@@ -4381,7 +4381,14 @@
           "sandbox": "Sandbox: the OTP is always 123345 -- don't use a code from the Fatoora portal.",
           "simulation": "Simulation: use an OTP from the Fatoora portal in Simulation mode.",
           "production": "Production: use an OTP from the real Fatoora portal (valid for a few minutes)."
-        }
+        },
+        "scenarios": {
+          "sale-no-discount": "Simplified invoice",
+          "sale-with-discount": "Simplified invoice with discount",
+          "credit-note": "Credit note",
+          "debit-note": "Debit note"
+        },
+        "checkRefused": "Refused by ZATCA"
       },
       "validation": {
         "deviceNameRequired": "Enter a name for this device.",

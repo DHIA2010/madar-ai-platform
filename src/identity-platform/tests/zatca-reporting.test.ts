@@ -354,7 +354,7 @@ describe("credit note XML", () => {
         },
       ],
       notes: null,
-      creditNote: { originalInvoiceNumber: "INV-000007", reason: "Damaged" },
+      adjustment: { type: "credit", originalInvoiceNumber: "INV-000007", reason: "Damaged" },
     })
     expect(xml).toContain('<cbc:InvoiceTypeCode name="0200000">381</cbc:InvoiceTypeCode>')
     expect(xml).toContain(

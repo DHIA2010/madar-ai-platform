@@ -458,15 +458,35 @@ export default function ZatcaSettings() {
                     </div>
                     {results.length > 0 ? (
                       <div className="flex flex-col gap-1.5">
-                        {results.map((result) => (
-                          <div
-                            key={result.scenario}
-                            className="flex items-center justify-between rounded-[10px] bg-[#f7f9fc] px-3 py-2 text-[12px]"
-                          >
-                            <span className={HEADING}>{result.scenario}</span>
-                            <span className="font-bold text-[#2878ff]">{result.status}</span>
-                          </div>
-                        ))}
+                        {results.map((result) => {
+                          const passed = result.status !== "NOT_REPORTED"
+                          const reason = (locale === "ar" ? result.reasonAr : null) ?? result.reason
+                          return (
+                            <div
+                              key={result.scenario}
+                              className="flex flex-col gap-1 rounded-[10px] bg-[#f7f9fc] px-3 py-2 text-[12px]"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className={HEADING}>
+                                  {t(
+                                    `device.scenarios.${result.scenario}` as "device.scenarios.sale-no-discount"
+                                  )}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "font-bold",
+                                    passed ? "text-[#1f9d55]" : "text-[#d92d20]"
+                                  )}
+                                >
+                                  {passed ? result.status : t("device.checkRefused")}
+                                </span>
+                              </div>
+                              {reason ? (
+                                <p className="text-[11px] leading-5 text-[#b42318]">{reason}</p>
+                              ) : null}
+                            </div>
+                          )
+                        })}
                       </div>
                     ) : null}
                   </div>

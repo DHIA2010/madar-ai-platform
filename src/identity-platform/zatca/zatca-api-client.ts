@@ -92,7 +92,8 @@ async function postJson(
       environment,
       path,
       status: response.status,
-      body: typeof parsed === "string" ? parsed.slice(0, 500) : parsed,
+      // Whole, so nested validation messages aren't collapsed to "[Array]" in the logs.
+      body: (typeof parsed === "string" ? parsed : JSON.stringify(parsed)).slice(0, 4000),
     })
     throw new ZatcaApiError(
       `ZATCA API request to ${path} failed (${response.status})`,
@@ -153,7 +154,9 @@ export async function submitZatcaComplianceCheck(
   invoiceHashBase64: string,
   uuid: string,
   signedInvoiceBase64: string,
-  credentials: { binarySecurityToken: string; secret: string }
+  credentials: { binarySecurityToken: string; secret: string },
+  // The language ZATCA words its validation messages in.
+  language: "en" | "ar" = "en"
 ): Promise<ZatcaComplianceCheckResult> {
   const result = await postJson(
     environment,
@@ -162,6 +165,7 @@ export async function submitZatcaComplianceCheck(
     {
       Authorization: basicAuthHeader(credentials.binarySecurityToken, credentials.secret),
       "Accept-Version": "V2",
+      "Accept-Language": language,
     }
   )
   return {

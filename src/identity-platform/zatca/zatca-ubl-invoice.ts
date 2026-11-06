@@ -34,6 +34,12 @@ export interface ZatcaUblInvoiceLine {
   taxRatePercent: number
 }
 
+export interface ZatcaInvoiceAdjustment {
+  type: "credit" | "debit"
+  originalInvoiceNumber: string
+  reason: string
+}
+
 export interface ZatcaUblInvoiceInput {
   invoiceNumber: string
   uuid: string
@@ -56,9 +62,9 @@ export interface ZatcaUblInvoiceInput {
   taxRatePercent: number
   lines: ZatcaUblInvoiceLine[]
   notes: string | null
-  // Set for a credit note (إشعار دائن, type 381): the invoice it corrects and why it was issued.
-  // Its amounts stay positive, like an invoice's.
-  creditNote?: { originalInvoiceNumber: string; reason: string } | null
+  // Set for a credit note (إشعار دائن, type 381) or a debit note (إشعار مدين, 383): the invoice
+  // it corrects and why it was issued. Its amounts stay positive, like an invoice's.
+  adjustment?: ZatcaInvoiceAdjustment | null
 }
 
 // The PIH of a device's very first invoice: base64 of the hex SHA-256 of "0", as ZATCA specifies.
@@ -155,7 +161,8 @@ export function buildZatcaUblInvoiceXml(input: ZatcaUblInvoiceInput): string {
   const taxExclusive = round2(input.subtotalAmount - input.discountAmount)
   // A discount not already in the line amounts becomes a document-level allowance.
   const documentAllowance = round2(lineTotal - taxExclusive)
-  const creditNote = input.creditNote ?? null
+  const adjustment = input.adjustment ?? null
+  const typeCode = adjustment ? (adjustment.type === "credit" ? 381 : 383) : 388
 
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
@@ -166,12 +173,12 @@ export function buildZatcaUblInvoiceXml(input: ZatcaUblInvoiceInput): string {
     `<cbc:UUID>${escapeXml(input.uuid)}</cbc:UUID>` +
     `<cbc:IssueDate>${isoDate(input.issuedAt)}</cbc:IssueDate>` +
     `<cbc:IssueTime>${isoTime(input.issuedAt)}</cbc:IssueTime>` +
-    `<cbc:InvoiceTypeCode name="${escapeXml(input.invoiceTypeName)}">${creditNote ? 381 : 388}</cbc:InvoiceTypeCode>` +
+    `<cbc:InvoiceTypeCode name="${escapeXml(input.invoiceTypeName)}">${typeCode}</cbc:InvoiceTypeCode>` +
     (input.notes ? `<cbc:Note>${escapeXml(input.notes)}</cbc:Note>` : "") +
     `<cbc:DocumentCurrencyCode>SAR</cbc:DocumentCurrencyCode>` +
     `<cbc:TaxCurrencyCode>SAR</cbc:TaxCurrencyCode>` +
-    (creditNote
-      ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${escapeXml(creditNote.originalInvoiceNumber)}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>`
+    (adjustment
+      ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${escapeXml(adjustment.originalInvoiceNumber)}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>`
       : "") +
     `<cac:AdditionalDocumentReference><cbc:ID>ICV</cbc:ID><cbc:UUID>${input.icv}</cbc:UUID></cac:AdditionalDocumentReference>` +
     `<cac:AdditionalDocumentReference><cbc:ID>PIH</cbc:ID><cac:Attachment>` +
@@ -185,8 +192,8 @@ export function buildZatcaUblInvoiceXml(input: ZatcaUblInvoiceInput): string {
     supplierXml(input) +
     customerXml(input) +
     `<cac:PaymentMeans><cbc:PaymentMeansCode>10</cbc:PaymentMeansCode>` +
-    (creditNote
-      ? `<cbc:InstructionNote>${escapeXml(creditNote.reason)}</cbc:InstructionNote>`
+    (adjustment
+      ? `<cbc:InstructionNote>${escapeXml(adjustment.reason)}</cbc:InstructionNote>`
       : "") +
     `</cac:PaymentMeans>` +
     (documentAllowance > 0.004
