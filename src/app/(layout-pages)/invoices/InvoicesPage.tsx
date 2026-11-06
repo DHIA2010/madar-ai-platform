@@ -21,7 +21,6 @@ import { format } from "date-fns"
 import { useLocale, useTranslations } from "next-intl"
 import type { DateRange } from "react-day-picker"
 import {
-  AlertTriangle,
   Calculator,
   CheckCircle2,
   ChevronLeft,
@@ -34,7 +33,6 @@ import {
   RotateCcw,
   Search,
   Send,
-  ShieldCheck,
   Trash2,
   Wallet,
   XCircle,
@@ -49,6 +47,12 @@ import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import { ThermalInvoiceReceipt } from "@/app/(layout-pages)/pos/ThermalInvoiceReceipt"
 import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
+import {
+  ZatcaDetailRows,
+  ZatcaReportButton,
+  ZatcaStatusBadge,
+  ZatcaUnreportedBanner,
+} from "@/app/(layout-pages)/invoices/zatca-status"
 import {
   posInvoicesService,
   VAT_RATE,
@@ -65,7 +69,6 @@ import {
   type PosSettings,
 } from "@/features/pos/services/pos-settings.service"
 import { taxRatesService } from "@/features/pos/services/tax-rates.service"
-import { zatcaService } from "@/features/pos/services/zatca.service"
 import {
   productListService,
   type ProductRecord,
@@ -194,19 +197,10 @@ type StatusFilter = "all" | InvoiceStatus
 
 export default function InvoicesPage() {
   const t = useTranslations("invoices")
+  const tZatca = useTranslations("invoices.zatca")
   const tCashierCommon = useTranslations("pos.cashier.common")
   const locale = useLocale() as Locale
   const { availableWorkspaces, currentOrganization } = useWorkspace()
-
-  // How many signed sales/returns ZATCA hasn't accepted yet -- a banner links to the list in the
-  // ZATCA settings. Quietly zero for anyone not allowed to see it.
-  const [zatcaUnreportedCount, setZatcaUnreportedCount] = useState(0)
-  useEffect(() => {
-    zatcaService
-      .listUnreported()
-      .then((items) => setZatcaUnreportedCount(items.length))
-      .catch(() => setZatcaUnreportedCount(0))
-  }, [])
 
   const workspaceName = useMemo(() => {
     const map = new Map(availableWorkspaces.map((workspace) => [workspace.id, workspace.name]))
@@ -336,54 +330,12 @@ export default function InvoicesPage() {
 
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
 
-  // "الإبلاغ إلى الهيئة" -- every signed sale is already reported automatically after it's saved;
-  // this sends one again on demand while ZATCA hasn't accepted it. Updates both the
-  // selected-detail copy and the list row in place, so the panel reflects the new status without
-  // a full reload.
-  const [reportingZatcaId, setReportingZatcaId] = useState<string | null>(null)
+  // Merges a change (e.g. a new ZATCA status) into both the list row and the open detail panel.
   function patchInvoice(id: string, patch: Partial<Invoice>) {
     setInvoices((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
     setSelectedInvoice((current) =>
       current && current.id === id ? { ...current, ...patch } : current
     )
-  }
-  async function reportInvoiceToZatca(invoice: Invoice) {
-    setReportingZatcaId(invoice.id)
-    try {
-      const result = await posInvoicesService.reportToZatca(invoice.id)
-      const reportedAt = new Date().toISOString()
-      patchInvoice(invoice.id, {
-        zatcaStatus: result.status,
-        zatcaReportedAt: reportedAt,
-        zatcaLastError: null,
-        zatcaLastErrorAr: null,
-      })
-      toast.success(t("detail.toasts.reportSuccess", { status: result.status }))
-    } catch (error) {
-      const code = error instanceof AppError ? error.code : undefined
-      // ZATCA itself refused or couldn't be reached: its reason, shown and kept on the invoice.
-      const rejected = code === "ZATCA_REJECTED" && error instanceof AppError ? error : undefined
-      const reasonAr =
-        (rejected?.details as { reasonAr?: string | null } | undefined)?.reasonAr ?? null
-      const zatcaReason = rejected
-        ? ((locale === "ar" ? reasonAr : null) ?? rejected.message)
-        : undefined
-      if (rejected) {
-        patchInvoice(invoice.id, { zatcaLastError: rejected.message, zatcaLastErrorAr: reasonAr })
-      }
-      toast.error(
-        code === "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA"
-          ? t("detail.toasts.alreadyReported")
-          : code === "POS_INVOICE_NOT_ZATCA_SIGNED"
-            ? t("detail.toasts.notSigned")
-            : code === "ZATCA_REPORT_IN_PROGRESS"
-              ? t("detail.toasts.inProgress")
-              : t("detail.toasts.reportFailed"),
-        zatcaReason ? { description: t("detail.toasts.zatcaSaid", { reason: zatcaReason }) } : {}
-      )
-    } finally {
-      setReportingZatcaId(null)
-    }
   }
 
   // A real, itemized return (إشعار دائن) -- see PosInvoicesService.createReturn(). Replaces what
@@ -614,22 +566,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {zatcaUnreportedCount > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#fde3b0] bg-[#fff8eb] px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="size-4 shrink-0 text-[#b45309]" />
-            <p className="text-[12.5px] font-semibold text-[#92400e]">
-              {t("page.zatcaUnreportedBanner", { count: zatcaUnreportedCount })}
-            </p>
-          </div>
-          <Link
-            href={ROUTES.settingsZatca}
-            className="text-[12.5px] font-bold text-[#b45309] underline-offset-4 hover:underline"
-          >
-            {t("page.zatcaUnreportedLink")}
-          </Link>
-        </div>
-      ) : null}
+      <ZatcaUnreportedBanner kind="invoice" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => (
@@ -752,7 +689,7 @@ export default function InvoicesPage() {
                         },
                         {
                           key: "zatca",
-                          label: t("page.table.columns.zatca"),
+                          label: tZatca("column"),
                           align: "text-center",
                         },
                         {
@@ -825,7 +762,7 @@ export default function InvoicesPage() {
                             </span>
                           </td>
                           <td className="px-3 py-3.5">
-                            <ZatcaStatusBadge invoice={invoice} />
+                            <ZatcaStatusBadge document={invoice} />
                           </td>
                           <td className="px-3 py-3.5" onClick={(event) => event.stopPropagation()}>
                             <DropdownMenu>
@@ -939,8 +876,7 @@ export default function InvoicesPage() {
             invoice={selectedInvoice}
             workspaceName={workspaceName(selectedInvoice.workspaceId)}
             paymentMethodName={paymentMethodLabel(selectedInvoice)}
-            reportingZatca={reportingZatcaId === selectedInvoice.id}
-            onReportZatca={() => void reportInvoiceToZatca(selectedInvoice)}
+            onZatcaChange={(patch) => patchInvoice(selectedInvoice.id, patch)}
             onClose={() => setSelectedInvoice(null)}
           />
         ) : null}
@@ -1029,15 +965,13 @@ function InvoiceDetailPanel({
   invoice,
   workspaceName,
   paymentMethodName,
-  reportingZatca,
-  onReportZatca,
+  onZatcaChange,
   onClose,
 }: {
   invoice: Invoice
   workspaceName: string
   paymentMethodName: string
-  reportingZatca: boolean
-  onReportZatca: () => void
+  onZatcaChange: (patch: Partial<Invoice>) => void
   onClose: () => void
 }) {
   const t = useTranslations("invoices")
@@ -1094,32 +1028,7 @@ function InvoiceDetailPanel({
         <dd className={cn("text-right font-semibold", HEADING)}>{workspaceName}</dd>
         <dt className={MUTED}>{t("detail.paymentMethod")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{paymentMethodName}</dd>
-        {invoice.zatcaSigned ? (
-          <>
-            <dt className={MUTED}>{t("detail.zatcaStatusLabel")}</dt>
-            <dd
-              className={cn(
-                "text-right font-semibold",
-                invoice.zatcaReportedAt
-                  ? "text-[#1f9d55]"
-                  : invoice.zatcaLastError
-                    ? "text-[#d92d20]"
-                    : "text-[#b45309]"
-              )}
-            >
-              {invoice.zatcaReportedAt
-                ? t("detail.zatcaReported", { status: invoice.zatcaStatus ?? "—" })
-                : invoice.zatcaLastError
-                  ? t("detail.zatcaNotReported")
-                  : t("detail.zatcaAwaitingReport")}
-            </dd>
-            {!invoice.zatcaReportedAt && invoice.zatcaLastError ? (
-              <dd className="col-span-2 rounded-[8px] bg-[#fdecec] px-2.5 py-1.5 text-[11px] leading-5 text-[#b42318]">
-                {t("detail.zatcaReason", { reason: zatcaReasonText(invoice, locale) ?? "" })}
-              </dd>
-            ) : null}
-          </>
-        ) : null}
+        <ZatcaDetailRows document={invoice} labelClassName={MUTED} />
       </dl>
 
       <div className="border-t border-[#eef2f8] pt-3">
@@ -1162,20 +1071,11 @@ function InvoiceDetailPanel({
         </div>
       </div>
 
-      {invoice.zatcaSigned && !invoice.zatcaReportedAt ? (
-        <Button
-          className="h-10 w-full gap-2 rounded-[10px] bg-[#1f9d55] text-[12.5px] font-bold text-white hover:bg-[#188045]"
-          disabled={reportingZatca}
-          onClick={onReportZatca}
-        >
-          {reportingZatca ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <ShieldCheck className="size-4" />
-          )}
-          {t("detail.reportToZatca")}
-        </Button>
-      ) : null}
+      <ZatcaReportButton
+        document={invoice}
+        report={() => posInvoicesService.reportToZatca(invoice.id)}
+        onChange={onZatcaChange}
+      />
 
       <div className="flex items-center gap-2">
         <Button
@@ -1785,45 +1685,5 @@ function CreateInvoiceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-// ZATCA's reason for not accepting a sale, in Arabic when the page is (ZATCA's own Arabic wording,
-// stored next to the English one).
-function zatcaReasonText(invoice: Invoice, locale: Locale): string | null {
-  return (locale === "ar" ? invoice.zatcaLastErrorAr : null) ?? invoice.zatcaLastError
-}
-
-// Where a sale stands with ZATCA: reported, refused (with ZATCA's reason on hover), couldn't be
-// sent yet (retried automatically), or being sent. Unsigned sales (no production device at the
-// time) have nothing to report.
-function ZatcaStatusBadge({ invoice }: { invoice: Invoice }) {
-  const t = useTranslations("invoices")
-  const locale = useLocale() as Locale
-  if (!invoice.zatcaSigned) return <span className={cn("text-[12px]", MUTED)}>—</span>
-  const state = invoice.zatcaReportedAt
-    ? "reported"
-    : invoice.zatcaStatus === "NOT_REPORTED"
-      ? "rejected"
-      : invoice.zatcaLastError
-        ? "failed"
-        : "pending"
-  const tint = {
-    reported: { tint: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
-    rejected: { tint: "bg-[#fdecec] text-[#d92d20]", dot: "bg-[#d92d20]" },
-    failed: { tint: "bg-[#fff6e5] text-[#b45309]", dot: "bg-[#f59e0b]" },
-    pending: { tint: "bg-[#eef4ff] text-[#2878ff]", dot: "bg-[#2878ff]" },
-  }[state]
-  return (
-    <span
-      title={state === "reported" ? undefined : (zatcaReasonText(invoice, locale) ?? undefined)}
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
-        tint.tint
-      )}
-    >
-      <span className={cn("size-1.5 rounded-full", tint.dot)} />
-      {t(`page.table.zatca.${state}`)}
-    </span>
   )
 }

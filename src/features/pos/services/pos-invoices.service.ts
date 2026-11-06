@@ -317,4 +317,14 @@ export const posInvoicesService = {
       undefined
     )
   },
+
+  // Same, for a return (credit note).
+  async reportReturnToZatca(returnId: string): Promise<{ status: string }> {
+    return client.post<undefined, { status: string }>(
+      [INVOICES_ENDPOINT, "returns", encodeURIComponent(returnId), "zatca-report"].join(
+        PATH_SEPARATOR
+      ),
+      undefined
+    )
+  },
 }

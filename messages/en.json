@@ -8315,18 +8315,11 @@
           "payment": "Payment method",
           "amount": "Amount",
           "status": "Status",
-          "actions": "Actions",
-          "zatca": "ZATCA"
+          "actions": "Actions"
         },
         "rowActionsAriaLabel": "Invoice actions",
         "viewDetails": "View details",
-        "registerReturnAction": "Register return",
-        "zatca": {
-          "reported": "Reported",
-          "rejected": "Rejected",
-          "failed": "Not sent",
-          "pending": "Sending"
-        }
+        "registerReturnAction": "Register return"
       },
       "pagination": {
         "previousAriaLabel": "Previous page",
@@ -8335,9 +8328,7 @@
       },
       "toasts": {
         "createSuccess": "Invoice {number} created."
-      },
-      "zatcaUnreportedBanner": "{count} invoices haven't been reported to ZATCA yet.",
-      "zatcaUnreportedLink": "View and report all"
+      }
     },
     "detail": {
       "closeAriaLabel": "Close",
@@ -8346,28 +8337,14 @@
       "phone": "Phone number",
       "workspace": "Workspace",
       "paymentMethod": "Payment method",
-      "zatcaStatusLabel": "ZATCA status",
-      "zatcaReported": "Reported ({status})",
-      "zatcaAwaitingReport": "Signed -- reporting automatically",
       "productsCount": "Products ({count})",
       "subtotal": "Subtotal",
       "discount": "Discount",
       "taxWithPercent": "Tax ({percent}%)",
       "total": "Total",
-      "reportToZatca": "Report to ZATCA again",
       "print": "Print",
       "sendInvoice": "Send invoice",
-      "sendInvoiceDisabledTitle": "Sending an invoice requires linking a communication channel (email or SMS) to the invoice, which isn't available yet",
-      "toasts": {
-        "reportSuccess": "Invoice reported to ZATCA ({status}).",
-        "alreadyReported": "This invoice has already been reported.",
-        "notSigned": "This invoice wasn't signed through a ZATCA production device.",
-        "reportFailed": "Couldn't report the invoice to ZATCA.",
-        "inProgress": "This invoice is being reported right now.",
-        "zatcaSaid": "ZATCA said: {reason}"
-      },
-      "zatcaNotReported": "Not reported yet",
-      "zatcaReason": "Reason: {reason}"
+      "sendInvoiceDisabledTitle": "Sending an invoice requires linking a communication channel (email or SMS) to the invoice, which isn't available yet"
     },
     "returnDialog": {
       "title": "Register return",
@@ -8455,6 +8432,36 @@
         "vat": "VAT",
         "totalReturned": "Total returned",
         "printButton": "Print credit note"
+      }
+    },
+    "zatca": {
+      "column": "ZATCA",
+      "states": {
+        "reported": "Reported",
+        "rejected": "Rejected",
+        "failed": "Not sent",
+        "pending": "Sending"
+      },
+      "banner": {
+        "invoices": "{count} invoices haven't been reported to ZATCA yet.",
+        "returns": "{count} credit notes (returns) haven't been reported to ZATCA yet.",
+        "link": "View and report all"
+      },
+      "detail": {
+        "statusLabel": "ZATCA status",
+        "reported": "Reported ({status})",
+        "awaiting": "Signed -- reporting automatically",
+        "notReported": "Not reported yet",
+        "reason": "Reason: {reason}"
+      },
+      "reportAgain": "Report to ZATCA again",
+      "toasts": {
+        "reported": "Reported to ZATCA ({status}).",
+        "alreadyReported": "Already reported.",
+        "notSigned": "Not signed by a ZATCA production device.",
+        "inProgress": "Being reported right now.",
+        "failed": "Couldn't report to ZATCA.",
+        "zatcaSaid": "ZATCA said: {reason}"
       }
     }
   },

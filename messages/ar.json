@@ -8311,18 +8311,11 @@
           "payment": "طريقة الدفع",
           "amount": "المبلغ",
           "status": "الحالة",
-          "actions": "الإجراءات",
-          "zatca": "الهيئة (ZATCA)"
+          "actions": "الإجراءات"
         },
         "rowActionsAriaLabel": "إجراءات الفاتورة",
         "viewDetails": "عرض التفاصيل",
-        "registerReturnAction": "تسجيل إرجاع",
-        "zatca": {
-          "reported": "مُبلَّغة",
-          "rejected": "مرفوضة",
-          "failed": "تعذّر الإرسال",
-          "pending": "قيد الإرسال"
-        }
+        "registerReturnAction": "تسجيل إرجاع"
       },
       "pagination": {
         "previousAriaLabel": "الصفحة السابقة",
@@ -8331,9 +8324,7 @@
       },
       "toasts": {
         "createSuccess": "تم إنشاء الفاتورة {number}."
-      },
-      "zatcaUnreportedBanner": "{count} فاتورة لم تُبلَّغ إلى الهيئة بعد.",
-      "zatcaUnreportedLink": "عرضها وإبلاغ الكل"
+      }
     },
     "detail": {
       "closeAriaLabel": "إغلاق",
@@ -8342,28 +8333,14 @@
       "phone": "رقم الجوال",
       "workspace": "مساحة العمل",
       "paymentMethod": "طريقة الدفع",
-      "zatcaStatusLabel": "حالة الهيئة (ZATCA)",
-      "zatcaReported": "تم الإبلاغ ({status})",
-      "zatcaAwaitingReport": "موقّعة -- جارٍ الإبلاغ تلقائياً",
       "productsCount": "المنتجات ({count})",
       "subtotal": "المجموع الفرعي",
       "discount": "الخصم",
       "taxWithPercent": "الضريبة ({percent}٪)",
       "total": "الإجمالي",
-      "reportToZatca": "إعادة الإبلاغ إلى الهيئة (ZATCA)",
       "print": "طباعة",
       "sendInvoice": "إرسال الفاتورة",
-      "sendInvoiceDisabledTitle": "إرسال الفاتورة يتطلب ربط قناة تواصل (بريد أو رسالة) بالفاتورة، وهذا غير متاح بعد",
-      "toasts": {
-        "reportSuccess": "تم إبلاغ الفاتورة إلى الهيئة ({status}).",
-        "alreadyReported": "تم إبلاغ هذه الفاتورة مسبقاً.",
-        "notSigned": "لم تُوقَّع هذه الفاتورة عبر جهاز إنتاج تابع للهيئة.",
-        "reportFailed": "تعذر إبلاغ الفاتورة إلى الهيئة.",
-        "inProgress": "يجري إبلاغ هذه الفاتورة الآن.",
-        "zatcaSaid": "ردّ الهيئة: {reason}"
-      },
-      "zatcaNotReported": "لم تُبلَّغ بعد",
-      "zatcaReason": "السبب: {reason}"
+      "sendInvoiceDisabledTitle": "إرسال الفاتورة يتطلب ربط قناة تواصل (بريد أو رسالة) بالفاتورة، وهذا غير متاح بعد"
     },
     "returnDialog": {
       "title": "تسجيل إرجاع",
@@ -8451,6 +8428,36 @@
         "vat": "ضريبة القيمة المضافة",
         "totalReturned": "الإجمالي المرتجع",
         "printButton": "طباعة إشعار الدائن"
+      }
+    },
+    "zatca": {
+      "column": "الهيئة (ZATCA)",
+      "states": {
+        "reported": "مُبلَّغة",
+        "rejected": "مرفوضة",
+        "failed": "تعذّر الإرسال",
+        "pending": "قيد الإرسال"
+      },
+      "banner": {
+        "invoices": "{count} فاتورة لم تُبلَّغ إلى الهيئة بعد.",
+        "returns": "{count} إشعار دائن (مرتجع) لم يُبلَّغ إلى الهيئة بعد.",
+        "link": "عرضها وإبلاغ الكل"
+      },
+      "detail": {
+        "statusLabel": "حالة الهيئة (ZATCA)",
+        "reported": "تم الإبلاغ ({status})",
+        "awaiting": "موقّعة -- جارٍ الإبلاغ تلقائياً",
+        "notReported": "لم تُبلَّغ بعد",
+        "reason": "السبب: {reason}"
+      },
+      "reportAgain": "إعادة الإبلاغ إلى الهيئة (ZATCA)",
+      "toasts": {
+        "reported": "تم الإبلاغ إلى الهيئة ({status}).",
+        "alreadyReported": "تم الإبلاغ عنها مسبقاً.",
+        "notSigned": "لم تُوقَّع عبر جهاز إنتاج تابع للهيئة.",
+        "inProgress": "يجري الإبلاغ عنها الآن.",
+        "failed": "تعذر الإبلاغ إلى الهيئة.",
+        "zatcaSaid": "ردّ الهيئة: {reason}"
       }
     }
   },

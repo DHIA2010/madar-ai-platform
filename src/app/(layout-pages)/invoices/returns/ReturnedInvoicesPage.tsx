@@ -27,6 +27,13 @@ import {
 } from "@/features/pos/services/pos-invoices.service"
 import { posPaymentMethodsService } from "@/features/pos/services/pos-payment-methods.service"
 import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
+import {
+  ZatcaDetailRows,
+  ZatcaReportButton,
+  ZatcaStatusBadge,
+  ZatcaUnreportedBanner,
+  type ZatcaFields,
+} from "@/app/(layout-pages)/invoices/zatca-status"
 
 import { Input } from "@/components/ui/input"
 import {
@@ -71,6 +78,7 @@ function formatDateTime(value: string, locale: Locale): string {
 
 export default function ReturnedInvoicesPage() {
   const t = useTranslations("invoices.returns")
+  const tZatca = useTranslations("invoices.zatca")
   const locale = useLocale() as Locale
   const { availableWorkspaces, currentOrganization } = useWorkspace()
 
@@ -142,6 +150,14 @@ export default function ReturnedInvoicesPage() {
 
   const [selectedReturn, setSelectedReturn] = useState<InvoiceReturn | null>(null)
 
+  // Merges a new ZATCA status into both the list row and the open detail panel.
+  function patchReturn(id: string, patch: Partial<ZatcaFields>) {
+    setReturns((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+    setSelectedReturn((current) =>
+      current && current.id === id ? { ...current, ...patch } : current
+    )
+  }
+
   return (
     <div dir={localeDirection(locale)} className="flex flex-col gap-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -159,6 +175,8 @@ export default function ReturnedInvoicesPage() {
           <p className={cn("mt-1 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
         </div>
       </div>
+
+      <ZatcaUnreportedBanner kind="return" />
 
       <div className={cn("grid gap-5", selectedReturn ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "")}>
         <section className={cn(PANEL, "p-5")}>
@@ -208,7 +226,7 @@ export default function ReturnedInvoicesPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-center">
+              <table className="w-full min-w-[960px] text-center">
                 <thead>
                   <tr>
                     {[
@@ -224,6 +242,7 @@ export default function ReturnedInvoicesPage() {
                       { key: "quantity", label: t("table.columns.quantity") },
                       { key: "paymentMethod", label: t("table.columns.paymentMethod") },
                       { key: "amount", label: t("table.columns.amount") },
+                      { key: "zatca", label: tZatca("column") },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -276,6 +295,9 @@ export default function ReturnedInvoicesPage() {
                       <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
                         {formatAmount(item.totalAmount, locale)}
                       </td>
+                      <td className="px-3 py-3.5">
+                        <ZatcaStatusBadge document={item} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -318,6 +340,7 @@ export default function ReturnedInvoicesPage() {
               <dd className={cn("text-right font-semibold", HEADING)}>
                 {refundPaymentLabel(selectedReturn)}
               </dd>
+              <ZatcaDetailRows document={selectedReturn} labelClassName={MUTED} />
             </dl>
 
             <div className="border-t border-[#eef2f8] pt-3">
@@ -369,6 +392,12 @@ export default function ReturnedInvoicesPage() {
                 </span>
               </div>
             </div>
+
+            <ZatcaReportButton
+              document={selectedReturn}
+              report={() => posInvoicesService.reportReturnToZatca(selectedReturn.id)}
+              onChange={(patch) => patchReturn(selectedReturn.id, patch)}
+            />
 
             <button
               type="button"
