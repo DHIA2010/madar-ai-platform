@@ -6,6 +6,7 @@ import Image from "next/image"
 import { CalendarCheck, CalendarDays, CheckCircle2, Loader2, PhoneCall } from "lucide-react"
 
 import { readAttribution } from "@/lib/attribution"
+import { pushDataLayerEvent } from "@/lib/data-layer"
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
 
@@ -148,6 +149,7 @@ export function ContactSalesPage() {
       }
       setCallAt(at)
       setStatus("called")
+      pushDataLayerEvent("request_call", { form_name: "contact_sales", lead_id: leadId })
     } catch {
       setCallFailed(true)
     } finally {
@@ -159,6 +161,7 @@ export function ContactSalesPage() {
     (booked: BookedMeeting) => {
       setMeeting(booked)
       setStatus("booked")
+      pushDataLayerEvent("book_meeting", { form_name: "contact_sales", lead_id: leadId })
       if (!leadId) return
       // Best effort: the booking itself is already confirmed by Cal.com.
       void fetch(
@@ -206,6 +209,8 @@ export function ContactSalesPage() {
       const body = (await response.json().catch(() => ({}))) as { id?: string }
       setLeadId(body.id ?? null)
       setStatus("choose")
+      // For Google Tag Manager: the form was sent and saved (no personal data).
+      pushDataLayerEvent("generate_lead", { form_name: "contact_sales", lead_id: body.id ?? null })
     } catch {
       setStatus("failed")
     }

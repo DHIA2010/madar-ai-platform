@@ -9,6 +9,8 @@ export const MADAR_REGISTER_URL = `${MADAR_APP_URL}${ROUTES.register}`
 export const MADAR_LOGIN_URL = `${MADAR_APP_URL}${ROUTES.login}`
 // Madar's demo meeting on Cal.com, booked right after the "talk to sales" form.
 export const MADAR_DEMO_CAL_LINK = "madar/30min"
+// The marketing site's Google Tag Manager container (ad pixels and form-submission tracking).
+export const MARKETING_GTM_CONTAINER_ID = "GTM-TWXLZT69"
 
 // madar.my and www.madar.my resolve to the same frontend service as app.madar.my (same ALB,
 // host-header routed) -- this is the single source of truth for which hostnames get the public

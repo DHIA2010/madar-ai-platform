@@ -9,11 +9,15 @@ import { AuthProvider, PermissionProvider } from "@/features/authentication/comp
 import { WorkspaceProvider } from "@/features/workspace"
 import { DEFAULT_THEME, THEME_KEYS } from "@/constants/theme"
 import { localeDirection } from "@/i18n/locales"
-import { isMarketingHostname } from "@/features/marketing-site/marketing-constants"
+import {
+  isMarketingHostname,
+  MARKETING_GTM_CONTAINER_ID,
+} from "@/features/marketing-site/marketing-constants"
 import { cairo } from "@/components/design/fonts"
 import StoreContextProvider from "@/providers/store-context-provider"
 import QueryProvider from "../providers/query-provider"
 import { AttributionCapture } from "@/components/attribution-capture"
+import { GoogleTagManagerNoScript, GoogleTagManagerScript } from "@/components/google-tag-manager"
 
 /* SEO Metadata */
 export const metadata: Metadata = {
@@ -112,6 +116,13 @@ export default async function RootLayout({
   return (
     <html lang={htmlLang} dir={htmlDir} className={cairo.variable} suppressHydrationWarning>
       <body className={`${cairo.className} antialiased`} suppressHydrationWarning>
+        {/* Google Tag Manager -- only on the public marketing site (madar.my), not in the app. */}
+        {isMarketingSite ? (
+          <>
+            <GoogleTagManagerNoScript containerId={MARKETING_GTM_CONTAINER_ID} />
+            <GoogleTagManagerScript containerId={MARKETING_GTM_CONTAINER_ID} />
+          </>
+        ) : null}
         {/* Where this visitor came from (UTM tags, ad click ids), for the CRM. */}
         <AttributionCapture />
         <NextIntlClientProvider messages={messages}>
