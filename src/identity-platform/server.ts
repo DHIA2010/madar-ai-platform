@@ -5,7 +5,9 @@ import { createIdentityApiServer } from "./api"
 import { createIdentityPlatform } from "./bootstrap/create-identity-platform"
 import { validateAwsCredentialIsolationForSecretsManager } from "./configuration/aws-credential-guard"
 import { validateProductionIntegrationConfiguration } from "./configuration/production-integration-validation"
+import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
+import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
 
 function loadRuntimeEnvironment() {
   const cwd = process.cwd()
@@ -53,4 +55,24 @@ if (database && maintenanceMinutes > 0) {
   // First pass shortly after boot (migrations and connections settle first), then on the timer.
   setTimeout(runMaintenance, 60_000).unref()
   setInterval(runMaintenance, maintenanceMinutes * 60_000).unref()
+}
+
+// ZATCA: every signed sale and return is reported right after it is saved; this retries whatever
+// didn't go through then (ZATCA down, network) well inside ZATCA's 24-hour window. Safe to run
+// from several tasks at once -- each document is claimed before it is sent.
+// ZATCA_REPORTING_INTERVAL_MINUTES=0 turns it off.
+const zatcaReportingMinutes = Number(process.env.ZATCA_REPORTING_INTERVAL_MINUTES ?? "5")
+if (database && zatcaReportingMinutes > 0) {
+  const zatcaReporting = new PosZatcaReporting(database, new ZatcaDevicesService(database))
+  const runZatcaReporting = () =>
+    zatcaReporting
+      .reportPending()
+      .then((result) => {
+        if (result.reported + result.rejected + result.failed > 0) {
+          console.log("zatca.reporting_pass", result)
+        }
+      })
+      .catch((error: unknown) => console.error("zatca.reporting_pass_failed", error))
+  setTimeout(runZatcaReporting, 90_000).unref()
+  setInterval(runZatcaReporting, zatcaReportingMinutes * 60_000).unref()
 }

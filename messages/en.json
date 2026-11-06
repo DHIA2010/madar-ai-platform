@@ -4345,7 +4345,7 @@
       "title": "E-invoicing (ZATCA)",
       "subtitle": "Link point-of-sale devices to the Fatoora platform -- Integration Phase",
       "addDevice": "Add new device",
-      "infoBanner": "Generating the device and its signing request (CSR) needs no connection to the Fatoora platform at all. Only the \"Onboard via OTP\" step needs a real verification code from the organization's Fatoora account -- after that, compliance checks run and your device issues its production certificate, and from that moment every sale is signed automatically and can be reported to the authority from the invoice detail panel.",
+      "infoBanner": "Generating the device and its signing request (CSR) needs no connection to the Fatoora platform at all. Only the \"Onboard via OTP\" step needs a real verification code from the organization's Fatoora account -- after that, compliance checks run and your device issues its production certificate, and from that moment every sale and return is signed and reported to the authority automatically.",
       "loading": "Loading e-invoicing settings...",
       "loadError": {
         "forbidden": "You don't have permission to view e-invoicing settings.",
@@ -4424,6 +4424,39 @@
         "cancel": "Cancel",
         "create": "Create device",
         "creating": "Creating..."
+      },
+      "unreported": {
+        "title": "Invoices not reported to ZATCA ({count})",
+        "description": "Every invoice and return is reported automatically once saved, and retried every few minutes if ZATCA can't be reached. These are still waiting for ZATCA to accept them -- they must be reported within 24 hours of the sale.",
+        "reportAll": "Report all",
+        "loading": "Loading unreported invoices...",
+        "loadError": "Couldn't load the unreported invoices.",
+        "retry": "Retry",
+        "allClearTitle": "Every invoice is reported to ZATCA",
+        "allClearDescription": "No signed invoices or returns are waiting to be reported.",
+        "columns": {
+          "number": "Number",
+          "type": "Type",
+          "date": "Date",
+          "total": "Total",
+          "status": "Status",
+          "reason": "Reason"
+        },
+        "types": {
+          "invoice": "Sales invoice",
+          "return": "Credit note (return)"
+        },
+        "statuses": {
+          "refused": "Refused by ZATCA",
+          "failed": "Couldn't send ({attempts} attempts)",
+          "pending": "Sending"
+        },
+        "toasts": {
+          "allReported": "{count} invoices reported to ZATCA.",
+          "someLeft": "{reported} reported, {left} still not reported.",
+          "someLeftDescription": "Check the reason next to each one.",
+          "failed": "Couldn't report the invoices. Try again."
+        }
       }
     },
     "taxes": {
@@ -8295,7 +8328,9 @@
       },
       "toasts": {
         "createSuccess": "Invoice {number} created."
-      }
+      },
+      "zatcaUnreportedBanner": "{count} invoices haven't been reported to ZATCA yet.",
+      "zatcaUnreportedLink": "View and report all"
     },
     "detail": {
       "closeAriaLabel": "Close",
@@ -8306,13 +8341,13 @@
       "paymentMethod": "Payment method",
       "zatcaStatusLabel": "ZATCA status",
       "zatcaReported": "Reported ({status})",
-      "zatcaAwaitingReport": "Signed -- awaiting report",
+      "zatcaAwaitingReport": "Signed -- reporting automatically",
       "productsCount": "Products ({count})",
       "subtotal": "Subtotal",
       "discount": "Discount",
       "taxWithPercent": "Tax ({percent}%)",
       "total": "Total",
-      "reportToZatca": "Report to ZATCA",
+      "reportToZatca": "Report to ZATCA again",
       "print": "Print",
       "sendInvoice": "Send invoice",
       "sendInvoiceDisabledTitle": "Sending an invoice requires linking a communication channel (email or SMS) to the invoice, which isn't available yet",
@@ -8320,8 +8355,12 @@
         "reportSuccess": "Invoice reported to ZATCA ({status}).",
         "alreadyReported": "This invoice has already been reported.",
         "notSigned": "This invoice wasn't signed through a ZATCA production device.",
-        "reportFailed": "Couldn't report the invoice to ZATCA."
-      }
+        "reportFailed": "Couldn't report the invoice to ZATCA.",
+        "inProgress": "This invoice is being reported right now.",
+        "zatcaSaid": "ZATCA said: {reason}"
+      },
+      "zatcaNotReported": "Not reported yet",
+      "zatcaReason": "Reason: {reason}"
     },
     "returnDialog": {
       "title": "Register return",

@@ -15,11 +15,11 @@ import {
 import type { TaxRatesService } from "../tax/tax-rates-service"
 import type { ZatcaDevicesService } from "../zatca/zatca-devices-service"
 import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "./pos-settings-service"
-import { submitZatcaReporting } from "../zatca/zatca-api-client"
 import type { ZatcaUblAddress } from "../zatca/zatca-ubl-invoice"
 import type { PosPaymentMethodsService } from "./payment-methods-service"
 import { parseNoteLines, type NoteLine } from "./saved-notes-service"
 import { generateZatcaQrCode } from "./zatca-qr-code"
+import type { PosZatcaReporting } from "./zatca-reporting"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -133,20 +133,6 @@ const INVOICE_ERRORS = {
       400,
       "validation",
       "A return must include at least one item."
-    ),
-  notZatcaSigned: () =>
-    new IdentityError(
-      "POS_INVOICE_NOT_ZATCA_SIGNED",
-      409,
-      "business",
-      "This invoice wasn't signed by a ZATCA production device -- there is nothing to report."
-    ),
-  alreadyReportedToZatca: () =>
-    new IdentityError(
-      "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA",
-      409,
-      "business",
-      "This invoice has already been reported to ZATCA."
     ),
 }
 
@@ -265,6 +251,8 @@ export interface InvoiceView {
   zatcaSigned: boolean
   zatcaStatus: string | null
   zatcaReportedAt: string | null
+  // Why the last attempt to report it didn't go through (ZATCA's reason or the network error).
+  zatcaLastError: string | null
 }
 
 export interface InvoiceSummary {
@@ -336,6 +324,11 @@ export interface InvoiceReturnView {
   sellerName: string | null
   sellerVatNumber: string | null
   sellerAddress: string | null
+  // Same ZATCA fields as InvoiceView -- a return is reported as a credit note.
+  zatcaSigned: boolean
+  zatcaStatus: string | null
+  zatcaReportedAt: string | null
+  zatcaLastError: string | null
 }
 
 // 15% is Saudi Arabia's statutory standard VAT rate -- used as the last-resort fallback only if
@@ -370,6 +363,7 @@ interface InvoiceRow {
   zatca_signed_xml: string | null
   zatca_status: string | null
   zatca_reported_at: Date | string | null
+  zatca_last_error: string | null
   [key: string]: unknown
 }
 
@@ -464,6 +458,7 @@ function mapInvoice(
     zatcaSigned: row.zatca_signed_xml !== null,
     zatcaStatus: row.zatca_status,
     zatcaReportedAt: row.zatca_reported_at ? toIso(row.zatca_reported_at) : null,
+    zatcaLastError: row.zatca_last_error,
   }
 }
 
@@ -484,6 +479,10 @@ interface InvoiceReturnRow {
   seller_name: string | null
   seller_vat_number: string | null
   seller_address: string | null
+  zatca_signed: boolean | null
+  zatca_status: string | null
+  zatca_reported_at: Date | string | null
+  zatca_last_error: string | null
   [key: string]: unknown
 }
 
@@ -553,6 +552,10 @@ function mapReturn(
     sellerName: row.seller_name,
     sellerVatNumber: row.seller_vat_number,
     sellerAddress: row.seller_address,
+    zatcaSigned: Boolean(row.zatca_signed),
+    zatcaStatus: row.zatca_status,
+    zatcaReportedAt: row.zatca_reported_at ? toIso(row.zatca_reported_at) : null,
+    zatcaLastError: row.zatca_last_error,
   }
 }
 
@@ -560,7 +563,8 @@ const INVOICE_SELECT = `
   SELECT id, workspace_id, invoice_number, order_number, status, customer_name, customer_phone, customer_id,
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
          total_amount, notes, notes_lines, created_at, qr_code, seller_name, seller_vat_number,
-         seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at
+         seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at,
+         zatca_last_error
     FROM pos_invoices
 `
 
@@ -582,7 +586,10 @@ export class PosInvoicesService {
     // the sale/return itself is entirely unaffected either way (always best-effort).
     private readonly sallaStockPushService: SallaStockPushService | null = null,
     // Same as sallaStockPushService above, for a linked Zid product instead.
-    private readonly zidStockPushService: ZidProductStockPushService | null = null
+    private readonly zidStockPushService: ZidProductStockPushService | null = null,
+    // Optional -- reports every ZATCA-signed sale and return right after it is saved. When null,
+    // nothing is sent from here (the background retry in server.ts still picks them up).
+    private readonly zatcaReporting: PosZatcaReporting | null = null
   ) {}
 
   async list(organizationId: string, filter: InvoiceListFilter): Promise<InvoiceView[]> {
@@ -1341,6 +1348,9 @@ export class PosInvoicesService {
       metadata: { invoiceNumber, totalAmount, status: "completed" },
     }).catch(() => {})
 
+    // Reported to ZATCA in the background -- the sale is already complete either way.
+    if (created.zatcaSigned) this.zatcaReporting?.reportInBackground("invoice", id)
+
     // Deliberately after the transaction commits, not alongside applyStockConsumption inside it
     // above -- this reads each linked product's/variant's now-committed absolute stock figure, so
     // it must run once that write is visible, and it must never be able to roll back a completed
@@ -1422,57 +1432,19 @@ export class PosInvoicesService {
     return updated
   }
 
-  // Manual "الإبلاغ إلى الهيئة" action -- deliberately never automatic at checkout (see the plan
-  // doc). Only meaningful for an invoice a production device actually signed at sale time
-  // (zatca_signed_xml/invoice_hash/zatca_uuid all set); reports it to ZATCA's Reporting API
-  // exactly once, and appends QR tag 9 (ZATCA's own stamp) if the response actually returns one.
+  // The "الإبلاغ إلى الهيئة" button -- every signed sale is already reported automatically right
+  // after it is saved (see zatca-reporting.ts); this sends one again on demand, e.g. after a
+  // failure.
   async reportToZatca(organizationId: string, invoiceId: string): Promise<{ status: string }> {
-    if (!this.zatcaDevicesService) throw new Error("ZATCA_DEVICES_SERVICE_UNAVAILABLE")
-    const result = await this.database.query<{
-      zatca_device_id: string | null
-      zatca_signed_xml: string | null
-      invoice_hash: string | null
-      zatca_uuid: string | null
-      zatca_reported_at: Date | string | null
-      qr_code: string | null
-    }>(
-      `SELECT zatca_device_id, zatca_signed_xml, invoice_hash, zatca_uuid, zatca_reported_at,
-              qr_code
-         FROM pos_invoices
-        WHERE organization_id = $1 AND id = $2`,
-      [organizationId, invoiceId]
-    )
-    const row = result.rows[0]
-    if (!row) throw INVOICE_ERRORS.notFound()
-    if (!row.zatca_device_id || !row.zatca_signed_xml || !row.invoice_hash || !row.zatca_uuid) {
-      throw INVOICE_ERRORS.notZatcaSigned()
-    }
-    if (row.zatca_reported_at) throw INVOICE_ERRORS.alreadyReportedToZatca()
+    if (!this.zatcaReporting) throw new Error("ZATCA_REPORTING_UNAVAILABLE")
+    if (!UUID_PATTERN.test(invoiceId)) throw INVOICE_ERRORS.notFound()
+    return this.zatcaReporting.reportNow("invoice", organizationId, invoiceId)
+  }
 
-    const credentials = await this.zatcaDevicesService.getProductionCredentials(
-      organizationId,
-      row.zatca_device_id
-    )
-    const signedXmlBase64 = Buffer.from(row.zatca_signed_xml, "utf8").toString("base64")
-    const reportResult = await submitZatcaReporting(
-      credentials.environment,
-      row.invoice_hash,
-      row.zatca_uuid,
-      signedXmlBase64,
-      credentials
-    )
-
-    // The QR already carries tag 9 (the certificate's signature) from signing -- nothing to add.
-    const qrCode = row.qr_code
-
-    await this.database.query(
-      `UPDATE pos_invoices
-          SET zatca_status = $2, zatca_response = $3, zatca_reported_at = now(), qr_code = $4
-        WHERE id = $1`,
-      [invoiceId, reportResult.status, JSON.stringify(reportResult.raw), qrCode]
-    )
-
-    return { status: reportResult.status }
+  async reportReturnToZatca(organizationId: string, returnId: string): Promise<{ status: string }> {
+    if (!this.zatcaReporting) throw new Error("ZATCA_REPORTING_UNAVAILABLE")
+    if (!UUID_PATTERN.test(returnId)) throw INVOICE_ERRORS.notFound()
+    return this.zatcaReporting.reportNow("return", organizationId, returnId)
   }
 
   // A real, itemized return event -- an إشعار دائن (credit note) with its own sequential number,
@@ -1504,8 +1476,9 @@ export class PosInvoicesService {
       status: string
       customer_id: string | null
       workspace_id: string
+      invoice_number: string
     }>(
-      `SELECT status, customer_id, workspace_id FROM pos_invoices
+      `SELECT status, customer_id, workspace_id, invoice_number FROM pos_invoices
         WHERE organization_id = $1 AND id = $2`,
       [organizationId, invoiceId]
     )
@@ -1563,6 +1536,7 @@ export class PosInvoicesService {
       quantity: number
       netAmount: number
       taxAmount: number
+      taxRatePercent: number
     }> = []
 
     for (const requested of input.items) {
@@ -1602,6 +1576,7 @@ export class PosInvoicesService {
         quantity: requested.quantity,
         netAmount: lineNet,
         taxAmount: lineTax,
+        taxRatePercent: perUnitNet > 0 ? Math.round((perUnitTax / perUnitNet) * 100) : 0,
       })
     }
     if (returnLines.length === 0) throw INVOICE_ERRORS.returnRequiresItems()
@@ -1666,6 +1641,7 @@ export class PosInvoicesService {
 
     const returnId = randomUUID()
     let returnNumber = ""
+    let returnSigned = false
 
     await this.database.withTransaction(async () => {
       // Same row-locked-UPSERT numbering pattern create() uses for invoice_number (migration
@@ -1683,7 +1659,7 @@ export class PosInvoicesService {
       // Same Phase 1 QR shape create() already generates for an invoice (see zatca-qr-code.ts) --
       // there is no separate credit-note tag in this simplified TLV structure, so the credit
       // note's own totals are encoded the same way an invoice's are.
-      const qrCode = generateZatcaQrCode({
+      let qrCode = generateZatcaQrCode({
         sellerName: seller.name,
         vatRegistrationNumber: seller.vatNumber ?? "",
         timestamp: issuedAt.toISOString(),
@@ -1691,12 +1667,75 @@ export class PosInvoicesService {
         vatTotal: taxAmount,
       })
 
+      // Phase 2: with a production device, the return is signed as a credit note (381) on the
+      // same chain as the sales -- inside this transaction, so a signing failure fails the return
+      // rather than leaving a gap in the chain, exactly as create() does for a sale.
+      let zatca: {
+        deviceId: string
+        icv: number
+        previousInvoiceHash: string
+        invoiceHash: string
+        cryptographicStamp: string
+        signedXml: string
+        uuid: string
+      } | null = null
+      const device = this.zatcaDevicesService
+        ? await this.zatcaDevicesService.findProductionDevice(
+            organizationId,
+            invoiceRow.workspace_id
+          )
+        : null
+      if (device) {
+        const signed = await this.zatcaDevicesService!.signInvoice(organizationId, device.id, {
+          invoiceNumber: returnNumber,
+          issuedAt,
+          sellerName: seller.name,
+          sellerVatNumber: seller.vatNumber ?? "",
+          sellerAddress: seller.structuredAddress,
+          customerName: null,
+          customerVatNumber: null,
+          subtotalAmount,
+          discountAmount,
+          taxAmount,
+          totalAmount,
+          taxRatePercent: returnLines[0]?.taxRatePercent ?? 0,
+          lines: returnLines.map((line, index) => ({
+            id: String(index + 1),
+            productName: line.productName,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            netAmount: line.netAmount,
+            taxAmount: line.taxAmount,
+            taxRatePercent: line.taxRatePercent,
+          })),
+          notes: null,
+          creditNote: {
+            originalInvoiceNumber: invoiceRow.invoice_number,
+            reason: input.notes?.trim() || "Goods returned",
+          },
+          advanceChain: true,
+        })
+        qrCode = signed.qrCodeBase64
+        zatca = {
+          deviceId: device.id,
+          icv: signed.icv,
+          previousInvoiceHash: signed.previousInvoiceHashBase64,
+          invoiceHash: signed.invoiceHash.toString("base64"),
+          cryptographicStamp: signed.digitalSignature.toString("base64"),
+          signedXml: Buffer.from(signed.signedXmlBase64, "base64").toString("utf8"),
+          uuid: signed.uuid,
+        }
+      }
+
       await this.database.query(
         `INSERT INTO pos_invoice_returns
            (id, organization_id, workspace_id, invoice_id, return_number, subtotal_amount,
             discount_amount, tax_amount, total_amount, refund_payment_method_code, notes,
-            created_by, created_at, qr_code, seller_name, seller_vat_number, seller_address)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+            created_by, created_at, qr_code, seller_name, seller_vat_number, seller_address,
+            zatca_device_id, icv, previous_invoice_hash, invoice_hash, cryptographic_stamp,
+            zatca_signed_xml, zatca_uuid)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                 $18, $19, $20, $21, $22, $23, $24)`,
         [
           returnId,
           organizationId,
@@ -1717,8 +1756,16 @@ export class PosInvoicesService {
           seller.name || null,
           seller.vatNumber,
           seller.address,
+          zatca?.deviceId ?? null,
+          zatca?.icv ?? null,
+          zatca?.previousInvoiceHash ?? null,
+          zatca?.invoiceHash ?? null,
+          zatca?.cryptographicStamp ?? null,
+          zatca?.signedXml ?? null,
+          zatca?.uuid ?? null,
         ]
       )
+      returnSigned = zatca !== null
 
       for (const payment of resolvedPayments) {
         await this.database.query(
@@ -1822,6 +1869,8 @@ export class PosInvoicesService {
       metadata: { invoiceId, returnNumber, totalAmount },
     }).catch(() => {})
 
+    if (returnSigned) this.zatcaReporting?.reportInBackground("return", returnId)
+
     // Symmetric with create()'s own push, after this transaction's own commit for the same reason
     // -- reads the now-restocked, committed stock figure.
     if (this.sallaStockPushService) {
@@ -1872,7 +1921,9 @@ export class PosInvoicesService {
       `SELECT r.id, r.organization_id, r.workspace_id, r.invoice_id, r.return_number,
               r.subtotal_amount, r.discount_amount, r.tax_amount, r.total_amount,
               r.refund_payment_method_code, r.notes, r.created_at, r.qr_code, r.seller_name,
-              r.seller_vat_number, r.seller_address, i.invoice_number
+              r.seller_vat_number, r.seller_address, i.invoice_number,
+              (r.zatca_signed_xml IS NOT NULL) AS zatca_signed, r.zatca_status,
+              r.zatca_reported_at, r.zatca_last_error
          FROM pos_invoice_returns r
          JOIN pos_invoices i ON i.id = r.invoice_id
         WHERE ${conditions.join(" AND ")}
@@ -1928,7 +1979,9 @@ export class PosInvoicesService {
       `SELECT r.id, r.organization_id, r.workspace_id, r.invoice_id, r.return_number,
               r.subtotal_amount, r.discount_amount, r.tax_amount, r.total_amount,
               r.refund_payment_method_code, r.notes, r.created_at, r.qr_code, r.seller_name,
-              r.seller_vat_number, r.seller_address, i.invoice_number
+              r.seller_vat_number, r.seller_address, i.invoice_number,
+              (r.zatca_signed_xml IS NOT NULL) AS zatca_signed, r.zatca_status,
+              r.zatca_reported_at, r.zatca_last_error
          FROM pos_invoice_returns r
          JOIN pos_invoices i ON i.id = r.invoice_id
         WHERE r.organization_id = $1 AND r.id = $2`,

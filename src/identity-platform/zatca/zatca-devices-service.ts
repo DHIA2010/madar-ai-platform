@@ -316,6 +316,8 @@ export class ZatcaDevicesService {
         taxRatePercent: number
       }>
       notes: string | null
+      // Set when signing a credit note instead of an invoice -- see zatca-ubl-invoice.ts.
+      creditNote?: { originalInvoiceNumber: string; reason: string } | null
       // When true (compliance-check sampling), the device's own persisted ICV/PIH chain is left
       // untouched -- a compliance test invoice never really happened, so it must never occupy a
       // real chain position.
@@ -325,6 +327,10 @@ export class ZatcaDevicesService {
     const row = await this.getRow(organizationId, deviceId)
     const key = this.encryptionKey()
     const privateKeyPem = decryptZatcaSecret(row.private_key_encrypted, key)
+    // ZATCA checks the seller's VAT number against the device's certificate, so the certificate's
+    // wins over whatever the organization's tax settings say (or don't, when never filled in).
+    const vatNumber = sellerVatNumber(row) || input.sellerVatNumber
+    const sellerName = input.sellerName || (await this.sellerName(row))
 
     const icv = Number(row.last_icv) + 1
     const previousInvoiceHashBase64 = row.last_invoice_hash ?? ZATCA_GENESIS_PIH_BASE64
@@ -337,8 +343,8 @@ export class ZatcaDevicesService {
       invoiceTypeName: "0200000",
       icv,
       previousInvoiceHashBase64,
-      sellerName: input.sellerName,
-      sellerVatNumber: input.sellerVatNumber,
+      sellerName,
+      sellerVatNumber: vatNumber,
       sellerAddress: input.sellerAddress,
       customerName: input.customerName,
       customerVatNumber: input.customerVatNumber,
@@ -349,6 +355,7 @@ export class ZatcaDevicesService {
       taxRatePercent: input.taxRatePercent,
       lines: input.lines,
       notes: input.notes,
+      creditNote: input.creditNote ?? null,
     })
 
     // The device's own certificate -- ZATCA returns it as the binarySecurityToken from the
@@ -368,8 +375,8 @@ export class ZatcaDevicesService {
 
     const qrCodeBase64 = generateZatcaPhase2QrCode(
       {
-        sellerName: input.sellerName,
-        vatRegistrationNumber: input.sellerVatNumber,
+        sellerName,
+        vatRegistrationNumber: vatNumber,
         timestamp: input.issuedAt.toISOString().slice(0, 19),
         invoiceTotal: input.totalAmount,
         vatTotal: input.taxAmount,
@@ -414,7 +421,7 @@ export class ZatcaDevicesService {
   }
 
   // Step 3 -- a small built-in set of representative Simplified Tax Invoice scenarios (a plain
-  // sale, and one with a discount) submitted to Compliance Checks. This is a reasonable default,
+  // sale, one with a discount, and a credit note) submitted to Compliance Checks. This is a reasonable default,
   // not a guarantee of ZATCA's exact required test set -- ZATCA's own developer portal names the
   // specific mandatory cases per device/environment, which weren't available to confirm this
   // session; adjust this list against whatever Compliance Checks itself reports as missing.
@@ -434,9 +441,17 @@ export class ZatcaDevicesService {
       name: string
       subtotal: number
       discount: number
+      creditNote?: { originalInvoiceNumber: string; reason: string }
     }> = [
       { name: "sale-no-discount", subtotal: 100, discount: 0 },
       { name: "sale-with-discount", subtotal: 100, discount: 10 },
+      // Returns are reported as credit notes, so the device is checked against one too.
+      {
+        name: "credit-note",
+        subtotal: 100,
+        discount: 0,
+        creditNote: { originalInvoiceNumber: "COMPLIANCE-sale-no-discount", reason: "Return" },
+      },
     ]
 
     const results: Array<{ scenario: string; status: string }> = []
@@ -468,6 +483,7 @@ export class ZatcaDevicesService {
           },
         ],
         notes: null,
+        creditNote: scenario.creditNote ?? null,
         advanceChain: false,
       })
       const checkResult = await submitZatcaComplianceCheck(

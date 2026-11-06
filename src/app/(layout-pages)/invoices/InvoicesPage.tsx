@@ -21,6 +21,7 @@ import { format } from "date-fns"
 import { useLocale, useTranslations } from "next-intl"
 import type { DateRange } from "react-day-picker"
 import {
+  AlertTriangle,
   Calculator,
   CheckCircle2,
   ChevronLeft,
@@ -64,6 +65,7 @@ import {
   type PosSettings,
 } from "@/features/pos/services/pos-settings.service"
 import { taxRatesService } from "@/features/pos/services/tax-rates.service"
+import { zatcaService } from "@/features/pos/services/zatca.service"
 import {
   productListService,
   type ProductRecord,
@@ -196,6 +198,16 @@ export default function InvoicesPage() {
   const locale = useLocale() as Locale
   const { availableWorkspaces, currentOrganization } = useWorkspace()
 
+  // How many signed sales/returns ZATCA hasn't accepted yet -- a banner links to the list in the
+  // ZATCA settings. Quietly zero for anyone not allowed to see it.
+  const [zatcaUnreportedCount, setZatcaUnreportedCount] = useState(0)
+  useEffect(() => {
+    zatcaService
+      .listUnreported()
+      .then((items) => setZatcaUnreportedCount(items.length))
+      .catch(() => setZatcaUnreportedCount(0))
+  }, [])
+
   const workspaceName = useMemo(() => {
     const map = new Map(availableWorkspaces.map((workspace) => [workspace.id, workspace.name]))
     return (id: string) => map.get(id) ?? "—"
@@ -324,32 +336,43 @@ export default function InvoicesPage() {
 
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
 
-  // "الإبلاغ إلى الهيئة" -- see PosInvoicesService.reportToZatca(). Never automatic at checkout;
-  // only ever offered once an invoice was actually signed by a ZATCA production device
-  // (zatcaSigned) and hasn't been reported yet. Updates both the selected-detail copy and the
-  // list row in place, so the panel reflects the new status without a full reload.
+  // "الإبلاغ إلى الهيئة" -- every signed sale is already reported automatically after it's saved;
+  // this sends one again on demand while ZATCA hasn't accepted it. Updates both the
+  // selected-detail copy and the list row in place, so the panel reflects the new status without
+  // a full reload.
   const [reportingZatcaId, setReportingZatcaId] = useState<string | null>(null)
+  function patchInvoice(id: string, patch: Partial<Invoice>) {
+    setInvoices((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+    setSelectedInvoice((current) =>
+      current && current.id === id ? { ...current, ...patch } : current
+    )
+  }
   async function reportInvoiceToZatca(invoice: Invoice) {
     setReportingZatcaId(invoice.id)
     try {
       const result = await posInvoicesService.reportToZatca(invoice.id)
       const reportedAt = new Date().toISOString()
-      const patch = { zatcaStatus: result.status, zatcaReportedAt: reportedAt }
-      setInvoices((current) =>
-        current.map((item) => (item.id === invoice.id ? { ...item, ...patch } : item))
-      )
-      setSelectedInvoice((current) =>
-        current && current.id === invoice.id ? { ...current, ...patch } : current
-      )
+      patchInvoice(invoice.id, {
+        zatcaStatus: result.status,
+        zatcaReportedAt: reportedAt,
+        zatcaLastError: null,
+      })
       toast.success(t("detail.toasts.reportSuccess", { status: result.status }))
     } catch (error) {
       const code = error instanceof AppError ? error.code : undefined
+      // ZATCA itself refused or couldn't be reached: its reason, shown and kept on the invoice.
+      const zatcaReason =
+        code === "ZATCA_REJECTED" && error instanceof AppError ? error.message : undefined
+      if (zatcaReason) patchInvoice(invoice.id, { zatcaLastError: zatcaReason })
       toast.error(
         code === "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA"
           ? t("detail.toasts.alreadyReported")
           : code === "POS_INVOICE_NOT_ZATCA_SIGNED"
             ? t("detail.toasts.notSigned")
-            : t("detail.toasts.reportFailed")
+            : code === "ZATCA_REPORT_IN_PROGRESS"
+              ? t("detail.toasts.inProgress")
+              : t("detail.toasts.reportFailed"),
+        zatcaReason ? { description: t("detail.toasts.zatcaSaid", { reason: zatcaReason }) } : {}
       )
     } finally {
       setReportingZatcaId(null)
@@ -583,6 +606,23 @@ export default function InvoicesPage() {
           </Button>
         </div>
       </div>
+
+      {zatcaUnreportedCount > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#fde3b0] bg-[#fff8eb] px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="size-4 shrink-0 text-[#b45309]" />
+            <p className="text-[12.5px] font-semibold text-[#92400e]">
+              {t("page.zatcaUnreportedBanner", { count: zatcaUnreportedCount })}
+            </p>
+          </div>
+          <Link
+            href={ROUTES.settingsZatca}
+            className="text-[12.5px] font-bold text-[#b45309] underline-offset-4 hover:underline"
+          >
+            {t("page.zatcaUnreportedLink")}
+          </Link>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => (
@@ -1042,11 +1082,27 @@ function InvoiceDetailPanel({
         {invoice.zatcaSigned ? (
           <>
             <dt className={MUTED}>{t("detail.zatcaStatusLabel")}</dt>
-            <dd className={cn("text-right font-semibold", HEADING)}>
+            <dd
+              className={cn(
+                "text-right font-semibold",
+                invoice.zatcaReportedAt
+                  ? "text-[#1f9d55]"
+                  : invoice.zatcaLastError
+                    ? "text-[#d92d20]"
+                    : "text-[#b45309]"
+              )}
+            >
               {invoice.zatcaReportedAt
                 ? t("detail.zatcaReported", { status: invoice.zatcaStatus ?? "—" })
-                : t("detail.zatcaAwaitingReport")}
+                : invoice.zatcaLastError
+                  ? t("detail.zatcaNotReported")
+                  : t("detail.zatcaAwaitingReport")}
             </dd>
+            {!invoice.zatcaReportedAt && invoice.zatcaLastError ? (
+              <dd className="col-span-2 rounded-[8px] bg-[#fdecec] px-2.5 py-1.5 text-[11px] leading-5 text-[#b42318]">
+                {t("detail.zatcaReason", { reason: invoice.zatcaLastError })}
+              </dd>
+            ) : null}
           </>
         ) : null}
       </dl>

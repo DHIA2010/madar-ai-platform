@@ -1720,6 +1720,7 @@ export default function CashierPage() {
       zatcaSigned: false,
       zatcaStatus: null,
       zatcaReportedAt: null,
+      zatcaLastError: null,
     }
   }
 

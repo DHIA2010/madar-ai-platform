@@ -61,6 +61,7 @@ import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { PosDevicesService } from "../../pos/devices-service"
 import { PosHeldOrdersService } from "../../pos/held-orders-service"
 import { PosInvoicesService, type InvoiceStatus } from "../../pos/invoices-service"
+import { PosZatcaReporting } from "../../pos/zatca-reporting"
 import { PosSalesAnalyticsEngine } from "../../pos/sales-analytics-engine"
 import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
 import { PosSavedNotesService } from "../../pos/saved-notes-service"
@@ -929,6 +930,10 @@ export function createIdentityApiServer(
         new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
       )
     : null
+  const zatcaReporting =
+    container.infrastructure.database && zatcaDevicesService
+      ? new PosZatcaReporting(container.infrastructure.database, zatcaDevicesService)
+      : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
       ? new PosInvoicesService(
@@ -938,7 +943,8 @@ export function createIdentityApiServer(
           zatcaDevicesService,
           posSettingsService,
           sallaStockPushService,
-          zidStockPushService
+          zidStockPushService,
+          zatcaReporting
         )
       : null
   const posShiftsService =
@@ -5116,8 +5122,50 @@ export function createIdentityApiServer(
         )
       }
 
-      // Manual "الإبلاغ إلى الهيئة" -- see PosInvoicesService.reportToZatca(). Deliberately never
-      // automatic at checkout.
+      // "الإبلاغ إلى الهيئة" on one return (credit note) -- see PosInvoicesService.
+      const returnZatcaReportMatch = url.pathname.match(
+        /^\/v1\/pos\/invoices\/returns\/([^/]+)\/zatca-report$/
+      )
+      if (returnZatcaReportMatch && method === "POST") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        return send(
+          200,
+          await posInvoicesService.reportReturnToZatca(
+            actor.organizationId,
+            returnZatcaReportMatch[1]
+          )
+        )
+      }
+
+      // Signed sales and returns ZATCA hasn't accepted yet, and "report them all" -- see
+      // pos/zatca-reporting.ts.
+      if (
+        url.pathname === "/v1/zatca/unreported" ||
+        url.pathname === "/v1/zatca/unreported/report-all"
+      ) {
+        if (!zatcaReporting) {
+          return send(503, {
+            code: "ZATCA_DEVICES_UNAVAILABLE",
+            message: "ZATCA reporting is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        if (url.pathname === "/v1/zatca/unreported" && method === "GET") {
+          return send(200, { items: await zatcaReporting.listUnreported(actor.organizationId) })
+        }
+        if (url.pathname === "/v1/zatca/unreported/report-all" && method === "POST") {
+          return send(200, await zatcaReporting.reportAll(actor.organizationId))
+        }
+      }
+
+      // "الإبلاغ إلى الهيئة" on one sale -- every signed sale is already reported automatically
+      // right after it's saved; this sends it again on demand.
       const zatcaReportMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/zatca-report$/)
       if (zatcaReportMatch && method === "POST") {
         if (!posInvoicesService) {

@@ -109,11 +109,13 @@ export interface Invoice {
   customerVatNumber: string | null
   // ZATCA Phase 2 (Integration Phase) -- set only once the organization has an onboarded
   // production device (Settings -> الفوترة الإلكترونية); every sale before that stays
-  // zatcaSigned: false and shows only the Phase 1 QR above. zatcaStatus/zatcaReportedAt stay null
-  // until the manual "الإبلاغ إلى الهيئة" action (reportToZatca below) actually reports it.
+  // zatcaSigned: false and shows only the Phase 1 QR above. A signed sale is reported to ZATCA
+  // automatically right after it's saved (and retried in the background); zatcaReportedAt is set
+  // once ZATCA accepted it, zatcaLastError says why the last attempt didn't go through.
   zatcaSigned: boolean
   zatcaStatus: string | null
   zatcaReportedAt: string | null
+  zatcaLastError: string | null
 }
 
 export interface InvoiceSummary {
@@ -179,6 +181,11 @@ export interface InvoiceReturn {
   sellerName: string | null
   sellerVatNumber: string | null
   sellerAddress: string | null
+  // Same as Invoice's -- a return is signed and reported as a credit note.
+  zatcaSigned: boolean
+  zatcaStatus: string | null
+  zatcaReportedAt: string | null
+  zatcaLastError: string | null
 }
 
 export interface CreateInvoiceReturnItemInput {
@@ -298,8 +305,8 @@ export const posInvoicesService = {
     return response.items
   },
 
-  // Manual "الإبلاغ إلى الهيئة" -- never automatic at checkout. Only valid once the invoice was
-  // actually signed by a ZATCA production device (zatcaSigned: true) and hasn't been reported yet.
+  // "الإبلاغ إلى الهيئة" -- sends a signed sale again on demand (it's already sent automatically
+  // after the sale). A refusal comes back as ZATCA_REJECTED carrying ZATCA's reason.
   async reportToZatca(invoiceId: string): Promise<{ status: string }> {
     return client.post<undefined, { status: string }>(
       [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "zatca-report"].join(PATH_SEPARATOR),

@@ -11,6 +11,7 @@ import { createSessionManager } from "@/infrastructure/identity"
 // from an API path.
 const PATH_SEPARATOR = String.fromCharCode(47)
 const DEVICES_ENDPOINT = ["", "v1", "zatca", "devices"].join(PATH_SEPARATOR)
+const UNREPORTED_ENDPOINT = ["", "v1", "zatca", "unreported"].join(PATH_SEPARATOR)
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -59,6 +60,29 @@ export interface CreateZatcaDeviceInput {
   industry: string
 }
 
+// A signed sale or return (credit note) ZATCA hasn't accepted yet -- see the backend's
+// pos/zatca-reporting.ts. Every one is sent automatically right after it's saved and retried in
+// the background; these are the ones still waiting.
+export interface ZatcaUnreportedDocument {
+  kind: "invoice" | "return"
+  id: string
+  number: string
+  totalAmount: number
+  createdAt: string
+  // "NOT_REPORTED" once ZATCA refused it; null while ZATCA never answered (down, network).
+  zatcaStatus: string | null
+  lastError: string | null
+  attempts: number
+  lastAttemptAt: string | null
+}
+
+export interface ZatcaReportAllResult {
+  reported: number
+  rejected: number
+  failed: number
+  skipped: number
+}
+
 export interface ZatcaComplianceCheckResult {
   scenario: string
   status: string
@@ -103,6 +127,19 @@ export const zatcaService = {
   async exchangeProduction(deviceId: string): Promise<ZatcaDevice> {
     return client.post<undefined, ZatcaDevice>(
       [DEVICES_ENDPOINT, encodeURIComponent(deviceId), "production"].join(PATH_SEPARATOR),
+      undefined
+    )
+  },
+
+  async listUnreported(): Promise<ZatcaUnreportedDocument[]> {
+    const response = await client.get<{ items: ZatcaUnreportedDocument[] }>(UNREPORTED_ENDPOINT)
+    return response.items
+  },
+
+  // Sends every one of them again, refused ones included.
+  async reportAll(): Promise<ZatcaReportAllResult> {
+    return client.post<undefined, ZatcaReportAllResult>(
+      [UNREPORTED_ENDPOINT, "report-all"].join(PATH_SEPARATOR),
       undefined
     )
   },

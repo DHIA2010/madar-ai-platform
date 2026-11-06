@@ -4,8 +4,8 @@
 // except "الربط عبر OTP" runs with no live ZATCA dependency at all: generating a device/CSR is
 // entirely local (see backend zatca-devices-service.ts), and Compliance Checks/Production only
 // ever act on a device that already went through that one OTP-gated step. Once a device reaches
-// "production", every new sale is signed automatically (PosInvoicesService.create()) and can be
-// reported manually from the invoice detail panel ("الإبلاغ إلى الهيئة").
+// "production", every new sale and return is signed and reported to ZATCA automatically; the
+// unreported panel lists whatever ZATCA hasn't accepted yet.
 
 import { useCallback, useEffect, useState } from "react"
 import {
@@ -33,6 +33,8 @@ import {
   type ZatcaCsrEnvironment,
   type ZatcaDevice,
 } from "@/features/pos/services/zatca.service"
+
+import { ZatcaUnreportedPanel } from "./ZatcaUnreportedPanel"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -320,6 +322,8 @@ export default function ZatcaSettings() {
         <Info className="mt-0.5 size-4 shrink-0 text-[#2878ff]" />
         <p className="text-[11.5px] leading-6 text-[#2878ff]">{t("infoBanner")}</p>
       </div>
+
+      {devices.some((device) => device.status === "production") ? <ZatcaUnreportedPanel /> : null}
 
       {devices.length === 0 ? (
         <div className={cn(PANEL, "flex flex-col items-center gap-2 p-10 text-center")}>
