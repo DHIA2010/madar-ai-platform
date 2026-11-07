@@ -18,7 +18,7 @@ export interface PromotionLine {
 
 export interface AppliedPromotion {
   promotion: Promotion
-  // Off each unit, in the shown price.
+  // Off each unit, net of VAT.
   unitDiscount: number
   // Off the whole line, net of VAT -- what the invoice's promotionDiscountAmount carries.
   netDiscount: number
@@ -70,19 +70,26 @@ export function promotionMatchesProduct(
   return !!category && promotion.categories.includes(category)
 }
 
-// Off one unit, in the shown price: a percentage (capped by maxDiscountPerUnit) or a fixed amount,
-// never more than the price itself.
-export function promotionUnitDiscount(promotion: Promotion, unitPrice: number): number {
-  if (unitPrice <= 0) return 0
+// Off one unit, net of VAT: a percentage of the item's price (capped by maxDiscountPerUnit) or a
+// fixed amount, never more than the item itself. A fixed amount and the cap are entered either
+// including VAT or not (amountIncludesTax); a percentage is the same either way.
+export function promotionUnitDiscount(
+  promotion: Promotion,
+  line: Pick<PromotionLine, "unitPrice" | "priceIncludesTax" | "taxRate">
+): number {
+  if (line.unitPrice <= 0) return 0
+  const unitNet = line.priceIncludesTax ? line.unitPrice / (1 + line.taxRate) : line.unitPrice
+  const toNet = (amount: number) =>
+    promotion.amountIncludesTax ? amount / (1 + line.taxRate) : amount
   const raw =
     promotion.discountType === "percent"
-      ? unitPrice * (Math.min(100, promotion.discountValue) / 100)
-      : promotion.discountValue
+      ? unitNet * (Math.min(100, promotion.discountValue) / 100)
+      : toNet(promotion.discountValue)
   const capped =
     promotion.discountType === "percent" && promotion.maxDiscountPerUnit !== null
-      ? Math.min(raw, promotion.maxDiscountPerUnit)
+      ? Math.min(raw, toNet(promotion.maxDiscountPerUnit))
       : raw
-  return Math.min(Math.max(0, capped), unitPrice)
+  return Math.min(Math.max(0, capped), unitNet)
 }
 
 export function bestPromotionFor(
@@ -96,16 +103,9 @@ export function bestPromotionFor(
     if (promotionStatus(promotion, now) !== "active") continue
     if (!promotionAppliesToBranch(promotion, workspaceId)) continue
     if (!promotionMatchesProduct(promotion, line.productId, line.category)) continue
-    const unitDiscount = promotionUnitDiscount(promotion, line.unitPrice)
+    const unitDiscount = promotionUnitDiscount(promotion, line)
     if (unitDiscount <= 0 || (best && unitDiscount <= best.unitDiscount)) continue
-    const grossDiscount = unitDiscount * line.quantity
-    best = {
-      promotion,
-      unitDiscount,
-      netDiscount: round2(
-        line.priceIncludesTax ? grossDiscount / (1 + line.taxRate) : grossDiscount
-      ),
-    }
+    best = { promotion, unitDiscount, netDiscount: round2(unitDiscount * line.quantity) }
   }
   return best
 }

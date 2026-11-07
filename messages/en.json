@@ -9072,8 +9072,10 @@
     },
     "discount": {
       "percent": "{value}% off each item",
-      "percentCapped": "{value}% off each item, up to SAR {cap}",
-      "fixed": "SAR {value} off each item"
+      "percentCapped": "{value}% off each item, up to SAR {cap} ({vat})",
+      "fixed": "SAR {value} off each item ({vat})",
+      "withVat": "incl. VAT",
+      "withoutVat": "excl. VAT"
     },
     "target": {
       "all": "All products",
@@ -9174,7 +9176,18 @@
         "categories": "Choose at least one category.",
         "dates": "The end date must be after the start.",
         "save": "Couldn't save the promotion."
-      }
+      },
+      "vat": {
+        "amount": "The amount",
+        "cap": "The cap",
+        "includes": "Incl. VAT",
+        "excludes": "Excl. VAT",
+        "percent": "Percentage and cap",
+        "percentHint": "A percentage takes the same off either way (10% of SAR 115 incl. VAT = 10% of SAR 100 before VAT); this decides whether the cap includes VAT."
+      },
+      "searchBranches": "Search branches...",
+      "allBranchesHint": "Runs in every branch",
+      "noBranches": "No matching branches."
     }
   }
 }

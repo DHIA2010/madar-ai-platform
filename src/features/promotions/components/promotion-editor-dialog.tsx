@@ -14,6 +14,7 @@ import type {
   PromotionInput,
   PromotionScope,
 } from "../types/promotion.types"
+import { BranchMultiSelect } from "./branch-multi-select"
 import { type PickerProduct, ProductMultiPicker } from "./product-multi-picker"
 import { FIELD_CLASS, FIELD_LABEL, MUTED } from "./promotion-styles"
 
@@ -95,6 +96,7 @@ export function PromotionEditorDialog({
   const [maxPerUnit, setMaxPerUnit] = useState(
     initial?.maxDiscountPerUnit ? String(initial.maxDiscountPerUnit) : ""
   )
+  const [amountIncludesTax, setAmountIncludesTax] = useState(initial?.amountIncludesTax ?? true)
   const [scope, setScope] = useState<PromotionScope>(initial?.scope ?? "all")
   const [productIds, setProductIds] = useState<string[]>(initial?.productIds ?? [])
   const [chosenCategories, setChosenCategories] = useState<string[]>(initial?.categories ?? [])
@@ -142,6 +144,7 @@ export function PromotionEditorDialog({
         discountType,
         discountValue: amount,
         maxDiscountPerUnit: discountType === "percent" ? cap : null,
+        amountIncludesTax,
         scope,
         productIds: scope === "products" ? productIds : [],
         categories: scope === "categories" ? chosenCategories : [],
@@ -247,6 +250,38 @@ export function PromotionEditorDialog({
               </div>
             ) : null}
           </div>
+          {/* Always offered. For a percentage the result is the same either way (a share of the
+              price before VAT, or of the price with it, comes to the same amount off) -- there it
+              decides how the cap is read, which the hint says. */}
+          <div className="mt-3 rounded-[12px] bg-[#f7f9fc] p-1.5 ps-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[12px] font-semibold text-[#0b1738]">
+                {discountType === "fixed" ? t("vat.amount") : t("vat.percent")}
+              </p>
+              <div className="flex shrink-0 rounded-[10px] bg-white p-1 shadow-[0_1px_2px_rgba(11,23,56,0.06)]">
+                {[true, false].map((includes) => (
+                  <button
+                    key={String(includes)}
+                    type="button"
+                    onClick={() => setAmountIncludesTax(includes)}
+                    className={cn(
+                      "rounded-[8px] px-3 py-1.5 text-[12px] font-semibold transition-colors",
+                      amountIncludesTax === includes
+                        ? "bg-[#ea580c] text-white"
+                        : "text-[#6b7b96] hover:text-[#0b1738]"
+                    )}
+                  >
+                    {includes ? t("vat.includes") : t("vat.excludes")}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {discountType === "percent" ? (
+              <p className={cn("mt-1.5 pe-2 pb-1 text-[11.5px] leading-5", MUTED)}>
+                {t("vat.percentHint")}
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <div>
@@ -307,20 +342,11 @@ export function PromotionEditorDialog({
         {branches.length > 1 ? (
           <div>
             <label className={FIELD_LABEL}>{t("branches")}</label>
-            <div className="flex flex-wrap gap-2">
-              <Chip selected={workspaceIds.length === 0} onClick={() => setWorkspaceIds([])}>
-                {t("allBranches")}
-              </Chip>
-              {branches.map((branch) => (
-                <Chip
-                  key={branch.id}
-                  selected={workspaceIds.includes(branch.id)}
-                  onClick={() => setWorkspaceIds((current) => toggle(current, branch.id))}
-                >
-                  {branch.name}
-                </Chip>
-              ))}
-            </div>
+            <BranchMultiSelect
+              branches={branches}
+              selected={workspaceIds}
+              onChange={setWorkspaceIds}
+            />
           </div>
         ) : null}
 

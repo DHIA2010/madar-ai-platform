@@ -7,8 +7,10 @@ export interface PromotionInput {
   name: string
   discountType: PromotionDiscountType
   discountValue: number
-  // Caps a percentage discount per unit, in the product's shown price.
+  // Caps a percentage discount per unit (with or without VAT, per amountIncludesTax).
   maxDiscountPerUnit: number | null
+  // Whether a fixed amount and the cap above include VAT (default) or not.
+  amountIncludesTax: boolean
   scope: PromotionScope
   productIds: string[]
   categories: string[]

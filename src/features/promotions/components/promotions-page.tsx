@@ -64,6 +64,7 @@ function toInput(promotion: Promotion, isPaused: boolean): PromotionInput {
     discountType: promotion.discountType,
     discountValue: promotion.discountValue,
     maxDiscountPerUnit: promotion.maxDiscountPerUnit,
+    amountIncludesTax: promotion.amountIncludesTax,
     scope: promotion.scope,
     productIds: promotion.productIds,
     categories: promotion.categories,
@@ -293,10 +294,16 @@ export function PromotionsPage() {
                             ? t("discount.percentCapped", {
                                 value: promotion.discountValue,
                                 cap: formatMoney(promotion.maxDiscountPerUnit, locale),
+                                vat: promotion.amountIncludesTax
+                                  ? t("discount.withVat")
+                                  : t("discount.withoutVat"),
                               })
                             : t("discount.percent", { value: promotion.discountValue })
                           : t("discount.fixed", {
                               value: formatMoney(promotion.discountValue, locale),
+                              vat: promotion.amountIncludesTax
+                                ? t("discount.withVat")
+                                : t("discount.withoutVat"),
                             })}
                       </p>
                     </div>

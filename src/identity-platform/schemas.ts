@@ -1533,6 +1533,7 @@ export const promotionSchema = z.object({
   discountType: z.enum(["percent", "fixed"]),
   discountValue: z.number().positive(),
   maxDiscountPerUnit: z.number().positive().nullable().optional().default(null),
+  amountIncludesTax: z.boolean().optional().default(true),
   scope: z.enum(["all", "products", "categories"]),
   productIds: z.array(z.string().uuid()).max(2000).optional().default([]),
   categories: z.array(z.string().trim().min(1).max(200)).max(500).optional().default([]),

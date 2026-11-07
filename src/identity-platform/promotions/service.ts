@@ -17,6 +17,7 @@ export interface PromotionInput {
   discountType: PromotionDiscountType
   discountValue: number
   maxDiscountPerUnit: number | null
+  amountIncludesTax: boolean
   scope: PromotionScope
   productIds: string[]
   categories: string[]
@@ -45,6 +46,7 @@ interface PromotionRow {
   discount_type: PromotionDiscountType
   discount_value: string | number
   max_discount_per_unit: string | number | null
+  amount_includes_tax: boolean
   scope: PromotionScope
   product_ids: unknown
   categories: unknown
@@ -62,7 +64,8 @@ interface PromotionRow {
   [key: string]: unknown
 }
 
-const PROMOTION_COLUMNS = `id, name, discount_type, discount_value, max_discount_per_unit, scope,
+const PROMOTION_COLUMNS = `id, name, discount_type, discount_value, max_discount_per_unit,
+  amount_includes_tax, scope,
   product_ids, categories, excluded_product_ids, workspace_ids, starts_at, ends_at, days_of_week,
   start_time, end_time, licence_number, is_paused, created_at, updated_at`
 
@@ -90,6 +93,7 @@ function mapPromotion(row: PromotionRow, stats?: PromotionView["stats"]): Promot
     discountValue: Number(row.discount_value),
     maxDiscountPerUnit:
       row.max_discount_per_unit === null ? null : Number(row.max_discount_per_unit),
+    amountIncludesTax: row.amount_includes_tax,
     scope: row.scope,
     productIds: jsonList<string>(row.product_ids),
     categories: jsonList<string>(row.categories),
@@ -230,6 +234,7 @@ export class PromotionsService {
       input.endTime || null,
       input.licenceNumber?.trim() || null,
       input.isPaused,
+      input.amountIncludesTax,
     ]
   }
 
@@ -245,8 +250,10 @@ export class PromotionsService {
       `INSERT INTO promotions
          (name, discount_type, discount_value, max_discount_per_unit, scope, product_ids,
           categories, excluded_product_ids, workspace_ids, starts_at, ends_at, days_of_week,
-          start_time, end_time, licence_number, is_paused, id, organization_id, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+          start_time, end_time, licence_number, is_paused, amount_includes_tax, id,
+          organization_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+               $19, $20)`,
       [...this.params(input), id, organizationId, actorUserId]
     )
     return mapPromotion(await this.getRow(organizationId, id))
@@ -262,8 +269,8 @@ export class PromotionsService {
          scope = $5, product_ids = $6, categories = $7, excluded_product_ids = $8,
          workspace_ids = $9, starts_at = $10, ends_at = $11, days_of_week = $12,
          start_time = $13, end_time = $14, licence_number = $15, is_paused = $16,
-         updated_at = now()
-       WHERE id = $17 AND organization_id = $18`,
+         amount_includes_tax = $17, updated_at = now()
+       WHERE id = $18 AND organization_id = $19`,
       [...this.params(input), id, organizationId]
     )
     const stats = await this.stats(organizationId)

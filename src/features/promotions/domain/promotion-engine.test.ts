@@ -9,6 +9,7 @@ const base: Promotion = {
   discountType: "percent",
   discountValue: 10,
   maxDiscountPerUnit: null,
+  amountIncludesTax: true,
   scope: "all",
   productIds: [],
   categories: [],
@@ -40,22 +41,22 @@ const line = {
 
 describe("promotion engine", () => {
   it("takes a percentage or fixed amount off each unit, capped and never past the price", () => {
-    expect(promotionUnitDiscount(base, 115)).toBeCloseTo(11.5)
-    expect(promotionUnitDiscount({ ...base, maxDiscountPerUnit: 5 }, 115)).toBe(5)
-    expect(promotionUnitDiscount({ ...base, discountType: "fixed", discountValue: 20 }, 115)).toBe(
-      20
-    )
-    expect(promotionUnitDiscount({ ...base, discountType: "fixed", discountValue: 200 }, 115)).toBe(
-      115
-    )
-  })
-
-  it("converts a VAT-inclusive line's discount to net", () => {
-    // 10% of 115 = 11.50 per unit, x2 = 23.00 gross = 20.00 net.
-    expect(bestPromotionFor([base], line, now, "ws-1")?.netDiscount).toBe(20)
-    expect(
-      bestPromotionFor([base], { ...line, priceIncludesTax: false }, now, "ws-1")?.netDiscount
-    ).toBe(23)
+    const net = (promotion: Promotion, priceIncludesTax = true) =>
+      bestPromotionFor([promotion], { ...line, priceIncludesTax }, now, null)?.netDiscount
+    // 10% of 115 incl. VAT = 10.00 net per unit, x2.
+    expect(net(base)).toBe(20)
+    // A net price: 10% of 115 = 11.50, x2.
+    expect(net(base, false)).toBe(23)
+    // Cap 5 incl. VAT = 4.35 net per unit; cap 5 excl. VAT = 5.
+    expect(net({ ...base, maxDiscountPerUnit: 5 })).toBe(8.7)
+    expect(net({ ...base, maxDiscountPerUnit: 5, amountIncludesTax: false })).toBe(10)
+    // Fixed 23 incl. VAT = 20 net; fixed 20 excl. VAT = 20.
+    const fixed = { ...base, discountType: "fixed" as const }
+    expect(net({ ...fixed, discountValue: 23 })).toBe(40)
+    expect(net({ ...fixed, discountValue: 20, amountIncludesTax: false })).toBe(40)
+    // Never more than the item: 200 off a 100-net item takes 100.
+    expect(net({ ...fixed, discountValue: 200 })).toBe(200)
+    expect(promotionUnitDiscount({ ...fixed, discountValue: 5 }, { ...line, unitPrice: 0 })).toBe(0)
   })
 
   it("picks the best matching promotion for the customer", () => {

@@ -308,7 +308,19 @@ describe("point-of-sale invoices", () => {
     expect((await post({ ...promotion, scope: "products", productIds: [] })).status).toBe(400)
     const created = await post(promotion)
     expect(created.status).toBe(201)
-    const { id } = (await created.json()) as { id: string }
+    const { id, amountIncludesTax } = (await created.json()) as {
+      id: string
+      amountIncludesTax: boolean
+    }
+    // Amounts read as VAT-inclusive unless the store says otherwise.
+    expect(amountIncludesTax).toBe(true)
+    const net = await post({
+      ...promotion,
+      name: "صافي",
+      discountType: "fixed",
+      amountIncludesTax: false,
+    })
+    expect(((await net.json()) as { amountIncludesTax: boolean }).amountIncludesTax).toBe(false)
     await post({ ...promotion, name: "موقوف", isPaused: true })
     await post({
       ...promotion,
@@ -320,7 +332,7 @@ describe("point-of-sale invoices", () => {
     // The cashier gets what can still apply: not the paused or finished ones.
     const cashier = await fetch(`${baseUrl}/v1/pos/promotions`, { headers: authHeaders(token) })
     const cashierItems = ((await cashier.json()) as { items: Array<{ name: string }> }).items
-    expect(cashierItems.map((item) => item.name)).toEqual(["خصم الافتتاح"])
+    expect(cashierItems.map((item) => item.name).sort()).toEqual(["خصم الافتتاح", "صافي"].sort())
 
     // 10% off the coffee line (net 24 -> 2.40) plus the cashier's own 1.00 on the same line.
     const sale = await createInvoice(token, {
