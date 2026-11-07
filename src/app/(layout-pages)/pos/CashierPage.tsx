@@ -114,6 +114,7 @@ import { PendingSalesIndicator } from "@/features/pos/offline/PendingSalesIndica
 import { PosServiceWorkerRegistration } from "@/features/pos/offline/PosServiceWorkerRegistration"
 
 import { ThermalInvoiceReceipt } from "./ThermalInvoiceReceipt"
+import { WhatsAppSendDialog } from "@/app/(layout-pages)/invoices/whatsapp-send-dialog"
 
 import {
   AppSearchableSelect,
@@ -1386,6 +1387,35 @@ export default function CashierPage() {
   // itself is cleared for the next sale. successQrDataUrl is generated once, up front (see
   // completeCheckout), so window.print() never fires before the QR image is actually ready.
   const [successInvoice, setSuccessInvoice] = useState<Invoice | null>(null)
+  // The sale whose receipt is being sent on WhatsApp by hand (no customer mobile at checkout, or
+  // a retry after a failed send).
+  const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null)
+
+  // Sends a just-completed sale's receipt to the customer on WhatsApp (as a PDF), in the
+  // background -- the sale is already done either way. With no mobile entered at checkout the
+  // cashier is asked for one; a queued offline sale has nothing to send until it syncs.
+  const deliverOnWhatsApp = (invoice: Invoice, queuedOffline: boolean) => {
+    if (queuedOffline) {
+      toast.info(t("toasts.whatsappOffline"))
+      return
+    }
+    if (!invoice.customerPhone) {
+      setWhatsAppInvoice(invoice)
+      return
+    }
+    posInvoicesService
+      .sendInvoiceWhatsApp(invoice.id, invoice.customerPhone)
+      .then(() => toast.success(t("toasts.whatsappSent", { number: invoice.invoiceNumber })))
+      .catch((error: unknown) => {
+        toast.error(t("toasts.whatsappFailed"), {
+          description:
+            error instanceof AppError && error.code?.startsWith("WHATSAPP_")
+              ? error.message
+              : undefined,
+          action: { label: t("toasts.whatsappRetry"), onClick: () => setWhatsAppInvoice(invoice) },
+        })
+      })
+  }
   const [successQrDataUrl, setSuccessQrDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1807,7 +1837,10 @@ export default function CashierPage() {
       window.setTimeout(() => {
         setSuccessQrDataUrl(qrDataUrl)
         setSuccessInvoice(invoice)
-        if (posSettings.autoPrintInvoice) {
+        // Settings -> الكاشير -> طريقة تسليم الفاتورة: print, WhatsApp, or both.
+        const delivery = posSettings.receiptDelivery ?? "print"
+        if (delivery !== "print") deliverOnWhatsApp(invoice, result.queued)
+        if (delivery !== "whatsapp" && posSettings.autoPrintInvoice) {
           window.setTimeout(() => {
             printThermalReceipt("zatca-print-invoice")
             // window.print() blocks until the print dialog closes, so this runs right as the
@@ -4311,6 +4344,16 @@ export default function CashierPage() {
           straight to <body> plus `display: none` (not just visibility) on every OTHER direct
           child of <body> during print (see the style block) collapses the rest of the document
           to zero height, so the printed page is sized to just this receipt -- one page, once. */}
+      {whatsAppInvoice ? (
+        <WhatsAppSendDialog
+          invoice={whatsAppInvoice}
+          open
+          onOpenChange={(open) => {
+            if (!open) setWhatsAppInvoice(null)
+          }}
+        />
+      ) : null}
+
       {successInvoice &&
         typeof document !== "undefined" &&
         createPortal(

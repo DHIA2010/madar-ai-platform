@@ -49,8 +49,13 @@ export interface PosSettingsView {
   orderNumberResetMode: "daily" | "max_value"
   orderNumberMaxValue: number | null
 
+  // After a sale: print the receipt, send it on WhatsApp (as a PDF), or both.
+  receiptDelivery: ReceiptDelivery
+
   updatedAt: string
 }
+
+export type ReceiptDelivery = "print" | "whatsapp" | "both"
 
 export interface PosSettingsUpdateInput {
   allowBelowCostSale: boolean
@@ -82,6 +87,7 @@ export interface PosSettingsUpdateInput {
   showOrderNumber: boolean
   orderNumberResetMode: "daily" | "max_value"
   orderNumberMaxValue: number | null
+  receiptDelivery: ReceiptDelivery
 }
 
 // Every default here matches the platform's actual, already-shipped unconditional behavior --
@@ -117,6 +123,7 @@ export const DEFAULT_POS_SETTINGS: Omit<PosSettingsView, "updatedAt"> = {
   showOrderNumber: false,
   orderNumberResetMode: "daily",
   orderNumberMaxValue: null,
+  receiptDelivery: "print",
 }
 
 // Same null-vs-empty-array handling as invoices-service.ts's own toNotesLines -- a jsonb column
@@ -161,6 +168,7 @@ function mapRow(row: Record<string, unknown>): PosSettingsView {
       row.order_number_max_value === null || row.order_number_max_value === undefined
         ? null
         : Number(row.order_number_max_value),
+    receiptDelivery: (row.receipt_delivery as ReceiptDelivery | undefined) ?? "print",
     updatedAt: new Date(row.updated_at as string).toISOString(),
   }
 }
@@ -205,9 +213,9 @@ export class PosSettingsService {
         enable_barcode_scanner, play_scan_sound, offline_mode_enabled,
         show_receipt_title, receipt_title_lines, receipt_description_lines,
         show_order_number, order_number_reset_mode, order_number_max_value,
-        created_by_user_id, updated_by_user_id, created_at, updated_at
+        created_by_user_id, updated_by_user_id, created_at, updated_at, receipt_delivery
       ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,$29::jsonb,$30,$31,$32,$33,$33,now(),now()
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,$29::jsonb,$30,$31,$32,$33,$33,now(),now(),$34
       )
       on conflict (organization_id, coalesce(workspace_id, '00000000-0000-0000-0000-000000000000'))
       do update set
@@ -240,6 +248,7 @@ export class PosSettingsService {
         show_order_number = excluded.show_order_number,
         order_number_reset_mode = excluded.order_number_reset_mode,
         order_number_max_value = excluded.order_number_max_value,
+        receipt_delivery = excluded.receipt_delivery,
         updated_by_user_id = excluded.updated_by_user_id,
         updated_at = now()
       returning *
@@ -278,6 +287,7 @@ export class PosSettingsService {
         input.orderNumberResetMode,
         input.orderNumberMaxValue,
         actorUserId,
+        input.receiptDelivery,
       ]
     )
 

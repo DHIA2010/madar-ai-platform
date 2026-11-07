@@ -63,8 +63,12 @@ export function MadarAdminWhatsAppTemplates() {
     <div className="rounded-xl border border-border/60 p-4">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground">قوالب الرسائل</p>
-        <AppButton variant="ghost" className="h-8 gap-1.5 px-2 text-xs" onClick={load}>
-          <RotateCcw className="size-3.5" />
+        <AppButton
+          variant="outline"
+          className="h-8 rounded-[8px] px-3 text-xs"
+          icon={<RotateCcw className="size-3.5" />}
+          onClick={load}
+        >
           تحديث الحالة
         </AppButton>
       </div>

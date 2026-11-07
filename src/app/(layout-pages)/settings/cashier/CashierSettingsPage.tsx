@@ -265,6 +265,32 @@ export function CashierSettingsPage() {
               </div>
             </div>
 
+            <div>
+              <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                {t("print.receiptDelivery.label")}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(["print", "whatsapp", "both"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => patch({ receiptDelivery: mode })}
+                    className={cn(
+                      "rounded-[10px] border px-2 py-2 text-[12px] font-semibold transition-colors",
+                      settings.receiptDelivery === mode
+                        ? "border-[#2878ff] bg-[#2878ff]/10 text-[#2878ff]"
+                        : "border-[#e1e7f0] bg-white text-[#5b6b85] hover:bg-[#f7f9fd]"
+                    )}
+                  >
+                    {t(`print.receiptDelivery.options.${mode}`)}
+                  </button>
+                ))}
+              </div>
+              <p className={cn("mt-1.5 text-[11px] leading-5", MUTED)}>
+                {t(`print.receiptDelivery.hints.${settings.receiptDelivery}`)}
+              </p>
+            </div>
+
             <ToggleRow
               title={t("print.autoPrintInvoice.title")}
               description={t("print.autoPrintInvoice.description")}

@@ -3035,7 +3035,11 @@
         "orderResumed": "Order resumed.",
         "orderResumeFailed": "Couldn't resume the order.",
         "heldOrderDeleted": "Held order deleted.",
-        "heldOrderDeleteFailed": "Couldn't delete the order."
+        "heldOrderDeleteFailed": "Couldn't delete the order.",
+        "whatsappSent": "Invoice {number} sent to the customer on WhatsApp.",
+        "whatsappFailed": "Couldn't send the invoice on WhatsApp.",
+        "whatsappRetry": "Retry",
+        "whatsappOffline": "Sale saved offline -- send the invoice on WhatsApp from the invoices page once it syncs."
       }
     },
     "noteEditor": {
@@ -4255,6 +4259,19 @@
           "unsupported": "This browser doesn't support Web Serial (use Chrome or Edge).",
           "success": "Test command sent to the device successfully.",
           "failed": "Couldn't connect to the device."
+        },
+        "receiptDelivery": {
+          "label": "How the receipt is handed over after a sale",
+          "options": {
+            "print": "Print only",
+            "whatsapp": "WhatsApp only",
+            "both": "Print and WhatsApp"
+          },
+          "hints": {
+            "print": "The receipt is printed as usual.",
+            "whatsapp": "Nothing is printed -- the receipt is sent as a PDF to the customer's mobile on WhatsApp. If no mobile was entered, the cashier is asked for one.",
+            "both": "The receipt is printed and also sent as a PDF to the customer's mobile on WhatsApp."
+          }
         }
       },
       "receipt": {

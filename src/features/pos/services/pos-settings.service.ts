@@ -65,6 +65,9 @@ export interface PosSettings {
   orderNumberResetMode: "daily" | "max_value"
   orderNumberMaxValue: number | null
 
+  // After a sale: print the receipt, send it to the customer on WhatsApp as a PDF, or both.
+  receiptDelivery: "print" | "whatsapp" | "both"
+
   updatedAt: string
 }
 
@@ -104,6 +107,7 @@ export const DEFAULT_POS_SETTINGS: PosSettings = {
   showOrderNumber: false,
   orderNumberResetMode: "daily",
   orderNumberMaxValue: null,
+  receiptDelivery: "print",
   updatedAt: new Date(0).toISOString(),
 }
 

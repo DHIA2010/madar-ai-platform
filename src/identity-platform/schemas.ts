@@ -461,6 +461,8 @@ export const posSettingsUpdateSchema = z
     showOrderNumber: z.boolean(),
     orderNumberResetMode: z.enum(["daily", "max_value"]),
     orderNumberMaxValue: z.number().int().min(1).max(999999).nullable(),
+    // After a sale: print, send on WhatsApp, or both. Defaults to printing for older clients.
+    receiptDelivery: z.enum(["print", "whatsapp", "both"]).default("print"),
   })
   .superRefine((value, ctx) => {
     if (

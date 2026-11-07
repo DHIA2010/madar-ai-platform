@@ -1009,11 +1009,13 @@ describe("point-of-sale invoices", () => {
     expect(defaults.confirmSale).toBe(false)
     expect(defaults.allowSplitPayment).toBe(true)
     expect(defaults.autoPrintInvoice).toBe(true)
+    expect(defaults.receiptDelivery).toBe("print")
 
     const saveResponse = await savePosSettings(token, {
       confirmSale: true,
       useCompactMode: true,
       copiesCount: 3,
+      receiptDelivery: "both",
     })
     expect(saveResponse.status).toBe(200)
     const saved = (await saveResponse.json()) as Record<string, unknown>
@@ -1026,6 +1028,17 @@ describe("point-of-sale invoices", () => {
     ).json()) as Record<string, unknown>
     expect(refetched.confirmSale).toBe(true)
     expect(refetched.copiesCount).toBe(3)
+    expect(refetched.receiptDelivery).toBe("both")
+
+    // An older client that doesn't send it gets printing back, never an error.
+    expect((await savePosSettings(token, {})).status).toBe(200)
+    expect(
+      (
+        (await (await savePosSettings(token, { receiptDelivery: "fax" })).json()) as {
+          code: string
+        }
+      ).code
+    ).toBe("VALIDATION_ERROR")
   })
 
   it("persists the receipt-content settings (title/description and order-number toggle)", async () => {
