@@ -47,6 +47,11 @@ export interface InvoiceItem {
   // receipt's per-line row is always internally consistent (see ThermalInvoiceReceipt.tsx).
   netAmount: number
   taxAmount: number
+  // The automatic promotion this line got (Promotions app) -- its name as it was at the sale, and
+  // what it took off (net, before VAT). discountAmount above already includes it.
+  promotionId?: string | null
+  promotionName?: string | null
+  promotionDiscountAmount?: number
   // Cumulative quantity already returned across every past return event on this line -- quantity
   // minus this is what a return dialog can still offer.
   returnedQuantity: number
@@ -239,6 +244,8 @@ export interface CreateInvoiceItemInput {
   unitPrice: number
   quantity: number
   discountAmount?: number
+  promotionId?: string | null
+  promotionDiscountAmount?: number
 }
 
 export interface CreateInvoiceInput {

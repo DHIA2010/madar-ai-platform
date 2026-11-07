@@ -106,6 +106,7 @@ import { SupplierInvoicesService } from "../../procurement/supplier-invoices-ser
 import { ReturnsService } from "../../procurement/returns-service"
 import { VouchersService } from "../../procurement/vouchers-service"
 import { ExpenseCategoriesService } from "../../expenses/expense-categories-service"
+import { PromotionsService } from "../../promotions/service"
 import { ExpensesService } from "../../expenses/expenses-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
@@ -235,6 +236,7 @@ import {
   integrationSyncSchema,
   inviteOrganizationMemberSchema,
   posSettingsUpdateSchema,
+  promotionSchema,
   saveConnectionSyncScheduleSchema,
   loginSchema,
   removeMemberSchema,
@@ -897,6 +899,9 @@ export function createIdentityApiServer(
     : null
   const expenseCategoriesService = container.infrastructure.database
     ? new ExpenseCategoriesService(container.infrastructure.database)
+    : null
+  const promotionsService = container.infrastructure.database
+    ? new PromotionsService(container.infrastructure.database)
     : null
   const expensesService = container.infrastructure.database
     ? new ExpensesService(container.infrastructure.database)
@@ -5192,6 +5197,54 @@ export function createIdentityApiServer(
             },
             actor.userId
           )
+        )
+      }
+
+      // Promotions app: the cashier's automatic discounts. GET /v1/pos/promotions is what the
+      // cashier caches and applies (anyone who can sell); managing them takes pos:manage. Every
+      // route also needs the Promotions subscription (promotions/guards.ts).
+      if (method === "GET" && url.pathname === "/v1/pos/promotions") {
+        if (!promotionsService) {
+          return send(503, { code: "PROMOTIONS_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+        return send(200, {
+          items: await promotionsService.listForCashier(actor.organizationId, actor.workspaceId),
+        })
+      }
+
+      if (url.pathname === "/v1/promotions") {
+        if (!promotionsService) {
+          return send(503, { code: "PROMOTIONS_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, { items: await promotionsService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = promotionSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await promotionsService.create(actor.organizationId, actor.userId, payload)
+          )
+        }
+      }
+
+      const promotionMatch = url.pathname.match(/^\/v1\/promotions\/([^/]+)$/)
+      if (promotionMatch && (method === "PUT" || method === "DELETE")) {
+        if (!promotionsService) {
+          return send(503, { code: "PROMOTIONS_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        if (method === "DELETE") {
+          await promotionsService.remove(actor.organizationId, promotionMatch[1])
+          return send(204, null)
+        }
+        const payload = promotionSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await promotionsService.update(actor.organizationId, promotionMatch[1], payload)
         )
       }
 

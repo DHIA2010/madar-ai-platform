@@ -257,6 +257,11 @@ export function ThermalInvoiceReceipt({
                 wrapped line stays pinned to the right edge, not centered. */}
             <span className="border-e border-[#c7d2e0] px-1 py-1 text-right break-words">
               {item.productName}
+              {item.promotionName ? (
+                <span className="block text-[8px] text-[#5b6b85]">
+                  {t("promotion", { name: item.promotionName })}
+                </span>
+              ) : null}
             </span>
             <span className="border-e border-[#c7d2e0] px-1 py-1 text-center">{item.quantity}</span>
             {/* This line's own net (tax-exclusive) unit price -- item.netAmount already accounts

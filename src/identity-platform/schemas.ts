@@ -287,6 +287,7 @@ export const requestApplicationActivationSchema = z.object({
     "expenses",
     "ai",
     "customReports",
+    "promotions",
     "madarComplete",
   ]),
   // The package and period chosen -- priced server-side against current Madar Admin pricing.
@@ -979,6 +980,9 @@ export const createInvoiceItemSchema = z.object({
   // A discount applied to just this line, distinct from the invoice's own order-wide
   // discountAmount below -- see migration 071_pos_invoice_item_discount.sql.
   discountAmount: z.number().min(0).optional().default(0),
+  // The automatic promotion applied to this line and its discount (net) -- see migration 156.
+  promotionId: z.string().uuid().nullable().optional().default(null),
+  promotionDiscountAmount: z.number().min(0).optional().default(0),
 })
 
 // One settling line -- an invoice can be paid across more than one of these (see
@@ -1197,6 +1201,7 @@ export const activateFreeApplicationSchema = z.object({
     "expenses",
     "ai",
     "customReports",
+    "promotions",
     "madarComplete",
   ]),
 })
@@ -1213,6 +1218,7 @@ export const startApplicationTrialSchema = z.object({
     "expenses",
     "ai",
     "customReports",
+    "promotions",
   ]),
 })
 
@@ -1513,4 +1519,30 @@ export const salesLeadCallSchema = z.object({
 export const salesLeadMeetingSchema = z.object({
   startTime: z.string().datetime({ offset: true }),
   uid: z.string().max(128).nullable().optional(),
+})
+
+// A promotion (Promotions app) -- see promotions/service.ts.
+const promotionTimeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+  .nullable()
+  .optional()
+  .default(null)
+export const promotionSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  discountType: z.enum(["percent", "fixed"]),
+  discountValue: z.number().positive(),
+  maxDiscountPerUnit: z.number().positive().nullable().optional().default(null),
+  scope: z.enum(["all", "products", "categories"]),
+  productIds: z.array(z.string().uuid()).max(2000).optional().default([]),
+  categories: z.array(z.string().trim().min(1).max(200)).max(500).optional().default([]),
+  excludedProductIds: z.array(z.string().uuid()).max(2000).optional().default([]),
+  workspaceIds: z.array(z.string().uuid()).max(200).optional().default([]),
+  startsAt: z.string().datetime({ offset: true }).nullable().optional().default(null),
+  endsAt: z.string().datetime({ offset: true }).nullable().optional().default(null),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional().default([]),
+  startTime: promotionTimeSchema,
+  endTime: promotionTimeSchema,
+  licenceNumber: z.string().trim().max(100).nullable().optional().default(null),
+  isPaused: z.boolean().optional().default(false),
 })

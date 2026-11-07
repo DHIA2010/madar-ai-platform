@@ -218,6 +218,7 @@ export interface RequestApplicationActivationCommand {
     | "expenses"
     | "ai"
     | "customReports"
+    | "promotions"
     | "madarComplete"
   // Resolved and priced by the REST route against current pricing (PricingService) before this
   // command runs -- the command layer has no pricing access of its own.
@@ -252,6 +253,7 @@ export interface StartApplicationTrialCommand {
     | "expenses"
     | "ai"
     | "customReports"
+    | "promotions"
 }
 
 export interface RemoveMemberCommand {

@@ -6,7 +6,10 @@ import type { ApplicationCategoryId } from "@/features/applications"
 // all, not data domains a conversation can be scoped to asking about. Mirrors the backend's own
 // ai-chat/types.ts ApplicationCategoryId exactly (also intentionally narrower, for the same
 // reason -- see its own comment).
-export type AiChatScopeCategory = Exclude<ApplicationCategoryId, "ai" | "customReports">
+export type AiChatScopeCategory = Exclude<
+  ApplicationCategoryId,
+  "ai" | "customReports" | "promotions"
+>
 
 export type ChatMessageRole = "user" | "assistant" | "system_notice"
 

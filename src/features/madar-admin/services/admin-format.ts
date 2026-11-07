@@ -19,6 +19,7 @@ export const APPLICATION_LABEL: Record<PurchasableApplication, string> = {
   expenses: "المصروفات",
   ai: "الذكاء الاصطناعي",
   customReports: "التقارير المخصصة",
+  promotions: "العروض الترويجية",
   madarComplete: "مدار الكامل",
 }
 

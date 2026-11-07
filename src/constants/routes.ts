@@ -32,6 +32,7 @@ export const ROUTES = {
   // scripts/check-routes.mjs allows a hardcoded "/..." string literal in.
   posServiceWorker: { script: "/pos-sw.js", scope: "/pos/" },
   shifts: "/shifts",
+  promotions: "/promotions",
   shiftsDetails: (shiftId: string) => `/shifts/${shiftId}`,
   invoices: "/invoices",
   invoicesReturns: "/invoices/returns",

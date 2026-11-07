@@ -106,6 +106,13 @@ import {
 } from "@/features/pos/services/pos-settings.service"
 import { openCashDrawerIfPaired } from "@/features/pos/services/pos-hardware"
 import { fetchWithOfflineFallback } from "@/features/pos/offline/cached-data"
+import { getActiveApplications } from "@/features/applications"
+import {
+  type AppliedPromotion,
+  bestPromotionFor,
+  type Promotion,
+  promotionService,
+} from "@/features/promotions"
 import { useOnlineStatus } from "@/features/pos/offline/use-online-status"
 import { useOfflineAwareCheckout } from "@/features/pos/offline/use-offline-aware-checkout"
 import { isNetworkLevelFailure } from "@/features/pos/offline/offline-invoice-queue"
@@ -799,6 +806,69 @@ export default function CashierPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspace?.id, isOnline])
 
+  // --- Promotions (the Promotions app): automatic discounts, applied per line on this device so
+  // they keep working offline. The best matching promotion wins per line and stacks with the
+  // cashier's own line discount; the server records what was applied (see invoices-service.ts).
+  const promotionsEnabled = getActiveApplications(currentOrganization?.settings).includes(
+    "promotions"
+  )
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+  // Promotions can start/stop by the hour -- re-check every minute.
+  const [promotionClock, setPromotionClock] = useState(() => new Date())
+  useEffect(() => {
+    const timer = window.setInterval(() => setPromotionClock(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  useEffect(() => {
+    if (!currentWorkspace || !promotionsEnabled) {
+      setPromotions([])
+      return
+    }
+    void fetchWithOfflineFallback(
+      currentWorkspace.id,
+      "promotions",
+      () => promotionService.listForCashier(),
+      !isOnline
+    )
+      .then(setPromotions)
+      .catch(() => setPromotions([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspace?.id, isOnline, promotionsEnabled])
+  const productCategoryById = useMemo(
+    () => new Map(products.map((product) => [product.id, product.category || null])),
+    [products]
+  )
+  const linePromotion = useCallback(
+    (line: CartLine): AppliedPromotion | null => {
+      if (promotions.length === 0) return null
+      return bestPromotionFor(
+        promotions,
+        {
+          productId: line.productId,
+          category: productCategoryById.get(line.productId) ?? null,
+          unitPrice: line.unitPrice,
+          quantity: line.quantity,
+          priceIncludesTax: line.priceIncludesTax,
+          taxRate: lineTaxRate(line),
+        },
+        promotionClock,
+        currentWorkspace?.id ?? null
+      )
+    },
+    [promotions, productCategoryById, lineTaxRate, promotionClock, currentWorkspace?.id]
+  )
+  // The line's whole discount -- the cashier's own plus the promotion's -- clamped to the line's
+  // net, exactly as invoices-service.ts's create() does.
+  const lineTotalDiscount = useCallback(
+    (line: CartLine) => {
+      const lineSubtotal = line.unitPrice * line.quantity
+      const lineNet = line.priceIncludesTax ? lineSubtotal / (1 + lineTaxRate(line)) : lineSubtotal
+      const combined = resolveLineDiscount(line) + (linePromotion(line)?.netDiscount ?? 0)
+      return Math.round(Math.min(combined, lineNet) * 100) / 100
+    },
+    [resolveLineDiscount, linePromotion, lineTaxRate]
+  )
+
   // Warms the per-product variant-detail cache (see openVariantPicker/handleScanFallback below)
   // for every variable product up front, instead of waiting for a cashier to have happened to
   // open each one at least once while online -- without this, "offline mode works" would really
@@ -1490,10 +1560,9 @@ export default function CashierPage() {
   // summary at all). Matches invoices-service.ts's own combined discount_amount exactly.
   const totalDiscount = useMemo(
     () =>
-      Math.round(
-        (discount + cart.reduce((sum, line) => sum + resolveLineDiscount(line), 0)) * 100
-      ) / 100,
-    [discount, cart, resolveLineDiscount]
+      Math.round((discount + cart.reduce((sum, line) => sum + lineTotalDiscount(line), 0)) * 100) /
+      100,
+    [discount, cart, lineTotalDiscount]
   )
   // Discount is spread across cart lines by their share of the subtotal, and each line is taxed
   // at its own effective rate -- identical arithmetic to invoices-service.ts's create(), so this
@@ -1515,7 +1584,7 @@ export default function CashierPage() {
       const lineSubtotal = line.unitPrice * line.quantity
       const lineRate = lineTaxRate(line)
       const lineNet = line.priceIncludesTax ? lineSubtotal / (1 + lineRate) : lineSubtotal
-      const lineNetAfterItemDiscount = lineNet - resolveLineDiscount(line)
+      const lineNetAfterItemDiscount = lineNet - lineTotalDiscount(line)
       return { lineNetAfterItemDiscount, lineRate }
     })
     const netSubtotalAfterItemDiscounts = lineNets.reduce(
@@ -1538,7 +1607,7 @@ export default function CashierPage() {
       taxable: Math.round(taxableSum * 100) / 100,
       tax: Math.round(taxSum * 100) / 100,
     }
-  }, [cart, discount, lineTaxRate, resolveLineDiscount])
+  }, [cart, discount, lineTaxRate, lineTotalDiscount])
   const total = Math.round((taxable + tax) * 100) / 100
   // Only meaningful to show a single "(15%)"-style label when every line in the cart actually
   // shares one effective rate -- a mixed cart's real rate varies per line, so the label just
@@ -1729,7 +1798,8 @@ export default function CashierPage() {
       ...notePayload(),
       createdAt: now,
       items: cart.map((line, index) => {
-        const lineNet = Math.max(0, line.unitPrice * line.quantity - resolveLineDiscount(line))
+        const lineNet = Math.max(0, line.unitPrice * line.quantity - lineTotalDiscount(line))
+        const promotion = linePromotion(line)
         return {
           id: String(index + 1),
           productId: line.productId,
@@ -1738,7 +1808,10 @@ export default function CashierPage() {
           unitPrice: line.unitPrice,
           quantity: line.quantity,
           lineTotal: Math.round(line.unitPrice * line.quantity * 100) / 100,
-          discountAmount: resolveLineDiscount(line),
+          discountAmount: lineTotalDiscount(line),
+          promotionId: promotion?.promotion.id ?? null,
+          promotionName: promotion?.promotion.name ?? null,
+          promotionDiscountAmount: promotion?.netDiscount ?? 0,
           netAmount: Math.round(lineNet * 100) / 100,
           taxAmount: Math.round(lineNet * lineTaxRate(line) * 100) / 100,
           returnedQuantity: 0,
@@ -1784,14 +1857,19 @@ export default function CashierPage() {
         payments,
         discountAmount: discount,
         ...notePayload(),
-        items: cart.map((line) => ({
-          productId: line.productId,
-          variantId: line.variantId,
-          productName: line.productName,
-          unitPrice: line.unitPrice,
-          quantity: line.quantity,
-          discountAmount: resolveLineDiscount(line),
-        })),
+        items: cart.map((line) => {
+          const promotion = linePromotion(line)
+          return {
+            productId: line.productId,
+            variantId: line.variantId,
+            productName: line.productName,
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            discountAmount: resolveLineDiscount(line),
+            promotionId: promotion?.promotion.id ?? null,
+            promotionDiscountAmount: promotion?.netDiscount ?? 0,
+          }
+        }),
       })
       const invoice: Invoice = result.queued
         ? buildProvisionalInvoice(result.localId, payments)
@@ -2607,6 +2685,12 @@ export default function CashierPage() {
                         <p className={cn("text-[10.5px]", MUTED)}>
                           {formatAmount(line.unitPrice, locale)}
                         </p>
+                        {linePromotion(line) ? (
+                          <p className="mt-0.5 flex items-center gap-1 truncate text-[10.5px] font-semibold text-[#ea580c]">
+                            <BadgePercent className="size-3 shrink-0" />
+                            <span className="truncate">{linePromotion(line)!.promotion.name}</span>
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -2646,6 +2730,11 @@ export default function CashierPage() {
                         <span className={cn("text-[13px] font-extrabold", HEADING)}>
                           {formatAmount(line.unitPrice * line.quantity, locale)}
                         </span>
+                        {linePromotion(line) ? (
+                          <span className="text-[10px] font-semibold text-[#ea580c]">
+                            -{formatAmount(linePromotion(line)!.netDiscount, locale)}
+                          </span>
+                        ) : null}
                         {resolveLineDiscount(line) > 0 ? (
                           <span className="text-[10px] font-semibold text-[#dc2626]">
                             -{formatAmount(resolveLineDiscount(line), locale)}
@@ -2849,6 +2938,12 @@ export default function CashierPage() {
                     </p>
                     <p className={cn("text-[10.5px]", MUTED)}>
                       {formatAmount(line.unitPrice, locale)}
+                      {linePromotion(line) ? (
+                        <span className="ms-1 font-semibold text-[#ea580c]">
+                          {linePromotion(line)!.promotion.name} -
+                          {formatAmount(linePromotion(line)!.netDiscount, locale)}
+                        </span>
+                      ) : null}
                       {resolveLineDiscount(line) > 0 ? (
                         <span className="ms-1 font-semibold text-[#dc2626]">
                           -{formatAmount(resolveLineDiscount(line), locale)}

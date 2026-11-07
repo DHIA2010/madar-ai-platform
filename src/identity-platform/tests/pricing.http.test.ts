@@ -130,7 +130,7 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     const customer = await signIn("owner@shop.test", "Shop")
     const pricing = await call<PricingEntry[]>("GET", "/v1/pricing", customer.token)
     expect(pricing.status).toBe(200)
-    expect(pricing.body).toHaveLength(9)
+    expect(pricing.body).toHaveLength(10)
 
     const advertising = pricing.body.find((entry) => entry.application === "advertising")!
     expect(advertising.mode).toBe("packages")

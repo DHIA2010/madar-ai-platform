@@ -1356,6 +1356,7 @@ export class IdentityCommandHandlers {
     expenses: "expensesEnabled",
     ai: "aiEnabled",
     customReports: "customReportsEnabled",
+    promotions: "promotionsEnabled",
   }
 
   async requestApplicationActivation(

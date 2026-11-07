@@ -27,6 +27,7 @@ import {
   ChartNoAxesCombined,
   CircleUserRound,
   ClipboardList,
+  BadgePercent,
   Clock,
   CreditCard,
   FileText,
@@ -248,6 +249,13 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <Clock className="text-purple-500" />,
       permission: "pos:view",
       applications: ["pos"],
+    },
+    {
+      title: t("promotions"),
+      url: ROUTES.promotions,
+      icon: <BadgePercent className="text-orange-500" />,
+      permission: "pos:manage",
+      applications: ["promotions"],
     },
     {
       title: t("customers"),

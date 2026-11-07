@@ -34,6 +34,8 @@ export interface InvoicePdfInput {
   salesPersonName?: string | null
   items: Array<{
     productName: string
+    // The automatic promotion this line got, shown after its name.
+    promotionName?: string | null
     quantity: number
     // The line's net (tax-exclusive, after discounts) amount and its VAT, as on the receipt.
     netAmount: number
@@ -338,7 +340,7 @@ function layout(doc: jsPDF, input: InvoicePdfInput, qr: QRCode.QRCode | null, dr
   for (const item of input.items) {
     drawRow(
       [
-        item.productName,
+        item.promotionName ? `${item.productName} - ${item.promotionName}` : item.productName,
         String(item.quantity),
         amount(item.quantity > 0 ? item.netAmount / item.quantity : 0),
         amount(item.taxAmount),

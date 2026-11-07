@@ -172,6 +172,7 @@ export class WhatsAppInvoiceSender {
       salesPersonName: invoice.salesPersonName,
       items: invoice.items.map((item) => ({
         productName: item.productName,
+        promotionName: item.promotionName,
         quantity: item.quantity,
         netAmount: item.netAmount,
         taxAmount: item.taxAmount,

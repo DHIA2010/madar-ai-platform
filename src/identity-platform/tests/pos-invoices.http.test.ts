@@ -282,6 +282,84 @@ describe("point-of-sale invoices", () => {
     expect(plain.body).toMatchObject({ salesPersonUserId: null, salesPersonName: null })
   })
 
+  it("applies a promotion on a sale line, stacked with the cashier's own discount", async () => {
+    const { token, actor } = await signIn("invoice-promotion@example.com", "Invoice Promotion")
+    const promotion = {
+      name: "خصم الافتتاح",
+      discountType: "percent",
+      discountValue: 10,
+      scope: "all",
+    }
+    const post = (body: Record<string, unknown>) =>
+      fetch(`${baseUrl}/v1/promotions`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify(body),
+      })
+
+    // A paid app: nothing works until the store subscribes.
+    expect((await post(promotion)).status).toBe(403)
+    await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
+      actor.organizationId,
+      JSON.stringify({ promotionsEnabled: true }),
+    ])
+
+    expect((await post({ ...promotion, discountValue: 150 })).status).toBe(400)
+    expect((await post({ ...promotion, scope: "products", productIds: [] })).status).toBe(400)
+    const created = await post(promotion)
+    expect(created.status).toBe(201)
+    const { id } = (await created.json()) as { id: string }
+    await post({ ...promotion, name: "موقوف", isPaused: true })
+    await post({
+      ...promotion,
+      name: "منتهي",
+      startsAt: "2026-01-01T00:00:00.000Z",
+      endsAt: "2026-01-02T00:00:00.000Z",
+    })
+
+    // The cashier gets what can still apply: not the paused or finished ones.
+    const cashier = await fetch(`${baseUrl}/v1/pos/promotions`, { headers: authHeaders(token) })
+    const cashierItems = ((await cashier.json()) as { items: Array<{ name: string }> }).items
+    expect(cashierItems.map((item) => item.name)).toEqual(["خصم الافتتاح"])
+
+    // 10% off the coffee line (net 24 -> 2.40) plus the cashier's own 1.00 on the same line.
+    const sale = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [{ paymentMethodCode: "cash", amount: 32.89 }],
+      items: [
+        {
+          ...COFFEE_SALE.items[0],
+          discountAmount: 1,
+          promotionId: id,
+          promotionDiscountAmount: 2.4,
+        },
+        COFFEE_SALE.items[1],
+      ],
+    })
+    expect(sale.status).toBe(201)
+    expect(sale.body).toMatchObject({ discountAmount: 3.4, totalAmount: 32.89 })
+    expect((sale.body.items as unknown[])[0]).toMatchObject({
+      discountAmount: 3.4,
+      promotionId: id,
+      promotionName: "خصم الافتتاح",
+      promotionDiscountAmount: 2.4,
+    })
+
+    const listed = await fetch(`${baseUrl}/v1/promotions`, { headers: authHeaders(token) })
+    const items = ((await listed.json()) as { items: Array<{ id: string; stats: unknown }> }).items
+    expect(items.find((item) => item.id === id)?.stats).toEqual({
+      invoiceCount: 1,
+      unitCount: 2,
+      discountTotal: 2.4,
+    })
+
+    const removed = await fetch(`${baseUrl}/v1/promotions/${id}`, {
+      method: "DELETE",
+      headers: authHeaders(token),
+    })
+    expect(removed.status).toBe(204)
+  })
+
   it("replays the same idempotencyKey without creating a second invoice", async () => {
     const { token } = await signIn("invoice-idempotency@example.com", "Invoice Idempotency")
     const idempotencyKey = "11111111-1111-4111-8111-111111111111"

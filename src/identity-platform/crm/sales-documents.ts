@@ -35,6 +35,7 @@ const APPLICATION_NAME: Record<string, string> = {
   expenses: "المصروفات",
   ai: "الذكاء الاصطناعي",
   customReports: "التقارير المخصصة",
+  promotions: "العروض الترويجية",
   madarApps: "تطبيقات مدار",
   madarComplete: "مدار الكامل",
 }

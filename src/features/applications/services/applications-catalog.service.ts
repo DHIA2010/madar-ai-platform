@@ -1,6 +1,15 @@
 import type { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
-import { Bot, CreditCard, FileBarChart, Radio, ShoppingBag, Truck, Wallet } from "lucide-react"
+import {
+  BadgePercent,
+  Bot,
+  CreditCard,
+  FileBarChart,
+  Radio,
+  ShoppingBag,
+  Truck,
+  Wallet,
+} from "lucide-react"
 
 import type { OrganizationSettings } from "@/features/workspace"
 
@@ -27,6 +36,7 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   expenses: "expensesEnabled",
   ai: "aiEnabled",
   customReports: "customReportsEnabled",
+  promotions: "promotionsEnabled",
 }
 
 // Which application categories this organization currently has activated -- the single shared
@@ -55,6 +65,7 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   expenses: "expensesTrialEndsAt",
   ai: "aiTrialEndsAt",
   customReports: "customReportsTrialEndsAt",
+  promotions: "promotionsTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -67,6 +78,7 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     expenses: "expensesTrialUsed",
     ai: "aiTrialUsed",
     customReports: "customReportsTrialUsed",
+    promotions: "promotionsTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -220,6 +232,24 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPriceLabel: true,
     featuresDisplay: "checklist",
     featureCount: 3,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Automatic discounts applied at the cashier -- its own subscription (promotionsEnabled), enforced
+  // by promotions/guards.ts on every promotions route.
+  {
+    id: "promotions",
+    category: "promotions",
+    tabCategory: "madarApps",
+    icon: BadgePercent,
+    accent: {
+      iconWrapperClassName: "bg-[#fff4e5] text-[#ea580c]",
+      primaryButtonClassName: "bg-[#ea580c] text-white hover:bg-[#c2410c]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 4,
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },

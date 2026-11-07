@@ -160,6 +160,11 @@ export interface InvoiceItemInput {
   // fixed, tax-inclusive or not; this service only ever sees the final number). Optional/absent
   // means no line discount, same as 0.
   discountAmount?: number
+  // The automatic promotion the cashier applied to this line (Promotions app), and how much it
+  // took off (net, before VAT). It stacks with discountAmount above; the line's stored
+  // discount_amount is the two together.
+  promotionId?: string | null
+  promotionDiscountAmount?: number
 }
 
 export interface InvoicePaymentInput {
@@ -210,6 +215,9 @@ export interface InvoiceItemView extends InvoiceItemInput {
   // unitPrice/lineTotal, which stay the raw as-charged figures no discount or tax ever touches.
   netAmount: number
   taxAmount: number
+  promotionId: string | null
+  promotionName: string | null
+  promotionDiscountAmount: number
   // Cumulative quantity already returned across every past return event on this line -- what a
   // return dialog subtracts from `quantity` to know how much is actually still left to return.
   returnedQuantity: number
@@ -397,6 +405,9 @@ interface InvoiceItemRow {
   net_amount: string | number
   tax_amount: string | number
   returned_quantity: string | number
+  promotion_id?: string | null
+  promotion_name?: string | null
+  promotion_discount_amount?: string | number | null
   [key: string]: unknown
 }
 
@@ -430,6 +441,9 @@ function mapItem(row: InvoiceItemRow): InvoiceItemView {
     discountAmount: Number(row.discount_amount),
     netAmount: Number(row.net_amount),
     taxAmount: Number(row.tax_amount),
+    promotionId: row.promotion_id ?? null,
+    promotionName: row.promotion_name ?? null,
+    promotionDiscountAmount: Number(row.promotion_discount_amount ?? 0),
     returnedQuantity: Number(row.returned_quantity),
   }
 }
@@ -660,7 +674,8 @@ export class PosInvoicesService {
     const [itemRows, paymentRows] = await Promise.all([
       this.database.query<InvoiceItemRow>(
         `SELECT id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
-                 line_total, discount_amount, net_amount, tax_amount, returned_quantity
+                 line_total, discount_amount, net_amount, tax_amount, returned_quantity,
+                 promotion_id, promotion_name, promotion_discount_amount
            FROM pos_invoice_items
           WHERE invoice_id IN (${idPlaceholders})`,
         invoiceIds
@@ -879,6 +894,22 @@ export class PosInvoicesService {
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
     if (input.payments.length === 0) throw INVOICE_ERRORS.invalidPaymentMethod()
 
+    // Each promotion a line names must be this organization's; its name is kept on the line as it
+    // is now. Not checked against the subscription or schedule -- a sale rung up offline under a
+    // promotion is recorded as it was made, whenever it syncs.
+    const promotionNames = new Map<string, string>()
+    const promotionIds = [
+      ...new Set(input.items.map((item) => item.promotionId).filter((id): id is string => !!id)),
+    ]
+    if (promotionIds.length > 0) {
+      const placeholders = promotionIds.map((_, index) => `$${index + 2}`).join(", ")
+      const found = await this.database.query<{ id: string; name: string }>(
+        `SELECT id, name FROM promotions WHERE organization_id = $1 AND id IN (${placeholders})`,
+        [input.organizationId, ...promotionIds]
+      )
+      for (const row of found.rows) promotionNames.set(row.id, row.name)
+    }
+
     // A retry of an already-completed offline sale (same client-generated key) returns the
     // existing invoice instead of creating a second one -- handles the overwhelmingly common
     // case (sequential retries from the same queue) cheaply, before any pricing/stock/wallet work
@@ -998,8 +1029,20 @@ export class PosInvoicesService {
       // A line discount is applied here, before the order-wide discount below is distributed --
       // clamped so it can never exceed what this one line is actually worth. Both discounts can
       // be present on the same sale at once; see migration 071.
-      const itemDiscount = Math.min(Math.max(0, item.discountAmount ?? 0), lineNet)
-      return { lineNet, lineNetAfterItemDiscount: lineNet - itemDiscount, lineRate, itemDiscount }
+      // A promotion's discount stacks with the cashier's own line discount; together they still
+      // can't exceed the line. The promotion's part is what's left of it after that clamp.
+      const promotionDiscount = Math.max(0, item.promotionDiscountAmount ?? 0)
+      const itemDiscount = Math.min(
+        Math.max(0, item.discountAmount ?? 0) + promotionDiscount,
+        lineNet
+      )
+      return {
+        lineNet,
+        lineNetAfterItemDiscount: lineNet - itemDiscount,
+        lineRate,
+        itemDiscount,
+        promotionDiscount: Math.min(promotionDiscount, itemDiscount),
+      }
     })
     const netSubtotal = lineComputations.reduce((sum, line) => sum + line.lineNet, 0)
     const netSubtotalAfterItemDiscounts = lineComputations.reduce(
@@ -1302,8 +1345,9 @@ export class PosInvoicesService {
           await this.database.query(
             `INSERT INTO pos_invoice_items
              (id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
-              line_total, discount_amount, net_amount, tax_amount, line_net_amount)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              line_total, discount_amount, net_amount, tax_amount, line_net_amount,
+              promotion_id, promotion_name, promotion_discount_amount)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
             [
               randomUUID(),
               id,
@@ -1318,6 +1362,11 @@ export class PosInvoicesService {
               lineTaxDetails[index].netAmount,
               lineTaxDetails[index].taxAmount,
               lineTaxDetails[index].lineNetAmount,
+              item.promotionId && promotionNames.has(item.promotionId) ? item.promotionId : null,
+              item.promotionId ? (promotionNames.get(item.promotionId) ?? null) : null,
+              item.promotionId && promotionNames.has(item.promotionId)
+                ? Math.round(lineComputations[index].promotionDiscount * 100) / 100
+                : 0,
             ]
           )
         }
@@ -2197,7 +2246,8 @@ export class PosInvoicesService {
     const [itemRows, paymentRows] = await Promise.all([
       this.database.query<InvoiceItemRow>(
         `SELECT id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
-                 line_total, discount_amount, net_amount, tax_amount, returned_quantity
+                 line_total, discount_amount, net_amount, tax_amount, returned_quantity,
+                 promotion_id, promotion_name, promotion_discount_amount
            FROM pos_invoice_items
           WHERE invoice_id = $1`,
         [row.id]

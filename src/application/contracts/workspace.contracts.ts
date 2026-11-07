@@ -57,6 +57,7 @@ export interface OrganizationSettingsDto {
   expensesEnabled?: boolean
   aiEnabled?: boolean
   customReportsEnabled?: boolean
+  promotionsEnabled?: boolean
   // Set on approval of a subscription activation request (see SubscriptionActivationRequestDto
   // below) -- the account-wide tier chosen at request time.
   currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
@@ -81,7 +82,9 @@ export interface OrganizationSettingsDto {
   aiTrialEndsAt?: string
   aiTrialUsed?: boolean
   customReportsTrialEndsAt?: string
+  promotionsTrialEndsAt?: string
   customReportsTrialUsed?: boolean
+  promotionsTrialUsed?: boolean
 }
 
 export type SubscriptionApplication =
@@ -93,6 +96,7 @@ export type SubscriptionApplication =
   | "expenses"
   | "ai"
   | "customReports"
+  | "promotions"
 // Everything purchasable: each application, plus the "Madar Complete" bundle.
 export type PurchasableApplication = SubscriptionApplication | "madarComplete"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"

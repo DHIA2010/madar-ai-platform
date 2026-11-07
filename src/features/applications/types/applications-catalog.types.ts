@@ -9,6 +9,7 @@ export type ApplicationCategoryId =
   | "expenses"
   | "ai"
   | "customReports"
+  | "promotions"
 
 export type ApplicationPricingModel = "free" | "paid"
 

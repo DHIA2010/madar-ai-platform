@@ -74,7 +74,8 @@
       "productCategories": "Categories",
       "inventory": "Inventory",
       "stockTransfers": "Stock transfers",
-      "stockCounts": "Stock take"
+      "stockCounts": "Stock take",
+      "promotions": "Promotions"
     }
   },
   "auth": {
@@ -850,6 +851,18 @@
           "Record and categorize expenses",
           "Link expenses to branches and categories",
           "Recurring expense reports"
+        ]
+      },
+      "promotions": {
+        "name": "Promotions",
+        "shortDescription": "Automatic discounts on all products or the products and categories you choose.",
+        "detailDescription": "Create percentage or fixed-amount promotions that apply automatically at the cashier to all products or to chosen products and categories, limited by branch, dates, weekdays and hours, with a per-item cap and a discount-licence number.",
+        "priceLabel": "Starting from SAR 99 / month",
+        "features": [
+          "Automatic cashier discount, percentage or fixed",
+          "On all products or chosen products and categories",
+          "Scheduled by dates, weekdays and hours per branch",
+          "Shown on the invoice and included in VAT"
         ]
       }
     },
@@ -3115,7 +3128,8 @@
       "total": "Total",
       "qrAlt": "QR code",
       "qrFailed": "Couldn't generate the QR code for this invoice.",
-      "salesPerson": "Seller"
+      "salesPerson": "Seller",
+      "promotion": "Promotion: {name}"
     },
     "cashMovementDialog": {
       "title": "Cash withdrawal or deposit",
@@ -9037,6 +9051,130 @@
       "searchPlaceholderReadOnly": "Search by product name or SKU...",
       "scanHint": "Each scan or Enter adds 1 to the counted quantity; you can also type a quantity directly.",
       "lastScanned": "Last counted: {name} — counted: {count}"
+    }
+  },
+  "promotions": {
+    "title": "Promotions",
+    "subtitle": "Automatic discounts the cashier applies by itself to the products they cover.",
+    "add": "New promotion",
+    "sar": "SAR",
+    "kpis": {
+      "active": "Active now",
+      "invoices": "Sales with promotions",
+      "discount": "Total discount given"
+    },
+    "status": {
+      "active": "Active",
+      "scheduled": "Scheduled",
+      "outsideHours": "Outside its hours",
+      "expired": "Ended",
+      "paused": "Paused"
+    },
+    "discount": {
+      "percent": "{value}% off each item",
+      "percentCapped": "{value}% off each item, up to SAR {cap}",
+      "fixed": "SAR {value} off each item"
+    },
+    "target": {
+      "all": "All products",
+      "products": "{count, plural, one {# product} other {# products}}",
+      "excluding": "(excluding {count})"
+    },
+    "schedule": {
+      "always": "Always",
+      "now": "Now",
+      "noEnd": "No end"
+    },
+    "stats": "{invoices} sales · SAR {discount} off",
+    "pause": "Pause",
+    "resume": "Resume",
+    "edit": "Edit",
+    "delete": "Delete",
+    "empty": {
+      "title": "No promotions yet",
+      "description": "Create one and the cashier applies it automatically to the products it covers."
+    },
+    "locked": {
+      "title": "Promotions isn't active",
+      "description": "Activate the Promotions app from the Madar marketplace to create automatic discounts the cashier applies by itself.",
+      "cta": "Activate Promotions"
+    },
+    "deleteDialog": {
+      "title": "Delete promotion",
+      "description": "\"{name}\" will stop applying at the cashier. Past sales stay as they are."
+    },
+    "toasts": {
+      "created": "Promotion created",
+      "saved": "Promotion saved",
+      "deleted": "Promotion deleted",
+      "loadFailed": "Couldn't load promotions",
+      "saveFailed": "Couldn't save the change"
+    },
+    "editor": {
+      "createTitle": "New promotion",
+      "editTitle": "Edit promotion",
+      "description": "Applied automatically at the cashier to each item it covers, on top of the cashier's own discount.",
+      "cancel": "Cancel",
+      "save": "Save promotion",
+      "create": "Create promotion",
+      "name": "Name",
+      "namePlaceholder": "e.g. End of season sale",
+      "nameHint": "Shown on the customer's invoice next to the discount.",
+      "discount": "Discount",
+      "percent": "Percentage (%)",
+      "fixed": "Fixed amount (SAR)",
+      "percentHint": "A share of each item's price.",
+      "fixedHint": "Taken off each item's price.",
+      "capPlaceholder": "No cap",
+      "capHint": "The most it can take off one item (SAR).",
+      "appliesTo": "Applies to",
+      "scope": {
+        "all": "All products",
+        "products": "Chosen products",
+        "categories": "Chosen categories"
+      },
+      "searchProducts": "Search by name or SKU...",
+      "noProducts": "No matching products.",
+      "selectedCount": "{count, plural, =0 {No products chosen} one {# product chosen} other {# products chosen}}",
+      "noCategories": "No categories yet.",
+      "exclude": "Exclude products",
+      "excludeHint": "Products the promotion doesn't cover.",
+      "branches": "Branches",
+      "allBranches": "All branches",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "now": "Now",
+      "noEnd": "No end",
+      "days": "Days",
+      "everyDay": "Every day",
+      "weekDays": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+      },
+      "hours": "Specific hours",
+      "hoursHint": "Like a happy hour -- outside them it doesn't apply.",
+      "from": "From",
+      "to": "To",
+      "licence": "Discount licence number (optional)",
+      "licencePlaceholder": "Ministry of Commerce licence number",
+      "licenceHint": "The Ministry of Commerce requires a licence before advertising a sale.",
+      "active": "Promotion active",
+      "activeHint": "A paused promotion doesn't apply at the cashier.",
+      "errors": {
+        "name": "Enter a name.",
+        "percent": "The percentage must be 1 to 100.",
+        "amount": "Enter a valid amount.",
+        "cap": "Enter a valid cap or leave it empty.",
+        "products": "Choose at least one product.",
+        "categories": "Choose at least one category.",
+        "dates": "The end date must be after the start.",
+        "save": "Couldn't save the promotion."
+      }
     }
   }
 }
