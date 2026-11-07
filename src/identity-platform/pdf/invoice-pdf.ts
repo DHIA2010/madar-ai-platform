@@ -30,6 +30,8 @@ export interface InvoicePdfInput {
   customerName: string | null
   customerPhone: string | null
   customerVatNumber: string | null
+  // Who the sale is credited to, when one was picked in the cashier.
+  salesPersonName?: string | null
   items: Array<{
     productName: string
     quantity: number
@@ -265,6 +267,7 @@ function layout(doc: jsPDF, input: InvoicePdfInput, qr: QRCode.QRCode | null, dr
   if (input.customerName) infoRows.push(["اسم العميل", input.customerName])
   if (input.customerPhone) infoRows.push(["جوال العميل", input.customerPhone])
   if (input.customerVatNumber) infoRows.push(["الرقم الضريبي للعميل", input.customerVatNumber])
+  if (input.salesPersonName) infoRows.push(["البائع", input.salesPersonName])
   const infoSize = pt(11)
   const infoRow = lineHeight(infoSize) + 2
   const infoTop = y

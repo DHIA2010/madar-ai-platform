@@ -2870,7 +2870,8 @@
         "heldAction": "Held",
         "customerAction": "Customer",
         "returnAction": "Return",
-        "noteAction": "Note"
+        "noteAction": "Note",
+        "salesPersonAction": "Seller"
       },
       "openShiftDialog": {
         "title": "Start a new shift",
@@ -3040,6 +3041,13 @@
         "whatsappFailed": "Couldn't send the invoice on WhatsApp.",
         "whatsappRetry": "Retry",
         "whatsappOffline": "Sale saved offline -- send the invoice on WhatsApp from the invoices page once it syncs."
+      },
+      "salesPersonDialog": {
+        "title": "Seller",
+        "description": "Pick the seller this sale is credited to -- shown on the invoice, separate from the cashier who rang it up.",
+        "searchPlaceholder": "Search by name...",
+        "clear": "No seller",
+        "empty": "No active members in this branch."
       }
     },
     "noteEditor": {
@@ -3106,7 +3114,8 @@
       "vat": "VAT",
       "total": "Total",
       "qrAlt": "QR code",
-      "qrFailed": "Couldn't generate the QR code for this invoice."
+      "qrFailed": "Couldn't generate the QR code for this invoice.",
+      "salesPerson": "Seller"
     },
     "cashMovementDialog": {
       "title": "Cash withdrawal or deposit",
@@ -8411,7 +8420,8 @@
       "taxWithPercent": "Tax ({percent}%)",
       "total": "Total",
       "print": "Print",
-      "sendInvoice": "Send on WhatsApp"
+      "sendInvoice": "Send on WhatsApp",
+      "salesPerson": "Seller"
     },
     "returnDialog": {
       "title": "Register return",

@@ -1008,6 +1008,9 @@ export const createInvoiceSchema = z.object({
   // A real customer this sale is attributed to -- required whenever a payment line uses a
   // "credit" (آجل) method, since that amount has to land on an actual account.
   customerId: z.string().uuid().nullable().optional().default(null),
+  // The salesperson the sale is credited to -- an active member of the branch (see
+  // PosInvoicesService.listSalesPeople).
+  salesPersonUserId: z.string().uuid().nullable().optional().default(null),
   payments: z.array(createInvoicePaymentSchema).min(1),
   discountAmount: z.number().min(0).default(0),
   notes: z.string().max(500).nullable().optional().default(null),

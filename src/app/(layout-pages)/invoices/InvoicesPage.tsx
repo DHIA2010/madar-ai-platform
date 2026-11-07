@@ -905,6 +905,12 @@ function InvoiceDetailPanel({
         <dd className={cn("text-right font-semibold", HEADING)}>{workspaceName}</dd>
         <dt className={MUTED}>{t("detail.paymentMethod")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{paymentMethodName}</dd>
+        {invoice.salesPersonName ? (
+          <>
+            <dt className={MUTED}>{t("detail.salesPerson")}</dt>
+            <dd className={cn("text-right font-semibold", HEADING)}>{invoice.salesPersonName}</dd>
+          </>
+        ) : null}
         <ZatcaDetailRows document={invoice} labelClassName={MUTED} />
       </dl>
 

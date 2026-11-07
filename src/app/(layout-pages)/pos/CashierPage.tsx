@@ -53,6 +53,7 @@ import {
   Trash2,
   Undo2,
   UserPlus,
+  UserCheck,
   UserRound,
   Wallet,
   X,
@@ -1750,6 +1751,8 @@ export default function CashierPage() {
       sellerVatNumber: null,
       sellerAddress: null,
       customerVatNumber: null,
+      salesPersonUserId: salesPerson?.userId ?? null,
+      salesPersonName: salesPerson?.name ?? null,
       zatcaSigned: false,
       zatcaStatus: null,
       zatcaReportedAt: null,
@@ -1775,6 +1778,7 @@ export default function CashierPage() {
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
         customerId,
+        salesPersonUserId: salesPerson?.userId ?? null,
         // Cash is capped at what the sale actually needs -- any excess the cashier typed is
         // physical change handed back, not extra revenue, so it never reaches the invoice.
         payments,
@@ -1814,6 +1818,7 @@ export default function CashierPage() {
       setCustomerPhone("")
       setCustomerId(null)
       setSelectedCustomer(null)
+      setSalesPerson(null)
       setDiscountValue("")
       setDiscountType("percent")
       setDiscountIncludesTax(true)
@@ -2070,6 +2075,22 @@ export default function CashierPage() {
     }
   }
 
+  // --- Salesperson -------------------------------------------------------------------------------
+  // Who the sale is credited to -- one of the branch's active members, not necessarily the cashier.
+  // Cleared with the customer (after each sale, or when the cart is cleared).
+  const [salesPerson, setSalesPerson] = useState<{ userId: string; name: string } | null>(null)
+  const [isSalesPersonDialogOpen, setIsSalesPersonDialogOpen] = useState(false)
+  const [salesPeople, setSalesPeople] = useState<Array<{ userId: string; name: string }>>([])
+  const [salesPersonSearch, setSalesPersonSearch] = useState("")
+  useEffect(() => {
+    if (!isSalesPersonDialogOpen) return
+    setSalesPersonSearch("")
+    void posInvoicesService
+      .listSalesPeople()
+      .then(setSalesPeople)
+      .catch(() => setSalesPeople([]))
+  }, [isSalesPersonDialogOpen])
+
   // --- Returns -------------------------------------------------------------------------------
   // Search a sale, then the same itemized return dialog the invoices page uses
   // (invoice-return-dialog.tsx): per-line quantities, refund method(s) and a note -- and the credit
@@ -2182,6 +2203,7 @@ export default function CashierPage() {
       setCustomerPhone("")
       setCustomerId(null)
       setSelectedCustomer(null)
+      setSalesPerson(null)
       setDiscountValue("")
       setDiscountType("percent")
       setDiscountIncludesTax(true)
@@ -2983,7 +3005,7 @@ export default function CashierPage() {
           {/* RTL: written in reverse of reading order so معلقة lands rightmost and ملاحظة
               leftmost, matching the reference (same first-child-is-rightmost rule already
               applied to the shift status strip). */}
-          <div className="grid shrink-0 grid-cols-4 gap-1 border-t border-[#eef2f8] pt-3">
+          <div className="flex shrink-0 items-start justify-between gap-1 border-t border-[#eef2f8] pt-3">
             <button
               type="button"
               onClick={() => setIsHeldOrdersOpen(true)}
@@ -3010,6 +3032,27 @@ export default function CashierPage() {
               </span>
               <span className={cn("text-[11px] font-semibold", MUTED)}>
                 {t("cart.customerAction")}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSalesPersonDialogOpen(true)}
+              className="flex flex-col items-center gap-1.5 rounded-[10px] p-1.5 hover:bg-[#f7faff]"
+            >
+              <span className="relative flex size-10 items-center justify-center rounded-[10px] bg-[#f5f3ff] text-[#7c3aed]">
+                <UserCheck className="size-[18px]" />
+                {salesPerson ? (
+                  <span className="absolute -top-1 -end-1 size-2 rounded-full bg-[#7c3aed]" />
+                ) : null}
+              </span>
+              <span
+                className={cn(
+                  "max-w-full truncate text-[11px] font-semibold",
+                  salesPerson ? "text-[#7c3aed]" : MUTED
+                )}
+              >
+                {salesPerson ? salesPerson.name.split(" ")[0] : t("cart.salesPersonAction")}
               </span>
             </button>
 
@@ -4208,6 +4251,79 @@ export default function CashierPage() {
       </Dialog>
 
       <ReturnDialog {...invoiceReturn.dialogProps} />
+
+      {/* Salesperson -- who this sale is credited to */}
+      <Dialog open={isSalesPersonDialogOpen} onOpenChange={setIsSalesPersonDialogOpen}>
+        <DialogContent
+          className={cn(
+            "sm:max-w-[24rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
+          <DialogHeader className="text-right">
+            <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
+              {t("salesPersonDialog.title")}
+            </DialogTitle>
+            <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
+              {t("salesPersonDialog.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
+            <Input
+              value={salesPersonSearch}
+              onChange={(event) => setSalesPersonSearch(event.target.value)}
+              placeholder={t("salesPersonDialog.searchPlaceholder")}
+              className={cn(FIELD_CLASS, "h-11 ps-9")}
+            />
+          </div>
+          <div className="flex max-h-[18rem] flex-col gap-1.5 overflow-y-auto">
+            {salesPerson ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSalesPerson(null)
+                  setIsSalesPersonDialogOpen(false)
+                }}
+                className="rounded-[10px] border border-dashed border-[#e8edf3] p-2.5 text-start text-[12.5px] font-semibold text-[#dc2626] hover:bg-[#fef2f2]"
+              >
+                {t("salesPersonDialog.clear")}
+              </button>
+            ) : null}
+            {salesPeople
+              .filter((person) =>
+                person.name.toLowerCase().includes(salesPersonSearch.trim().toLowerCase())
+              )
+              .map((person) => {
+                const selected = salesPerson?.userId === person.userId
+                return (
+                  <button
+                    key={person.userId}
+                    type="button"
+                    onClick={() => {
+                      setSalesPerson(person)
+                      setIsSalesPersonDialogOpen(false)
+                    }}
+                    className={cn(
+                      "flex items-center justify-between rounded-[10px] border p-2.5 text-start text-[12.5px] font-semibold transition-colors",
+                      selected
+                        ? "border-[#7c3aed] bg-[#f5f3ff] text-[#7c3aed]"
+                        : cn("border-[#e8edf3] hover:bg-[#f7faff]", HEADING)
+                    )}
+                  >
+                    {person.name}
+                    {selected ? <Check className="size-4" /> : null}
+                  </button>
+                )
+              })}
+            {salesPeople.length === 0 ? (
+              <p className={cn("py-6 text-center text-[12px]", MUTED)}>
+                {t("salesPersonDialog.empty")}
+              </p>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Returns -- find the sale to return; the return itself is the shared ReturnDialog */}
       <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>

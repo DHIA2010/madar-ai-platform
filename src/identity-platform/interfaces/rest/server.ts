@@ -5115,6 +5115,7 @@ export function createIdentityApiServer(
               customerName: payload.customerName,
               customerPhone: payload.customerPhone,
               customerId: payload.customerId,
+              salesPersonUserId: payload.salesPersonUserId,
               payments: payload.payments,
               discountAmount: payload.discountAmount,
               notes: payload.notes,
@@ -5192,6 +5193,17 @@ export function createIdentityApiServer(
             actor.userId
           )
         )
+      }
+
+      // Who a sale can be credited to in the cashier: the branch's active members.
+      if (method === "GET" && url.pathname === "/v1/pos/sales-people") {
+        if (!posInvoicesService) {
+          return send(503, { code: "POS_INVOICES_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+        return send(200, {
+          items: await posInvoicesService.listSalesPeople(actor.organizationId, actor.workspaceId),
+        })
       }
 
       // The sale's receipt to the customer on WhatsApp, as a PDF -- see whatsapp/invoice-sender.ts.

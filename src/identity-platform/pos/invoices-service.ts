@@ -127,6 +127,13 @@ const INVOICE_ERRORS = {
       "validation",
       "The return quantity for a line exceeds what is still left on that line."
     ),
+  invalidSalesPerson: () =>
+    new IdentityError(
+      "POS_INVOICE_INVALID_SALES_PERSON",
+      400,
+      "validation",
+      "The salesperson must be an active member of this branch."
+    ),
   returnRequiresItems: () =>
     new IdentityError(
       "POS_INVOICE_RETURN_REQUIRES_ITEMS",
@@ -171,6 +178,8 @@ export interface CreateInvoiceInput {
   // either way. Required whenever any payment line uses a "credit"-kind method: a deferred
   // amount has to land on an actual account, not a free-text name.
   customerId: string | null
+  // The salesperson the sale is credited to (an active member of this branch), when picked.
+  salesPersonUserId?: string | null
   // One or more methods settling this sale -- amounts must add up to the computed total exactly
   // (see create()). A single-entry array is the common case (one method, full amount).
   payments: InvoicePaymentInput[]
@@ -221,6 +230,9 @@ export interface InvoiceView {
   customerPhone: string | null
   customerId: string | null
   cashierUserId: string | null
+  // Who the sale is credited to (picked in the cashier), and their name at sale time.
+  salesPersonUserId: string | null
+  salesPersonName: string | null
   paymentMethodCode: string
   payments: InvoicePaymentView[]
   subtotalAmount: number
@@ -367,6 +379,8 @@ interface InvoiceRow {
   zatca_reported_at: Date | string | null
   zatca_last_error: string | null
   zatca_last_error_ar: string | null
+  sales_person_user_id: string | null
+  sales_person_name: string | null
   [key: string]: unknown
 }
 
@@ -443,6 +457,8 @@ function mapInvoice(
     customerPhone: row.customer_phone,
     customerId: row.customer_id,
     cashierUserId: row.cashier_user_id,
+    salesPersonUserId: row.sales_person_user_id,
+    salesPersonName: row.sales_person_name,
     paymentMethodCode: row.payment_method_code,
     payments,
     subtotalAmount: Number(row.subtotal_amount),
@@ -570,7 +586,7 @@ const INVOICE_SELECT = `
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
          total_amount, notes, notes_lines, created_at, qr_code, seller_name, seller_vat_number,
          seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at,
-         zatca_last_error, zatca_last_error_ar
+         zatca_last_error, zatca_last_error_ar, sales_person_user_id, sales_person_name
     FROM pos_invoices
 `
 
@@ -824,7 +840,42 @@ export class PosInvoicesService {
     }))
   }
 
+  // Who a sale can be credited to: the active members of this branch (or of the organization,
+  // without one), by name.
+  async listSalesPeople(
+    organizationId: string,
+    workspaceId: string | null
+  ): Promise<Array<{ userId: string; name: string }>> {
+    const params: unknown[] = [organizationId]
+    let branch = ""
+    if (workspaceId) {
+      params.push(workspaceId)
+      branch = "AND m.workspace_id = $2"
+    }
+    const result = await this.database.query<{ user_id: string; full_name: string }>(
+      `SELECT DISTINCT u.id AS user_id, u.full_name
+         FROM memberships m
+         JOIN users u ON u.id = m.user_id
+        WHERE m.organization_id = $1 AND m.status = 'active' AND m.deleted_at IS NULL
+          AND u.account_status = 'active' ${branch}
+        ORDER BY u.full_name`,
+      params
+    )
+    return result.rows.map((row) => ({ userId: row.user_id, name: row.full_name }))
+  }
+
   async create(input: CreateInvoiceInput): Promise<InvoiceView> {
+    // The salesperson, when picked: checked against the branch's active members, and their name
+    // kept on the invoice as it is now.
+    let salesPerson: { id: string; name: string } | null = null
+    if (input.salesPersonUserId) {
+      const match = (await this.listSalesPeople(input.organizationId, input.workspaceId)).find(
+        (person) => person.userId === input.salesPersonUserId
+      )
+      if (!match) throw INVOICE_ERRORS.invalidSalesPerson()
+      salesPerson = { id: match.userId, name: match.name }
+    }
+
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
     if (input.payments.length === 0) throw INVOICE_ERRORS.invalidPaymentMethod()
 
@@ -1208,9 +1259,9 @@ export class PosInvoicesService {
             discount_amount, tax_amount, total_amount, notes, notes_lines, created_at, qr_code,
             seller_name, seller_vat_number, seller_address, customer_vat_number, zatca_device_id,
             icv, previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml,
-            zatca_uuid, idempotency_key, order_number)
+            zatca_uuid, idempotency_key, order_number, sales_person_user_id, sales_person_name)
          VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb,
-                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)`,
           [
             id,
             input.organizationId,
@@ -1242,6 +1293,8 @@ export class PosInvoicesService {
             zatcaUuid,
             input.idempotencyKey,
             orderNumber,
+            salesPerson?.id ?? null,
+            salesPerson?.name ?? null,
           ]
         )
 

@@ -189,6 +189,12 @@ export function ThermalInvoiceReceipt({
             <span>{invoice.customerVatNumber}</span>
           </div>
         )}
+        {invoice.salesPersonName && (
+          <div className="flex justify-between border-b border-[#c7d2e0] px-2 py-1 text-[11px] last:border-b-0">
+            <span className="text-[#5b6b85]">{t("salesPerson")}</span>
+            <span>{invoice.salesPersonName}</span>
+          </div>
+        )}
       </div>
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />

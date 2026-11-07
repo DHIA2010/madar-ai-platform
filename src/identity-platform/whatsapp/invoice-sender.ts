@@ -169,6 +169,7 @@ export class WhatsAppInvoiceSender {
       customerName: invoice.customerName,
       customerPhone: invoice.customerPhone,
       customerVatNumber: invoice.customerVatNumber,
+      salesPersonName: invoice.salesPersonName,
       items: invoice.items.map((item) => ({
         productName: item.productName,
         quantity: item.quantity,

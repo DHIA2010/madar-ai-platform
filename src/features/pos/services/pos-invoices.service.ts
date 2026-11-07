@@ -107,6 +107,10 @@ export interface Invoice {
   // The linked customer's own VAT number, snapshotted at sale time -- only ever set when
   // customerId pointed at a real native customer who had one on file at the moment of sale.
   customerVatNumber: string | null
+  // The salesperson the sale is credited to (picked in the cashier) and their name at sale time --
+  // not the cashier who rang it up.
+  salesPersonUserId: string | null
+  salesPersonName: string | null
   // ZATCA Phase 2 (Integration Phase) -- set only once the organization has an onboarded
   // production device (Settings -> الفوترة الإلكترونية); every sale before that stays
   // zatcaSigned: false and shows only the Phase 1 QR above. A signed sale is reported to ZATCA
@@ -241,6 +245,8 @@ export interface CreateInvoiceInput {
   customerName: string | null
   customerPhone: string | null
   customerId: string | null
+  // The salesperson the sale is credited to -- see listSalesPeople().
+  salesPersonUserId?: string | null
   payments: InvoicePayment[]
   discountAmount: number
   notes: string | null
@@ -279,6 +285,14 @@ const client = createHttpDataClient({
 })
 
 export const posInvoicesService = {
+  // Who a sale can be credited to in the cashier: the branch's active members.
+  async listSalesPeople(): Promise<Array<{ userId: string; name: string }>> {
+    const response = await client.get<{ items: Array<{ userId: string; name: string }> }>(
+      ["", "v1", "pos", "sales-people"].join(PATH_SEPARATOR)
+    )
+    return response.items
+  },
+
   async list(filter: InvoiceListFilter = {}): Promise<Invoice[]> {
     const response = await client.get<{ items: Invoice[] }>(
       `${INVOICES_ENDPOINT}${buildQuery(filter)}`

@@ -3,6 +3,7 @@
 // Covers point-of-sale invoices (migration 055): POST /v1/pos/invoices, GET /v1/pos/invoices,
 // GET /v1/pos/invoices/summary, and PATCH /v1/pos/invoices/:id/status.
 
+import { randomUUID } from "node:crypto"
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
@@ -232,6 +233,53 @@ describe("point-of-sale invoices", () => {
     })
     expect(created.body.invoiceNumber).toMatch(/^INV-\d{6}$/)
     expect(created.body.items).toHaveLength(2)
+  })
+
+  it("credits a sale to a salesperson from the branch's active members", async () => {
+    const { token, actor } = await signIn(
+      "invoice-sales-person@example.com",
+      "Invoice Sales Person"
+    )
+    // This harness keeps memberships in memory; the real database holds them -- one row here.
+    await database.query(
+      `insert into memberships (id, user_id, organization_id, workspace_id, role_code, status)
+       values ($1, $2, $3, $4, 'owner', 'active')`,
+      [randomUUID(), actor.userId, actor.organizationId, actor.workspaceId]
+    )
+
+    const peopleResponse = await fetch(`${baseUrl}/v1/pos/sales-people`, {
+      headers: authHeaders(token),
+    })
+    expect(peopleResponse.status).toBe(200)
+    const people = (
+      (await peopleResponse.json()) as {
+        items: Array<{ userId: string; name: string }>
+      }
+    ).items
+    expect(people).toContainEqual(expect.objectContaining({ name: "Invoice Test" }))
+    const salesPerson = people.find((person) => person.name === "Invoice Test")!
+
+    const credited = await createInvoice(token, {
+      ...COFFEE_SALE,
+      salesPersonUserId: salesPerson.userId,
+    })
+    expect(credited.status).toBe(201)
+    expect(credited.body).toMatchObject({
+      salesPersonUserId: salesPerson.userId,
+      salesPersonName: "Invoice Test",
+    })
+
+    // Someone who isn't a member of this branch can't be credited.
+    const stranger = await createInvoice(token, {
+      ...COFFEE_SALE,
+      salesPersonUserId: "99999999-9999-4999-8999-999999999999",
+    })
+    expect(stranger.status).toBe(400)
+    expect(stranger.body.code).toBe("POS_INVOICE_INVALID_SALES_PERSON")
+
+    // Without one, the sale simply has no salesperson.
+    const plain = await createInvoice(token, COFFEE_SALE)
+    expect(plain.body).toMatchObject({ salesPersonUserId: null, salesPersonName: null })
   })
 
   it("replays the same idempotencyKey without creating a second invoice", async () => {

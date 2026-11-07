@@ -2870,7 +2870,8 @@
         "heldAction": "معلقة",
         "customerAction": "عميل",
         "returnAction": "إرجاع",
-        "noteAction": "ملاحظة"
+        "noteAction": "ملاحظة",
+        "salesPersonAction": "بائع"
       },
       "openShiftDialog": {
         "title": "بدء وردية جديدة",
@@ -3040,6 +3041,13 @@
         "whatsappFailed": "تعذر إرسال الفاتورة عبر واتساب.",
         "whatsappRetry": "إعادة المحاولة",
         "whatsappOffline": "البيع محفوظ بلا اتصال -- أرسل الفاتورة عبر واتساب من صفحة الفواتير بعد المزامنة."
+      },
+      "salesPersonDialog": {
+        "title": "البائع",
+        "description": "اختر البائع الذي تُنسب له هذه العملية -- يظهر على الفاتورة، وهو غير الكاشير الذي سجّلها.",
+        "searchPlaceholder": "ابحث بالاسم...",
+        "clear": "بدون بائع",
+        "empty": "لا يوجد أعضاء نشطون في هذا الفرع."
       }
     },
     "noteEditor": {
@@ -3106,7 +3114,8 @@
       "vat": "ضريبة القيمة المضافة",
       "total": "المجموع",
       "qrAlt": "رمز الاستجابة السريع",
-      "qrFailed": "تعذر إنشاء رمز الاستجابة السريع لهذه الفاتورة."
+      "qrFailed": "تعذر إنشاء رمز الاستجابة السريع لهذه الفاتورة.",
+      "salesPerson": "البائع"
     },
     "cashMovementDialog": {
       "title": "سحب أو إيداع نقدي",
@@ -8407,7 +8416,8 @@
       "taxWithPercent": "الضريبة ({percent}٪)",
       "total": "الإجمالي",
       "print": "طباعة",
-      "sendInvoice": "إرسال عبر واتساب"
+      "sendInvoice": "إرسال عبر واتساب",
+      "salesPerson": "البائع"
     },
     "returnDialog": {
       "title": "تسجيل إرجاع",
