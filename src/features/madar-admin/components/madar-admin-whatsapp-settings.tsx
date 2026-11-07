@@ -17,6 +17,7 @@ import type {
   AdminWhatsAppConfig,
   AdminWhatsAppConfigPatch,
 } from "../types/platform-admin.types"
+import { MadarAdminWhatsAppTemplates } from "./madar-admin-whatsapp-templates"
 
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 
@@ -261,6 +262,8 @@ export function MadarAdminWhatsAppSettings() {
             تلقائياً، أو الصق القيمتين يدوياً في لوحة التطبيق ← WhatsApp ← Configuration.
           </p>
         </div>
+
+        {config?.hasSystemUserToken ? <MadarAdminWhatsAppTemplates /> : null}
 
         {checks ? (
           <div className="flex flex-col gap-2">

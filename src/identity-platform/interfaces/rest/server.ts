@@ -110,6 +110,8 @@ import { ExpensesService } from "../../expenses/expenses-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { AwsSecretsWhatsAppCredentialsSource } from "../../whatsapp/credentials"
+import { applyWhatsAppStatuses, WhatsAppInvoiceSender } from "../../whatsapp/invoice-sender"
+import { WhatsAppTemplatesService } from "../../whatsapp/templates"
 import { verifyWhatsAppSignature, WhatsAppPlatformService } from "../../whatsapp/platform-config"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
@@ -289,6 +291,7 @@ import {
   createSupplierVoucherSchema,
   createExpenseCategorySchema,
   createExpenseSchema,
+  sendInvoiceWhatsAppSchema,
 } from "../../schemas"
 
 function json(
@@ -953,6 +956,23 @@ export function createIdentityApiServer(
           sallaStockPushService,
           zidStockPushService,
           zatcaReporting
+        )
+      : null
+  const whatsAppTemplatesService = whatsAppPlatformService
+    ? new WhatsAppTemplatesService(whatsAppPlatformService)
+    : null
+  const whatsAppInvoiceSender =
+    container.infrastructure.database &&
+    whatsAppPlatformService &&
+    whatsAppTemplatesService &&
+    posInvoicesService &&
+    posPaymentMethodsService
+      ? new WhatsAppInvoiceSender(
+          container.infrastructure.database,
+          whatsAppPlatformService,
+          whatsAppTemplatesService,
+          posInvoicesService,
+          posPaymentMethodsService
         )
       : null
   const posShiftsService =
@@ -1764,6 +1784,9 @@ export function createIdentityApiServer(
           return send(400, { code: "INVALID_JSON", message: "Invalid JSON." })
         }
         await whatsAppPlatformService.recordWebhookEvent(payload)
+        if (container.infrastructure.database) {
+          await applyWhatsAppStatuses(container.infrastructure.database, payload)
+        }
         return send(200, { ok: true })
       }
 
@@ -2544,6 +2567,7 @@ export function createIdentityApiServer(
         crm: crmService,
         salesDocuments: salesDocumentsService,
         whatsapp: whatsAppPlatformService,
+        whatsappTemplates: whatsAppTemplatesService,
         send,
         readJsonBody: () => readJsonBody(request),
       })
@@ -5166,6 +5190,34 @@ export function createIdentityApiServer(
             },
             actor.userId
           )
+        )
+      }
+
+      // The sale's receipt to the customer on WhatsApp, as a PDF -- see whatsapp/invoice-sender.ts.
+      // Anyone who can see the invoice can send it; GET lists what was sent and its status.
+      const invoiceWhatsAppMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/whatsapp$/)
+      if (invoiceWhatsAppMatch && (method === "GET" || method === "POST")) {
+        if (!whatsAppInvoiceSender) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+        if (method === "GET") {
+          return send(200, {
+            items: await whatsAppInvoiceSender.listSends(
+              actor.organizationId,
+              invoiceWhatsAppMatch[1]
+            ),
+          })
+        }
+        const { phone } = sendInvoiceWhatsAppSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await whatsAppInvoiceSender.sendInvoice({
+            organizationId: actor.organizationId,
+            invoiceId: invoiceWhatsAppMatch[1],
+            phone,
+            actorUserId: actor.userId,
+          })
         )
       }
 

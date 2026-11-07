@@ -20,6 +20,7 @@ import {
   storeListQuerySchema,
   subscriptionListQuerySchema,
   whatsAppPlatformConfigPatchSchema,
+  whatsAppTemplateSubmitSchema,
   whatsAppWebhookActivationSchema,
 } from "../../platform-admin/schemas"
 import {
@@ -62,6 +63,7 @@ import {
 } from "../../platform-admin/staff-roles"
 import type { PlatformAdminService } from "../../platform-admin/service"
 import type { WhatsAppPlatformService } from "../../whatsapp/platform-config"
+import type { WhatsAppTemplatesService } from "../../whatsapp/templates"
 
 type Send = (status: number, body: unknown) => void
 
@@ -113,6 +115,7 @@ export async function handlePlatformAdminRoute(input: {
   crm: CrmService | null
   salesDocuments: SalesDocumentsService | null
   whatsapp: WhatsAppPlatformService | null
+  whatsappTemplates: WhatsAppTemplatesService | null
   send: Send
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
@@ -126,6 +129,7 @@ export async function handlePlatformAdminRoute(input: {
     crm,
     salesDocuments,
     whatsapp,
+    whatsappTemplates,
     readJsonBody,
   } = input
   const send = (status: number, body: unknown) => {
@@ -332,6 +336,13 @@ export async function handlePlatformAdminRoute(input: {
     }
     if (method === "POST" && path === "/settings/whatsapp/test") {
       return send(200, await whatsapp.testConnection())
+    }
+    if (path === "/settings/whatsapp/templates" && method === "GET" && whatsappTemplates) {
+      return send(200, { items: await whatsappTemplates.statuses() })
+    }
+    if (path === "/settings/whatsapp/templates/submit" && method === "POST" && whatsappTemplates) {
+      const { name } = whatsAppTemplateSubmitSchema.parse(await readJsonBody())
+      return send(200, await whatsappTemplates.submit(name))
     }
     if (method === "POST" && path === "/settings/whatsapp/webhook") {
       const { callbackUrl } = whatsAppWebhookActivationSchema.parse(await readJsonBody())

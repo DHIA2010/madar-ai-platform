@@ -2113,6 +2113,12 @@ export class PosInvoicesService {
     }
   }
 
+  // One invoice, or null -- for sending it elsewhere (e.g. as a PDF on WhatsApp).
+  async get(organizationId: string, id: string): Promise<InvoiceView | null> {
+    if (!UUID_PATTERN.test(id)) return null
+    return this.findById(organizationId, id)
+  }
+
   private async findById(organizationId: string, id: string): Promise<InvoiceView | null> {
     const result = await this.database.query<InvoiceRow>(
       `${INVOICE_SELECT} WHERE organization_id = $1 AND id = $2`,

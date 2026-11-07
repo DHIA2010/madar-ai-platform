@@ -120,6 +120,16 @@ export interface Invoice {
   zatcaLastErrorAr: string | null
 }
 
+// One WhatsApp send of an invoice and where it stands (sent -> delivered -> read, or failed).
+export interface InvoiceWhatsAppMessage {
+  id: string
+  toPhone: string
+  status: "sent" | "delivered" | "read" | "failed"
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface InvoiceSummary {
   totalCount: number
   completedCount: number
@@ -319,6 +329,22 @@ export const posInvoicesService = {
   },
 
   // Same, for a return (credit note).
+  // The sale's receipt to the customer on WhatsApp as a PDF (see the backend's
+  // whatsapp/invoice-sender.ts), and what was sent so far with its delivery status.
+  async sendInvoiceWhatsApp(invoiceId: string, phone: string): Promise<InvoiceWhatsAppMessage> {
+    return client.post<{ phone: string }, InvoiceWhatsAppMessage>(
+      [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "whatsapp"].join(PATH_SEPARATOR),
+      { phone }
+    )
+  },
+
+  async listInvoiceWhatsApp(invoiceId: string): Promise<InvoiceWhatsAppMessage[]> {
+    const response = await client.get<{ items: InvoiceWhatsAppMessage[] }>(
+      [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "whatsapp"].join(PATH_SEPARATOR)
+    )
+    return response.items
+  },
+
   async reportReturnToZatca(returnId: string): Promise<{ status: string }> {
     return client.post<undefined, { status: string }>(
       [INVOICES_ENDPOINT, "returns", encodeURIComponent(returnId), "zatca-report"].join(

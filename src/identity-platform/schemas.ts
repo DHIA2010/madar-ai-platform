@@ -1159,6 +1159,11 @@ export const customPaymentMethodSchema = paymentMethodUpdateSchema.extend({
 
 // ZATCA Phase 2 device onboarding -- see zatca-devices-service.ts. Step 1 (no live ZATCA
 // dependency): generates a real CSR from these fields.
+// Sending a POS invoice to the customer on WhatsApp (whatsapp/invoice-sender.ts checks the number).
+export const sendInvoiceWhatsAppSchema = z.object({
+  phone: z.string().trim().min(8).max(20),
+})
+
 export const createZatcaDeviceSchema = z.object({
   workspaceId: z.string().uuid().nullable().optional().default(null),
   commonName: z.string().min(1).max(120),

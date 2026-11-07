@@ -8394,8 +8394,7 @@
       "taxWithPercent": "Tax ({percent}%)",
       "total": "Total",
       "print": "Print",
-      "sendInvoice": "Send invoice",
-      "sendInvoiceDisabledTitle": "Sending an invoice requires linking a communication channel (email or SMS) to the invoice, which isn't available yet"
+      "sendInvoice": "Send on WhatsApp"
     },
     "returnDialog": {
       "title": "Register return",
@@ -8513,6 +8512,27 @@
         "inProgress": "Being reported right now.",
         "failed": "Couldn't report to ZATCA.",
         "zatcaSaid": "ZATCA said: {reason}"
+      }
+    },
+    "whatsapp": {
+      "title": "Send invoice {number} on WhatsApp",
+      "description": "The invoice is sent as a PDF to the customer's mobile from Madar's number, with your store's name in the message.",
+      "send": "Send",
+      "phoneRequired": "Enter the customer's mobile number.",
+      "history": "Earlier sends",
+      "statuses": {
+        "sent": "Sent",
+        "delivered": "Delivered",
+        "read": "Read",
+        "failed": "Not sent"
+      },
+      "toasts": {
+        "sent": "Invoice sent on WhatsApp.",
+        "invalidPhone": "Invalid mobile number, e.g. 05XXXXXXXX",
+        "templateNotReady": "Meta hasn't approved the invoice message template yet. Try again later.",
+        "dailyLimit": "You've reached today's limit of WhatsApp invoices.",
+        "notConfigured": "WhatsApp isn't set up in Madar yet.",
+        "failed": "Couldn't send the invoice on WhatsApp."
       }
     }
   },

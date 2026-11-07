@@ -47,6 +47,7 @@ import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import { ThermalInvoiceReceipt } from "@/app/(layout-pages)/pos/ThermalInvoiceReceipt"
 import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
+import { WhatsAppSendDialog } from "@/app/(layout-pages)/invoices/whatsapp-send-dialog"
 import {
   ZatcaDetailRows,
   ZatcaReportButton,
@@ -977,6 +978,7 @@ function InvoiceDetailPanel({
   const t = useTranslations("invoices")
   const tCashierCommon = useTranslations("pos.cashier.common")
   const locale = useLocale() as Locale
+  const [whatsAppOpen, setWhatsAppOpen] = useState(false)
   const meta = STATUS_META[invoice.status]
   // Derived from this invoice's own stored numbers, not the organization's CURRENT default rate
   // -- a real sale keeps the rate it was actually charged at forever, even after the org's
@@ -1087,14 +1089,14 @@ function InvoiceDetailPanel({
           {t("detail.print")}
         </Button>
         <Button
-          disabled
-          title={t("detail.sendInvoiceDisabledTitle")}
-          className="h-10 flex-1 cursor-not-allowed gap-2 rounded-[10px] bg-[#eff6ff] text-[12.5px] font-semibold text-[#2563eb] opacity-70"
+          className="h-10 flex-1 gap-2 rounded-[10px] bg-[#eff6ff] text-[12.5px] font-semibold text-[#2563eb] hover:bg-[#dbeafe]"
+          onClick={() => setWhatsAppOpen(true)}
         >
           <Send className="size-4" />
           {t("detail.sendInvoice")}
         </Button>
       </div>
+      <WhatsAppSendDialog invoice={invoice} open={whatsAppOpen} onOpenChange={setWhatsAppOpen} />
     </section>
   )
 }

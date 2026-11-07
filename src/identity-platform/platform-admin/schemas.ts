@@ -103,6 +103,13 @@ export const whatsAppPlatformConfigPatchSchema = z
   })
   .partial()
 
+export const whatsAppTemplateSubmitSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9_]{1,512}$/),
+})
+
 export const whatsAppWebhookActivationSchema = z.object({
   callbackUrl: z.string().trim().url().startsWith("https://"),
 })

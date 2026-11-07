@@ -442,3 +442,13 @@ export interface AdminWhatsAppCheck {
   ok: boolean
   detail: string
 }
+
+// A WhatsApp message template Madar sends with, and where Meta's review of it stands.
+export interface AdminWhatsAppTemplate {
+  name: string
+  language: string
+  category: string
+  // APPROVED, PENDING, REJECTED, PAUSED, DISABLED -- or MISSING when never submitted.
+  status: string
+  rejectedReason: string | null
+}

@@ -34,12 +34,12 @@ export async function graphRequest<T>(
   method: "GET" | "POST" | "DELETE",
   path: string,
   auth: GraphAuth,
-  params: Record<string, string> = {}
+  params: Record<string, unknown> = {}
 ): Promise<T> {
   const url = new URL(`${graphBaseUrl(auth.version)}${path}`)
   const init: RequestInit = { method, headers: { Authorization: `Bearer ${auth.token}` } }
   if (method === "GET" || method === "DELETE") {
-    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value))
   } else {
     init.headers = { ...init.headers, "Content-Type": "application/json" }
     init.body = JSON.stringify(params)

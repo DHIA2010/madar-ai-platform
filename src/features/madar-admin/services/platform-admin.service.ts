@@ -31,6 +31,7 @@ import type {
   AdminWhatsAppCheck,
   AdminWhatsAppConfig,
   AdminWhatsAppConfigPatch,
+  AdminWhatsAppTemplate,
   BillingInterval,
   GrantSubscriptionInput,
   PackageInput,
@@ -175,6 +176,14 @@ export const platformAdminService = {
 
   testWhatsAppConnection(): Promise<{ checks: AdminWhatsAppCheck[] }> {
     return client.post(`${ENDPOINT}/settings/whatsapp/test`, {})
+  },
+
+  listWhatsAppTemplates(): Promise<{ items: AdminWhatsAppTemplate[] }> {
+    return client.get(`${ENDPOINT}/settings/whatsapp/templates`)
+  },
+
+  submitWhatsAppTemplate(name: string): Promise<AdminWhatsAppTemplate> {
+    return client.post(`${ENDPOINT}/settings/whatsapp/templates/submit`, { name })
   },
 
   activateWhatsAppWebhook(

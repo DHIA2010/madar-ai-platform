@@ -83,6 +83,13 @@ interface ConfigRow {
   [key: string]: unknown
 }
 
+export interface WhatsAppSendingContext {
+  auth: GraphAuth
+  phoneNumberId: string
+  wabaId: string
+  appId: string
+}
+
 // What Madar actually uses: AWS's values over Madar Admin's.
 interface EffectiveConfig {
   appId: string
@@ -248,6 +255,20 @@ export class WhatsAppPlatformService {
       ]
     )
     return this.get()
+  }
+
+  // What sending a message needs: the token, Madar's number and account, the app.
+  async sendingContext(): Promise<WhatsAppSendingContext> {
+    const config = await this.effective(await this.row())
+    if (!config.token) throw notConfigured("the System User token")
+    if (!config.phoneNumberId) throw notConfigured("Madar's phone number ID")
+    if (!config.wabaId) throw notConfigured("Madar's WhatsApp Business Account ID")
+    return {
+      auth: { token: config.token, version: config.apiVersion },
+      phoneNumberId: config.phoneNumberId,
+      wabaId: config.wabaId,
+      appId: config.appId,
+    }
   }
 
   // The app secret in use -- for verifying webhook signatures. Null when not set.
