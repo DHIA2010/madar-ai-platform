@@ -38,7 +38,16 @@ const invoice = {
   customerName: "عبدالله",
   customerPhone: "0501234567",
   customerVatNumber: null,
-  items: [{ productName: "قهوة", quantity: 2, unitPrice: 25, lineTotal: 50 }],
+  items: [
+    {
+      productName: "قهوة",
+      quantity: 2,
+      unitPrice: 25,
+      lineTotal: 57.5,
+      netAmount: 50,
+      taxAmount: 7.5,
+    },
+  ],
   subtotalAmount: 50,
   discountAmount: 0,
   taxAmount: 7.5,

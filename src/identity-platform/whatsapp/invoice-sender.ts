@@ -5,6 +5,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { renderInvoicePdf } from "../pdf/invoice-pdf"
 import type { PosInvoicesService } from "../pos/invoices-service"
 import type { PosPaymentMethodsService } from "../pos/payment-methods-service"
+import type { PosSettingsService } from "../pos/pos-settings-service"
 import { sendTemplateMessage, uploadMedia } from "./messaging"
 import type { WhatsAppPlatformService } from "./platform-config"
 import { POS_INVOICE_TEMPLATE, type WhatsAppTemplatesService } from "./templates"
@@ -56,8 +57,36 @@ export class WhatsAppInvoiceSender {
     private readonly platform: WhatsAppPlatformService,
     private readonly templates: WhatsAppTemplatesService,
     private readonly invoices: PosInvoicesService,
-    private readonly paymentMethods: PosPaymentMethodsService
+    private readonly paymentMethods: PosPaymentMethodsService,
+    // Optional: the receipt title/description printed on the receipt (POS settings).
+    private readonly posSettings: PosSettingsService | null = null
   ) {}
+
+  // The store's current logo, as on the printed receipt -- PNG or JPEG only (what a PDF embeds);
+  // anything else, or a slow or failed download, just leaves the logo out.
+  private async logo(
+    organizationId: string
+  ): Promise<{ bytes: Buffer; format: "PNG" | "JPEG" } | null> {
+    const result = await this.database.query<{ logo_url: string | null }>(
+      "SELECT logo_url FROM organizations WHERE id = $1",
+      [organizationId]
+    )
+    const url = result.rows[0]?.logo_url
+    if (!url || !/^https:\/\//.test(url)) return null
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+      if (!response.ok) return null
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (bytes.length > 5_000_000) return null
+      if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+        return { bytes, format: "PNG" }
+      }
+      if (bytes[0] === 0xff && bytes[1] === 0xd8) return { bytes, format: "JPEG" }
+      return null
+    } catch {
+      return null
+    }
+  }
 
   async listSends(organizationId: string, invoiceId: string): Promise<WhatsAppMessageView[]> {
     const result = await this.database.query<{
@@ -123,7 +152,14 @@ export class WhatsAppInvoiceSender {
     const methods = await this.paymentMethods.list(input.organizationId, invoice.workspaceId)
     const methodName = new Map(methods.map((method) => [method.code, method.name]))
     const storeName = invoice.sellerName?.trim() || "متجرنا"
+    const settings = this.posSettings
+      ? await this.posSettings.get(input.organizationId, invoice.workspaceId).catch(() => null)
+      : null
     const pdf = renderInvoicePdf({
+      logo: await this.logo(input.organizationId),
+      receiptTitleLines: settings?.showReceiptTitle ? settings.receiptTitleLines : null,
+      receiptDescriptionLines: settings?.showReceiptTitle ? settings.receiptDescriptionLines : null,
+      notesLines: invoice.notesLines,
       invoiceNumber: invoice.invoiceNumber,
       orderNumber: invoice.orderNumber,
       createdAt: invoice.createdAt,
@@ -136,8 +172,8 @@ export class WhatsAppInvoiceSender {
       items: invoice.items.map((item) => ({
         productName: item.productName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        lineTotal: item.lineTotal,
+        netAmount: item.netAmount,
+        taxAmount: item.taxAmount,
       })),
       subtotalAmount: invoice.subtotalAmount,
       discountAmount: invoice.discountAmount,

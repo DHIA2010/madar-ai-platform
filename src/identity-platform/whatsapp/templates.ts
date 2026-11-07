@@ -42,7 +42,7 @@ function sampleDocument(template: TemplateDefinition) {
       customerName: "عبدالله",
       customerPhone: null,
       customerVatNumber: null,
-      items: [{ productName: "قهوة عربية", quantity: 2, unitPrice: 25, lineTotal: 50 }],
+      items: [{ productName: "قهوة عربية", quantity: 2, netAmount: 50, taxAmount: 7.5 }],
       subtotalAmount: 50,
       discountAmount: 0,
       taxAmount: 7.5,

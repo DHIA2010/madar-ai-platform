@@ -972,7 +972,8 @@ export function createIdentityApiServer(
           whatsAppPlatformService,
           whatsAppTemplatesService,
           posInvoicesService,
-          posPaymentMethodsService
+          posPaymentMethodsService,
+          posSettingsService
         )
       : null
   const posShiftsService =
