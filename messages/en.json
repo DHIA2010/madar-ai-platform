@@ -2851,7 +2851,9 @@
       "products": {
         "loading": "Loading products...",
         "noMatch": "No matching products.",
-        "skuLabel": "SKU: {sku}"
+        "skuLabel": "SKU: {sku}",
+        "promoPercent": "{value}% off",
+        "promoAmount": "{value} off"
       },
       "lineActions": {
         "moreAriaLabel": "More options",

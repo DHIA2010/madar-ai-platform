@@ -2851,7 +2851,9 @@
       "products": {
         "loading": "جارٍ تحميل المنتجات...",
         "noMatch": "لا توجد منتجات مطابقة.",
-        "skuLabel": "SKU: {sku}"
+        "skuLabel": "SKU: {sku}",
+        "promoPercent": "خصم {value}%",
+        "promoAmount": "خصم {value}"
       },
       "lineActions": {
         "moreAriaLabel": "خيارات إضافية",

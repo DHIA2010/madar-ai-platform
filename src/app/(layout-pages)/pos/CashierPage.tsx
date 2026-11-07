@@ -543,7 +543,7 @@ export default function CashierPage() {
   // still resolves to a real active rate, otherwise the organization's default -- identical
   // precedence to invoices-service.ts's create().
   const lineTaxRate = useCallback(
-    (line: CartLine) => {
+    (line: Pick<CartLine, "taxRateId">) => {
       if (!autoApplyTax) return 0
       if (line.taxRateId) {
         const overridden = ratePercentById.get(line.taxRateId)
@@ -857,6 +857,32 @@ export default function CashierPage() {
     },
     [promotions, productCategoryById, lineTaxRate, promotionClock, currentWorkspace?.id]
   )
+  // The promotion a product card shows (one unit at its listed price). A variable product's own
+  // price may be 0 -- its variants carry the prices -- so it's matched at a nominal price just to
+  // know a promotion covers it; its card then shows only the badge, not a crossed-out price.
+  const productPromotion = useCallback(
+    (product: ProductRecord): AppliedPromotion | null => {
+      if (promotions.length === 0) return null
+      const isVariable = product.productType === "variable"
+      // Nothing to take off a free (0-priced) simple product.
+      if (!isVariable && product.sellingPrice <= 0) return null
+      return bestPromotionFor(
+        promotions,
+        {
+          productId: product.id,
+          category: product.category || null,
+          unitPrice: isVariable && product.sellingPrice <= 0 ? 100 : product.sellingPrice,
+          quantity: 1,
+          priceIncludesTax: product.priceIncludesTax,
+          taxRate: lineTaxRate(product),
+        },
+        promotionClock,
+        currentWorkspace?.id ?? null
+      )
+    },
+    [promotions, lineTaxRate, promotionClock, currentWorkspace?.id]
+  )
+
   // The line's whole discount -- the cashier's own plus the promotion's -- clamped to the line's
   // net, exactly as invoices-service.ts's create() does.
   const lineTotalDiscount = useCallback(
@@ -2791,62 +2817,117 @@ export default function CashierPage() {
                     : "grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
                 )}
               >
-                {filteredProducts.map((product) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() =>
-                      product.productType === "variable"
-                        ? void openVariantPicker(product)
-                        : addToCart(product)
-                    }
-                    className={cn(
-                      "flex flex-col items-start rounded-2xl border border-[#e8edf3] bg-white text-right transition-colors hover:border-[#c7d9ff]",
-                      posSettings.useCompactMode ? "gap-1 p-1.5" : "gap-2 p-3"
-                    )}
-                  >
-                    <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-[10px] bg-[#f4f7fc]">
-                      {product.image && posSettings.showProductImages ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <Store className="size-6 text-[#c7d3e3]" />
-                      )}
-                    </div>
-                    <p
+                {filteredProducts.map((product) => {
+                  const promotion = productPromotion(product)
+                  const showsPromotedPrice =
+                    !!promotion && product.productType !== "variable" && product.sellingPrice > 0
+                  // The discount in the card's own (shown) price terms.
+                  const shownDiscount = promotion
+                    ? promotion.unitDiscount *
+                      (product.priceIncludesTax ? 1 + lineTaxRate(product) : 1)
+                    : 0
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() =>
+                        product.productType === "variable"
+                          ? void openVariantPicker(product)
+                          : addToCart(product)
+                      }
                       className={cn(
-                        "line-clamp-2 font-semibold leading-tight",
-                        posSettings.useCompactMode ? "text-[11px]" : "text-[12px]",
-                        HEADING
+                        "flex flex-col items-start rounded-2xl border bg-white text-right transition-colors",
+                        promotion
+                          ? "border-[#fed7aa] hover:border-[#fb923c]"
+                          : "border-[#e8edf3] hover:border-[#c7d9ff]",
+                        posSettings.useCompactMode ? "gap-1 p-1.5" : "gap-2 p-3"
                       )}
                     >
-                      {product.name}
-                    </p>
-                    {posSettings.useCompactMode ? null : (
-                      <p className={cn("text-[10.5px]", MUTED)}>SKU: {product.sku || "—"}</p>
-                    )}
-                    <div className="flex w-full items-center justify-between">
-                      <span
+                      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-[10px] bg-[#f4f7fc]">
+                        {promotion ? (
+                          <span
+                            title={promotion.promotion.name}
+                            className={cn(
+                              "absolute start-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full bg-[#ea580c] font-bold whitespace-nowrap text-white shadow-[0_2px_6px_rgba(234,88,12,0.35)]",
+                              posSettings.useCompactMode
+                                ? "px-1.5 py-0.5 text-[9.5px]"
+                                : "px-2 py-1 text-[10.5px]"
+                            )}
+                          >
+                            <BadgePercent
+                              className={posSettings.useCompactMode ? "size-3" : "size-3.5"}
+                            />
+                            {promotion.promotion.discountType === "percent"
+                              ? t("products.promoPercent", {
+                                  value: promotion.promotion.discountValue,
+                                })
+                              : t("products.promoAmount", {
+                                  value: formatAmount(shownDiscount, locale),
+                                })}
+                          </span>
+                        ) : null}
+                        {product.image && posSettings.showProductImages ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <Store className="size-6 text-[#c7d3e3]" />
+                        )}
+                      </div>
+                      <p
                         className={cn(
-                          "font-extrabold",
-                          posSettings.useCompactMode ? "text-[11.5px]" : "text-[13px]",
+                          "line-clamp-2 font-semibold leading-tight",
+                          posSettings.useCompactMode ? "text-[11px]" : "text-[12px]",
                           HEADING
                         )}
                       >
-                        {formatAmount(product.sellingPrice, locale)}
-                      </span>
+                        {product.name}
+                      </p>
                       {posSettings.useCompactMode ? null : (
-                        <span className="flex size-7 items-center justify-center rounded-full bg-[#2563eb] text-white">
-                          <Plus className="size-4" />
-                        </span>
+                        <p className={cn("text-[10.5px]", MUTED)}>SKU: {product.sku || "—"}</p>
                       )}
-                    </div>
-                  </button>
-                ))}
+                      <div className="flex w-full items-center justify-between">
+                        <span
+                          className={cn(
+                            "font-extrabold",
+                            posSettings.useCompactMode ? "text-[11.5px]" : "text-[13px]",
+                            HEADING
+                          )}
+                        >
+                          {showsPromotedPrice ? (
+                            <span className="flex flex-wrap items-baseline gap-x-1.5">
+                              <span className="text-[#ea580c]">
+                                {formatAmount(
+                                  Math.max(0, product.sellingPrice - shownDiscount),
+                                  locale
+                                )}
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-semibold line-through",
+                                  posSettings.useCompactMode ? "text-[9.5px]" : "text-[10.5px]",
+                                  MUTED
+                                )}
+                              >
+                                {formatAmount(product.sellingPrice, locale)}
+                              </span>
+                            </span>
+                          ) : (
+                            formatAmount(product.sellingPrice, locale)
+                          )}
+                        </span>
+                        {posSettings.useCompactMode ? null : (
+                          <span className="flex size-7 items-center justify-center rounded-full bg-[#2563eb] text-white">
+                            <Plus className="size-4" />
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
