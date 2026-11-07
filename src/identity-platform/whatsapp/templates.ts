@@ -20,7 +20,9 @@ export const POS_INVOICE_TEMPLATE: TemplateDefinition = {
   language: "ar",
   category: "UTILITY",
   documentHeader: true,
-  body: "مرحباً {{1}}،\nشكراً لتسوقك من {{2}}. مرفقة فاتورتك رقم {{3}} بإجمالي {{4}}.",
+  // Meta refuses a template that starts or ends with a variable (a trailing "." doesn't count),
+  // hence the closing line.
+  body: "مرحباً {{1}}،\nشكراً لتسوقك من {{2}}. مرفقة فاتورتك رقم {{3}} بإجمالي {{4}}.\nنسعد بخدمتك دائماً.",
   bodyExamples: ["عبدالله", "متجر الريم", "INV-000068", "57.50 ر.س"],
   footer: "أُرسلت عبر مدار",
 }
