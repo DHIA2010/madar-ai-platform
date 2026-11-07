@@ -47,6 +47,7 @@ import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import { ThermalInvoiceReceipt } from "@/app/(layout-pages)/pos/ThermalInvoiceReceipt"
 import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
+import { ReturnDialog, useInvoiceReturn } from "@/app/(layout-pages)/invoices/invoice-return-dialog"
 import { WhatsAppSendDialog } from "@/app/(layout-pages)/invoices/whatsapp-send-dialog"
 import {
   ZatcaDetailRows,
@@ -102,7 +103,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 
 const PANEL =
   "rounded-2xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
@@ -339,128 +339,18 @@ export default function InvoicesPage() {
     )
   }
 
-  // A real, itemized return (إشعار دائن) -- see PosInvoicesService.createReturn(). Replaces what
-  // used to be a single "mark the whole invoice returned" click: the dialog lets the cashier name
-  // exactly which lines, and how many units of each, are actually being returned, defaulting
-  // every line's quantity to nothing so an accidental full return can never happen by mistake.
-  const [returnTarget, setReturnTarget] = useState<Invoice | null>(null)
-  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({})
-  const [returnNotes, setReturnNotes] = useState("")
-  // One entry per method the refund is actually being given back through, keyed by code -- a
-  // refund can now be split across more than one, the same way a sale's own checkout can (see
-  // CashierPage's own paymentAmounts). Only a credit/prepaid-kind method's own share ever credits
-  // a linked customer's real account balance; cash/card/transfer/bnpl are assumed already handled
-  // outside the system.
-  const [returnPaymentAmounts, setReturnPaymentAmounts] = useState<Record<string, string>>({})
-  const [submittingReturn, setSubmittingReturn] = useState(false)
-  // The just-created credit note, printed once immediately after submitting a return -- same
-  // "straight to print, no confirmation screen" pattern CashierPage's own checkout uses. Cleared
-  // right after that one print so the shared print target (see the bottom of this file) reverts
-  // to printing whichever invoice is selected, same as before.
+  // A real, itemized return (إشعار دائن) -- see invoice-return-dialog.tsx, shared with the cashier.
+  // The just-created credit note is printed once right after, then cleared so the shared print
+  // target (bottom of this file) reverts to the selected invoice.
   const [lastReturn, setLastReturn] = useState<InvoiceReturn | null>(null)
   const [lastReturnQrDataUrl, setLastReturnQrDataUrl] = useState<string | null>(null)
-
-  // A live estimate of what this return will actually total, from the same per-unit net/tax rate
-  // createReturn() itself prorates from (item.netAmount + item.taxAmount, divided by the line's
-  // own full quantity) -- close enough to size the payment tiles below by; the backend re-derives
-  // the real figure from line_net_amount and is what actually gets charged.
-  const returnPreviewTotal = useMemo(() => {
-    if (!returnTarget) return 0
-    const raw = returnTarget.items.reduce((sum, item) => {
-      const quantity = Math.trunc(Number(returnQuantities[item.id]) || 0)
-      if (quantity <= 0 || item.quantity <= 0) return sum
-      const perUnit = (item.netAmount + item.taxAmount) / item.quantity
-      return sum + perUnit * quantity
-    }, 0)
-    return Math.round(raw * 100) / 100
-  }, [returnTarget, returnQuantities])
-
-  const returnPaymentEntries = useMemo(
-    () =>
-      Object.entries(returnPaymentAmounts)
-        .map(([code, value]) => ({ code, amount: Math.round((Number(value) || 0) * 100) / 100 }))
-        .filter((entry) => entry.amount > 0),
-    [returnPaymentAmounts]
-  )
-  const returnPaymentTotal = useMemo(
-    () =>
-      Math.round(returnPaymentEntries.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100,
-    [returnPaymentEntries]
-  )
-
-  function openReturnDialog(invoice: Invoice) {
-    setReturnTarget(invoice)
-    // Default every line to its own full remaining quantity -- returning the whole invoice is
-    // then just "open and submit"; a partial return is still one edit away by typing over a
-    // line's own number.
-    const fullQuantities = Object.fromEntries(
-      invoice.items
-        .filter((item) => item.quantity - item.returnedQuantity > 0)
-        .map((item) => [item.id, String(item.quantity - item.returnedQuantity)])
-    )
-    setReturnQuantities(fullQuantities)
-    setReturnNotes("")
-    // Pre-selects the invoice's own original method for the full (currently full-remaining)
-    // total, so a straight full return is still just "open and submit" -- tapping a different
-    // tile, or editing quantities and re-tapping one, replaces this.
-    const enabledMethods = paymentMethods.filter((method) => method.enabled)
-    const sameAsOriginal = enabledMethods.find(
-      (method) => method.code === invoice.paymentMethodCode
-    )
-    const defaultCode = sameAsOriginal?.code ?? enabledMethods[0]?.code
-    const previewTotal = invoice.items.reduce((sum, item) => {
-      const quantity = Math.trunc(Number(fullQuantities[item.id]) || 0)
-      if (quantity <= 0 || item.quantity <= 0) return sum
-      return sum + ((item.netAmount + item.taxAmount) / item.quantity) * quantity
-    }, 0)
-    setReturnPaymentAmounts(
-      defaultCode ? { [defaultCode]: (Math.round(previewTotal * 100) / 100).toFixed(2) } : {}
-    )
-  }
-
-  const submitReturn = async () => {
-    if (!returnTarget) return
-    const items = returnTarget.items
-      .map((item) => ({
-        invoiceItemId: item.id,
-        quantity: Math.trunc(Number(returnQuantities[item.id]) || 0),
-      }))
-      .filter((entry) => entry.quantity > 0)
-    if (items.length === 0) {
-      toast.error(t("returnDialog.toasts.selectQuantity"))
-      return
-    }
-    if (returnPaymentEntries.length === 0) {
-      toast.error(t("returnDialog.toasts.selectPaymentMethod"))
-      return
-    }
-    if (Math.abs(returnPaymentTotal - returnPreviewTotal) > 0.01) {
-      toast.error(
-        t("returnDialog.toasts.amountMismatch", {
-          amount: formatAmount(returnPaymentTotal, locale),
-        })
-      )
-      return
-    }
-
-    setSubmittingReturn(true)
-    try {
-      const created = await posInvoicesService.createReturn(returnTarget.id, {
-        items,
-        payments: returnPaymentEntries.map((entry) => ({
-          paymentMethodCode: entry.code,
-          amount: entry.amount,
-        })),
-        notes: returnNotes.trim() || null,
-      })
-      toast.success(t("returnDialog.toasts.success", { number: created.returnNumber }))
+  const invoiceReturn = useInvoiceReturn({
+    paymentMethods,
+    onReturned: async (created) => {
       void load()
       void posInvoicesService.summary(backendFilter).then(setSummary)
       setSelectedInvoice(null)
-      setReturnTarget(null)
-
-      // Same QR-ready-before-print discipline CashierPage's own checkout uses -- generate the
-      // image up front so window.print() never fires onto a still-loading QR.
+      // QR ready before print -- window.print() must never fire onto a still-loading QR.
       const qrDataUrl = created.qrCode
         ? await QRCode.toDataURL(created.qrCode, { margin: 0, width: 180 }).catch(() => null)
         : null
@@ -470,12 +360,8 @@ export default function InvoicesPage() {
         printThermalReceipt("invoice-print-target")
         setLastReturn(null)
       }, 150)
-    } catch {
-      toast.error(t("returnDialog.toasts.failed"))
-    } finally {
-      setSubmittingReturn(false)
-    }
-  }
+    },
+  })
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
 
@@ -801,7 +687,9 @@ export default function InvoicesPage() {
                                     // refresh -- deferring by one tick lets the menu's own close
                                     // finish first. Same fix ProductsPage.tsx's own row actions
                                     // menu already uses for exactly this reason.
-                                    onSelect={() => setTimeout(() => openReturnDialog(invoice), 0)}
+                                    onSelect={() =>
+                                      setTimeout(() => invoiceReturn.open(invoice), 0)
+                                    }
                                   >
                                     {t("page.table.registerReturnAction")}
                                   </DropdownMenuItem>
@@ -895,20 +783,7 @@ export default function InvoicesPage() {
         }}
       />
 
-      <ReturnDialog
-        invoice={returnTarget}
-        quantities={returnQuantities}
-        onQuantitiesChange={setReturnQuantities}
-        notes={returnNotes}
-        onNotesChange={setReturnNotes}
-        paymentMethods={paymentMethods.filter((method) => method.enabled)}
-        paymentAmounts={returnPaymentAmounts}
-        onPaymentAmountsChange={setReturnPaymentAmounts}
-        previewTotal={returnPreviewTotal}
-        submitting={submittingReturn}
-        onSubmit={() => void submitReturn()}
-        onClose={() => setReturnTarget(null)}
-      />
+      <ReturnDialog {...invoiceReturn.dialogProps} />
 
       {/* "طباعة" in the detail panel below just calls window.print() -- what actually makes that
           print the real thermal receipt instead of this whole page (sidebar, filters, table and
@@ -920,7 +795,7 @@ export default function InvoicesPage() {
           selected, not just at print time, so ThermalInvoiceReceipt's own QR generation has
           already finished by the time anyone actually clicks طباعة.
           One shared target, not two -- lastReturn (set only for the one auto-print right after
-          submitReturn, then cleared) takes priority over selectedInvoice, so a just-created
+          a return is submitted, then cleared) takes priority over selectedInvoice, so a just-created
           credit note prints instead of whatever invoice happens to still be selected underneath
           it; the rest of the time this is simply the selected invoice's own receipt. */}
       {(lastReturn || selectedInvoice) &&
@@ -1098,224 +973,6 @@ function InvoiceDetailPanel({
       </div>
       <WhatsAppSendDialog invoice={invoice} open={whatsAppOpen} onOpenChange={setWhatsAppOpen} />
     </section>
-  )
-}
-
-// A per-line quantity picker, not a single "return everything" click -- see createReturn() on
-// the backend, which validates every requested quantity against what that specific line still
-// actually has left (quantity - returnedQuantity), across however many separate return events
-// have already touched it.
-// One refund method tile -- tapping the card makes it the sole method for the whole return total
-// (clearing any other tile), typing directly into the field builds a deliberate split across more
-// than one. Same interaction CashierPage's own checkout payment tiles already use.
-function ReturnPaymentTile({
-  name,
-  amount,
-  selected,
-  onAmountChange,
-  onSelectFull,
-}: {
-  name: string
-  amount: string
-  selected: boolean
-  onAmountChange: (value: string) => void
-  onSelectFull: () => void
-}) {
-  const t = useTranslations("invoices")
-  return (
-    <div
-      onClick={onSelectFull}
-      className={cn(
-        "flex min-w-0 cursor-pointer flex-col gap-2 rounded-[12px] border bg-white p-3 transition-colors",
-        selected ? "border-black" : "border-[#e5e9f0]"
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "flex size-4 shrink-0 items-center justify-center rounded-full border-2",
-            selected ? "border-black bg-black" : "border-[#c7d2e0] bg-white"
-          )}
-        >
-          {selected ? <span className="size-1.5 rounded-full bg-white" /> : null}
-        </span>
-        <span className={cn("truncate text-[13px] font-bold", HEADING)}>{name}</span>
-      </div>
-      <div dir="ltr" className="relative">
-        <Input
-          type="number"
-          min={0}
-          step="0.01"
-          value={amount}
-          onChange={(event) => onAmountChange(event.target.value)}
-          onFocus={(event) => event.target.select()}
-          onClick={(event) => event.stopPropagation()}
-          placeholder="0.00"
-          className="h-10 rounded-[8px] border-[#e8edf3] pe-9 text-left text-[13px]"
-        />
-        <span className="pointer-events-none absolute inset-y-0 end-3 my-auto h-fit text-[11px] font-semibold text-[#8098b4]">
-          {t("returnDialog.currencyUnit")}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-function ReturnDialog({
-  invoice,
-  quantities,
-  onQuantitiesChange,
-  notes,
-  onNotesChange,
-  paymentMethods,
-  paymentAmounts,
-  onPaymentAmountsChange,
-  previewTotal,
-  submitting,
-  onSubmit,
-  onClose,
-}: {
-  invoice: Invoice | null
-  quantities: Record<string, string>
-  onQuantitiesChange: (next: Record<string, string>) => void
-  notes: string
-  onNotesChange: (next: string) => void
-  paymentMethods: Array<{ code: string; name: string }>
-  paymentAmounts: Record<string, string>
-  onPaymentAmountsChange: (next: Record<string, string>) => void
-  previewTotal: number
-  submitting: boolean
-  onSubmit: () => void
-  onClose: () => void
-}) {
-  const t = useTranslations("invoices")
-  const tCommon = useTranslations("common")
-  const locale = useLocale() as Locale
-  const returnableItems = (invoice?.items ?? []).filter(
-    (item) => item.quantity - item.returnedQuantity > 0
-  )
-
-  return (
-    <Dialog open={invoice !== null} onOpenChange={(open) => !open && !submitting && onClose()}>
-      <DialogContent
-        className={cn(
-          "flex max-h-[85vh] flex-col sm:max-w-[50rem]",
-          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
-        )}
-      >
-        <DialogHeader className="text-right">
-          <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-            {t("returnDialog.title")}
-          </DialogTitle>
-          <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-            {invoice ? t("returnDialog.description", { number: invoice.invoiceNumber }) : ""}
-          </DialogDescription>
-        </DialogHeader>
-
-        {returnableItems.length === 0 ? (
-          <p className={cn("py-6 text-center text-[12.5px]", MUTED)}>
-            {t("returnDialog.noItemsLeft")}
-          </p>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pe-1">
-            {returnableItems.map((item) => {
-              const remaining = item.quantity - item.returnedQuantity
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-3 rounded-[10px] border border-[#e8edf3] p-3"
-                >
-                  <div className="min-w-0">
-                    <p className={cn("truncate text-[12.5px] font-semibold", HEADING)}>
-                      {item.productName}
-                    </p>
-                    <p className="text-[11px] text-[#e0484d]">
-                      {t("returnDialog.remainingLabel", { remaining, quantity: item.quantity })}
-                    </p>
-                  </div>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={remaining}
-                    step="1"
-                    value={quantities[item.id] ?? ""}
-                    onChange={(event) =>
-                      onQuantitiesChange({ ...quantities, [item.id]: event.target.value })
-                    }
-                    placeholder="0"
-                    className="h-10 w-20 rounded-[8px] border-[#e8edf3] text-center text-[13px]"
-                  />
-                </div>
-              )
-            })}
-
-            <div className="flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5">
-              <span className={cn("text-[13px] font-extrabold", HEADING)}>
-                {t("returnDialog.total")}
-              </span>
-              <span className={cn("text-[14px] font-extrabold", HEADING)}>
-                {formatAmount(previewTotal, locale)}
-              </span>
-            </div>
-
-            <div>
-              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                {t("returnDialog.refundMethodLabel")} <span className="text-[#e0484d]">*</span>
-              </Label>
-              <div className="grid grid-cols-3 gap-2.5">
-                {paymentMethods.map((method) => (
-                  <ReturnPaymentTile
-                    key={method.code}
-                    name={method.name}
-                    amount={paymentAmounts[method.code] ?? ""}
-                    selected={(Number(paymentAmounts[method.code]) || 0) > 0}
-                    onAmountChange={(value) =>
-                      onPaymentAmountsChange({ ...paymentAmounts, [method.code]: value })
-                    }
-                    onSelectFull={() =>
-                      onPaymentAmountsChange({ [method.code]: previewTotal.toFixed(2) })
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                {t("returnDialog.notesLabel")}
-              </Label>
-              <Textarea
-                value={notes}
-                onChange={(event) => onNotesChange(event.target.value)}
-                rows={2}
-                placeholder={t("returnDialog.notesPlaceholder")}
-                className="resize-none rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
-              />
-            </div>
-          </div>
-        )}
-
-        <DialogFooter className="gap-2">
-          {returnableItems.length > 0 ? (
-            <Button
-              className="h-11 gap-2 rounded-[10px] bg-black px-6 text-[13px] font-semibold text-white hover:bg-[#1a1a1a]"
-              disabled={submitting}
-              onClick={onSubmit}
-            >
-              {submitting ? t("returnDialog.submitting") : t("returnDialog.submit")}
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
-            disabled={submitting}
-            onClick={onClose}
-          >
-            {tCommon("cancel")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 

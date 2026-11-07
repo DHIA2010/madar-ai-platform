@@ -70,6 +70,7 @@ import {
   VAT_RATE,
   type Invoice,
   type InvoicePayment,
+  type InvoiceReturn,
 } from "@/features/pos/services/pos-invoices.service"
 import { taxRatesService, type TaxRate } from "@/features/pos/services/tax-rates.service"
 import { posShiftsService, type Shift } from "@/features/pos/services/pos-shifts.service"
@@ -113,7 +114,9 @@ import { usePendingShiftOpen } from "@/features/pos/offline/use-pending-shift-op
 import { PendingSalesIndicator } from "@/features/pos/offline/PendingSalesIndicator"
 import { PosServiceWorkerRegistration } from "@/features/pos/offline/PosServiceWorkerRegistration"
 
+import { CreditNoteReceipt } from "./CreditNoteReceipt"
 import { ThermalInvoiceReceipt } from "./ThermalInvoiceReceipt"
+import { ReturnDialog, useInvoiceReturn } from "@/app/(layout-pages)/invoices/invoice-return-dialog"
 import { WhatsAppSendDialog } from "@/app/(layout-pages)/invoices/whatsapp-send-dialog"
 
 import {
@@ -2068,17 +2071,36 @@ export default function CashierPage() {
   }
 
   // --- Returns -------------------------------------------------------------------------------
-  // Reuses the real POST /v1/pos/invoices/:id/returns the Invoices page's own return dialog
-  // already calls -- one real return flow, just reachable from here too. This quick search-and-
-  // click action always returns every remaining unit of every line (the full-invoice case of that
-  // same itemized endpoint); a cashier who needs to return only SOME items uses the Invoices page
-  // itself, which offers per-line quantities.
+  // Search a sale, then the same itemized return dialog the invoices page uses
+  // (invoice-return-dialog.tsx): per-line quantities, refund method(s) and a note -- and the credit
+  // note printed right after, as from the invoices page.
 
   const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false)
   const [returnSearch, setReturnSearch] = useState("")
   const [returnCandidates, setReturnCandidates] = useState<Invoice[]>([])
   const [loadingReturnCandidates, setLoadingReturnCandidates] = useState(false)
-  const [returningId, setReturningId] = useState<string | null>(null)
+  // The credit note just created -- printed once, then cleared.
+  const [lastReturn, setLastReturn] = useState<InvoiceReturn | null>(null)
+  const [lastReturnQrDataUrl, setLastReturnQrDataUrl] = useState<string | null>(null)
+
+  // The refund methods (the enabled catalogue) -- loaded with the return search, kept apart from
+  // checkout's own list.
+  const [returnPaymentMethods, setReturnPaymentMethods] = useState<
+    Array<{ code: string; name: string }>
+  >([])
+  useEffect(() => {
+    if (!isReturnDialogOpen) return
+    void posPaymentMethodsService
+      .list()
+      .then((methods) =>
+        setReturnPaymentMethods(
+          methods
+            .filter((method) => method.enabled)
+            .map((method) => ({ code: method.code, name: method.name }))
+        )
+      )
+      .catch(() => setReturnPaymentMethods([]))
+  }, [isReturnDialogOpen])
 
   useEffect(() => {
     if (!isReturnDialogOpen) return
@@ -2090,28 +2112,28 @@ export default function CashierPage() {
       .finally(() => setLoadingReturnCandidates(false))
   }, [isReturnDialogOpen, returnSearch])
 
-  const submitReturn = async (invoice: Invoice) => {
-    setReturningId(invoice.id)
-    try {
-      await posInvoicesService.createReturn(invoice.id, {
-        items: invoice.items.map((item) => ({
-          invoiceItemId: item.id,
-          quantity: item.quantity - item.returnedQuantity,
-        })),
-        // This quick action has no dedicated method picker (unlike InvoicesPage's itemized
-        // return dialog) -- default to refunding through whatever the sale was originally paid
-        // with. Single line, so amount is inferred as the return's own full computed total.
-        payments: [{ paymentMethodCode: invoice.paymentMethodCode }],
-        notes: null,
-      })
-      toast.success(t("toasts.returnSuccess", { number: invoice.invoiceNumber }))
-      setReturnCandidates((current) => current.filter((item) => item.id !== invoice.id))
+  const invoiceReturn = useInvoiceReturn({
+    paymentMethods: returnPaymentMethods,
+    onReturned: async (created) => {
       loadTodaySummary()
-    } catch {
-      toast.error(t("toasts.returnFailed"))
-    } finally {
-      setReturningId(null)
-    }
+      const qrDataUrl = created.qrCode
+        ? await QRCode.toDataURL(created.qrCode, { margin: 0, width: 180 }).catch(() => null)
+        : null
+      setLastReturnQrDataUrl(qrDataUrl)
+      setLastReturn(created)
+      window.setTimeout(() => {
+        printThermalReceipt("zatca-print-invoice")
+        setLastReturn(null)
+        searchInputRef.current?.focus()
+      }, 150)
+    },
+  })
+
+  // Closes the search first -- two Radix dialogs open in the same tick leave pointer events
+  // locked (see the success dialog's own deferral above).
+  const startReturn = (invoice: Invoice) => {
+    setIsReturnDialogOpen(false)
+    window.setTimeout(() => invoiceReturn.open(invoice), 0)
   }
 
   // --- Held orders -----------------------------------------------------------------------------
@@ -4185,7 +4207,9 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Returns -- reuses the real invoice status change (PATCH /v1/pos/invoices/:id/status) */}
+      <ReturnDialog {...invoiceReturn.dialogProps} />
+
+      {/* Returns -- find the sale to return; the return itself is the shared ReturnDialog */}
       <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
         <DialogContent
           className={cn(
@@ -4239,13 +4263,10 @@ export default function CashierPage() {
                   </div>
                   <Button
                     variant="outline"
-                    disabled={returningId === invoice.id}
                     className="h-8 rounded-[8px] border-[#fecaca] px-3 text-[11.5px] font-semibold text-[#dc2626] hover:bg-[#fef2f2]"
-                    onClick={() => void submitReturn(invoice)}
+                    onClick={() => startReturn(invoice)}
                   >
-                    {returningId === invoice.id
-                      ? t("returnDialog.registering")
-                      : t("returnDialog.registerReturn")}
+                    {t("returnDialog.registerReturn")}
                   </Button>
                 </div>
               ))
@@ -4354,22 +4375,31 @@ export default function CashierPage() {
         />
       ) : null}
 
-      {successInvoice &&
+      {(lastReturn || successInvoice) &&
         typeof document !== "undefined" &&
         createPortal(
           <div id="zatca-print-invoice" className="hidden print:block">
-            <ThermalInvoiceReceipt
-              invoice={successInvoice}
-              paymentMethodNames={paymentMethodNameByCode}
-              qrDataUrl={successQrDataUrl}
-              sellerLogoUrl={currentOrganization?.logoUrl ?? null}
-              receiptTitleLines={
-                posSettings.showReceiptTitle ? posSettings.receiptTitleLines : null
-              }
-              receiptDescriptionLines={
-                posSettings.showReceiptTitle ? posSettings.receiptDescriptionLines : null
-              }
-            />
+            {lastReturn ? (
+              <CreditNoteReceipt
+                creditNote={lastReturn}
+                qrDataUrl={lastReturnQrDataUrl}
+                sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+                paymentMethodNames={paymentMethodNameByCode}
+              />
+            ) : successInvoice ? (
+              <ThermalInvoiceReceipt
+                invoice={successInvoice}
+                paymentMethodNames={paymentMethodNameByCode}
+                qrDataUrl={successQrDataUrl}
+                sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+                receiptTitleLines={
+                  posSettings.showReceiptTitle ? posSettings.receiptTitleLines : null
+                }
+                receiptDescriptionLines={
+                  posSettings.showReceiptTitle ? posSettings.receiptDescriptionLines : null
+                }
+              />
+            ) : null}
           </div>,
           document.body
         )}
