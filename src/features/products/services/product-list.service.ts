@@ -173,11 +173,24 @@ export interface ProductDetail extends CreateProductInput {
   updatedAt: string
 }
 
-// A CSV import of native products -- every value is a plain string (or null), exactly like a
-// spreadsheet cell. Only covers "raw"/"simple"/"weighted"/"service"/"digital": a bundle needs
-// component references to other products and a variable product needs a variant matrix, neither
-// of which fits one flat row, so ProductCatalogService.bulkImport() skips (and reports) either
-// with a reason rather than forcing them into a shape that would only confuse the sheet's author.
+// A spreadsheet import of native products -- every value is a plain string (or null), exactly like
+// a spreadsheet cell. products-workbook.ts folds the workbook's variants and bundle-components
+// sheets into each product's own entry, so every type arrives self-contained; the backend
+// (ProductCatalogService.bulkImport) does all coercion and validation.
+export interface BulkImportVariantRow {
+  options: Array<{ name: string; value: string }>
+  sku: string | null
+  price: string | null
+  stock: string | null
+}
+
+export interface BulkImportComponentRow {
+  component: string
+  quantity: string | null
+  unit: string | null
+  conversionFactor: string | null
+}
+
 export interface BulkImportProductRow {
   name: string
   sku: string | null
@@ -190,10 +203,17 @@ export interface BulkImportProductRow {
   minStock: string | null
   baseUnit: string | null
   description: string | null
+  ref: string | null
+  options: string | null
+  variants: BulkImportVariantRow[]
+  components: BulkImportComponentRow[]
+  sourceRow: number | null
 }
 
 export interface BulkImportProductResult {
   created: number
+  updated: number
+  unchanged: number
   skipped: Array<{ row: number; reason: string }>
 }
 
@@ -376,13 +396,23 @@ export const productListService = {
     )
   },
 
-  // Creates as many rows as are actually valid -- a bad row is skipped and reported back rather
-  // than failing the whole file. See catalog-service.ts's bulkImport.
+  // Creates (or, for a SKU that already exists, updates) as many rows as are actually valid -- a
+  // bad row is skipped and reported back rather than failing the whole file. See
+  // catalog-service.ts's bulkImport.
   async bulkImportProducts(rows: BulkImportProductRow[]): Promise<BulkImportProductResult> {
     return client.post<{ products: BulkImportProductRow[] }, BulkImportProductResult>(
       [PRODUCTS_ENDPOINT, "bulk-import"].join(PATH_SEPARATOR),
       { products: rows }
     )
+  },
+
+  // Every native product in full (variants, bundle components) -- what the Excel export writes,
+  // in the same layout the import reads back.
+  async getCatalogExport(): Promise<ProductDetail[]> {
+    const response = await client.get<{ products: ProductDetail[] }>(
+      [PRODUCTS_ENDPOINT, "catalog-export"].join(PATH_SEPARATOR)
+    )
+    return response.products
   },
 
   // Settings -> الضرائب -> "الأسعار تشمل الضريبة" applied to every existing priced product at

@@ -718,7 +718,7 @@ export const bulkUpdateProductStatusSchema = z.object({
   status: z.enum(PRODUCT_STATUSES),
 })
 
-// A bulk CSV import of native products -- every field is a plain string (or null), exactly like a
+// A bulk spreadsheet import of native products -- every field is a plain string (or null), exactly like a
 // spreadsheet cell, since ProductCatalogService.bulkImport() does the real type coercion and
 // per-row validation (the same rules createProductSchema/create() already enforce for one
 // product). name is deliberately not required at the schema level -- an invalid row is skipped
@@ -738,6 +738,35 @@ export const bulkImportProductsSchema = z.object({
         minStock: z.string().max(40).nullable().optional().default(null),
         baseUnit: z.string().max(60).nullable().optional().default(null),
         description: z.string().max(2000).nullable().optional().default(null),
+        ref: z.string().max(120).nullable().optional().default(null),
+        options: z.string().max(1000).nullable().optional().default(null),
+        variants: z
+          .array(
+            z.object({
+              options: z
+                .array(z.object({ name: z.string().max(100), value: z.string().max(100) }))
+                .max(5),
+              sku: z.string().max(120).nullable().optional().default(null),
+              price: z.string().max(40).nullable().optional().default(null),
+              stock: z.string().max(40).nullable().optional().default(null),
+            })
+          )
+          .max(200)
+          .optional()
+          .default([]),
+        components: z
+          .array(
+            z.object({
+              component: z.string().max(200),
+              quantity: z.string().max(40).nullable().optional().default(null),
+              unit: z.string().max(60).nullable().optional().default(null),
+              conversionFactor: z.string().max(40).nullable().optional().default(null),
+            })
+          )
+          .max(100)
+          .optional()
+          .default([]),
+        sourceRow: z.number().int().positive().nullable().optional().default(null),
       })
     )
     .min(1)

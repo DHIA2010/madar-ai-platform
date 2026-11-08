@@ -262,14 +262,29 @@ export interface ProductView {
   producibleQuantity: number | null
 }
 
-// A CSV import of native products -- every value arrives as a plain string (or null), the same
-// way a spreadsheet cell does, and ProductCatalogService.bulkImport() does all the type coercion
-// and per-row validation a single POST /v1/products call already does for one product. Only
-// covers the product types a flat spreadsheet row can actually describe (see
-// FLAT_IMPORTABLE_TYPES below) -- a bundle needs component references to other products and a
-// variable product needs a variant matrix, neither of which fits one row, so a row naming either
-// is skipped with a reason rather than forced into a shape that would only confuse whoever filled
-// out the sheet.
+// A spreadsheet import of native products -- every value arrives as a plain string (or null), the
+// same way a spreadsheet cell does, and ProductCatalogService.bulkImport() does all the type
+// coercion and per-row validation a single POST /v1/products call already does for one product.
+// The template is an Excel workbook: one row per product on the products sheet, plus a variants
+// sheet and a bundle-components sheet linked back to it by the product's code (ref). The client
+// folds those sheets into each product's own variants / components here, so every type --
+// variable and bundle included -- arrives as one self-contained entry.
+export interface BulkImportVariantRow {
+  options: Array<{ name: string; value: string }>
+  sku: string | null
+  price: string | null
+  stock: string | null
+}
+
+export interface BulkImportComponentRow {
+  // A product code from the same file, an existing product's SKU or exact name, a storefront
+  // reference ("salla:123"), or -- matching none of those -- a name the bundle keeps by hand.
+  component: string
+  quantity: string | null
+  unit: string | null
+  conversionFactor: string | null
+}
+
 export interface BulkImportProductRow {
   name: string
   sku: string | null
@@ -282,19 +297,26 @@ export interface BulkImportProductRow {
   minStock: string | null
   baseUnit: string | null
   description: string | null
+  // The code linking this row to its variants / components rows -- and what another bundle in
+  // the same file names it by.
+  ref?: string | null
+  // The quick-variants cell ("اللون: أحمر|أزرق ; المقاس: M|L"), used when the variants sheet has
+  // no rows for this product.
+  options?: string | null
+  variants?: BulkImportVariantRow[]
+  components?: BulkImportComponentRow[]
+  // The row number the merchant sees in their own sheet, so a skipped row is reported where they
+  // can find it. Falls back to the row's position in the request.
+  sourceRow?: number | null
 }
 
 export interface BulkImportProductResult {
   created: number
+  // Rows whose SKU (or, for a raw material or bundle, exact name) matched an existing product,
+  // which was updated in place instead of failing as a duplicate.
+  updated: number
+  // Matched rows that carried nothing new -- left untouched, so re-importing an exported file
+  // does not rebuild every product (and its variants) for no change.
+  unchanged: number
   skipped: Array<{ row: number; reason: string }>
 }
-
-// The only types a single flat CSV row can fully describe -- a bundle's components and a
-// variable product's option/variant matrix both need more structure than one row has room for.
-export const FLAT_IMPORTABLE_TYPES: ProductType[] = [
-  "raw",
-  "simple",
-  "weighted",
-  "service",
-  "digital",
-]

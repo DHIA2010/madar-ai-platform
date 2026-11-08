@@ -4,7 +4,17 @@ import type { NormalizedProduct, NormalizedProductStatus } from "./service"
 import type { TaxRatesService } from "../tax/tax-rates-service"
 import type { ProductCatalogRepository } from "./catalog-repository"
 import {
-  FLAT_IMPORTABLE_TYPES,
+  buildComponent,
+  buildQuickVariants,
+  buildVariantsFromRows,
+  generateImportSku,
+  MAX_QUICK_VARIANTS,
+  parseImportNumber,
+  parseQuickOptions,
+  recipeUnitOf,
+  type ResolvedComponentTarget,
+} from "./catalog-import"
+import {
   isProductUnit,
   PRODUCT_STATUSES,
   PRODUCT_TYPES,
@@ -17,6 +27,8 @@ import {
   type CreateProductInput,
   type ProductStatus,
   type ProductType,
+  type ProductVariantInput,
+  type ProductVariantOptionInput,
   type ProductView,
 } from "./catalog-types"
 
@@ -175,90 +187,281 @@ export class ProductCatalogService {
     return this.repository.create({ ...input, product: normalized })
   }
 
-  // A CSV import -- every row goes through the exact same create() above (numbering, validation,
-  // SKU-conflict check included), so a bulk-imported product can never be valid by different
-  // rules than one typed into the Add Product form. Only bad rows are skipped and reported back;
-  // one row's problem never fails the rest of the file. See catalog-types.ts's
-  // BulkImportProductRow for why bundle/variable rows can't be represented here at all.
+  // A spreadsheet import -- every row goes through the exact same create()/update() above
+  // (numbering, validation, SKU-conflict check included), so an imported product can never be
+  // valid by different rules than one typed into the Add Product form. A row whose SKU already
+  // exists updates that product instead of failing as a duplicate; one without a SKU matches an
+  // existing product of the same type by its exact name, and is otherwise created with a
+  // generated SKU. Only bad rows are skipped and reported back; one row's problem never fails the
+  // rest of the file. Bundles are imported last, so a component naming a product from the same
+  // file finds it already saved.
   async bulkImport(input: {
     organizationId: string
     workspaceId: string | null
     createdBy: string | null
     rows: BulkImportProductRow[]
   }): Promise<BulkImportProductResult> {
-    let created = 0
-    const skipped: BulkImportProductResult["skipped"] = []
+    const result: BulkImportProductResult = { created: 0, updated: 0, unchanged: 0, skipped: [] }
+    const prepared: PreparedImportRow[] = []
 
-    for (let index = 0; index < input.rows.length; index += 1) {
-      const row = input.rows[index]
+    input.rows.forEach((row, index) => {
+      const rowNumber = row.sourceRow ?? index + 1
       const name = row.name.trim()
       if (!name) {
-        skipped.push({ row: index + 1, reason: "الاسم مطلوب" })
-        continue
+        result.skipped.push({ row: rowNumber, reason: "الاسم مطلوب" })
+        return
       }
 
       const rawType = (row.productType ?? "").trim().toLowerCase()
       const productType = (rawType || "simple") as ProductType
       if (!(PRODUCT_TYPES as readonly string[]).includes(productType)) {
-        skipped.push({ row: index + 1, reason: `نوع المنتج "${rawType}" غير معروف` })
-        continue
-      }
-      if (!FLAT_IMPORTABLE_TYPES.includes(productType)) {
-        skipped.push({
-          row: index + 1,
-          reason:
-            "منتجات الحزم والمنتجات متعددة الخيارات لا يمكن استيرادها من ملف -- أضفها يدوياً من صفحة إضافة منتج",
-        })
-        continue
+        result.skipped.push({ row: rowNumber, reason: `نوع المنتج "${rawType}" غير معروف` })
+        return
       }
 
       const rawStatus = (row.status ?? "").trim().toLowerCase()
-      const status = (rawStatus || "draft") as ProductStatus
-      if (!(PRODUCT_STATUSES as readonly string[]).includes(status)) {
-        skipped.push({ row: index + 1, reason: `حالة غير معروفة "${rawStatus}"` })
-        continue
+      if (rawStatus && !(PRODUCT_STATUSES as readonly string[]).includes(rawStatus)) {
+        result.skipped.push({ row: rowNumber, reason: `حالة غير معروفة "${rawStatus}"` })
+        return
       }
 
+      prepared.push({
+        row,
+        rowNumber,
+        name,
+        productType,
+        status: rawStatus ? (rawStatus as ProductStatus) : null,
+      })
+    })
+
+    const ordered = [
+      ...prepared.filter((entry) => entry.productType !== "bundle"),
+      ...prepared.filter((entry) => entry.productType === "bundle"),
+    ]
+    const context: ImportContext = {
+      ...input,
+      catalogue: ordered.length > 0 ? await this.repository.list(input.organizationId, null) : [],
+      idByRef: new Map(),
+    }
+
+    for (const entry of ordered) {
       try {
-        await this.create({
-          organizationId: input.organizationId,
-          workspaceId: input.workspaceId,
-          createdBy: input.createdBy,
-          product: {
-            productType,
-            name,
-            sku: row.sku?.trim() || null,
-            // Category is optional -- a blank cell leaves the product uncategorized.
-            category: row.category?.trim() || "",
-            description: row.description?.trim() || "",
-            status,
-            currency: "SAR",
-            baseUnit: row.baseUnit?.trim() || null,
-            sellPrice: parseImportNumber(row.sellPrice),
-            costPrice: parseImportNumber(row.costPrice),
-            stockQuantity: parseImportNumber(row.stockQuantity),
-            minStock: parseImportNumber(row.minStock),
-            imageUrls: [],
-            attributes: {},
-            components: [],
-            variantOptions: [],
-            variants: [],
-            // Bulk-imported rows always use the organization's default rate -- there is no CSV
-            // column for a per-product override yet; assign one afterwards from the product's own
-            // edit form if it needs one.
-            taxRateId: null,
-            // Bulk-imported prices are treated as tax-exclusive (net), the same default a manually
-            // created product gets -- there is no CSV column to say otherwise.
-            priceIncludesTax: false,
-          },
-        })
-        created += 1
+        const outcome = await this.importRow(context, entry)
+        result[outcome.kind] += 1
+        const ref = entry.row.ref?.trim()
+        if (ref) context.idByRef.set(ref.toLowerCase(), outcome.product.id)
+        context.catalogue = [
+          outcome.product,
+          ...context.catalogue.filter((product) => product.id !== outcome.product.id),
+        ]
       } catch (error) {
-        skipped.push({ row: index + 1, reason: describeImportError(error) })
+        result.skipped.push({ row: entry.rowNumber, reason: describeImportError(error) })
       }
     }
 
-    return { created, skipped }
+    result.skipped.sort((left, right) => left.row - right.row)
+    return result
+  }
+
+  private async importRow(
+    context: ImportContext,
+    entry: PreparedImportRow
+  ): Promise<{ kind: "created" | "updated" | "unchanged"; product: ProductView }> {
+    const { row, name } = entry
+    const rowSku = row.sku?.trim() || null
+    const structure = suppliedStructure(row)
+    const existing = await this.findImportMatch(context, {
+      productType: entry.productType,
+      name,
+      sku: TYPES_WITHOUT_SKU.includes(entry.productType) ? null : rowSku,
+      structure,
+    })
+    // A flat sheet (a CSV report, a merchant's own list) cannot describe sizes/colours or a
+    // bundle's recipe, so it reads every row as a regular product. Matched to a variable product
+    // or a bundle and carrying none of that structure, the row is that product -- its type is
+    // kept, never flattened into a regular product that loses its variants or components.
+    const productType =
+      existing && keepsStructuredType(existing.productType, structure)
+        ? existing.productType
+        : entry.productType
+    const carriesSku = !TYPES_WITHOUT_SKU.includes(productType)
+    const typedSku = carriesSku ? rowSku : null
+    // A new product the sheet gave no stock code gets one generated, and a stocked one with no
+    // quantity starts at zero -- the two things a merchant's own list most often leaves out, and
+    // neither worth refusing the row over. A matched product keeps its own (a blank cell never
+    // overwrites).
+    const sku =
+      typedSku ?? (carriesSku && !existing ? generateImportSku(catalogueSkus(context)) : null)
+    const sellPrice = parseImportNumber(row.sellPrice)
+    const typedStock = parseImportNumber(row.stockQuantity)
+    const stockQuantity =
+      typedStock ?? (!existing && TYPES_REQUIRING_STOCK.includes(productType) ? 0 : null)
+
+    let variantOptions: ProductVariantOptionInput[] = []
+    let variants: ProductVariantInput[] = []
+    if (productType === "variable") {
+      const variantRows = row.variants ?? []
+      if (variantRows.length > 0) {
+        ;({ variantOptions, variants } = buildVariantsFromRows(variantRows, {
+          price: sellPrice,
+          stock: stockQuantity,
+        }))
+        // A new product's variants left without a code get "<product sku>-<n>", like quick
+        // variants do, so each can still be scanned at the till.
+        if (!existing && sku) {
+          variants = variants.map((variant, index) =>
+            variant.sku ? variant : { ...variant, sku: `${sku}-${index + 1}` }
+          )
+        }
+      } else if (row.options?.trim()) {
+        const options = parseQuickOptions(row.options)
+        if (!options) {
+          throw new ImportRowError(
+            "صيغة عمود الخيارات غير صحيحة -- مثال: اللون: أحمر|أزرق ; المقاس: M|L"
+          )
+        }
+        const count = options.reduce((total, option) => total * option.values.length, 1)
+        if (count > MAX_QUICK_VARIANTS) {
+          throw new ImportRowError(
+            `عدد المتغيرات (${count}) أكبر من الحد المسموح (${MAX_QUICK_VARIANTS})`
+          )
+        }
+        variantOptions = options
+        variants = buildQuickVariants(options, { sku, price: sellPrice, stock: stockQuantity })
+      }
+    }
+
+    const components =
+      productType === "bundle"
+        ? (row.components ?? [])
+            .filter((component) => component.component.trim() !== "")
+            .map((component) =>
+              buildComponent(component, resolveComponentTarget(context, component.component))
+            )
+        : []
+
+    if (!existing) {
+      const product = await this.create({
+        organizationId: context.organizationId,
+        workspaceId: context.workspaceId,
+        createdBy: context.createdBy,
+        product: {
+          productType,
+          name,
+          sku,
+          // Category is optional -- a blank cell leaves the product uncategorized.
+          category: row.category?.trim() || "",
+          description: row.description?.trim() || "",
+          status: entry.status ?? "draft",
+          currency: "SAR",
+          baseUnit: row.baseUnit?.trim() || null,
+          sellPrice,
+          costPrice: parseImportNumber(row.costPrice),
+          stockQuantity,
+          minStock: parseImportNumber(row.minStock),
+          imageUrls: [],
+          attributes: {},
+          components,
+          variantOptions,
+          variants,
+          // Imported rows always use the organization's default rate and tax-exclusive prices --
+          // the same defaults a manually created product gets; there is no column for either.
+          taxRateId: null,
+          priceIncludesTax: false,
+        },
+      })
+      return { kind: "created", product }
+    }
+
+    // A blank cell keeps what the product already has -- the sheet only has to carry what is
+    // changing. Images, attributes and tax settings have no column at all and are always kept.
+    const base = productToInput(existing)
+    const suppliesVariants = variants.length > 0
+    const suppliesComponents = components.length > 0
+    const merged: CreateProductInput = {
+      ...base,
+      productType,
+      name,
+      sku: typedSku ?? (carriesSku ? base.sku : null),
+      category: row.category?.trim() || base.category,
+      description: row.description?.trim() || base.description,
+      status: entry.status ?? base.status,
+      baseUnit: row.baseUnit?.trim() || base.baseUnit,
+      sellPrice: sellPrice ?? base.sellPrice,
+      costPrice: parseImportNumber(row.costPrice) ?? base.costPrice,
+      stockQuantity: typedStock ?? base.stockQuantity,
+      minStock: parseImportNumber(row.minStock) ?? base.minStock,
+      variantOptions: suppliesVariants ? variantOptions : base.variantOptions,
+      variants: suppliesVariants
+        ? variants.map((variant) => {
+            // Same rule per variant: one the product already has (by its option values) keeps
+            // its saved code and stock where the sheet left them blank.
+            const key = variant.optionValues.join("\u0000")
+            const saved = base.variants.find(
+              (candidate) => candidate.optionValues.join("\u0000") === key
+            )
+            if (!saved) return variant
+            return {
+              ...variant,
+              sku: variant.sku ?? saved.sku,
+              price: variant.price ?? saved.price,
+              stock: variant.stock ?? saved.stock,
+            }
+          })
+        : base.variants,
+      components: suppliesComponents
+        ? components.map((component) => {
+            // A hand-named component keeps the stock figure it was saved with -- the sheet has no
+            // column for it, and dropping it would rebuild an untouched bundle on every import.
+            const saved = component.customName
+              ? base.components.find((candidate) => candidate.customName === component.customName)
+              : undefined
+            return saved ? { ...component, customStock: saved.customStock } : component
+          })
+        : base.components,
+    }
+
+    if (JSON.stringify(normalizeProduct(merged)) === JSON.stringify(normalizeProduct(base))) {
+      return { kind: "unchanged", product: existing }
+    }
+
+    const product = await this.update({
+      organizationId: context.organizationId,
+      id: existing.id,
+      updatedBy: context.createdBy,
+      product: merged,
+    })
+    return { kind: "updated", product }
+  }
+
+  private async findImportMatch(
+    context: ImportContext,
+    row: {
+      productType: ProductType
+      name: string
+      sku: string | null
+      structure: { variants: boolean; components: boolean }
+    }
+  ): Promise<ProductView | null> {
+    if (row.sku) {
+      const match = await this.repository.findBySku(context.organizationId, row.sku)
+      return match ? this.repository.findById(context.organizationId, match.id) : null
+    }
+    // No stock code (a raw material or bundle never has one, and a merchant's own list often
+    // leaves it out): the same type with the exact same name is the same product, so importing
+    // the same file twice updates instead of duplicating.
+    return (
+      context.catalogue.find(
+        (product) => product.productType === row.productType && product.name === row.name
+      ) ??
+      // Failing that, a variable product or bundle of that name, when the row carries none of
+      // the structure that would make it something else (see keepsStructuredType).
+      context.catalogue.find(
+        (product) =>
+          product.name === row.name && keepsStructuredType(product.productType, row.structure)
+      ) ??
+      null
+    )
   }
 
   // Bulk-flips every priced native product between tax-inclusive and tax-exclusive pricing, in
@@ -303,10 +506,117 @@ export class ProductCatalogService {
   }
 }
 
-function parseImportNumber(value: string | null | undefined): number | null {
-  if (value === null || value === undefined || value.trim() === "") return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+interface PreparedImportRow {
+  row: BulkImportProductRow
+  rowNumber: number
+  name: string
+  productType: ProductType
+  // Null when the cell was blank: a new product defaults to draft, an updated one keeps its own.
+  status: ProductStatus | null
+}
+
+interface ImportContext {
+  organizationId: string
+  workspaceId: string | null
+  createdBy: string | null
+  // Every native product, kept current as the import saves rows -- what a raw material or bundle
+  // without a SKU, and a bundle component named by SKU or name, is matched against.
+  catalogue: ProductView[]
+  // Lower-cased product code (the sheet's ref column) -> the product saved for it.
+  idByRef: Map<string, string>
+}
+
+function suppliedStructure(row: BulkImportProductRow): { variants: boolean; components: boolean } {
+  return {
+    variants: (row.variants?.length ?? 0) > 0 || Boolean(row.options?.trim()),
+    components: (row.components?.length ?? 0) > 0,
+  }
+}
+
+// Whether a saved product of this type stays that type for an import row bringing no variants
+// (for a variable product) or no components (for a bundle).
+function keepsStructuredType(
+  savedType: ProductType,
+  structure: { variants: boolean; components: boolean }
+): boolean {
+  if (savedType === "variable") return !structure.variants
+  if (savedType === "bundle") return !structure.components
+  return false
+}
+
+// Every stock code already taken -- products' and their variants' -- for a generated one to avoid.
+function catalogueSkus(context: ImportContext): Set<string> {
+  const taken = new Set<string>()
+  for (const product of context.catalogue) {
+    if (product.sku) taken.add(product.sku)
+    for (const variant of product.variants) if (variant.sku) taken.add(variant.sku)
+  }
+  return taken
+}
+
+// A reason the import itself works out (a malformed quick-variants cell, say), reported as-is.
+class ImportRowError extends Error {}
+
+const STOREFRONT_REF_PATTERN = /^(salla|zid|shopify):\S+$/i
+
+function resolveComponentTarget(context: ImportContext, text: string): ResolvedComponentTarget {
+  const value = text.trim()
+  if (STOREFRONT_REF_PATTERN.test(value)) {
+    return { kind: "product", ref: value.toLowerCase(), stockUnit: null }
+  }
+
+  const refId = context.idByRef.get(value.toLowerCase())
+  const product =
+    (refId ? context.catalogue.find((candidate) => candidate.id === refId) : undefined) ??
+    context.catalogue.find((candidate) => candidate.sku === value) ??
+    context.catalogue.find((candidate) => candidate.name === value)
+  if (product) {
+    return { kind: "product", ref: product.id, stockUnit: recipeUnitOf(product.baseUnit) }
+  }
+  return { kind: "custom", name: value }
+}
+
+// A saved product back in the create/update input shape -- children rebuilt field by field, in
+// the same key order the import's own builders use, so an untouched row compares equal.
+function productToInput(product: ProductView): CreateProductInput {
+  return {
+    productType: product.productType,
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    description: product.description,
+    status: product.status,
+    currency: product.currency,
+    baseUnit: product.baseUnit,
+    sellPrice: product.sellPrice,
+    costPrice: product.costPrice,
+    stockQuantity: product.stockQuantity,
+    minStock: product.minStock,
+    imageUrls: product.imageUrls,
+    attributes: product.attributes,
+    components: product.components.map((component) => ({
+      componentRef: component.componentRef,
+      customName: component.customName,
+      customStock: component.customStock,
+      requiredQuantity: component.requiredQuantity,
+      requiredUnit: component.requiredUnit,
+      stockUnit: component.stockUnit,
+      conversionFactor: component.conversionFactor,
+      note: component.note,
+    })),
+    variantOptions: product.variantOptions.map((option) => ({
+      name: option.name,
+      values: option.values,
+    })),
+    variants: product.variants.map((variant) => ({
+      sku: variant.sku,
+      price: variant.price,
+      stock: variant.stock,
+      optionValues: variant.optionValues,
+    })),
+    taxRateId: product.taxRateId,
+    priceIncludesTax: product.priceIncludesTax,
+  }
 }
 
 const IMPORT_FIELD_LABEL_AR: Record<string, string> = {
@@ -316,18 +626,25 @@ const IMPORT_FIELD_LABEL_AR: Record<string, string> = {
   sellPrice: "سعر البيع",
   stockQuantity: "الكمية بالمخزون",
   description: "الوصف",
+  variantOptions: "خيارات المنتج",
+  variants: "المتغيرات",
+  components: "مكونات الحزمة",
 }
 
 // Reuses create()'s own real validation/conflict errors rather than re-deriving a reason, so the
 // message a user sees for a skipped row can never disagree with why it was actually rejected.
 function describeImportError(error: unknown): string {
+  if (error instanceof ImportRowError) return error.message
   if (error instanceof IdentityError) {
     if (error.code === "PRODUCT_SKU_TAKEN") {
       return "رمز المخزون (SKU) مستخدم بالفعل"
     }
     if (error.code === "PRODUCT_VALIDATION_FAILED") {
-      const fields = Object.keys((error.details?.fields as Record<string, string>) ?? {})
-      const labels = fields.map((field) => IMPORT_FIELD_LABEL_AR[field] ?? field)
+      // "variants.2.price" reads as the variants it belongs to, not a dotted path.
+      const fields = Object.keys((error.details?.fields as Record<string, string>) ?? {}).map(
+        (field) => field.split(".")[0]
+      )
+      const labels = [...new Set(fields.map((field) => IMPORT_FIELD_LABEL_AR[field] ?? field))]
       if (labels.length > 0) {
         return `حقول ناقصة أو غير صحيحة لهذا النوع من المنتجات: ${labels.join("، ")}`
       }

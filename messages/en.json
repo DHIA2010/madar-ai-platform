@@ -1958,35 +1958,29 @@
       },
       "importDialog": {
         "title": "Import Products",
-        "description": "Upload a CSV file to add several products at once. Import supports these product types: {types} -- bundles and multi-option products must be added manually from the Add Product page, since they need components or variants that don't fit one row.",
-        "chooseFile": "Tap to choose a CSV file",
-        "columnsHint": "Columns: name, sku, category, type, status, cost_price, sell_price, stock, min_stock, unit, description",
+        "description": "Upload an Excel file to add or update many products at once -- every type, including variable products and bundles. Download the template to see how to fill it in, with an example of each type.",
+        "chooseFile": "Tap to choose an Excel or CSV file",
+        "columnsHint": "Accepts an Excel file with Products, Variants and Bundle components sheets -- or a CSV file",
         "rowsFound": "{count} row(s) found",
-        "downloadTemplate": "Download CSV Template",
-        "resultSummary": "{created} product(s) added",
+        "downloadTemplate": "Download Excel Template",
+        "resultSummary": "{created} product(s) added, {updated} updated",
         "resultSkippedSuffix": ", {count} row(s) skipped",
-        "rowError": "Line {row} in the file: {reason}",
+        "rowError": "Line {row} on the Products sheet: {reason}",
         "importing": "Importing...",
         "importButton": "Import",
         "importButtonWithCount": "Import ({count})",
         "close": "Close",
-        "listSeparator": ", "
+        "reading": "Reading the file...",
+        "resultUnchangedSuffix": ", {count} unchanged",
+        "orphan": {
+          "variants": "Variants sheet, line {row}: code \"{ref}\" matches no product in the file -- it will be ignored",
+          "components": "Bundle components sheet, line {row}: code \"{ref}\" matches no product in the file, or the component is blank -- it will be ignored"
+        }
       },
       "importTemplate": {
-        "filename": "products-import-template",
-        "row1Name": "Cotton Shirt",
-        "row1Category": "Clothing",
-        "row1Unit": "pcs",
-        "row2Name": "Premium Flour",
-        "row2Category": "Raw Materials",
-        "row2Unit": "kg",
-        "row3Name": "Marketing Consultation",
-        "row3Category": "Services"
+        "filename": "products-import-template"
       },
       "toasts": {
-        "selectCsvFirst": "Choose a CSV file with products first.",
-        "importSuccess": "{count} product(s) added.",
-        "importError": "Couldn't import the file.",
         "cannotChangeImported": "Can't change the status of store-imported products from here.",
         "statusUpdateSuccess": "{count} product(s) updated.",
         "statusUpdateSkipped": "{count} store-imported product(s) skipped -- managed from the store itself.",
@@ -1999,12 +1993,25 @@
         "deleteSuccess": "Product deleted.",
         "noDeletePermission": "You don't have permission to delete products.",
         "contactOwnerDelete": "Contact the account owner to grant you the products:delete permission.",
-        "deleteError": "Couldn't delete the product."
+        "deleteError": "Couldn't delete the product.",
+        "exportNoNative": "No Madar products to export -- store products are exported as the CSV report.",
+        "exportSkippedExternal": "{count} store-imported product(s) left out of the Excel file.",
+        "exportError": "Couldn't export the products.",
+        "selectCsvFirst": "Choose a file with products first.",
+        "importSuccess": "{created} product(s) added, {updated} updated.",
+        "readFileError": "Couldn't read the file -- make sure it's an Excel (.xlsx) or CSV file.",
+        "templateError": "Couldn't prepare the template.",
+        "importError": "Couldn't import the file."
       },
       "branch": {
         "all": "All branches",
         "shared": "Shared by all branches"
-      }
+      },
+      "exportMenu": {
+        "excel": "Excel file (edit and import back)",
+        "csvReport": "CSV report"
+      },
+      "exportFilename": "madar-products"
     },
     "form": {
       "breadcrumb": {

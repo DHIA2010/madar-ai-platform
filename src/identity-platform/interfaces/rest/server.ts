@@ -5956,6 +5956,26 @@ export function createIdentityApiServer(
         return send(200, result)
       }
 
+      // The products-page export: every native product of every branch in full (variants, bundle
+      // components), which the client writes into the same workbook the import reads -- so a
+      // merchant can export, edit and import back. GET /v1/products only carries the flattened
+      // list row, not the variant matrix or recipe.
+      if (method === "GET" && url.pathname === "/v1/products/catalog-export") {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product export is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:export")) {
+          throw ERRORS.forbidden()
+        }
+
+        return send(200, {
+          products: await productCatalogService.list(actor.organizationId, null),
+        })
+      }
+
       // Products list -- "select several, change their status" quick action (see
       // ProductCatalogService.bulkUpdateStatus). Same permission as a single edit; a synced
       // storefront product's id never matches any row this organization owns here, so it is

@@ -1958,35 +1958,29 @@
       },
       "importDialog": {
         "title": "استيراد منتجات",
-        "description": "ارفع ملف CSV لإضافة عدة منتجات دفعة واحدة. يدعم الاستيراد أنواع المنتجات: {types} -- أما الحزم والمنتجات متعددة الخيارات فتُضاف يدوياً من صفحة إضافة منتج، لأنها تحتاج اختيار مكونات أو متغيرات لا تتسع لها خانة واحدة في الجدول.",
-        "chooseFile": "اضغط لاختيار ملف CSV",
-        "columnsHint": "الأعمدة: name, sku, category, type, status, cost_price, sell_price, stock, min_stock, unit, description",
+        "description": "ارفع ملف Excel لإضافة أو تحديث عدة منتجات دفعة واحدة -- بجميع الأنواع، بما فيها المنتجات المتغيرة والمجمعة. حمّل النموذج لترى طريقة التعبئة مع أمثلة لكل نوع.",
+        "chooseFile": "اضغط لاختيار ملف Excel أو CSV",
+        "columnsHint": "يقبل ملف Excel بأوراق: المنتجات، المتغيرات، مكونات الحزم -- أو ملف CSV",
         "rowsFound": "تم العثور على {count} صف",
-        "downloadTemplate": "تحميل نموذج CSV",
-        "resultSummary": "تم إضافة {created} منتج",
+        "downloadTemplate": "تحميل نموذج Excel",
+        "resultSummary": "تمت إضافة {created} وتحديث {updated} منتج",
         "resultSkippedSuffix": "، وتخطي {count} صف",
-        "rowError": "السطر {row} في الملف: {reason}",
+        "rowError": "السطر {row} في ورقة المنتجات: {reason}",
         "importing": "جارٍ الاستيراد...",
         "importButton": "استيراد",
         "importButtonWithCount": "استيراد ({count})",
         "close": "إغلاق",
-        "listSeparator": "، "
+        "reading": "جارٍ قراءة الملف...",
+        "resultUnchangedSuffix": "، وبقي {count} دون تغيير",
+        "orphan": {
+          "variants": "ورقة المتغيرات، السطر {row}: الرمز \"{ref}\" لا يطابق أي منتج في الملف -- سيتم تجاهله",
+          "components": "ورقة مكونات الحزم، السطر {row}: الرمز \"{ref}\" لا يطابق أي منتج في الملف أو المكون فارغ -- سيتم تجاهله"
+        }
       },
       "importTemplate": {
-        "filename": "نموذج-استيراد-المنتجات",
-        "row1Name": "قميص قطن",
-        "row1Category": "ملابس",
-        "row1Unit": "حبة",
-        "row2Name": "دقيق فاخر",
-        "row2Category": "مواد خام",
-        "row2Unit": "كجم",
-        "row3Name": "استشارة تسويقية",
-        "row3Category": "خدمات"
+        "filename": "نموذج-استيراد-المنتجات"
       },
       "toasts": {
-        "selectCsvFirst": "اختر ملف CSV يحتوي على منتجات أولاً.",
-        "importSuccess": "تم إضافة {count} منتج.",
-        "importError": "تعذر استيراد الملف.",
         "cannotChangeImported": "لا يمكن تغيير حالة المنتجات المستوردة من المتجر من هنا.",
         "statusUpdateSuccess": "تم تحديث حالة {count} منتج.",
         "statusUpdateSkipped": "تم تجاوز {count} منتج مستورد من المتجر -- يُدار من المتجر نفسه.",
@@ -1999,12 +1993,25 @@
         "deleteSuccess": "تم حذف المنتج.",
         "noDeletePermission": "لا تملك صلاحية حذف المنتجات.",
         "contactOwnerDelete": "تواصل مع مالك الحساب لمنحك صلاحية products:delete.",
-        "deleteError": "تعذر حذف المنتج."
+        "deleteError": "تعذر حذف المنتج.",
+        "exportNoNative": "لا توجد منتجات مضافة في مدار للتصدير -- منتجات المتجر تُصدَّر كتقرير CSV.",
+        "exportSkippedExternal": "تم استثناء {count} منتج مستورد من المتجر من ملف Excel.",
+        "exportError": "تعذر تصدير المنتجات.",
+        "selectCsvFirst": "اختر ملفاً يحتوي على منتجات أولاً.",
+        "importSuccess": "تمت إضافة {created} وتحديث {updated} منتج.",
+        "readFileError": "تعذرت قراءة الملف -- تأكد أنه ملف Excel (.xlsx) أو CSV.",
+        "templateError": "تعذر تجهيز النموذج.",
+        "importError": "تعذر استيراد الملف."
       },
       "branch": {
         "all": "كل الفروع",
         "shared": "مشترك لكل الفروع"
-      }
+      },
+      "exportMenu": {
+        "excel": "ملف Excel (قابل للتعديل وإعادة الاستيراد)",
+        "csvReport": "تقرير CSV"
+      },
+      "exportFilename": "منتجات-مدار"
     },
     "form": {
       "breadcrumb": {

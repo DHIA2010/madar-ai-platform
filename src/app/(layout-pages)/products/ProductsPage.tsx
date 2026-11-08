@@ -53,6 +53,12 @@ import {
   type ProductKind,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
+import {
+  buildProductsWorkbook,
+  downloadBlob,
+  parseProductsFile,
+  type OrphanRow,
+} from "@/features/products/services/products-workbook"
 
 import { Button } from "@/components/ui/button"
 import { AppDateRangeFilter, AppSearchableSelect } from "@/components/app"
@@ -569,165 +575,6 @@ function PlatformIcon({ platform }: { platform: ProductRow["platform"] }) {
   return <Store className="size-4" />
 }
 
-// The 5 product types a single flat CSV row can fully describe -- mirrors
-// catalog-types.ts's FLAT_IMPORTABLE_TYPES. A bundle needs component references to other
-// products and a variable product needs a variant matrix, neither of which fits one row, so
-// ProductCatalogService.bulkImport() skips (and reports) either with a reason instead.
-const IMPORTABLE_PRODUCT_TYPES = ["simple", "raw", "weighted", "service", "digital"] as const
-
-function toImportCsvCell(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
-
-function downloadImportCsv(filename: string, rows: string[][]) {
-  const csv = rows.map((row) => row.map(toImportCsvCell).join(",")).join("\n")
-  // A leading BOM so Excel (the realistic destination for this file) opens Arabic text as UTF-8
-  // instead of guessing a legacy codepage and mangling it.
-  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-// One example row per importable type, so opening the template teaches the format instead of
-// just naming its columns -- a blank sku/stock/description cell only being wrong for SOME types
-// is much easier to grasp from a working example than from a rule written out in prose.
-function downloadProductsImportTemplateCsv(t: ReturnType<typeof useTranslations<"products.list">>) {
-  downloadImportCsv(`${t("importTemplate.filename")}.csv`, [
-    [
-      "name",
-      "sku",
-      "category",
-      "type",
-      "status",
-      "cost_price",
-      "sell_price",
-      "stock",
-      "min_stock",
-      "unit",
-      "description",
-    ],
-    [
-      t("importTemplate.row1Name"),
-      "SKU-1001",
-      t("importTemplate.row1Category"),
-      "simple",
-      "active",
-      "40",
-      "89.9",
-      "25",
-      "5",
-      t("importTemplate.row1Unit"),
-      "",
-    ],
-    [
-      t("importTemplate.row2Name"),
-      "",
-      t("importTemplate.row2Category"),
-      "raw",
-      "active",
-      "",
-      "",
-      "100",
-      "10",
-      t("importTemplate.row2Unit"),
-      "",
-    ],
-    [
-      t("importTemplate.row3Name"),
-      "SKU-2002",
-      t("importTemplate.row3Category"),
-      "service",
-      "active",
-      "",
-      "250",
-      "",
-      "",
-      "",
-      "",
-    ],
-  ])
-}
-
-// A small RFC4180-ish parser -- handles quoted fields (so a name containing a comma still reads
-// as one cell) without pulling in a CSV library. Same approach as customers-overview.tsx's own
-// parseCsv -- each feature keeps its own rather than sharing one for four-to-eleven columns.
-function parseImportCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ""
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i]
-    if (inQuotes) {
-      if (char === '"') {
-        if (text[i + 1] === '"') {
-          field += '"'
-          i += 1
-        } else {
-          inQuotes = false
-        }
-      } else {
-        field += char
-      }
-      continue
-    }
-
-    if (char === '"') {
-      inQuotes = true
-    } else if (char === ",") {
-      row.push(field)
-      field = ""
-    } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && text[i + 1] === "\n") i += 1
-      row.push(field)
-      rows.push(row)
-      row = []
-      field = ""
-    } else {
-      field += char
-    }
-  }
-  if (field !== "" || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-
-  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""))
-}
-
-// Maps by header name (case-insensitive) rather than fixed column order, so a file with the
-// columns in a different order -- or missing optional ones entirely -- still imports correctly.
-function csvToProductImportRows(text: string): BulkImportProductRow[] {
-  const rows = parseImportCsv(text)
-  if (rows.length === 0) return []
-
-  const header = rows[0].map((cell) => cell.trim().toLowerCase())
-  const columnIndex = (name: string) => header.indexOf(name)
-  const cellAt = (cells: string[], name: string) => {
-    const index = columnIndex(name)
-    return index >= 0 ? (cells[index] ?? "").trim() || null : null
-  }
-
-  return rows.slice(1).map((cells) => ({
-    name: cellAt(cells, "name") ?? "",
-    sku: cellAt(cells, "sku"),
-    category: cellAt(cells, "category"),
-    productType: cellAt(cells, "type"),
-    status: cellAt(cells, "status"),
-    costPrice: cellAt(cells, "cost_price"),
-    sellPrice: cellAt(cells, "sell_price"),
-    stockQuantity: cellAt(cells, "stock"),
-    minStock: cellAt(cells, "min_stock"),
-    baseUnit: cellAt(cells, "unit"),
-    description: cellAt(cells, "description"),
-  }))
-}
-
 function ImportProductsDialog({
   open,
   onOpenChange,
@@ -738,24 +585,46 @@ function ImportProductsDialog({
   onImported: () => void
 }) {
   const t = useTranslations("products.list")
-  const tTypes = useTranslations("products.types")
   const locale = useLocale()
   const [fileName, setFileName] = useState<string | null>(null)
   const [rows, setRows] = useState<BulkImportProductRow[]>([])
+  const [orphans, setOrphans] = useState<OrphanRow[]>([])
+  const [isReading, setIsReading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<BulkImportProductResult | null>(null)
+  const workbookLocale = locale === "ar" ? "ar" : "en"
 
   const reset = () => {
     setFileName(null)
     setRows([])
+    setOrphans([])
     setResult(null)
   }
 
   const handleFile = async (file: File) => {
     setFileName(file.name)
     setResult(null)
-    const text = await file.text()
-    setRows(csvToProductImportRows(text))
+    setIsReading(true)
+    try {
+      const parsed = await parseProductsFile(file)
+      setRows(parsed.rows)
+      setOrphans(parsed.orphans)
+    } catch {
+      setRows([])
+      setOrphans([])
+      toast.error(t("toasts.readFileError"))
+    } finally {
+      setIsReading(false)
+    }
+  }
+
+  const downloadTemplate = async () => {
+    try {
+      const blob = await buildProductsWorkbook({ locale: workbookLocale, products: null })
+      downloadBlob(blob, `${t("importTemplate.filename")}.xlsx`)
+    } catch {
+      toast.error(t("toasts.templateError"))
+    }
   }
 
   const submit = async () => {
@@ -767,8 +636,10 @@ function ImportProductsDialog({
     try {
       const outcome = await productListService.bulkImportProducts(rows)
       setResult(outcome)
-      if (outcome.created > 0) {
-        toast.success(t("toasts.importSuccess", { count: outcome.created }))
+      if (outcome.created + outcome.updated > 0) {
+        toast.success(
+          t("toasts.importSuccess", { created: outcome.created, updated: outcome.updated })
+        )
         onImported()
       }
     } catch {
@@ -777,10 +648,6 @@ function ImportProductsDialog({
       setIsImporting(false)
     }
   }
-
-  const importableTypeNames = IMPORTABLE_PRODUCT_TYPES.map((key) => tTypes(`${key}.title`)).join(
-    t("importDialog.listSeparator")
-  )
 
   return (
     <Dialog
@@ -803,7 +670,7 @@ function ImportProductsDialog({
             {t("importDialog.title")}
           </DialogTitle>
           <DialogDescription className="text-[12.5px] leading-6 text-[#6b7b96]">
-            {t("importDialog.description", { types: importableTypeNames })}
+            {t("importDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -814,13 +681,15 @@ function ImportProductsDialog({
               {fileName ?? t("importDialog.chooseFile")}
             </span>
             <span className="text-[10.5px] text-[#6b7b96]">
-              {rows.length > 0
-                ? t("importDialog.rowsFound", { count: rows.length })
-                : t("importDialog.columnsHint")}
+              {isReading
+                ? t("importDialog.reading")
+                : rows.length > 0
+                  ? t("importDialog.rowsFound", { count: rows.length })
+                  : t("importDialog.columnsHint")}
             </span>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0]
@@ -832,16 +701,32 @@ function ImportProductsDialog({
 
           <button
             type="button"
-            onClick={() => downloadProductsImportTemplateCsv(t)}
+            onClick={() => void downloadTemplate()}
             className="self-start text-[11.5px] font-semibold text-[#2878ff] hover:underline"
           >
             {t("importDialog.downloadTemplate")}
           </button>
 
+          {orphans.length > 0 && !result ? (
+            <ul className="flex max-h-[120px] flex-col gap-0.5 overflow-y-auto rounded-[10px] border border-[#f5d9a8] bg-[#fffaf0] p-3">
+              {orphans.map((orphan) => (
+                <li key={`${orphan.sheet}-${orphan.row}`} className="text-[11px] text-[#8a5a00]">
+                  {t(`importDialog.orphan.${orphan.sheet}`, { row: orphan.row, ref: orphan.ref })}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
           {result ? (
             <div className="rounded-[10px] border border-[#e1e7f0] p-3">
               <p className="text-[12.5px] font-bold text-[#0b1738]">
-                {t("importDialog.resultSummary", { created: result.created })}
+                {t("importDialog.resultSummary", {
+                  created: result.created,
+                  updated: result.updated,
+                })}
+                {result.unchanged > 0
+                  ? t("importDialog.resultUnchangedSuffix", { count: result.unchanged })
+                  : ""}
                 {result.skipped.length > 0
                   ? t("importDialog.resultSkippedSuffix", { count: result.skipped.length })
                   : ""}
@@ -850,7 +735,7 @@ function ImportProductsDialog({
                 <ul className="mt-1.5 flex max-h-[180px] flex-col gap-0.5 overflow-y-auto">
                   {result.skipped.map((entry) => (
                     <li key={entry.row} className="text-[11px] text-[#6b7b96]">
-                      {t("importDialog.rowError", { row: entry.row + 1, reason: entry.reason })}
+                      {t("importDialog.rowError", { row: entry.row, reason: entry.reason })}
                     </li>
                   ))}
                 </ul>
@@ -862,7 +747,7 @@ function ImportProductsDialog({
         <DialogFooter className="gap-2">
           <Button
             className="h-10 gap-2 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
-            disabled={isImporting || rows.length === 0}
+            disabled={isImporting || isReading || rows.length === 0}
             onClick={() => void submit()}
           >
             {isImporting
@@ -1068,6 +953,7 @@ export default function ProductsPage() {
     [filteredProducts, selectedIds]
   )
   const exportRows = selectedProducts.length > 0 ? selectedProducts : filteredProducts
+  const [isExporting, setIsExporting] = useState(false)
   const allOnPageSelected =
     paginatedProducts.length > 0 &&
     paginatedProducts.every((product) => selectedIds.has(product.id))
@@ -1175,6 +1061,35 @@ export default function ProductsPage() {
     }
   }
 
+  // The re-importable export: the same workbook the import reads, in full (variants, bundle
+  // components) -- so only products authored in Madar; a storefront product is managed from its
+  // store and stays in the CSV report below.
+  async function exportToExcel(rows: ProductRow[]) {
+    const ids = new Set(rows.filter((row) => row.isNative).map((row) => row.id))
+    if (ids.size === 0) {
+      toast.error(t("toasts.exportNoNative"))
+      return
+    }
+    setIsExporting(true)
+    try {
+      const catalogue = await productListService.getCatalogExport()
+      const products = catalogue.filter((product) => ids.has(product.id))
+      const blob = await buildProductsWorkbook({
+        locale: locale === "ar" ? "ar" : "en",
+        products,
+        catalogue,
+      })
+      downloadBlob(blob, `${t("exportFilename")}.xlsx`)
+      if (products.length < rows.length) {
+        toast.info(t("toasts.exportSkippedExternal", { count: rows.length - products.length }))
+      }
+    } catch {
+      toast.error(t("toasts.exportError"))
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   function exportToCSV(rows: ProductRow[]) {
     const headers = [
       "Product",
@@ -1258,15 +1173,27 @@ export default function ProductsPage() {
             </Can>
 
             <Can permission="products:export">
-              <Button
-                variant="outline"
-                className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
-                disabled={exportRows.length === 0}
-                onClick={() => exportToCSV(exportRows)}
-              >
-                {t("export")}
-                <Download className="size-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+                    disabled={exportRows.length === 0 || isExporting}
+                  >
+                    {isExporting ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {t("export")}
+                    <Download className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className={cairo.className}>
+                  <DropdownMenuItem onSelect={() => void exportToExcel(exportRows)}>
+                    {t("exportMenu.excel")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportToCSV(exportRows)}>
+                    {t("exportMenu.csvReport")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </Can>
 
             <Can permission="products:create">
@@ -1698,7 +1625,11 @@ export default function ProductsPage() {
                               )
                             }
                             onCopySku={() => copyToClipboard(product.sku, t("skuLabel"))}
-                            onExport={() => exportToCSV([product])}
+                            onExport={() =>
+                              product.isNative
+                                ? void exportToExcel([product])
+                                : exportToCSV([product])
+                            }
                             onDelete={() => setPendingDelete(product)}
                           />
                         </td>
