@@ -3081,6 +3081,18 @@
         "searchPlaceholder": "Search by name...",
         "clear": "No seller",
         "empty": "No active members in this branch."
+      },
+      "receiptDelivery": {
+        "title": "Sale completed",
+        "summary": "Invoice {number} · SAR {total}",
+        "question": "How should the customer get the receipt?",
+        "print": "Print the invoice",
+        "printHint": "Print the receipt on the thermal printer",
+        "whatsapp": "Send on WhatsApp",
+        "phoneLabel": "Enter the customer's mobile",
+        "invalidPhone": "Invalid mobile number. Example: 05XXXXXXXX",
+        "openWhatsApp": "Open WhatsApp",
+        "skip": "Skip"
       }
     },
     "noteEditor": {

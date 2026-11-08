@@ -125,7 +125,12 @@ import { PosServiceWorkerRegistration } from "@/features/pos/offline/PosServiceW
 import { CreditNoteReceipt } from "./CreditNoteReceipt"
 import { ThermalInvoiceReceipt } from "./ThermalInvoiceReceipt"
 import { ReturnDialog, useInvoiceReturn } from "@/app/(layout-pages)/invoices/invoice-return-dialog"
-import { WhatsAppSendDialog } from "@/app/(layout-pages)/invoices/whatsapp-send-dialog"
+import {
+  toWhatsAppNumber,
+  WhatsAppSendDialog,
+  whatsAppUrl,
+} from "@/app/(layout-pages)/invoices/whatsapp-send-dialog"
+import { ReceiptDeliveryDialog } from "@/app/(layout-pages)/pos/ReceiptDeliveryDialog"
 
 import {
   AppSearchableSelect,
@@ -1494,15 +1499,47 @@ export default function CashierPage() {
   // Sends a just-completed sale's receipt to the customer on WhatsApp (as a PDF), in the
   // background -- the sale is already done either way. With no mobile entered at checkout the
   // cashier is asked for one; a queued offline sale has nothing to send until it syncs.
-  // Receipt delivery on WhatsApp opens the share dialog: one click opens the customer's chat in
-  // the cashier's own WhatsApp with the invoice link ready to send.
+  // "Both" in Settings -> طريقة تسليم الفاتورة: the cashier picks print or WhatsApp per sale.
+  const [deliveryChoiceInvoice, setDeliveryChoiceInvoice] = useState<Invoice | null>(null)
+
+  const printReceipt = () => {
+    window.setTimeout(() => {
+      printThermalReceipt("zatca-print-invoice")
+      // window.print() blocks until the print dialog closes, so this runs right as the cashier
+      // lands back on the POS screen -- ready for the next barcode scan with no click needed.
+      searchInputRef.current?.focus()
+    }, 150)
+  }
+
+  // "WhatsApp only": straight to the customer's chat in the cashier's own WhatsApp, with the
+  // invoice link ready to send. With no valid number on the sale -- or a browser that blocks the
+  // new window -- the share dialog asks for it / offers the button instead.
   const deliverOnWhatsApp = (invoice: Invoice, queuedOffline: boolean) => {
     if (queuedOffline) {
       toast.info(t("toasts.whatsappOffline"))
       return
     }
-    setWhatsAppInvoice(invoice)
+    const number = invoice.customerPhone ? toWhatsAppNumber(invoice.customerPhone) : null
+    if (!number) {
+      setWhatsAppInvoice(invoice)
+      return
+    }
+    // Opened now, inside the checkout click, so the browser allows it; pointed at WhatsApp once
+    // the message is ready.
+    const opened = window.open("", "_blank")
+    posInvoicesService
+      .getInvoiceWhatsAppLink(invoice.id)
+      .then((link) => {
+        const url = whatsAppUrl(number, link.message)
+        if (opened && !opened.closed) opened.location.href = url
+        else setWhatsAppInvoice(invoice)
+      })
+      .catch(() => {
+        opened?.close()
+        setWhatsAppInvoice(invoice)
+      })
   }
+
   const [successQrDataUrl, setSuccessQrDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1936,17 +1973,17 @@ export default function CashierPage() {
       window.setTimeout(() => {
         setSuccessQrDataUrl(qrDataUrl)
         setSuccessInvoice(invoice)
-        // Settings -> الكاشير -> طريقة تسليم الفاتورة: print, WhatsApp, or both.
+        // Settings -> الكاشير -> طريقة تسليم الفاتورة: print, WhatsApp, or the cashier's choice
+        // per sale ("both" -- never print and WhatsApp at once). A sale queued offline has no
+        // link to share yet, so it's printed.
         const delivery = posSettings.receiptDelivery ?? "print"
-        if (delivery !== "print") deliverOnWhatsApp(invoice, result.queued)
-        if (delivery !== "whatsapp" && posSettings.autoPrintInvoice) {
-          window.setTimeout(() => {
-            printThermalReceipt("zatca-print-invoice")
-            // window.print() blocks until the print dialog closes, so this runs right as the
-            // cashier lands back on the POS screen -- ready for the next barcode scan with no
-            // click needed.
-            searchInputRef.current?.focus()
-          }, 150)
+        if (delivery === "whatsapp") {
+          deliverOnWhatsApp(invoice, result.queued)
+          searchInputRef.current?.focus()
+        } else if (delivery === "both" && !result.queued) {
+          setDeliveryChoiceInvoice(invoice)
+        } else if (posSettings.autoPrintInvoice) {
+          printReceipt()
         } else {
           searchInputRef.current?.focus()
         }
@@ -4644,6 +4681,19 @@ export default function CashierPage() {
           straight to <body> plus `display: none` (not just visibility) on every OTHER direct
           child of <body> during print (see the style block) collapses the rest of the document
           to zero height, so the printed page is sized to just this receipt -- one page, once. */}
+      {deliveryChoiceInvoice ? (
+        <ReceiptDeliveryDialog
+          invoice={deliveryChoiceInvoice}
+          onPrint={() => {
+            setDeliveryChoiceInvoice(null)
+            printReceipt()
+          }}
+          onClose={() => {
+            setDeliveryChoiceInvoice(null)
+            searchInputRef.current?.focus()
+          }}
+        />
+      ) : null}
       {whatsAppInvoice ? (
         <WhatsAppSendDialog
           invoice={whatsAppInvoice}

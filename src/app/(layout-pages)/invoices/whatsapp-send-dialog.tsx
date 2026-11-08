@@ -32,7 +32,7 @@ const isMobileDevice = () =>
   typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
 
 // WhatsApp Web on a computer; the WhatsApp app (through wa.me) on a phone or tablet.
-function whatsAppUrl(phone: string, message: string): string {
+export function whatsAppUrl(phone: string, message: string): string {
   const text = encodeURIComponent(message)
   return isMobileDevice()
     ? `https://wa.me/${phone}?text=${text}`

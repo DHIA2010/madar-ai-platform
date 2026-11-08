@@ -3081,6 +3081,18 @@
         "searchPlaceholder": "ابحث بالاسم...",
         "clear": "بدون بائع",
         "empty": "لا يوجد أعضاء نشطون في هذا الفرع."
+      },
+      "receiptDelivery": {
+        "title": "تمت عملية البيع",
+        "summary": "فاتورة {number} · {total} ر.س",
+        "question": "كيف تريد تسليم الفاتورة للعميل؟",
+        "print": "طباعة الفاتورة",
+        "printHint": "طباعة الإيصال على الطابعة الحرارية",
+        "whatsapp": "إرسال عبر واتساب",
+        "phoneLabel": "أدخل رقم جوال العميل",
+        "invalidPhone": "رقم الجوال غير صحيح. مثال: 05XXXXXXXX",
+        "openWhatsApp": "فتح واتساب",
+        "skip": "تخطي"
       }
     },
     "noteEditor": {
