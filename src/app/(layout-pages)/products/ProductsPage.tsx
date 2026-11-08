@@ -50,6 +50,7 @@ import {
   productListService,
   type BulkImportProductResult,
   type BulkImportProductRow,
+  type ProductKind,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
 
@@ -248,6 +249,144 @@ function getInventoryStatus(stock: number) {
 // Only products authored in Madar are ours to change. A synced storefront row belongs to
 // Salla/Shopify/Zid -- deleting it here would be undone by the next sync -- so that entry is
 // disabled with the reason rather than hidden or, worse, offered and silently ineffective.
+// One colour per product type, so the column reads at a glance down a long list.
+const TYPE_PILL_CLASS: Record<ProductKind, string> = {
+  simple: "bg-[#eef4ff] text-[#2563eb]",
+  variable: "bg-[#f3edff] text-[#7c3aed]",
+  weighted: "bg-[#fff6e5] text-[#b45309]",
+  bundle: "bg-[#e9f9f1] text-[#15803d]",
+  raw: "bg-[#f1f4f9] text-[#475569]",
+  digital: "bg-[#e8f7fb] text-[#0e7490]",
+  service: "bg-[#fdeef6] text-[#be185d]",
+}
+
+function ProductTypePill({
+  type,
+  tTypes,
+}: {
+  type: ProductKind | null
+  tTypes: ReturnType<typeof useTranslations<"products.types">>
+}) {
+  if (!type) return <span className={cn("text-[11.5px]", MUTED)}>—</span>
+  return (
+    <span
+      className={cn(
+        "inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+        TYPE_PILL_CLASS[type]
+      )}
+    >
+      {tTypes(`${type}.title`)}
+    </span>
+  )
+}
+
+// A variable product's variants, read from the product itself (GET /v1/products/:id) -- the list
+// rows don't carry them. Mounted per product (keyed by id), so each open starts from loading.
+function ProductVariantsSection({
+  productId,
+  currency,
+}: {
+  productId: string
+  currency: string | null
+}) {
+  const t = useTranslations("products.list")
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "error" }
+    | {
+        kind: "ready"
+        options: string[]
+        variants: Array<{
+          id: string
+          label: string
+          sku: string | null
+          price: number | null
+          stock: number | null
+        }>
+      }
+  >({ kind: "loading" })
+
+  useEffect(() => {
+    let cancelled = false
+    productListService
+      .getProduct(productId)
+      .then((detail) => {
+        if (cancelled) return
+        setState({
+          kind: "ready",
+          options: detail.variantOptions.map((option) => option.name),
+          variants: detail.variants.map((variant) => ({
+            id: variant.id,
+            label: variant.optionValues.join(" / "),
+            sku: variant.sku,
+            price: variant.price,
+            stock: variant.stock,
+          })),
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setState({ kind: "error" })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [productId])
+
+  return (
+    <div className="border-t border-[#eef2f8] px-5 py-4">
+      <div className="mb-2.5 flex items-baseline justify-between gap-2">
+        <p className={cn("text-[13px] font-bold", HEADING)}>
+          {state.kind === "ready"
+            ? t("detail.variantsTitle", { count: state.variants.length })
+            : t("detail.variantsTitle", { count: 0 })}
+        </p>
+        {state.kind === "ready" && state.options.length > 0 ? (
+          <p className={cn("text-[11px]", MUTED)}>{state.options.join(" · ")}</p>
+        ) : null}
+      </div>
+
+      {state.kind === "loading" ? (
+        <div className="flex justify-center py-4 text-[#95a4bd]">
+          <Loader2 className="size-5 animate-spin" />
+        </div>
+      ) : state.kind === "error" ? (
+        <p className={cn("py-3 text-center text-[12px]", MUTED)}>{t("detail.variantsError")}</p>
+      ) : state.variants.length === 0 ? (
+        <p className={cn("py-3 text-center text-[12px]", MUTED)}>{t("detail.noVariants")}</p>
+      ) : (
+        <div className="max-h-[260px] overflow-y-auto rounded-[12px] border border-[#eef2f8]">
+          <table className="w-full text-center text-[12px]">
+            <thead className="sticky top-0 bg-[#f6f8fc]">
+              <tr className={cn("text-[11px] font-semibold", MUTED)}>
+                <th className="px-3 py-2 text-right">{t("detail.variantColumns.variant")}</th>
+                <th className="px-3 py-2">{t("detail.variantColumns.sku")}</th>
+                <th className="px-3 py-2">{t("detail.variantColumns.price")}</th>
+                <th className="px-3 py-2">{t("detail.variantColumns.stock")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.variants.map((variant) => (
+                <tr key={variant.id} className="border-t border-[#f2f5fa]">
+                  <td className={cn("px-3 py-2 text-right font-semibold", HEADING)}>
+                    {variant.label || "—"}
+                  </td>
+                  <td className={cn("px-3 py-2 text-[11.5px]", MUTED)}>{variant.sku || "—"}</td>
+                  <td className={cn("px-3 py-2 font-bold tabular-nums", HEADING)}>
+                    {variant.price === null ? "—" : formatCurrency(variant.price, currency)}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-[#334155]">
+                    {variant.stock === null ? "—" : variant.stock.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DetailStat({
   label,
   value,
@@ -1375,7 +1514,7 @@ export default function ProductsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] text-center">
+              <table className="w-full min-w-[1280px] text-center">
                 <thead>
                   <tr>
                     <th className="border-b border-[#eef2f8] px-3 py-3">
@@ -1389,6 +1528,7 @@ export default function ProductsPage() {
                     </th>
                     {[
                       { key: "product", label: t("table.columns.product"), align: "text-right" },
+                      { key: "type", label: t("table.columns.type"), align: "text-center" },
                       { key: "sku", label: t("table.columns.sku"), align: "text-center" },
                       { key: "category", label: t("table.columns.category"), align: "text-center" },
                       { key: "branch", label: t("table.columns.branch"), align: "text-center" },
@@ -1470,6 +1610,9 @@ export default function ProductsPage() {
                           </div>
                         </td>
 
+                        <td className="px-3 py-3.5">
+                          <ProductTypePill type={product.productType} tTypes={tTypes} />
+                        </td>
                         <td className={cn("px-3 py-3.5 text-[11.5px]", MUTED)}>
                           {product.sku || "—"}
                         </td>
@@ -1711,6 +1854,9 @@ export default function ProductsPage() {
 
                   {/* The same pills the table uses, so the two read as one system. */}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {detailProduct.productType ? (
+                      <ProductTypePill type={detailProduct.productType} tTypes={tTypes} />
+                    ) : null}
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
@@ -1802,6 +1948,14 @@ export default function ProductsPage() {
                   value={activityDateFormat.format(new Date(detailProduct.activityDate))}
                 />
               </dl>
+
+              {detailProduct.productType === "variable" && detailProduct.isNative ? (
+                <ProductVariantsSection
+                  key={detailProduct.id}
+                  productId={detailProduct.id}
+                  currency={detailProduct.currency}
+                />
+              ) : null}
 
               {/* RTL: the primary action is written first so it sits at the right of the group. */}
               <DialogFooter className="mx-0 mb-0 flex-row items-center gap-2 rounded-b-[18px] border-t border-[#eef2f8] bg-[#fafbfe] p-4 sm:justify-start">

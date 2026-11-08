@@ -1905,7 +1905,8 @@
           "price": "سعر البيع",
           "platform": "المنصة",
           "actions": "إجراءات",
-          "branch": "الفرع"
+          "branch": "الفرع",
+          "type": "النوع"
         }
       },
       "pagination": {
@@ -1937,7 +1938,16 @@
         "edit": "تعديل المنتج",
         "delete": "حذف",
         "close": "إغلاق",
-        "managedElsewhere": "هذا المنتج يُدار من {platform} ولا يمكن تعديله هنا."
+        "managedElsewhere": "هذا المنتج يُدار من {platform} ولا يمكن تعديله هنا.",
+        "variantsTitle": "المتغيرات ({count})",
+        "variantsError": "تعذّر تحميل المتغيرات.",
+        "noVariants": "لا توجد متغيرات لهذا المنتج.",
+        "variantColumns": {
+          "variant": "المتغير",
+          "sku": "رمز المنتج",
+          "price": "السعر",
+          "stock": "الكمية"
+        }
       },
       "deleteDialog": {
         "title": "حذف المنتج؟",
