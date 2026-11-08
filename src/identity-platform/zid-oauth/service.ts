@@ -1331,7 +1331,12 @@ export class ZidOAuthService {
     if (this.webhookRegistrationsInFlight.has(connectionId)) return
     this.webhookRegistrationsInFlight.add(connectionId)
     try {
-      if (await this.repository.hasEvent(connectionId, ZID_WEBHOOKS_REGISTERED_EVENT)) return
+      // Since the last (re)connect only: uninstalling the app removes its webhooks on Zid's side,
+      // so a reinstall -- the same connection row -- has to register them again.
+      if (
+        await this.repository.hasEventSinceLastConnect(connectionId, ZID_WEBHOOKS_REGISTERED_EVENT)
+      )
+        return
       const storeId = await this.repository.findSelectedStoreAccountId(connectionId)
       if (!storeId) return
 

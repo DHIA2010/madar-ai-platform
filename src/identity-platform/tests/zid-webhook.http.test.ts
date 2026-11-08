@@ -432,6 +432,19 @@ describe("POST /v1/integrations/zid/webhook", () => {
     await authedPost(`/v1/integrations/zid/webhook?store_id=${STORE_ID}`, "customer.update", body)
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(registrations).toHaveLength(countAfterFirst)
+
+    // Uninstalling removes the app's webhooks on Zid's side; reinstalling reconnects the same
+    // connection row (last_connected_at moves on) -- the next delivery registers them again.
+    await database.query(
+      `update zid_oauth_connections set last_connected_at = now() + interval '1 second' where id = $1`,
+      [connectionId]
+    )
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    await authedPost(`/v1/integrations/zid/webhook?store_id=${STORE_ID}`, "customer.update", body)
+    for (let attempt = 0; attempt < 50 && registrations.length === countAfterFirst; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(registrations.length).toBeGreaterThan(countAfterFirst)
   })
 
   it("is idempotent against a duplicated/replayed delivery", async () => {

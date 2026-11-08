@@ -674,6 +674,26 @@ export class ZidOAuthRepository
     })
   }
 
+  // Like hasEvent, but only counting what happened since the connection last (re)connected --
+  // for state Zid wipes when the app is uninstalled (its webhook subscriptions): a reinstall
+  // reuses the same connection row, and an event from before it says nothing about now.
+  async hasEventSinceLastConnect(connectionId: string, eventType: string): Promise<boolean> {
+    const result = await this.db.query<{ found: number }>({
+      name: "zid-oauth-event-exists-since-connect",
+      text: `
+        SELECT 1 AS found
+        FROM zid_oauth_events e
+        JOIN zid_oauth_connections c ON c.id = e.connection_id
+        WHERE e.connection_id = $1
+          AND e.event_type = $2
+          AND (c.last_connected_at IS NULL OR e.created_at >= c.last_connected_at)
+        LIMIT 1
+      `,
+      values: [connectionId, eventType],
+    })
+    return result.rows.length > 0
+  }
+
   async hasEvent(connectionId: string, eventType: string): Promise<boolean> {
     const result = await this.db.query<{ found: number }>({
       name: "zid-oauth-event-exists",
