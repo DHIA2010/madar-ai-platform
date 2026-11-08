@@ -1,5 +1,6 @@
 import type { ZidProductPromotionService } from "../products/zid-product-promotion-service"
-import type { ZidProductApiPayload } from "../products/zid-product-mapper"
+import { isZidVariantChild } from "../products/zid-product-mapper"
+import { fetchZidProduct } from "./product-fetch"
 import { toRecordDate } from "./record-date"
 import type { ZidOAuthRepository } from "./repository"
 import type { ZidOAuthService } from "./service"
@@ -158,7 +159,6 @@ export class ZidWebhookService {
   }
 
   private async syncProduct(target: WebhookTarget, entityId: string, event: string) {
-    const entityType = "products"
     // Confirmed live (same sandbox store used for every other Zid finding this session):
     // GET /products/{id}/ returns the exact same full shape as the list endpoint's items, so
     // webhook ingestion re-fetches the canonical record rather than trusting whatever shape the
@@ -171,49 +171,44 @@ export class ZidWebhookService {
       console.error("zid.webhook_access_token_failed", error)
       return
     }
+    const fetchProduct = (productId: string) =>
+      fetchZidProduct({
+        apiBaseUrl: this.apiBaseUrl,
+        storeId: target.customerId,
+        accessToken,
+        productId,
+      })
 
-    const response = await fetch(
-      `${this.apiBaseUrl.replace(/\/$/, "")}/${entityType}/${entityId}/`,
-      {
-        headers: {
-          "access-token": accessToken,
-          "store-id": target.customerId,
-          "accept-language": "en",
-          role: "Manager",
-          accept: "application/json",
-        },
+    const data = await fetchProduct(entityId)
+    if (!data) return
+
+    // A variant (Zid "child") is imported as part of its parent: an update to one re-syncs the
+    // parent, which carries every variant.
+    const product = isZidVariantChild(data) ? await fetchProduct(String(data.parent_id)) : data
+    const records = [data, ...(product && product !== data ? [product] : [])]
+    for (const child of product?.variants ?? []) {
+      if (!records.some((record) => String(record.id) === String(child.id))) {
+        records.push(child as typeof data)
       }
-    )
-    if (!response.ok) {
-      console.error("zid.webhook_refetch_failed", { entityType, entityId, status: response.status })
-      return
     }
-
-    const data = (await response.json()) as Record<string, unknown>
 
     await this.syncRepository.upsertRecords({
       connectionId: target.connectionId,
       customerId: target.customerId,
-      records: [
-        {
-          entityType,
-          entityId,
-          recordDate: recordDateFor(data),
-          payload: data,
-        },
-      ],
+      records: records.map((record) => ({
+        entityType: "products" as const,
+        entityId: String(record.id),
+        recordDate: recordDateFor(record as Record<string, unknown>),
+        payload: record as Record<string, unknown>,
+      })),
     })
-    console.log("zid.webhook_synced", { event, entityType, entityId })
+    console.log("zid.webhook_synced", { event, entityType: "products", entityId })
 
     // Auto-promotes/reverse-syncs the linked native product (see ZidProductPromotionService) --
     // best-effort, a failure here must never fail the webhook's own 200 ack to Zid.
-    if (this.promotionService) {
+    if (this.promotionService && product) {
       await this.promotionService
-        .promoteOrSync(
-          target.organizationId,
-          target.workspaceId,
-          data as unknown as ZidProductApiPayload
-        )
+        .promoteOrSync(target.organizationId, target.workspaceId, product)
         .catch((error: unknown) => {
           console.error("zid.product_promotion_failed", { entityId, error })
         })

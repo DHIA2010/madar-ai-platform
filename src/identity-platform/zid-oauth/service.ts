@@ -1593,6 +1593,79 @@ export class ZidOAuthService {
     }
   }
 
+  // Zid's app.market.application.uninstall (an App Event, see webhook-service.ts): stops every
+  // live connection of that store. `verified` is true when the delivery carried our webhook
+  // credentials; without them the event is only acted on once Zid itself confirms the store's
+  // access is gone, so a forged event can't disconnect a store that still has the app.
+  async handleAppUninstall(input: {
+    storeIds: string[]
+    verified: boolean
+    details: Record<string, unknown>
+  }): Promise<{ uninstalled: number; ignored: number }> {
+    const connections = await this.repository.findLiveConnectionsByStoreId(input.storeIds)
+    let uninstalled = 0
+    let ignored = 0
+    for (const connection of connections) {
+      if (!input.verified && !(await this.isAccessRevoked(connection.id))) {
+        console.warn("zid.app_uninstall_unconfirmed", { connectionId: connection.id })
+        ignored += 1
+        continue
+      }
+      const now = new Date().toISOString()
+      await this.repository.withTransaction(async () => {
+        await this.repository.markConnectionUninstalled(connection.id, now)
+        await this.repository.saveEvent(connection.id, "zid.oauth.connection.uninstalled", {
+          ...input.details,
+          verified: input.verified,
+        })
+        await this.repository.appendOutboxEvent({
+          eventType: "zid.oauth.connection.uninstalled",
+          aggregateId: connection.id,
+          occurredAt: now,
+          metadata: {
+            actorUserId: null,
+            organizationId: connection.organizationId,
+            workspaceId: connection.workspaceId,
+          },
+          payload: { reason: "Uninstalled from the Zid App Market" },
+        })
+      })
+      uninstalled += 1
+    }
+    return { uninstalled, ignored }
+  }
+
+  // Whether Zid no longer accepts this connection's credentials: the refresh is refused, or the
+  // manager profile answers 401/403. A network failure is not an answer, so it counts as "not
+  // revoked" and the connection is left alone.
+  private async isAccessRevoked(connectionId: string): Promise<boolean> {
+    let access: { accessToken: string; authorizationHeader: string }
+    try {
+      access = await this.resolveAccessToken(connectionId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ""
+      return (
+        message === "ZID_OAUTH_TOKEN_REFRESH_FAILED" || message === "ZID_OAUTH_CONNECTION_NOT_READY"
+      )
+    }
+    try {
+      const config = await this.loadResolvedConfig()
+      const response = await fetch(
+        `${config.apiBaseUrl.replace(/\/$/, "")}/managers/account/profile`,
+        {
+          headers: {
+            authorization: access.authorizationHeader,
+            "x-manager-token": access.accessToken,
+            accept: "application/json",
+          },
+        }
+      )
+      return response.status === 401 || response.status === 403
+    } catch {
+      return false
+    }
+  }
+
   async startReconnect(actor: AuthenticatedActor, connectionId: string) {
     assertActorCanManageIntegrations(actor)
 

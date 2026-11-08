@@ -1058,6 +1058,52 @@ export class ZidOAuthRepository
     })
   }
 
+  // The live connections of one Zid store -- matched like findWebhookTargetByStoreId (the numeric
+  // store id or the store's uuid), but without needing a selected store row.
+  async findLiveConnectionsByStoreId(
+    storeIds: string[]
+  ): Promise<Array<{ id: string; organizationId: string; workspaceId: string | null }>> {
+    const ids = storeIds.filter((id) => id.trim().length > 0)
+    if (ids.length === 0) return []
+    const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ")
+    const result = await this.db.query<Record<string, unknown>>(
+      `SELECT id, organization_id, workspace_id
+         FROM zid_oauth_connections
+        WHERE (store_uuid IN (${placeholders}) OR provider_account_id IN (${placeholders}))
+          AND status IN ('connected', 'paused', 'error')
+          AND deleted_at IS NULL`,
+      ids
+    )
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      organizationId: String(row.organization_id),
+      workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+    }))
+  }
+
+  // The merchant removed the app on Zid: the connection stops (every lookup that feeds webhooks,
+  // syncs and stock pushes wants status = 'connected') and its tokens, which Zid has revoked, are
+  // dropped. Nothing else is touched -- the merchant's Madar account, products and orders stay,
+  // and reinstalling updates this same row back to connected (claimInstall / upsertConnection).
+  async markConnectionUninstalled(connectionId: string, occurredAt: string) {
+    await this.db.query({
+      name: "zid-oauth-connection-uninstalled",
+      text: `
+        UPDATE zid_oauth_connections
+        SET status = 'disconnected',
+            encrypted_access_token = NULL,
+            encrypted_refresh_token = NULL,
+            encrypted_authorization_token = NULL,
+            token_expires_at = NULL,
+            last_disconnected_at = $2,
+            updated_at = $2
+        WHERE id = $1
+          AND deleted_at IS NULL
+      `,
+      values: [connectionId, occurredAt],
+    })
+  }
+
   async setConnectionLifecycleStatus(input: {
     connectionId: string
     status: "connected" | "paused" | "disconnected"

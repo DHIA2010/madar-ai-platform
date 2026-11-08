@@ -1621,24 +1621,46 @@ export function createIdentityApiServer(
 
         // Unlike Salla's HMAC-over-raw-body scheme, Zid's delivery auth (Basic, over a fixed
         // header) doesn't need the raw bytes -- readJsonBody is fine here.
-        if (
-          !verifyZidWebhookBasicAuth(
-            request.headers.authorization,
-            credentials.username,
-            credentials.password
-          )
-        ) {
-          return send(401, {
-            code: "ZID_WEBHOOK_INVALID_AUTH",
-            message: "Invalid webhook credentials.",
-          })
-        }
+        const authenticated = verifyZidWebhookBasicAuth(
+          request.headers.authorization,
+          credentials.username,
+          credentials.password
+        )
 
         let payload: Record<string, unknown>
         try {
           payload = (await readJsonBody(request)) as Record<string, unknown>
         } catch {
           return send(400, { code: "ZID_WEBHOOK_INVALID_BODY", message: "Invalid JSON body." })
+        }
+
+        // Zid's App Events (docs.zid.sa/doc-878234) -- subscribed in the Partner Dashboard rather
+        // than per store, named in the body's event_name. Only the uninstall acts; the delivery
+        // may come without our credentials, which handleAppUninstall makes up for by checking
+        // with Zid that the store's access is really gone.
+        const appEvent = typeof payload.event_name === "string" ? payload.event_name : ""
+        if (appEvent.startsWith("app.market.")) {
+          if (appEvent === "app.market.application.uninstall" && zidOAuthMarketplaceService) {
+            const result = await zidOAuthMarketplaceService.handleAppUninstall({
+              storeIds: [payload.store_id, payload.store_uuid]
+                .filter((value) => value !== undefined && value !== null)
+                .map(String),
+              verified: authenticated,
+              details: {
+                appId: payload.app_id ?? null,
+                planName: payload.plan_name ?? null,
+                storeUrl: payload.store_url ?? null,
+              },
+            })
+            console.log("zid.app_uninstall", result)
+          }
+          return send(200, { received: true })
+        }
+        if (!authenticated) {
+          return send(401, {
+            code: "ZID_WEBHOOK_INVALID_AUTH",
+            message: "Invalid webhook credentials.",
+          })
         }
 
         // Confirmed live: Zid sends the event name in this header, never in the body -- there is

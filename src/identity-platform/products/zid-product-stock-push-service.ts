@@ -12,10 +12,10 @@ export interface StockPushLine {
 }
 
 // Mirrors SallaStockPushService's shape exactly, adapted to Zid's own Products API (access-token/
-// store-id headers, not Salla's Bearer token) and its real stock-update endpoint. Zid has no
-// variant support (products/zid-product-mapper.ts maps every product to "simple"), so unlike
-// Salla's service there is no product-level-vs-variant-level branch -- a push target is always
-// the product's own stock_quantity.
+// store-id headers, not Salla's Bearer token) and its real stock-update endpoint. A variant is
+// linked to its Zid child product, itself a product with its own stock entry on Zid's side -- so
+// the push is the same call either way; only the figure read on Madar's side differs (the
+// variant's own stock rather than the product's).
 export class ZidProductStockPushService {
   private readonly apiBaseUrl: string
 
@@ -45,7 +45,7 @@ export class ZidProductStockPushService {
     _sign: 1 | -1
   ): Promise<void> {
     const zidProductIds = new Set<string>()
-    const nativeProductByZidId = new Map<string, string>()
+    const nativeTargetByZidId = new Map<string, { productId: string; variantId: string | null }>()
 
     for (const line of lines) {
       if (!line.productId) continue
@@ -55,7 +55,10 @@ export class ZidProductStockPushService {
       })
       if (!link) continue
       zidProductIds.add(link.zidProductId)
-      nativeProductByZidId.set(link.zidProductId, line.productId)
+      nativeTargetByZidId.set(link.zidProductId, {
+        productId: line.productId,
+        variantId: link.variantId,
+      })
     }
     if (zidProductIds.size === 0) return
 
@@ -76,10 +79,10 @@ export class ZidProductStockPushService {
     }
 
     for (const zidProductId of zidProductIds) {
-      const productId = nativeProductByZidId.get(zidProductId)
-      if (!productId) continue
+      const target = nativeTargetByZidId.get(zidProductId)
+      if (!target) continue
       try {
-        const currentStock = await this.readCurrentStock(productId)
+        const currentStock = await this.readCurrentStock(target.productId, target.variantId)
         if (currentStock === null) continue
         await this.pushQuantity(accessToken, storeId, zidProductId, currentStock)
       } catch (error) {
@@ -89,11 +92,19 @@ export class ZidProductStockPushService {
     }
   }
 
-  private async readCurrentStock(productId: string): Promise<number | null> {
-    const result = await this.database.query<{ stock_quantity: string | number | null }>(
-      `SELECT stock_quantity FROM products WHERE id = $1`,
-      [productId]
-    )
+  private async readCurrentStock(
+    productId: string,
+    variantId: string | null
+  ): Promise<number | null> {
+    const result = variantId
+      ? await this.database.query<{ stock_quantity: string | number | null }>(
+          `SELECT stock AS stock_quantity FROM product_variants WHERE id = $1 AND product_id = $2`,
+          [variantId, productId]
+        )
+      : await this.database.query<{ stock_quantity: string | number | null }>(
+          `SELECT stock_quantity FROM products WHERE id = $1`,
+          [productId]
+        )
     const stock = result.rows[0]?.stock_quantity
     return stock === null || stock === undefined ? null : Number(stock)
   }

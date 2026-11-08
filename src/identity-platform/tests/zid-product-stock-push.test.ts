@@ -117,6 +117,45 @@ describe("ZidProductStockPushService.pushStockForLines", () => {
     })
   })
 
+  it("pushes a sold variant's own stock to the Zid child it is linked to", async () => {
+    const productId = randomUUID()
+    const variantId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, product_type, name, stock_quantity)
+       values ($1, $2, 'variable', 'Spray', null)`,
+      [productId, organizationId]
+    )
+    await database.query(
+      `insert into product_variants (id, product_id, sku, price, stock, option_values, position)
+       values ($1, $2, 'SPRAY-12', 30, 6, '["12"]'::jsonb, 0)`,
+      [variantId, productId]
+    )
+    await linksService.upsertLink(
+      organizationId,
+      {
+        productId,
+        variantId,
+        zidProductId: "child-a",
+        zidProductSku: "SPRAY-12",
+        zidProductName: null,
+      },
+      userId
+    )
+    const fetchSpy = mockFetchSequence({
+      id: "child-a",
+      stocks: [{ id: "child-stock-1", is_infinite: false, available_quantity: 7 }],
+    })
+
+    await pushService.pushStockForLines(organizationId, null, [{ productId, variantId }], -1)
+
+    const [patchUrl, patchInit] = fetchSpy.mock.calls[1]
+    expect(String(patchUrl)).toContain("/products/child-a/stocks/child-stock-1/")
+    expect(JSON.parse(String(patchInit?.body))).toEqual({
+      available_quantity: 6,
+      is_infinite: false,
+    })
+  })
+
   it("pushes is_infinite: true instead of the sentinel figure for a product Zid tracks as unlimited", async () => {
     // Madar's own stand-in for "this came from a Zid location Zid itself tracks as unlimited"
     // (see zid-product-mapper.ts's INFINITE_STOCK_SENTINEL) -- pushed back as is_infinite: true

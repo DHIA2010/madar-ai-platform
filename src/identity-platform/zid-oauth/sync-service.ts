@@ -4,8 +4,10 @@ import type {
   IntegrationProviderSyncInput,
 } from "../integrations/provider-contracts"
 import { IntegrationProviderError } from "../integrations/provider-error"
+import { needsZidVariantFetch, type ZidProductApiPayload } from "../products/zid-product-mapper"
 import type { ZidProductPromotionService } from "../products/zid-product-promotion-service"
 
+import { fetchZidProduct } from "./product-fetch"
 import { toRecordDate } from "./record-date"
 import type { ZidOAuthRepository } from "./repository"
 import type { ZidOAuthService } from "./service"
@@ -105,6 +107,35 @@ async function fetchAllProducts(input: {
 // ZidOAuthService.resolveAccessToken (Bearer-prefixed, preferring Zid's own distinct
 // `authorization` token-response field over access_token when present -- confirmed on stage
 // that using access_token alone here 401s even though it works fine for X-Manager-Token).
+// Replaces each listed parent with its full record (variants included) and appends its children,
+// once each -- the list may already carry a child on its own, so ids are de-duplicated.
+async function withZidVariants(
+  listed: ZidProductApiRow[],
+  input: { apiBaseUrl: string; storeId: string; accessToken: string }
+): Promise<ZidProductApiRow[]> {
+  const result: ZidProductApiRow[] = []
+  const seen = new Set<string>()
+  const add = (product: ZidProductApiRow) => {
+    if (seen.has(String(product.id))) return
+    seen.add(String(product.id))
+    result.push(product)
+  }
+  const children: ZidProductApiRow[] = []
+  for (const product of listed) {
+    if (!needsZidVariantFetch(product as unknown as ZidProductApiPayload)) {
+      add(product)
+      continue
+    }
+    const full = await fetchZidProduct({ ...input, productId: String(product.id) })
+    add(full ? (full as unknown as ZidProductApiRow) : product)
+    for (const child of full?.variants ?? []) {
+      children.push(child as unknown as ZidProductApiRow)
+    }
+  }
+  children.forEach(add)
+  return result
+}
+
 async function fetchAllMerchantListPages<T>(input: {
   apiBaseUrl: string
   path: string
@@ -261,7 +292,7 @@ export class ZidSyncService {
 
       // Components the merchant turned off are skipped entirely; their existing records stay.
       const components = await this.syncRepository.findSyncComponents(connection.id)
-      const [products, orders, customers] = await Promise.all([
+      const [listedProducts, orders, customers] = await Promise.all([
         components.products
           ? fetchAllProducts({
               apiBaseUrl: this.apiBaseUrl,
@@ -294,6 +325,15 @@ export class ZidSyncService {
             })
           : Promise.resolve([]),
       ])
+
+      // A parent with variants comes back from the list without its variants[] -- fetch each
+      // one whole, and keep its children as records of their own (a child's stock webhook is
+      // resolved through its own record, see repository.findWebhookTargetByZidProductId).
+      const products = await withZidVariants(listedProducts, {
+        apiBaseUrl: this.apiBaseUrl,
+        storeId: input.customerId,
+        accessToken,
+      })
 
       const records: ZidSyncRecordInput[] = [
         ...products.map((product) => ({

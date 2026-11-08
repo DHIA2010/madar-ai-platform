@@ -167,7 +167,7 @@ describe("PUT/GET/DELETE /v1/products/:id/zid-link", () => {
       headers: authHeaders(token),
     })
     expect(await getResponse.json()).toEqual({
-      link: { zidProductId: "555", zidProductSku: "SKU-1" },
+      link: { zidProductId: "555", zidProductSku: "SKU-1", variantId: null },
     })
 
     const removeResponse = await fetch(`${baseUrl}/v1/products/${productId}/zid-link`, {

@@ -466,3 +466,96 @@ describe("POST /v1/integrations/zid/webhook", () => {
     expect(rows.rows[0]).toEqual({ entity_type: "products", entity_id: "777" })
   })
 })
+
+// Zid's App Events (docs.zid.sa/doc-878234): set up once in the Partner Dashboard, named in the
+// body's event_name rather than a header.
+describe("POST /v1/integrations/zid/webhook -- app.market.application.uninstall", () => {
+  const uninstallBody = {
+    event_name: "app.market.application.uninstall",
+    app_id: 1292,
+    store_id: Number(STORE_ID),
+    store_uuid: "d78468cd-4b44-4fee-a00d-76561f35787c",
+    status: "uninstall",
+  }
+  const postUninstall = (authorization?: string) =>
+    fetch(`${baseUrl}/v1/integrations/zid/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(authorization ? { authorization } : {}) },
+      body: JSON.stringify(uninstallBody),
+    })
+  const connectionState = async (connectionId: string) =>
+    (
+      await database.query<{ status: string; encrypted_access_token: string | null }>(
+        `select status, encrypted_access_token from zid_oauth_connections where id = $1`,
+        [connectionId]
+      )
+    ).rows[0]
+  const seedWithToken = async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    await database.query(
+      `update zid_oauth_connections set encrypted_access_token = 'v1:x:y:z' where id = $1`,
+      [connectionId]
+    )
+    return connectionId
+  }
+
+  it("disconnects the store and drops its tokens when the delivery carries our credentials", async () => {
+    const connectionId = await seedWithToken()
+
+    const response = await postUninstall(basicAuthHeader())
+    expect(response.status).toBe(200)
+    expect(await connectionState(connectionId)).toEqual({
+      status: "disconnected",
+      encrypted_access_token: null,
+    })
+    const events = await database.query<{ event_type: string }>(
+      `select event_type from zid_oauth_events where connection_id = $1`,
+      [connectionId]
+    )
+    expect(events.rows.map((row) => row.event_type)).toContain("zid.oauth.connection.uninstalled")
+    // Later store webhooks no longer find the store.
+    const later = await authedPost("/v1/integrations/zid/webhook", "order.create", {
+      id: 1,
+      store_id: Number(STORE_ID),
+    })
+    expect(later.status).toBe(200)
+    expect((await database.query(`select 1 from zid_records`)).rows).toHaveLength(0)
+  })
+
+  it("without our credentials, acts only once Zid confirms the store's access is gone", async () => {
+    const connectionId = await seedWithToken()
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "still-valid",
+      authorizationHeader: "Bearer still-valid",
+    })
+    const profileStatus = { value: 200 }
+    const realFetch = globalThis.fetch
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).includes("/managers/account/profile")) {
+        return new Response("{}", { status: profileStatus.value })
+      }
+      return realFetch(input, init)
+    })
+
+    // Zid still accepts the token: a forged event changes nothing.
+    expect((await postUninstall()).status).toBe(200)
+    expect((await connectionState(connectionId)).status).toBe("connected")
+
+    // Zid refuses it: the uninstall is real.
+    profileStatus.value = 401
+    expect((await postUninstall()).status).toBe(200)
+    expect((await connectionState(connectionId)).status).toBe("disconnected")
+  })
+
+  it("acks the other app events without changing anything", async () => {
+    const connectionId = await seedWithToken()
+    const response = await fetch(`${baseUrl}/v1/integrations/zid/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...uninstallBody, event_name: "app.market.subscription.renew" }),
+    })
+    expect(response.status).toBe(200)
+    expect((await connectionState(connectionId)).status).toBe("connected")
+  })
+})

@@ -117,12 +117,17 @@ export class ZidProductLinksService {
   async findLinkForLine(
     organizationId: string,
     target: ZidProductLinkTarget
-  ): Promise<{ zidProductId: string; zidProductSku: string | null } | null> {
+  ): Promise<{
+    zidProductId: string
+    zidProductSku: string | null
+    variantId: string | null
+  } | null> {
     const result = await this.database.query<{
       zid_product_id: string
       zid_product_sku: string | null
+      variant_id: string | null
     }>(
-      `SELECT zid_product_id, zid_product_sku FROM zid_product_links
+      `SELECT zid_product_id, zid_product_sku, variant_id FROM zid_product_links
         WHERE organization_id = $1 AND product_id = $2
           AND (variant_id IS NULL OR variant_id = $3::uuid)
         ORDER BY variant_id IS NOT NULL DESC
@@ -130,7 +135,13 @@ export class ZidProductLinksService {
       [organizationId, target.productId, target.variantId ?? null]
     )
     const row = result.rows[0]
-    return row ? { zidProductId: row.zid_product_id, zidProductSku: row.zid_product_sku } : null
+    return row
+      ? {
+          zidProductId: row.zid_product_id,
+          zidProductSku: row.zid_product_sku,
+          variantId: row.variant_id ? String(row.variant_id) : null,
+        }
+      : null
   }
 
   async findProductForAnyZidId(
