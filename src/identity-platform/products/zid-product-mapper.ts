@@ -156,6 +156,30 @@ function buildVariantOptionsAndVariants(children: ZidProductApiPayload[]): {
   }
 }
 
+// Zid's descriptions come from a rich-text editor (`<p style="margin:6px 0px">…</p>`); Madar's is
+// a plain textarea, so the markup would show up as literal tags there. Block ends become line
+// breaks, every other tag goes, and the few entities an editor emits are decoded.
+const HTML_ENTITIES: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+}
+
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;|&amp;|&lt;|&gt;|&quot;|&#39;/g, (entity) => HTML_ENTITIES[entity])
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 export function mapZidProductToCreateInput(
   payload: ZidProductApiPayload,
   fallbackCategory: string
@@ -172,7 +196,9 @@ export function mapZidProductToCreateInput(
     name,
     sku,
     category,
-    description: localizedText(payload.description) || localizedText(payload.short_description),
+    description:
+      htmlToText(localizedText(payload.description)) ||
+      htmlToText(localizedText(payload.short_description)),
     status,
     currency: (payload.currency ?? "").trim().toUpperCase() || FALLBACK_CURRENCY,
     baseUnit: null,

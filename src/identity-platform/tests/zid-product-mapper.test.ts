@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  htmlToText,
   mapZidProductToCreateInput,
   type ZidProductApiPayload,
 } from "../products/zid-product-mapper"
@@ -85,5 +86,15 @@ describe("mapZidProductToCreateInput", () => {
   it("prefers Arabic when no English name is given, matching normalizeZidProduct's precedent", () => {
     const payload: ZidProductApiPayload = { id: 1, name: { ar: "اسم عربي" } }
     expect(mapZidProductToCreateInput(payload, "fallback").name).toBe("اسم عربي")
+  })
+})
+
+describe("htmlToText", () => {
+  it("turns Zid's rich-text description into plain text", () => {
+    expect(htmlToText('<p style="margin:6px 0px">قميص قطن</p>')).toBe("قميص قطن")
+    expect(
+      htmlToText("<p>سطر <strong>أول</strong></p><p>سطر&nbsp;ثانٍ &amp; أخير<br/>ثالث</p>")
+    ).toBe("سطر أول\nسطر ثانٍ & أخير\nثالث")
+    expect(htmlToText("<p></p>")).toBe("")
   })
 })
