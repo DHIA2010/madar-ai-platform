@@ -248,4 +248,27 @@ export class ZidSyncRepository {
 
     return result.rows.map(mapRecord)
   }
+
+  async findRecordPayload(
+    connectionId: string,
+    entityType: string,
+    entityId: string
+  ): Promise<Record<string, unknown> | null> {
+    const result = await this.db.query<{ payload: Record<string, unknown> }>(
+      `select payload from zid_records
+        where connection_id = $1 and entity_type = $2 and entity_id = $3`,
+      [connectionId, entityType, entityId]
+    )
+    return result.rows[0]?.payload ?? null
+  }
+
+  async deleteRecords(connectionId: string, entityType: string, entityIds: string[]) {
+    if (entityIds.length === 0) return
+    const placeholders = entityIds.map((_, index) => `$${index + 3}`).join(", ")
+    await this.db.query(
+      `delete from zid_records
+        where connection_id = $1 and entity_type = $2 and entity_id in (${placeholders})`,
+      [connectionId, entityType, ...entityIds]
+    )
+  }
 }

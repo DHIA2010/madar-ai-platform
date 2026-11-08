@@ -1,5 +1,5 @@
 import type { ZidProductPromotionService } from "../products/zid-product-promotion-service"
-import { isZidVariantChild } from "../products/zid-product-mapper"
+import { isZidVariantChild, type ZidProductApiPayload } from "../products/zid-product-mapper"
 import { fetchZidProduct } from "./product-fetch"
 import { toRecordDate } from "./record-date"
 import type { ZidOAuthRepository } from "./repository"
@@ -26,9 +26,9 @@ export interface ZidWebhookEnvelope {
 // order is created and returns it when one is cancelled, but has no stock webhook of its own.
 const STOCK_MOVING_ORDER_EVENTS = new Set(["order.create", "order.status.update"])
 
-// Confirmed real event catalog, https://docs.zid.sa/webhooks. product.delete is deliberately
-// unmapped, same reasoning as Salla's order.deleted/product.deleted (upsertRecords only ever
-// inserts/updates). Everything else maps to the entity type its own record belongs under.
+// Confirmed real event catalog, https://docs.zid.sa/webhooks. product.delete is handled on its
+// own (handleProductDeleted) -- the product is gone, so there is nothing to re-fetch or upsert.
+// Everything else maps to the entity type its own record belongs under.
 // order.*/customer.* sit on Zid's Merchant API (different auth headers, no confirmed
 // single-record GET endpoint) -- but a product.* delivery's own body already turned out to BE
 // the canonical resource with no wrapper (confirmed live), so order/customer deliveries are
@@ -86,7 +86,7 @@ export class ZidWebhookService {
 
     console.log("zid.webhook_received", { event, entityId })
 
-    const entityType = ZID_EVENT_TO_ENTITY_TYPE[event]
+    const entityType = event === "product.delete" ? "products" : ZID_EVENT_TO_ENTITY_TYPE[event]
     if (!entityType) {
       console.log("zid.webhook_event_unmapped", { event })
       return
@@ -138,7 +138,41 @@ export class ZidWebhookService {
       return
     }
 
+    if (event === "product.delete") {
+      await this.handleProductDeleted(target, entityId, payload)
+      return
+    }
+
     await this.syncProduct(target, entityId, event)
+  }
+
+  // Zid's delete body isn't documented field by field, so the record synced earlier -- which
+  // carries a parent's variants[] -- is preferred over it for working out which ids go.
+  private async handleProductDeleted(
+    target: WebhookTarget,
+    entityId: string,
+    payload: Record<string, unknown>
+  ) {
+    const saved = await this.syncRepository.findRecordPayload(
+      target.connectionId,
+      "products",
+      entityId
+    )
+    const product = { ...(saved ?? payload), id: entityId } as ZidProductApiPayload
+    if (this.promotionService) {
+      await this.promotionService
+        .removeDeleted(target.organizationId, product)
+        .catch((error: unknown) => {
+          console.error("zid.product_delete_failed", { entityId, error })
+        })
+    }
+    if (isZidVariantChild(product)) return
+    const childIds = (product.variants ?? []).map((child) => String(child.id))
+    await this.syncRepository.deleteRecords(target.connectionId, "products", [
+      entityId,
+      ...childIds,
+    ])
+    console.log("zid.webhook_product_deleted", { entityId, children: childIds.length })
   }
 
   // Re-fetches every product on an order so the stock Zid just deducted (or returned, on a

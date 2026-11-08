@@ -98,6 +98,31 @@ export class ZidProductPromotionService {
     )
   }
 
+  // A product deleted on Zid. One auto-promotion created from it is deleted here too (a soft
+  // delete, like the products page's own); one a person linked by hand is Madar's own product
+  // that was also listed on Zid, so it is only unlinked and stays. A child is a variant removed
+  // from its parent -- the parent's own product.update rebuilds the variants, nothing to do here.
+  async removeDeleted(organizationId: string, payload: ZidProductApiPayload): Promise<void> {
+    if (isZidVariantChild(payload)) return
+
+    const zidIds = [
+      String(payload.id),
+      ...(payload.variants ?? []).map((child) => String(child.id)),
+    ]
+    const links = await this.linksService.findLinksForZidIds(organizationId, zidIds)
+    const autoProductIds = new Set(
+      links.filter((link) => link.createdByUserId === null).map((link) => link.productId)
+    )
+    for (const productId of autoProductIds) {
+      try {
+        await this.catalogService.delete(organizationId, productId)
+      } catch (error) {
+        if (!(error instanceof IdentityError && error.code === "PRODUCT_NOT_FOUND")) throw error
+      }
+    }
+    await this.linksService.removeLinksByZidIds(organizationId, zidIds)
+  }
+
   private async updateAndRelink(
     organizationId: string,
     productId: string,

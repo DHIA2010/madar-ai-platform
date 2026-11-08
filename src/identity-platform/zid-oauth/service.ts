@@ -389,6 +389,7 @@ const ZID_WEBHOOK_EVENTS = [
   "product.create",
   "product.update",
   "product.publish",
+  "product.delete",
   "order.create",
   "order.status.update",
   "order.payment_status.update",
@@ -399,8 +400,9 @@ const ZID_WEBHOOK_EVENTS = [
 
 // Bumped whenever ZID_WEBHOOK_EVENTS changes, so every existing connection re-registers exactly
 // once (see ZidOAuthService.ensureWebhooksRegistered) instead of only connections made afterwards.
-// v1 (unrecorded) was product.create/update/publish only.
-const ZID_WEBHOOKS_REGISTERED_EVENT = "zid.webhooks.registered.v2"
+// v1 (unrecorded) was product.create/update/publish only; v2 added order.*/customer.*; v3 added
+// product.delete.
+const ZID_WEBHOOKS_REGISTERED_EVENT = "zid.webhooks.registered.v3"
 
 // Returns whether every event registered successfully.
 async function registerZidWebhooks(input: {

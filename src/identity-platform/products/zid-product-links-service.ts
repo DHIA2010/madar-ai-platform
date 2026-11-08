@@ -160,6 +160,28 @@ export class ZidProductLinksService {
     return row ? { productId: row.product_id } : null
   }
 
+  // Every link pointing at any of these Zid ids, with who made it: null for a link auto-promotion
+  // made, a user id for one a person picked by hand.
+  async findLinksForZidIds(
+    organizationId: string,
+    zidIds: string[]
+  ): Promise<Array<{ productId: string; createdByUserId: string | null }>> {
+    if (zidIds.length === 0) return []
+    const placeholders = zidIds.map((_, index) => `$${index + 2}`).join(", ")
+    const result = await this.database.query<{
+      product_id: string
+      created_by: string | null
+    }>(
+      `SELECT product_id, created_by FROM zid_product_links
+        WHERE organization_id = $1 AND zid_product_id IN (${placeholders})`,
+      [organizationId, ...zidIds]
+    )
+    return result.rows.map((row) => ({
+      productId: row.product_id,
+      createdByUserId: row.created_by,
+    }))
+  }
+
   // Called only when ZidProductPromotionService discovers an existing link's target product has
   // been deleted (findProductForAnyZidId has no way to know that itself -- it never joins against
   // products, see above) -- mirrors SallaProductLinksService.removeLinksBySallaIds exactly, for

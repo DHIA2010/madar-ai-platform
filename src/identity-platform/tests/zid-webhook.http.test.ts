@@ -251,11 +251,11 @@ describe("POST /v1/integrations/zid/webhook", () => {
     expect(rows.rows).toHaveLength(0)
   })
 
-  it("acks with 200 and does nothing for an event type that isn't mapped (e.g. product.delete)", async () => {
+  it("acks with 200 and does nothing for an event type that isn't mapped", async () => {
     const org = await seedOrganization()
     await seedConnectedStore({ ...org, storeId: STORE_ID })
 
-    const response = await authedPost("/v1/integrations/zid/webhook", "product.delete", {
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.unknown", {
       id: "1",
       store_id: Number(STORE_ID),
     })
@@ -263,6 +263,101 @@ describe("POST /v1/integrations/zid/webhook", () => {
 
     const rows = await database.query(`select 1 from zid_records`)
     expect(rows.rows).toHaveLength(0)
+  })
+
+  async function promoteZidProduct(product: Record<string, unknown>) {
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "test-access-token",
+      authorizationHeader: "Bearer test-access-token",
+    })
+    const nativeFetch = globalThis.fetch
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      if (url.includes(`/products/${String(product.id)}/`)) {
+        return new Response(JSON.stringify(product), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
+      return new Response("{}", { status: 404 })
+    })
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.update", {
+      id: product.id,
+      store_id: Number(STORE_ID),
+    })
+    expect(response.status).toBe(200)
+  }
+
+  const ZID_PRODUCT = {
+    id: "777001",
+    name: { ar: "قهوة زد", en: "Zid Coffee" },
+    sku: "ZID-COFFEE",
+    price: 25,
+    quantity: 10,
+    structure: "standalone",
+    updated_at: "2026-01-01T00:00:00Z",
+  }
+
+  it("deletes the product a Zid product.delete names, with its link and synced record", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    await promoteZidProduct(ZID_PRODUCT)
+
+    const promoted = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1 and sku = 'ZID-COFFEE' and deleted_at is null`,
+      [org.organizationId]
+    )
+    expect(promoted.rows).toHaveLength(1)
+
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.delete", {
+      id: ZID_PRODUCT.id,
+      store_id: Number(STORE_ID),
+    })
+    expect(response.status).toBe(200)
+
+    const remaining = await database.query(
+      `select 1 from products where id = $1 and deleted_at is null`,
+      [promoted.rows[0].id]
+    )
+    expect(remaining.rows).toHaveLength(0)
+    const links = await database.query(`select 1 from zid_product_links where product_id = $1`, [
+      promoted.rows[0].id,
+    ])
+    expect(links.rows).toHaveLength(0)
+    const records = await database.query(`select 1 from zid_records where connection_id = $1`, [
+      connectionId,
+    ])
+    expect(records.rows).toHaveLength(0)
+  })
+
+  it("only unlinks a product someone linked to the deleted Zid product by hand", async () => {
+    const org = await seedOrganization()
+    await seedConnectedStore({ ...org, storeId: STORE_ID })
+    await promoteZidProduct(ZID_PRODUCT)
+    const promoted = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1 and sku = 'ZID-COFFEE'`,
+      [org.organizationId]
+    )
+    await database.query(`update zid_product_links set created_by = $1 where product_id = $2`, [
+      org.userId,
+      promoted.rows[0].id,
+    ])
+
+    await authedPost("/v1/integrations/zid/webhook", "product.delete", {
+      id: ZID_PRODUCT.id,
+      store_id: Number(STORE_ID),
+    })
+
+    const kept = await database.query(
+      `select 1 from products where id = $1 and deleted_at is null`,
+      [promoted.rows[0].id]
+    )
+    expect(kept.rows).toHaveLength(1)
+    const links = await database.query(`select 1 from zid_product_links where product_id = $1`, [
+      promoted.rows[0].id,
+    ])
+    expect(links.rows).toHaveLength(0)
   })
 
   it("stores an order.create delivery's own body directly, no re-fetch (orders sit on a different API surface)", async () => {
@@ -406,7 +501,7 @@ describe("POST /v1/integrations/zid/webhook", () => {
     const waitForRegistration = async () => {
       for (let attempt = 0; attempt < 50; attempt += 1) {
         const found = await database.query(
-          `select 1 from zid_oauth_events where connection_id = $1 and event_type = 'zid.webhooks.registered.v2'`,
+          `select 1 from zid_oauth_events where connection_id = $1 and event_type = 'zid.webhooks.registered.v3'`,
           [connectionId]
         )
         if (found.rows.length > 0) return
