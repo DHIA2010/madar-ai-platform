@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { renderInvoicePdf } from "../pdf/invoice-pdf"
-import type { PosInvoicesService } from "../pos/invoices-service"
+import type { InvoiceView, PosInvoicesService } from "../pos/invoices-service"
 import type { PosPaymentMethodsService } from "../pos/payment-methods-service"
 import type { PosSettingsService } from "../pos/pos-settings-service"
 import { sendTemplateMessage, uploadMedia } from "./messaging"
@@ -88,6 +88,67 @@ export class WhatsAppInvoiceSender {
     }
   }
 
+  // The sale's receipt as a PDF, laid out exactly like the printed POS receipt.
+  async renderPdf(
+    organizationId: string,
+    invoice: InvoiceView
+  ): Promise<{ pdf: Buffer; filename: string; storeName: string }> {
+    const methods = await this.paymentMethods.list(organizationId, invoice.workspaceId)
+    const methodName = new Map(methods.map((method) => [method.code, method.name]))
+    const storeName = invoice.sellerName?.trim() || "متجرنا"
+    const settings = this.posSettings
+      ? await this.posSettings.get(organizationId, invoice.workspaceId).catch(() => null)
+      : null
+    const pdf = renderInvoicePdf({
+      logo: await this.logo(organizationId),
+      receiptTitleLines: settings?.showReceiptTitle ? settings.receiptTitleLines : null,
+      receiptDescriptionLines: settings?.showReceiptTitle ? settings.receiptDescriptionLines : null,
+      notesLines: invoice.notesLines,
+      invoiceNumber: invoice.invoiceNumber,
+      orderNumber: invoice.orderNumber,
+      createdAt: invoice.createdAt,
+      sellerName: invoice.sellerName,
+      sellerVatNumber: invoice.sellerVatNumber,
+      sellerAddress: invoice.sellerAddress,
+      customerName: invoice.customerName,
+      customerPhone: invoice.customerPhone,
+      customerVatNumber: invoice.customerVatNumber,
+      salesPersonName: invoice.salesPersonName,
+      items: invoice.items.map((item) => ({
+        productName: item.productName,
+        promotionName: item.promotionName,
+        quantity: item.quantity,
+        netAmount: item.netAmount,
+        taxAmount: item.taxAmount,
+      })),
+      subtotalAmount: invoice.subtotalAmount,
+      discountAmount: invoice.discountAmount,
+      taxAmount: invoice.taxAmount,
+      totalAmount: invoice.totalAmount,
+      payments: invoice.payments.map((payment) => ({
+        label: methodName.get(payment.paymentMethodCode) ?? payment.paymentMethodCode,
+        amount: payment.amount,
+      })),
+      qrCode: invoice.qrCode,
+      notes: invoice.notes,
+    })
+    return { pdf, filename: `${invoice.invoiceNumber}.pdf`, storeName }
+  }
+
+  // The same PDF for an invoice found by id alone (the public link checks its signature first).
+  async renderPdfById(invoiceId: string): Promise<{ pdf: Buffer; filename: string } | null> {
+    const owner = await this.database.query<{ organization_id: string }>(
+      "SELECT organization_id FROM pos_invoices WHERE id = $1",
+      [invoiceId]
+    )
+    const organizationId = owner.rows[0]?.organization_id
+    if (!organizationId) return null
+    const invoice = await this.invoices.get(organizationId, invoiceId)
+    if (!invoice) return null
+    const { pdf, filename } = await this.renderPdf(organizationId, invoice)
+    return { pdf, filename }
+  }
+
   async listSends(organizationId: string, invoiceId: string): Promise<WhatsAppMessageView[]> {
     const result = await this.database.query<{
       id: string
@@ -149,46 +210,7 @@ export class WhatsAppInvoiceSender {
     await this.templates.requireApproved(POS_INVOICE_TEMPLATE)
     const context = await this.platform.sendingContext()
 
-    const methods = await this.paymentMethods.list(input.organizationId, invoice.workspaceId)
-    const methodName = new Map(methods.map((method) => [method.code, method.name]))
-    const storeName = invoice.sellerName?.trim() || "متجرنا"
-    const settings = this.posSettings
-      ? await this.posSettings.get(input.organizationId, invoice.workspaceId).catch(() => null)
-      : null
-    const pdf = renderInvoicePdf({
-      logo: await this.logo(input.organizationId),
-      receiptTitleLines: settings?.showReceiptTitle ? settings.receiptTitleLines : null,
-      receiptDescriptionLines: settings?.showReceiptTitle ? settings.receiptDescriptionLines : null,
-      notesLines: invoice.notesLines,
-      invoiceNumber: invoice.invoiceNumber,
-      orderNumber: invoice.orderNumber,
-      createdAt: invoice.createdAt,
-      sellerName: invoice.sellerName,
-      sellerVatNumber: invoice.sellerVatNumber,
-      sellerAddress: invoice.sellerAddress,
-      customerName: invoice.customerName,
-      customerPhone: invoice.customerPhone,
-      customerVatNumber: invoice.customerVatNumber,
-      salesPersonName: invoice.salesPersonName,
-      items: invoice.items.map((item) => ({
-        productName: item.productName,
-        promotionName: item.promotionName,
-        quantity: item.quantity,
-        netAmount: item.netAmount,
-        taxAmount: item.taxAmount,
-      })),
-      subtotalAmount: invoice.subtotalAmount,
-      discountAmount: invoice.discountAmount,
-      taxAmount: invoice.taxAmount,
-      totalAmount: invoice.totalAmount,
-      payments: invoice.payments.map((payment) => ({
-        label: methodName.get(payment.paymentMethodCode) ?? payment.paymentMethodCode,
-        amount: payment.amount,
-      })),
-      qrCode: invoice.qrCode,
-      notes: invoice.notes,
-    })
-    const filename = `${invoice.invoiceNumber}.pdf`
+    const { pdf, filename, storeName } = await this.renderPdf(input.organizationId, invoice)
 
     const id = randomUUID()
     let waMessageId: string | null = null

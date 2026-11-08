@@ -8628,7 +8628,7 @@
     },
     "whatsapp": {
       "title": "Send invoice {number} on WhatsApp",
-      "description": "The invoice is sent as a PDF to the customer's mobile from Madar's number, with your store's name in the message.",
+      "description": "Opens WhatsApp on your number (WhatsApp Web or the app) in the customer's chat, with a ready message linking to the invoice -- just press send.",
       "send": "Send",
       "phoneRequired": "Enter the customer's mobile number.",
       "history": "Earlier sends",
@@ -8644,8 +8644,9 @@
         "templateNotReady": "Meta hasn't approved the invoice message template yet. Try again later.",
         "dailyLimit": "You've reached today's limit of WhatsApp invoices.",
         "notConfigured": "WhatsApp isn't set up in Madar yet.",
-        "failed": "Couldn't send the invoice on WhatsApp."
-      }
+        "failed": "Couldn't prepare the invoice link. Try again."
+      },
+      "open": "Open WhatsApp"
     }
   },
   "shifts": {

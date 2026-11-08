@@ -377,6 +377,38 @@ describe("point-of-sale invoices", () => {
     expect(removed.status).toBe(204)
   })
 
+  it("shares a sale on WhatsApp as a ready message with a signed link to its PDF", async () => {
+    const { token } = await signIn("invoice-share@example.com", "Invoice Share")
+    const sale = await createInvoice(token, {
+      ...COFFEE_SALE,
+      customerName: "عبدالله",
+      customerPhone: "0501234567",
+    })
+    const linkResponse = await fetch(`${baseUrl}/v1/pos/invoices/${sale.body.id}/whatsapp-link`, {
+      headers: authHeaders(token),
+    })
+    expect(linkResponse.status).toBe(200)
+    const link = (await linkResponse.json()) as { phone: string; url: string; message: string }
+    expect(link.phone).toBe("966501234567")
+    expect(link.url).toMatch(new RegExp(`/i/${sale.body.id}\\.[A-Za-z0-9_-]+$`))
+    expect(link.message).toContain("عبدالله")
+    expect(link.message).toContain(String(sale.body.invoiceNumber))
+    expect(link.message.endsWith(link.url)).toBe(true)
+
+    // The link opens the PDF without signing in; a changed signature or another id doesn't.
+    const linkToken = link.url.split("/i/")[1]
+    const pdf = await fetch(`${baseUrl}/v1/public/pos-invoices/${linkToken}/pdf`)
+    expect(pdf.status).toBe(200)
+    expect(pdf.headers.get("content-type")).toBe("application/pdf")
+    expect(
+      Buffer.from(await pdf.arrayBuffer())
+        .subarray(0, 5)
+        .toString()
+    ).toBe("%PDF-")
+    const tampered = `${linkToken.split(".")[0]}.${"x".repeat(32)}`
+    expect((await fetch(`${baseUrl}/v1/public/pos-invoices/${tampered}/pdf`)).status).toBe(404)
+  })
+
   it("replays the same idempotencyKey without creating a second invoice", async () => {
     const { token } = await signIn("invoice-idempotency@example.com", "Invoice Idempotency")
     const idempotencyKey = "11111111-1111-4111-8111-111111111111"

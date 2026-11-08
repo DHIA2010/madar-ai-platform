@@ -125,6 +125,7 @@ import { AiChatService, ChatTurnCancelledError } from "../../ai-chat/service"
 import { AiChatLlmClient } from "../../ai-chat/llm-client"
 import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
 import { ApplicationAccessService } from "../../subscriptions/app-access"
+import { invoiceIdFromLinkToken, invoiceWhatsAppLink } from "../../whatsapp/invoice-links"
 import { PackageEntitlementsService } from "../../subscriptions/entitlements"
 import { BranchAllowanceService } from "../../subscriptions/branches"
 import { MoyasarBillingService } from "../../billing/moyasar/service"
@@ -1954,6 +1955,27 @@ export function createIdentityApiServer(
 
       // Public: the prices madar.my shows -- the same catalog the marketplace shows signed-in
       // customers, limited to what's on sale.
+      // Public: a POS invoice's PDF behind the signed link shared on WhatsApp
+      // (whatsapp/invoice-links.ts). The app serves it at /i/<token>.
+      const publicInvoicePdfMatch = url.pathname.match(/^\/v1\/public\/pos-invoices\/([^/]+)\/pdf$/)
+      if (method === "GET" && publicInvoicePdfMatch) {
+        const invoiceId = invoiceIdFromLinkToken(decodeURIComponent(publicInvoicePdfMatch[1]))
+        const rendered =
+          invoiceId && whatsAppInvoiceSender
+            ? await whatsAppInvoiceSender.renderPdfById(invoiceId)
+            : null
+        if (!rendered) {
+          return send(404, { code: "INVOICE_NOT_FOUND", message: "Invoice not found." })
+        }
+        response.writeHead(200, {
+          "content-type": "application/pdf",
+          "content-disposition": `inline; filename="${rendered.filename}"`,
+          "cache-control": "private, max-age=300",
+        })
+        response.end(rendered.pdf)
+        return
+      }
+
       if (method === "GET" && url.pathname === "/v1/public/pricing") {
         if (!pricingService) {
           return send(503, { code: "PRICING_UNAVAILABLE", message: "Pricing is unavailable." })
@@ -5344,6 +5366,24 @@ export function createIdentityApiServer(
 
       // The sale's receipt to the customer on WhatsApp, as a PDF -- see whatsapp/invoice-sender.ts.
       // Anyone who can see the invoice can send it; GET lists what was sent and its status.
+      // The sale shared from the merchant's own WhatsApp: the customer's number and a ready message
+      // with a link to the invoice PDF (whatsapp/invoice-links.ts) -- the app opens WhatsApp with it.
+      const invoiceWhatsAppLinkMatch = url.pathname.match(
+        /^\/v1\/pos\/invoices\/([^/]+)\/whatsapp-link$/
+      )
+      if (invoiceWhatsAppLinkMatch && method === "GET") {
+        if (!posInvoicesService) {
+          return send(503, { code: "POS_INVOICES_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+        const invoice = await posInvoicesService.get(
+          actor.organizationId,
+          invoiceWhatsAppLinkMatch[1]
+        )
+        if (!invoice) return send(404, { code: "POS_INVOICE_NOT_FOUND", message: "Not found." })
+        return send(200, invoiceWhatsAppLink(invoice, appUrl))
+      }
+
       const invoiceWhatsAppMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/whatsapp$/)
       if (invoiceWhatsAppMatch && (method === "GET" || method === "POST")) {
         if (!whatsAppInvoiceSender) {

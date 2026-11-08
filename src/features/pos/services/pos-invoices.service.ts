@@ -359,6 +359,16 @@ export const posInvoicesService = {
     )
   },
 
+  // The sale shared from the merchant's own WhatsApp: the customer's number (WhatsApp form, or
+  // null) and a ready message ending with a link to the invoice PDF.
+  async getInvoiceWhatsAppLink(
+    invoiceId: string
+  ): Promise<{ phone: string | null; url: string; message: string }> {
+    return client.get(
+      [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "whatsapp-link"].join(PATH_SEPARATOR)
+    )
+  },
+
   async listInvoiceWhatsApp(invoiceId: string): Promise<InvoiceWhatsAppMessage[]> {
     const response = await client.get<{ items: InvoiceWhatsAppMessage[] }>(
       [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "whatsapp"].join(PATH_SEPARATOR)

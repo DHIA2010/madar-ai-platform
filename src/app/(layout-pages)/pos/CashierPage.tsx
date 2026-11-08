@@ -1494,27 +1494,14 @@ export default function CashierPage() {
   // Sends a just-completed sale's receipt to the customer on WhatsApp (as a PDF), in the
   // background -- the sale is already done either way. With no mobile entered at checkout the
   // cashier is asked for one; a queued offline sale has nothing to send until it syncs.
+  // Receipt delivery on WhatsApp opens the share dialog: one click opens the customer's chat in
+  // the cashier's own WhatsApp with the invoice link ready to send.
   const deliverOnWhatsApp = (invoice: Invoice, queuedOffline: boolean) => {
     if (queuedOffline) {
       toast.info(t("toasts.whatsappOffline"))
       return
     }
-    if (!invoice.customerPhone) {
-      setWhatsAppInvoice(invoice)
-      return
-    }
-    posInvoicesService
-      .sendInvoiceWhatsApp(invoice.id, invoice.customerPhone)
-      .then(() => toast.success(t("toasts.whatsappSent", { number: invoice.invoiceNumber })))
-      .catch((error: unknown) => {
-        toast.error(t("toasts.whatsappFailed"), {
-          description:
-            error instanceof AppError && error.code?.startsWith("WHATSAPP_")
-              ? error.message
-              : undefined,
-          action: { label: t("toasts.whatsappRetry"), onClick: () => setWhatsAppInvoice(invoice) },
-        })
-      })
+    setWhatsAppInvoice(invoice)
   }
   const [successQrDataUrl, setSuccessQrDataUrl] = useState<string | null>(null)
 
