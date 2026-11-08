@@ -101,10 +101,9 @@ export class GoogleAdsAuthProvider {
       return cached.accessToken
     }
 
-    const row = await this.db.query<OAuthTokenRow>(
-      {
-        name: "google-ads-auth-oauth-token",
-        text: `
+    const row = await this.db.query<OAuthTokenRow>({
+      name: "google-ads-auth-oauth-token",
+      text: `
           WITH target_runtime AS (
             SELECT
               ic.project_id,
@@ -169,11 +168,10 @@ export class GoogleAdsAuthProvider {
             token_expires_at DESC NULLS LAST
           LIMIT 1
         `,
-        values: [connectionId],
-      }
-    )
+      values: [connectionId],
+    })
 
-    let connection = row.rows[0] ?? null
+    const connection = row.rows[0] ?? null
 
     if (!connection || connection.connection_status !== "connected") {
       throw new GoogleAdsIntegrationError(
@@ -193,7 +191,10 @@ export class GoogleAdsAuthProvider {
     if (activeToken.encrypted_access_token && activeToken.token_expires_at) {
       const expiresAtMs = new Date(activeToken.token_expires_at ?? "").getTime()
       if (!Number.isNaN(expiresAtMs) && expiresAtMs > Date.now() + 30_000) {
-        const token = decryptSecret(String(activeToken.encrypted_access_token), this.config.encryptionKey)
+        const token = decryptSecret(
+          String(activeToken.encrypted_access_token),
+          this.config.encryptionKey
+        )
         this.cachedAccessTokens.set(connectionId, {
           accessToken: token,
           expiresAt: activeToken.token_expires_at,
@@ -211,7 +212,10 @@ export class GoogleAdsAuthProvider {
       )
     }
 
-    const refreshToken = decryptSecret(String(activeToken.encrypted_refresh_token), this.config.encryptionKey)
+    const refreshToken = decryptSecret(
+      String(activeToken.encrypted_refresh_token),
+      this.config.encryptionKey
+    )
     const refreshed = await this.refreshAccessToken(refreshToken)
 
     const encryptedAccessToken = encryptSecret(refreshed.accessToken, this.config.encryptionKey)
@@ -229,7 +233,12 @@ export class GoogleAdsAuthProvider {
             updated_at = now()
         WHERE id = $1
       `,
-      values: [String(connection.oauth_connection_id), encryptedAccessToken, encryptedRefreshToken, refreshed.expiresAt],
+      values: [
+        String(connection.oauth_connection_id),
+        encryptedAccessToken,
+        encryptedRefreshToken,
+        refreshed.expiresAt,
+      ],
     })
 
     if (connection.oauth_account_id) {
@@ -261,7 +270,13 @@ export class GoogleAdsAuthProvider {
             'active',now(),now(),NULL
           )
         `,
-        values: [randomUUID(), connection.oauth_account_id, encryptedRefreshToken, encryptedAccessToken, refreshed.expiresAt],
+        values: [
+          randomUUID(),
+          connection.oauth_account_id,
+          encryptedRefreshToken,
+          encryptedAccessToken,
+          refreshed.expiresAt,
+        ],
       })
     }
 

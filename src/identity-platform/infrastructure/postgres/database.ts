@@ -20,7 +20,10 @@ export interface QueryInput {
 }
 
 interface PgExecutor {
-  query<T extends QueryResultRow = QueryResultRow>(query: string | QueryInput, values?: readonly unknown[]): Promise<{ rows: T[]; rowCount: number | null }>
+  query<T extends QueryResultRow = QueryResultRow>(
+    query: string | QueryInput,
+    values?: readonly unknown[]
+  ): Promise<{ rows: T[]; rowCount: number | null }>
 }
 
 interface PgClient extends PgExecutor {
@@ -50,7 +53,10 @@ export class PostgresDatabase {
     return this.transactionStorage.getStore() ?? this.pool
   }
 
-  async query<T extends QueryResultRow = QueryResultRow>(query: string | QueryInput, values?: readonly unknown[]): Promise<QueryResult<T>> {
+  async query<T extends QueryResultRow = QueryResultRow>(
+    query: string | QueryInput,
+    values?: readonly unknown[]
+  ): Promise<QueryResult<T>> {
     const executor = this.getExecutor()
     const result = await executor.query<T>(query, values)
     return {

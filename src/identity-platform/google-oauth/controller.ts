@@ -84,7 +84,10 @@ export class GoogleOAuthController {
     return this.service.startReconnect(actor, connectionId)
   }
 
-  async listRecentEvents(actor: AuthenticatedActor, input: { connectionId: string; limit: number }) {
+  async listRecentEvents(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; limit: number }
+  ) {
     return this.service.getRecentEvents(actor, input)
   }
 

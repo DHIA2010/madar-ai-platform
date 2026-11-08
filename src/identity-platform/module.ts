@@ -15,7 +15,9 @@ export function createIdentityModuleDefinition(): BackendModuleDefinition {
     healthCheck: async () => {
       const database = container.infrastructure.database
       const cache = container.infrastructure.cache
-      const databaseHealth = database ? await database.healthCheck() : { ok: true, message: "memory mode" }
+      const databaseHealth = database
+        ? await database.healthCheck()
+        : { ok: true, message: "memory mode" }
       const cacheHealth = cache ? await cache.healthCheck() : { ok: true, message: "memory mode" }
       const ok = databaseHealth.ok && cacheHealth.ok
 

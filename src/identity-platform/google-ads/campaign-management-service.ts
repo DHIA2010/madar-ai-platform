@@ -27,18 +27,20 @@ function normalizeDate(value: string | null | undefined) {
 }
 
 function recordsEqual(current: MarketingCampaignRecord, next: MarketingCampaignRecord) {
-  return current.providerAccountId === next.providerAccountId
-    && current.externalCustomerId === next.externalCustomerId
-    && current.providerEntityId === next.providerEntityId
-    && current.name === next.name
-    && current.status === next.status
-    && current.channel === next.channel
-    && current.objective === next.objective
-    && current.budgetMicros === next.budgetMicros
-    && current.currencyCode === next.currencyCode
-    && current.startDate === next.startDate
-    && current.endDate === next.endDate
-    && current.sourceUpdatedAt === next.sourceUpdatedAt
+  return (
+    current.providerAccountId === next.providerAccountId &&
+    current.externalCustomerId === next.externalCustomerId &&
+    current.providerEntityId === next.providerEntityId &&
+    current.name === next.name &&
+    current.status === next.status &&
+    current.channel === next.channel &&
+    current.objective === next.objective &&
+    current.budgetMicros === next.budgetMicros &&
+    current.currencyCode === next.currencyCode &&
+    current.startDate === next.startDate &&
+    current.endDate === next.endDate &&
+    current.sourceUpdatedAt === next.sourceUpdatedAt
+  )
 }
 
 export class GoogleAdsCampaignManagementService {
@@ -79,7 +81,9 @@ export class GoogleAdsCampaignManagementService {
       connectionId: input.connection.id,
       externalCustomerId: input.customerId,
     })
-    const existingByProviderEntityId = new Map(existing.map((campaign) => [campaign.providerEntityId, campaign]))
+    const existingByProviderEntityId = new Map(
+      existing.map((campaign) => [campaign.providerEntityId, campaign])
+    )
 
     let insertedCount = 0
     let updatedCount = 0

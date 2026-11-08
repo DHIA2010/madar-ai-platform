@@ -9,7 +9,9 @@ export function hasAwsRegionConfigured() {
   return region.length > 0
 }
 
-export function isSecretsManagerEnabled(disableEnvVar = "IDENTITY_PLATFORM_DISABLE_SECRETS_MANAGER") {
+export function isSecretsManagerEnabled(
+  disableEnvVar = "IDENTITY_PLATFORM_DISABLE_SECRETS_MANAGER"
+) {
   return process.env[disableEnvVar] !== "1"
 }
 

@@ -99,7 +99,8 @@ describe("environment-first google identity credentials provider", () => {
   it("uses environment credentials when configuration is complete", async () => {
     setEnvCredentials(COMPLETE_ENV_CREDENTIALS)
 
-    const fallbackLoad = vi.fn<GoogleIdentityCredentialsProvider["load"]>()
+    const fallbackLoad = vi
+      .fn<GoogleIdentityCredentialsProvider["load"]>()
       .mockResolvedValue(FALLBACK_CREDENTIALS)
     const fallback: GoogleIdentityCredentialsProvider = { load: fallbackLoad }
 
@@ -118,7 +119,8 @@ describe("environment-first google identity credentials provider", () => {
       redirectUri: COMPLETE_ENV_CREDENTIALS.redirectUri,
     })
 
-    const fallbackLoad = vi.fn<GoogleIdentityCredentialsProvider["load"]>()
+    const fallbackLoad = vi
+      .fn<GoogleIdentityCredentialsProvider["load"]>()
       .mockResolvedValue(FALLBACK_CREDENTIALS)
     const fallback: GoogleIdentityCredentialsProvider = { load: fallbackLoad }
 
@@ -132,7 +134,8 @@ describe("environment-first google identity credentials provider", () => {
   it("uses fallback when no environment variables are present", async () => {
     setEnvCredentials({})
 
-    const fallbackLoad = vi.fn<GoogleIdentityCredentialsProvider["load"]>()
+    const fallbackLoad = vi
+      .fn<GoogleIdentityCredentialsProvider["load"]>()
       .mockResolvedValue(FALLBACK_CREDENTIALS)
     const fallback: GoogleIdentityCredentialsProvider = { load: fallbackLoad }
 
@@ -146,7 +149,8 @@ describe("environment-first google identity credentials provider", () => {
   it("keeps environment precedence over fallback when env is complete", async () => {
     setEnvCredentials(COMPLETE_ENV_CREDENTIALS)
 
-    const fallbackLoad = vi.fn<GoogleIdentityCredentialsProvider["load"]>()
+    const fallbackLoad = vi
+      .fn<GoogleIdentityCredentialsProvider["load"]>()
       .mockRejectedValue(new Error("fallback should not be used"))
     const fallback: GoogleIdentityCredentialsProvider = { load: fallbackLoad }
 

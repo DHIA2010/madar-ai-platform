@@ -16,17 +16,16 @@ function hasGoogleEnvCredentials() {
 }
 
 function hasSnapchatEnvCredentials() {
-  return [
-    process.env.SNAPCHAT_CLIENT_ID,
-    process.env.SNAPCHAT_CLIENT_SECRET,
-  ].every((value) => (value ?? "").trim().length > 0)
+  return [process.env.SNAPCHAT_CLIENT_ID, process.env.SNAPCHAT_CLIENT_SECRET].every(
+    (value) => (value ?? "").trim().length > 0
+  )
 }
 
 function assertEncryptionKeyConfigured() {
   const key =
-    process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY?.trim()
-    || process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET?.trim()
-    || ""
+    process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY?.trim() ||
+    process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET?.trim() ||
+    ""
 
   const forbiddenDefaults = new Set([
     "",
@@ -85,7 +84,10 @@ export function validateProductionIntegrationConfiguration() {
   })
 
   if (!googleEnvCredentials || !snapchatEnvCredentials) {
-    if (isSecretsManagerEnabled("IDENTITY_PLATFORM_DISABLE_SECRETS_MANAGER") && !hasAwsRegionConfigured()) {
+    if (
+      isSecretsManagerEnabled("IDENTITY_PLATFORM_DISABLE_SECRETS_MANAGER") &&
+      !hasAwsRegionConfigured()
+    ) {
       throw new Error("IDENTITY_PLATFORM_PRODUCTION_SECRET_VALIDATION_FAILED:AWS_REGION_MISSING")
     }
   }
