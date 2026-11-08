@@ -7,6 +7,7 @@ import { validateAwsCredentialIsolationForSecretsManager } from "./configuration
 import { validateProductionIntegrationConfiguration } from "./configuration/production-integration-validation"
 import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
+import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
 
 function loadRuntimeEnvironment() {
@@ -75,4 +76,21 @@ if (database && zatcaReportingMinutes > 0) {
       .catch((error: unknown) => console.error("zatca.reporting_pass_failed", error))
   setTimeout(runZatcaReporting, 90_000).unref()
   setInterval(runZatcaReporting, zatcaReportingMinutes * 60_000).unref()
+}
+
+// The daily store report on WhatsApp: every few minutes, sends it to each organization whose chosen
+// time has come today (whatsapp/daily-report.ts). Safe from several tasks at once -- each day is
+// claimed before sending. WHATSAPP_DAILY_REPORT_INTERVAL_MINUTES=0 turns it off.
+const dailyReportMinutes = Number(process.env.WHATSAPP_DAILY_REPORT_INTERVAL_MINUTES ?? "5")
+const dailyReports = registeredDailyReportService()
+if (dailyReports && dailyReportMinutes > 0) {
+  const runDailyReports = () =>
+    dailyReports
+      .runDue()
+      .then((result) => {
+        if (result.organizations > 0) console.log("whatsapp.daily_report_pass", result)
+      })
+      .catch((error: unknown) => console.error("whatsapp.daily_report_pass_failed", error))
+  setTimeout(runDailyReports, 120_000).unref()
+  setInterval(runDailyReports, dailyReportMinutes * 60_000).unref()
 }

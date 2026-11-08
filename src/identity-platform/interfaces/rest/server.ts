@@ -126,6 +126,7 @@ import { AiChatLlmClient } from "../../ai-chat/llm-client"
 import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
 import { ApplicationAccessService } from "../../subscriptions/app-access"
 import { invoiceIdFromLinkToken, invoiceWhatsAppLink } from "../../whatsapp/invoice-links"
+import { registerDailyReportService, WhatsAppDailyReportService } from "../../whatsapp/daily-report"
 import { PackageEntitlementsService } from "../../subscriptions/entitlements"
 import { BranchAllowanceService } from "../../subscriptions/branches"
 import { MoyasarBillingService } from "../../billing/moyasar/service"
@@ -242,6 +243,7 @@ import {
   inviteOrganizationMemberSchema,
   posSettingsUpdateSchema,
   promotionSchema,
+  dailyReportSettingsSchema,
   saveConnectionSyncScheduleSchema,
   loginSchema,
   removeMemberSchema,
@@ -1039,6 +1041,18 @@ export function createIdentityApiServer(
   const productCategoriesService = container.infrastructure.database
     ? new ProductCategoriesService(container.infrastructure.database)
     : null
+  // The daily store report on WhatsApp -- built here (it needs the shifts service), and handed to
+  // the backend's scheduled pass (server.ts).
+  const whatsAppDailyReportService =
+    container.infrastructure.database && whatsAppPlatformService && whatsAppTemplatesService
+      ? new WhatsAppDailyReportService(
+          container.infrastructure.database,
+          whatsAppPlatformService,
+          whatsAppTemplatesService,
+          posShiftsService ?? null
+        )
+      : null
+  registerDailyReportService(whatsAppDailyReportService)
 
   // The one product list every surface shows: products authored here plus each connected store's
   // synced products. A promoted/linked native row stays a real, editable, stock-tracked product
@@ -6517,6 +6531,41 @@ export function createIdentityApiServer(
           200,
           await supplierInvoicesService.scan({ organizationId: actor.organizationId, ...payload })
         )
+      }
+
+      // The daily store report on WhatsApp (whatsapp/daily-report.ts): the organization's choice of
+      // time and numbers, a preview of today's report, and a test send.
+      if (url.pathname === "/v1/whatsapp/daily-report") {
+        if (!whatsAppDailyReportService) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
+        }
+        if (method === "GET") {
+          const [settings, preview] = await Promise.all([
+            whatsAppDailyReportService.getSettings(actor.organizationId),
+            whatsAppDailyReportService.preview(actor.organizationId),
+          ])
+          return send(200, { settings, preview })
+        }
+        if (method === "PUT") {
+          if (!actor.modulePermissions.includes("settings:edit")) throw ERRORS.forbidden()
+          const payload = dailyReportSettingsSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await whatsAppDailyReportService.updateSettings(
+              actor.organizationId,
+              actor.userId,
+              payload
+            )
+          )
+        }
+      }
+      if (method === "POST" && url.pathname === "/v1/whatsapp/daily-report/test") {
+        if (!whatsAppDailyReportService) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) throw ERRORS.forbidden()
+        const { day } = await whatsAppDailyReportService.preview(actor.organizationId)
+        return send(200, await whatsAppDailyReportService.send(actor.organizationId, day))
       }
 
       // What the organization's plans unlock (subscriptions/entitlements.ts) -- for the app to show

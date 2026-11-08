@@ -28,7 +28,16 @@ import { useWorkspace } from "@/features/workspace"
 import { cn } from "@/lib/utils"
 
 interface SettingsSection {
-  key: "general" | "devices" | "cashier" | "workspaces" | "payments" | "tax" | "zatca" | "backup"
+  key:
+    | "general"
+    | "devices"
+    | "cashier"
+    | "workspaces"
+    | "payments"
+    | "tax"
+    | "zatca"
+    | "dailyReport"
+    | "backup"
   href?: string
   // Whether this section has no destination yet. When true, it's shown disabled with a reason.
   pending?: boolean
@@ -44,6 +53,7 @@ const SECTIONS: SettingsSection[] = [
   { key: "payments", href: ROUTES.settingsPayments },
   { key: "tax", href: ROUTES.settingsTaxes },
   { key: "zatca", href: ROUTES.settingsZatca, applications: ["pos"] },
+  { key: "dailyReport", href: ROUTES.settingsDailyReport, applications: ["pos"] },
   { key: "backup", pending: true },
 ]
 

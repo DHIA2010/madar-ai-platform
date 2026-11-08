@@ -3883,7 +3883,8 @@
         "payments": "Payment methods",
         "tax": "Taxes",
         "zatca": "E-invoicing (ZATCA)",
-        "backup": "Backup"
+        "backup": "Backup",
+        "dailyReport": "Daily report (WhatsApp)"
       },
       "backupPendingReason": "Backup isn't available yet"
     },
@@ -5075,6 +5076,62 @@
         "buyWorkspace": "Add a workspace",
         "limitTitleWorkspaces": "You've reached your subscription's workspaces",
         "limitBuyWorkspaces": "Add a workspace to your subscription to create a new one."
+      }
+    },
+    "dailyReport": {
+      "title": "Daily WhatsApp report",
+      "subtitle": "Your store's daily summary on WhatsApp: sales, purchases, expenses, shifts, payment methods, best sellers and low stock.",
+      "save": "Save settings",
+      "saving": "Saving...",
+      "retry": "Try again",
+      "loadError": {
+        "forbidden": "You don't have permission to view these settings.",
+        "generic": "Couldn't load the daily report settings."
+      },
+      "enable": {
+        "title": "Send the daily report",
+        "on": "Sent every day at {time} (Riyadh time).",
+        "off": "Off — turn it on to get your store's report every day.",
+        "lastSent": "Last sent: {day}"
+      },
+      "time": {
+        "title": "Send time",
+        "hint": "Choose when the report arrives each day, in Riyadh time.",
+        "label": "Time",
+        "dayRule": "Sent before 12:00 noon, the report covers the whole previous day; later, it covers the same day up to the send time."
+      },
+      "recipients": {
+        "title": "Recipients",
+        "hint": "The numbers that receive the report — up to {max} (owner, manager, accountant...).",
+        "empty": "No numbers added yet.",
+        "namePlaceholder": "Name (optional)",
+        "nameLabel": "Name",
+        "phoneLabel": "Mobile number",
+        "remove": "Remove number",
+        "add": "Add number",
+        "full": "Limit reached"
+      },
+      "preview": {
+        "title": "Message preview",
+        "day": "Report for {day}",
+        "test": "Send test now",
+        "testNeedsRecipients": "Add a number and save first",
+        "note": "The report is sent from Madar's official WhatsApp number to the saved numbers."
+      },
+      "errors": {
+        "forbidden": "You don't have permission to change settings.",
+        "invalidTime": "Choose a valid time.",
+        "noRecipients": "Add at least one number to receive the report.",
+        "invalidPhone": "One of the numbers isn't valid — enter a mobile like 0501234567.",
+        "templateNotReady": "The daily report template is awaiting WhatsApp's approval — try again later.",
+        "unavailable": "WhatsApp is unavailable right now."
+      },
+      "toasts": {
+        "savedOn": "Saved — the report will arrive daily at {time}.",
+        "savedOff": "Saved — the daily report is off.",
+        "saveFailed": "Couldn't save the settings.",
+        "testSent": "Report sent to {count, plural, one {# number} other {# numbers}}.",
+        "testFailed": "Couldn't send the report."
       }
     }
   },

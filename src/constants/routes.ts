@@ -87,6 +87,7 @@ export const ROUTES = {
   settingsZatca: "/settings/zatca",
   settingsCashier: "/settings/cashier",
   settingsNotes: "/settings/notes",
+  settingsDailyReport: "/settings/daily-report",
   madarAdmin: "/madar-admin",
   madarAdminRequests: "/madar-admin/requests",
   madarAdminCustomers: "/madar-admin/customers",

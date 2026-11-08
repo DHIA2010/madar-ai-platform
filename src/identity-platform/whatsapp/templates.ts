@@ -27,7 +27,77 @@ export const POS_INVOICE_TEMPLATE: TemplateDefinition = {
   footer: "أُرسلت عبر مدار",
 }
 
-export const MADAR_TEMPLATES: TemplateDefinition[] = [POS_INVOICE_TEMPLATE]
+// The daily store report sent to the merchant's chosen numbers (whatsapp/daily-report.ts).
+// Utility -- an update about the merchant's own account. Meta's rules shape it: a variable can't
+// hold a line break, so the lists are a fixed number of lines ("—" when empty), and the body
+// can't end with a variable, hence the closing line.
+//   {{1}} day · {{2}}-{{5}} sales, purchases, expenses, returns · {{6}}-{{10}} shifts: total,
+//   closed, open, cash difference, working hours · {{11}}-{{14}} payments: cash, card, bank
+//   transfer, other · {{15}}-{{17}} best sellers · {{18}}-{{20}} low stock
+export const DAILY_REPORT_TEMPLATE: TemplateDefinition = {
+  name: "madar_daily_report",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "📊 *تقريرك اليومي مع مدار*",
+    "ملخص أداء متجرك ليوم *{{1}}*",
+    "",
+    "💰 *الملخص المالي*",
+    "• المبيعات: {{2}} ر.س",
+    "• المشتريات: {{3}} ر.س",
+    "• المصروفات: {{4}} ر.س",
+    "• المرتجعات: {{5}} ر.س",
+    "",
+    "⏱️ *الورديات*",
+    "• إجمالي الورديات: {{6}}",
+    "• الورديات المغلقة: {{7}}",
+    "• الورديات المفتوحة: {{8}}",
+    "• فرق الصندوق: {{9}} ر.س",
+    "• إجمالي ساعات العمل: {{10}}",
+    "",
+    "💳 *طرق الدفع*",
+    "• نقدي: {{11}} ر.س",
+    "• شبكة: {{12}} ر.س",
+    "• تحويل بنكي: {{13}} ر.س",
+    "• أخرى: {{14}} ر.س",
+    "",
+    "🏆 *الأكثر مبيعاً*",
+    "• {{15}}",
+    "• {{16}}",
+    "• {{17}}",
+    "",
+    "⚠️ *منتجات منخفضة المخزون*",
+    "• {{18}}",
+    "• {{19}}",
+    "• {{20}}",
+    "",
+    "💙 *مدار، شريكك التقني في عالم التجزئة.*",
+  ].join("\n"),
+  bodyExamples: [
+    "2026-01-14",
+    "1,170",
+    "1,000",
+    "0",
+    "0",
+    "3",
+    "2",
+    "1",
+    "0",
+    "17.5",
+    "820",
+    "350",
+    "0",
+    "0",
+    "هيل أمريكي 1: 8",
+    "فستان سهرة راقٍ: 2",
+    "قهوة عربية: 1",
+    "باب ألمنيوم: -8.3",
+    "حماية كاميرا 15 برو: -3",
+    "هيل أمريكي 1: -2",
+  ],
+}
+
+export const MADAR_TEMPLATES: TemplateDefinition[] = [POS_INVOICE_TEMPLATE, DAILY_REPORT_TEMPLATE]
 
 // The sample document Meta reviews with a document-header template.
 function sampleDocument(template: TemplateDefinition) {

@@ -1547,3 +1547,18 @@ export const promotionSchema = z.object({
   licenceNumber: z.string().trim().max(100).nullable().optional().default(null),
   isPaused: z.boolean().optional().default(false),
 })
+
+// The daily store report on WhatsApp -- see whatsapp/daily-report.ts.
+export const dailyReportSettingsSchema = z.object({
+  enabled: z.boolean(),
+  sendTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  recipients: z
+    .array(
+      z.object({
+        phone: z.string().trim().min(5).max(30),
+        name: z.string().trim().max(80).optional().default(""),
+      })
+    )
+    .max(5)
+    .default([]),
+})
