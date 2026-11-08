@@ -254,10 +254,23 @@ export class ProductsAggregationService {
         connectionsTable: "zid_oauth_connections",
         actor,
         normalize: normalizeZidProduct,
-        // Zid has no variant support (products/zid-product-mapper.ts maps every product to
-        // "simple"), so a product is always self-linked by its own top-level id -- the plain
-        // single-id check is correct here, unlike Salla above.
-        isPromoted: (row, promotedIds) => promotedIds.has(row.entity_id),
+        // A Zid product with variants is linked per variant -- each native variant to its Zid
+        // child (see ZidProductPromotionService.linkVariants) -- so, like Salla above, "already
+        // promoted" means its own id or any of its variants' ids is linked. A child is never a
+        // row of its own: it shows as a variant of its parent.
+        isPromoted: (row, promotedIds) => {
+          const payload = row.payload as {
+            structure?: unknown
+            parent_id?: unknown
+            variants?: Array<{ id?: unknown }> | null
+          }
+          if (payload.structure === "child" && payload.parent_id) return true
+          const candidateIds = [
+            row.entity_id,
+            ...(payload.variants ?? []).map((variant) => String(variant.id)),
+          ]
+          return candidateIds.some((id) => promotedIds.has(id))
+        },
         promotedIds: promotedZidIds,
       }),
     ])
