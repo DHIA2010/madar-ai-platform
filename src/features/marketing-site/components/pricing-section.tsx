@@ -31,6 +31,13 @@ const PACKAGE_LABEL: Record<string, string> = {
 // The main apps, as tabs in this order.
 const MAIN_APPS = ["advertising", "ecommerce", "pos"]
 
+// "شهرين مجاناً" -- how many months a yearly payment saves.
+function freeMonthsLabel(months: number) {
+  if (months <= 1) return "شهر مجاناً"
+  if (months === 2) return "شهرين مجاناً"
+  return `${months} ${months <= 10 ? "أشهر" : "شهراً"} مجاناً`
+}
+
 // POS sells branches; Ads and E-commerce call the same add-on a workspace.
 const WORKSPACE_APPS = ["advertising", "ecommerce"]
 
@@ -152,7 +159,9 @@ function PackageCard({
           highlighted ? "text-[#5eead4]" : "text-emerald-600"
         )}
       >
-        {saving > 0 ? `توفّر ${sar(saving)} ر.س مقارنة بالدفع الشهري` : ""}
+        {saving > 0
+          ? `${freeMonthsLabel(Math.round(saving / (pkg?.monthlyPriceHalalas || 1)))} · وفّر ${Math.round((saving / ((pkg?.monthlyPriceHalalas || 1) * 12)) * 100)}%`
+          : ""}
       </p>
       {branchPrice !== null && !isContact && !isFree ? (
         <p
@@ -243,7 +252,7 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
             ادفع على قد احتياجك
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-600">
-            كل تطبيق باشتراكه، شهري أو سنوي، مع تجربة مجانية ٧ أيام للتطبيقات المدفوعة. الأسعار
+            كل تطبيق باشتراكه، شهري أو سنوي، مع تجربة مجانية ١٤ يوماً للتطبيقات المدفوعة. الأسعار
             بالريال السعودي.
           </p>
         </div>
@@ -292,7 +301,7 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
                         : "text-slate-500 hover:text-[#0b1738]"
                     )}
                   >
-                    {option === "monthly" ? "شهري" : "سنوي"}
+                    {option === "monthly" ? "شهري" : "سنوي · شهرين مجاناً · وفّر 17%"}
                   </button>
                 ))}
               </div>

@@ -761,7 +761,8 @@
       "contactTitle": "تواصل معنا للاشتراك",
       "contactDescription": "هذا الاشتراك متاح بسعر مخصص. تواصل مع فريق مدار عبر {email} وسنساعدك في التفعيل.",
       "noPackages": "لا توجد باقات متاحة لهذا التطبيق حاليًا.",
-      "loadingPackages": "جارٍ تحميل الباقات..."
+      "loadingPackages": "جارٍ تحميل الباقات...",
+      "yearlyFreeMonthsAndSaving": "{count, plural, one {شهر مجاناً} two {شهرين مجاناً} few {# أشهر مجاناً} other {# شهراً مجاناً}} · وفّر {percent}%"
     },
     "planComparison": {
       "title": "مقارنة الباقات",

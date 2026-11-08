@@ -172,7 +172,7 @@ export function BlogPostPage({ post }: { post: BlogPost }) {
                   جرّب مدار مجانًا وطبّق هذا على تجارتك
                 </p>
                 <p className="mt-3 text-[16.5px] leading-8 text-slate-200">
-                  الكاشير والمتاجر والإعلانات والمخزون في نظام واحد، مع تجربة مجانية ٧ أيام.
+                  الكاشير والمتاجر والإعلانات والمخزون في نظام واحد، مع تجربة مجانية ١٤ يوماً.
                 </p>
                 <a
                   href={MADAR_REGISTER_URL}

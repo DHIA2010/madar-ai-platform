@@ -102,6 +102,19 @@ export function yearlySavingPercent(pkg: PricingPackage): number | null {
   return Math.round(((fullYear - pkg.yearlyPriceHalalas) / fullYear) * 100)
 }
 
+// How many months a yearly payment saves over 12 monthly ones, in whole months (e.g. 2 for a year
+// priced at 10 months) -- null when the package doesn't offer both or a year isn't cheaper.
+export function yearlyFreeMonths(pkg: {
+  monthlyPriceHalalas: number | null
+  yearlyPriceHalalas: number | null
+}): number | null {
+  if (!pkg.monthlyPriceHalalas || pkg.yearlyPriceHalalas === null) return null
+  const months = Math.round(
+    (pkg.monthlyPriceHalalas * 12 - pkg.yearlyPriceHalalas) / pkg.monthlyPriceHalalas
+  )
+  return months >= 1 ? months : null
+}
+
 export function formatRiyals(halalas: number): string {
   const riyals = halalas / 100
   return new Intl.NumberFormat("en-US", {

@@ -278,6 +278,20 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     const free = await call<{ enforced: boolean }>("GET", "/v1/branches/allowance", customer.token)
     expect(free.body.enforced).toBe(false)
 
+    // A free trial (no package yet) may try 3 branches, like احترافي.
+    await database.query(
+      `insert into organization_subscriptions
+         (id, organization_id, application, status, source, started_at, trial_ends_at)
+       values ($1, $2, 'pos', 'trial', 'trial', now(), $3)`,
+      [randomUUID(), customer.actor.organizationId, new Date(Date.now() + 7 * 86_400_000)]
+    )
+    const trial = await call<{ allowed: number; canBuyBranches: boolean }>(
+      "GET",
+      "/v1/branches/allowance",
+      customer.token
+    )
+    expect(trial.body).toMatchObject({ allowed: 3, canBuyBranches: false })
+
     // Granted Growth (2 branches included) with one extra branch: 3 allowed.
     const granted = await call<{ id: string; extraBranches: number }>(
       "POST",

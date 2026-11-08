@@ -761,7 +761,8 @@
       "contactTitle": "Contact us to subscribe",
       "contactDescription": "This subscription has custom pricing. Contact the Madar team at {email} and we'll get you set up.",
       "noPackages": "No packages are available for this application right now.",
-      "loadingPackages": "Loading packages..."
+      "loadingPackages": "Loading packages...",
+      "yearlyFreeMonthsAndSaving": "{count, plural, one {# month free} other {# months free}} · save {percent}%"
     },
     "planComparison": {
       "title": "Compare plans",

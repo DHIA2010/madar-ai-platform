@@ -51,6 +51,17 @@ export interface BranchAllowance {
 }
 
 const LIVE = new Set(["active", "trial", "overdue"])
+// A free trial (no package bought yet) may use as many branches as احترافي includes, so the
+// customer can try running several; past the trial, existing branches stay, new ones follow the plan.
+export const TRIAL_INCLUDED_BRANCHES = 3
+
+function includedBranches(
+  subscription: OrganizationSubscriptionState,
+  pkg: PlatformPackage | null
+) {
+  if (pkg) return pkg.includedBranches
+  return subscription.status === "trial" ? TRIAL_INCLUDED_BRANCHES : 1
+}
 
 function periodStart(periodEnd: string, interval: BillingInterval): Date {
   const date = new Date(periodEnd)
@@ -109,7 +120,7 @@ export class BranchAllowanceService {
         return {
           subscription,
           pkg,
-          allowed: (pkg?.includedBranches ?? 1) + subscription.extraBranches,
+          allowed: includedBranches(subscription, pkg) + subscription.extraBranches,
         }
       })
     )
@@ -152,12 +163,12 @@ export class BranchAllowanceService {
     return {
       enforced: true,
       used,
-      allowed: (pkg?.includedBranches ?? 1) + subscription.extraBranches,
+      allowed: includedBranches(subscription, pkg) + subscription.extraBranches,
       subscription: {
         id: subscription.id,
         application: subscription.application,
         packageName: subscription.packageName,
-        includedBranches: pkg?.includedBranches ?? 1,
+        includedBranches: includedBranches(subscription, pkg),
         interval,
         currentPeriodEnd: subscription.currentPeriodEnd,
         extraBranches: subscription.extraBranches,

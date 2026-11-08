@@ -29,6 +29,7 @@ import {
   priceFor,
   type PricingPackage,
   purchasablePackages,
+  yearlyFreeMonths,
   yearlySavingPercent,
 } from "../services/pricing.service"
 
@@ -348,6 +349,9 @@ export function ActivationRequestDialog({
                     const selectedSaving = selectedPackage
                       ? (yearlySavingPercent(selectedPackage) ?? 0)
                       : 0
+                    const selectedFreeMonths = selectedPackage
+                      ? yearlyFreeMonths(selectedPackage)
+                      : null
                     return (
                       <button
                         key={option}
@@ -363,7 +367,12 @@ export function ActivationRequestDialog({
                         {option === "monthly" ? t("billingMonthly") : t("billingYearly")}
                         {option === "yearly" && selectedSaving > 0 ? (
                           <span className="rounded-full bg-[#dcfce7] px-2 py-0.5 text-[10.5px] font-bold text-[#15803d]">
-                            {t("yearlySaving", { percent: selectedSaving })}
+                            {selectedFreeMonths
+                              ? t("yearlyFreeMonthsAndSaving", {
+                                  count: selectedFreeMonths,
+                                  percent: selectedSaving,
+                                })
+                              : t("yearlySaving", { percent: selectedSaving })}
                           </span>
                         ) : null}
                       </button>
@@ -430,7 +439,12 @@ export function ActivationRequestDialog({
                         </p>
                         {saving ? (
                           <span className="mt-1 inline-block rounded-full bg-[#dcfce7] px-2 py-0.5 text-[10.5px] font-bold text-[#15803d]">
-                            {t("yearlySaving", { percent: saving })}
+                            {yearlyFreeMonths(pkg)
+                              ? t("yearlyFreeMonthsAndSaving", {
+                                  count: yearlyFreeMonths(pkg)!,
+                                  percent: saving,
+                                })
+                              : t("yearlySaving", { percent: saving })}
                           </span>
                         ) : null}
                         {pkg.description ? (
