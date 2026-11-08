@@ -1,12 +1,13 @@
 import { ERRORS } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { loadOrganizationEntitlements } from "../subscriptions/entitlements"
 
 // Expenses' own copy of procurement/guards.ts's isProcurementEnabled/requireProcurementEnabled
 // (itself a copy of ai-chat/guards.ts's general-purpose version) -- same duplication convention
 // as every other APPLICATION_SETTINGS_KEY-style copy in this codebase: feature modules must not
 // reach into each other's internals. Only ever checks "expenses", so there's no need for the full
 // ApplicationCategoryId union here.
-export async function isExpensesEnabled(
+async function isExpensesEnabledBySubscription(
   db: PostgresDatabase,
   organizationId: string
 ): Promise<boolean> {
@@ -27,6 +28,16 @@ export async function isExpensesEnabled(
     return false
   }
   return true
+}
+
+// The app's own subscription, or a plan that includes it (POS نمو / احترافي, Madar Complete --
+// see subscriptions/entitlements.ts).
+export async function isExpensesEnabled(
+  db: PostgresDatabase,
+  organizationId: string
+): Promise<boolean> {
+  if (await isExpensesEnabledBySubscription(db, organizationId)) return true
+  return (await loadOrganizationEntitlements(db, organizationId)).procurement
 }
 
 export async function requireExpensesEnabled(

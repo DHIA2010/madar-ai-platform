@@ -773,7 +773,7 @@
         "name": "Ad Campaigns",
         "shortDescription": "Analyze your ad campaign performance and make decisions based on accurate data.",
         "detailDescription": "Connect the major digital ad platforms and track your campaign performance in one place -- conversions, return on ad spend (ROAS), customer acquisition cost (CAC), and cross-channel attribution -- with ready-made reports and recommendations based on your real numbers.",
-        "priceLabel": "Starting from SAR 129 / month",
+        "priceLabel": "Starting from SAR 149 / month",
         "features": [
           "Connect ad platforms (Google, Meta, Snapchat, TikTok)",
           "Performance analysis and return on ad spend (ROAS)",
@@ -786,7 +786,7 @@
         "name": "Online Stores",
         "shortDescription": "Connect your online store with ad and analytics systems and track your customer's full journey.",
         "detailDescription": "Connect your store on Salla, Zid, Shopify, or WooCommerce and track your sales, products, customers, and live visitors in one place, with precise conversion tracking via UTM and click IDs for every campaign that sends traffic.",
-        "priceLabel": "Starting from SAR 129 / month",
+        "priceLabel": "Starting from SAR 79 / month",
         "features": [
           "Connect stores (Salla, Zid, Shopify, and more)",
           "Track products and orders",
@@ -835,7 +835,7 @@
         "name": "Custom Reports",
         "shortDescription": "Build your own reports with exactly the fields and filters you need.",
         "detailDescription": "A flexible report builder lets you pick the fields, filters, and groupings you need, and save the report to reuse anytime -- on top of the ready-made reports already available to everyone.",
-        "priceLabel": "Starting from SAR 99 / month",
+        "priceLabel": "Starting from SAR 79 / month",
         "features": [
           "Flexible report builder with fields and filters",
           "Save reports to reuse them",
@@ -857,7 +857,7 @@
         "name": "Promotions",
         "shortDescription": "Automatic discounts on all products or the products and categories you choose.",
         "detailDescription": "Create percentage or fixed-amount promotions that apply automatically at the cashier to all products or to chosen products and categories, limited by branch, dates, weekdays and hours, with a per-item cap and a discount-licence number.",
-        "priceLabel": "Starting from SAR 99 / month",
+        "priceLabel": "Starting from SAR 59 / month",
         "features": [
           "Automatic cashier discount, percentage or fixed",
           "On all products or chosen products and categories",
@@ -965,6 +965,19 @@
       "freeFor": "Free for {days, plural, =1 {# day} other {# days}}",
       "perMonth": "/ month",
       "perYear": "/ year"
+    },
+    "planUpgrade": {
+      "title": "This feature isn't in your current plan",
+      "description": "Upgrade your plan to use this feature.",
+      "cta": "Upgrade",
+      "features": {
+        "shiftCash": "Cash movements and detailed shift reports aren't enabled in your plan.",
+        "customRoles": "Custom roles and permissions come with the Growth and Pro plans.",
+        "procurement": "Suppliers, purchases and expenses come with the POS Growth and Pro plans.",
+        "customReports": "Custom reports come with the Pro plan.",
+        "maxAdPlatforms": "You've reached your plan's ad platforms — upgrade to Growth to connect them all.",
+        "maxStores": "You've reached your plan's stores — upgrade to connect more."
+      }
     }
   },
   "purchases": {
@@ -1054,7 +1067,10 @@
         "button": "Upload invoice",
         "attached": "Supplier invoice attached",
         "remove": "Remove attached invoice",
-        "openFailed": "Couldn't open the invoice."
+        "openFailed": "Couldn't open the invoice.",
+        "notIncludedTitle": "The purchase-invoice reader comes with the Growth and Pro packages",
+        "notIncludedDescription": "Upgrade your POS package to read supplier invoices automatically with AI.",
+        "upgrade": "Upgrade"
       }
     },
     "lineItems": {
@@ -1299,7 +1315,8 @@
         "productCreated": "Created \"{name}\".",
         "productCreateFailed": "Couldn't create \"{name}\".",
         "productsCreated": "Created {count} products.",
-        "someProductsFailed": "Created {created}; {failed} couldn't be created."
+        "someProductsFailed": "Created {created}; {failed} couldn't be created.",
+        "notIncluded": "The purchase-invoice reader comes with the Growth and Pro packages."
       },
       "createProduct": "Create product",
       "createAll": "Create all unmatched products ({count})",
@@ -5021,6 +5038,30 @@
         "deactivated": "{name} deactivated.",
         "activated": "{name} activated.",
         "statusUpdateFailed": "Couldn't update the workspace's status."
+      },
+      "branchAllowance": {
+        "usage": "Your subscription's branches: {used} of {allowed}",
+        "included": "The {plan} package includes {included, plural, one {# branch} other {# branches}} + {extra} extra",
+        "includedNoPlan": "The subscription includes {included, plural, one {# branch} other {# branches}} + {extra} extra",
+        "buy": "Add a branch",
+        "buyWithPrice": "Add a branch (SAR {price} / {period})",
+        "perMonth": "month",
+        "perYear": "year",
+        "limitTitle": "You've reached your subscription's branches",
+        "limitBuy": "Add a branch to your subscription to create a new one.",
+        "limitContact": "Contact Madar to add branches to your subscription.",
+        "applications": {
+          "pos": "Extra branch — POS",
+          "madarComplete": "Extra branch — Madar Complete",
+          "advertising": "Extra workspace — Ads",
+          "ecommerce": "Extra workspace — E-commerce"
+        },
+        "usageWorkspaces": "Your subscription's workspaces: {used} of {allowed}",
+        "includedWorkspaces": "The {plan} package includes {included, plural, one {# workspace} other {# workspaces}} + {extra} extra",
+        "buyWorkspaceWithPrice": "Add a workspace (SAR {price} / {period})",
+        "buyWorkspace": "Add a workspace",
+        "limitTitleWorkspaces": "You've reached your subscription's workspaces",
+        "limitBuyWorkspaces": "Add a workspace to your subscription to create a new one."
       }
     }
   },
@@ -5800,6 +5841,28 @@
           "COUPON_EXHAUSTED": "This coupon has reached its usage limit.",
           "COUPON_NOT_APPLICABLE": "This coupon doesn't apply to this subscription.",
           "generic": "Couldn't check this coupon."
+        },
+        "branches": {
+          "label": "Branches",
+          "hint": "The package includes {included, plural, one {# branch} other {# branches}}; each extra branch is SAR {price}. Cashier devices are unlimited in every branch.",
+          "breakdown": "Package {base} + {count} × SAR {price} for extra branches"
+        },
+        "addBranches": {
+          "label": "Branches to add",
+          "subtitle": "{count, plural, one {# extra branch} other {# extra branches}}",
+          "hint": "SAR {price} per branch for the time left until {date}, then it renews with your subscription at SAR {full} per branch.",
+          "unavailable": "Branches can be added to a running paid subscription only."
+        },
+        "workspaces": {
+          "label": "Workspaces",
+          "hint": "The package includes {included, plural, one {# workspace} other {# workspaces}}; each extra workspace is SAR {price}.",
+          "breakdown": "Package {base} + {count} × SAR {price} for extra workspaces"
+        },
+        "addWorkspaces": {
+          "label": "Workspaces to add",
+          "subtitle": "{count, plural, one {# extra workspace} other {# extra workspaces}}",
+          "hint": "SAR {price} per workspace for the time left until {date}, then it renews with your subscription at SAR {full}.",
+          "unavailable": "Workspaces can be added to a running paid subscription only."
         }
       },
       "paymentPanel": {
@@ -5828,6 +5891,11 @@
         "error": {
           "title": "Couldn't verify the payment",
           "description": "The payment may have gone through -- try verifying again before paying again."
+        },
+        "branchesPaid": {
+          "title": "Added to your subscription",
+          "description": "You can create the new branches / workspaces now.",
+          "cta": "Go to workspaces"
         }
       }
     },

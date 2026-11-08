@@ -37,7 +37,7 @@ export function MoyasarPaymentPanel({
   const locale = useLocale() as Locale
   const formRef = useRef<HTMLDivElement>(null)
   const { stage, errorMessage, start, reset } = useMoyasarCheckout()
-  const purchaseKey = `${purchase.application}:${purchase.packageId}:${purchase.interval}:${purchase.couponCode ?? ""}`
+  const purchaseKey = `${purchase.application}:${purchase.packageId}:${purchase.interval}:${purchase.couponCode ?? ""}:${purchase.extraBranches ?? 0}:${purchase.addBranches ?? 0}`
   const startedFor = useRef<string | null>(null)
 
   const runStart = useCallback(() => {

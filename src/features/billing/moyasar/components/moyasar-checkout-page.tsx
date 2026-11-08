@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
-import { AlertCircle, ArrowLeft, TicketPercent, X } from "lucide-react"
+import { AlertCircle, ArrowLeft, Building2, Minus, Plus, TicketPercent, X } from "lucide-react"
 
 import { ROUTES } from "@/constants/routes"
 
@@ -11,12 +11,14 @@ import { AppButton, AppInput } from "@/components/app"
 
 import {
   type CouponQuote,
+  extraBranchPriceFor,
   formatRiyals,
   priceFor,
   pricingService,
   usePricingCatalog,
 } from "@/features/applications"
 
+import { type BranchAllowance, branchAllowanceService } from "../services"
 import type { MoyasarPurchase } from "../types"
 import { MoyasarPaymentPanel } from "./moyasar-payment-panel"
 
@@ -36,6 +38,52 @@ const VALID_APPLICATIONS: ReadonlySet<string> = new Set<PurchasableApplication>(
   "madarComplete",
 ])
 const VALID_INTERVALS: ReadonlySet<string> = new Set<BillingInterval>(["monthly", "yearly"])
+// Branches are sold with POS and the Madar Complete bundle.
+const BRANCH_APPLICATIONS: ReadonlySet<string> = new Set([
+  "pos",
+  "madarComplete",
+  "advertising",
+  "ecommerce",
+])
+// Ads and E-commerce call the same add-on a workspace; POS calls it a branch.
+const WORKSPACE_APPLICATIONS: ReadonlySet<string> = new Set(["advertising", "ecommerce"])
+
+const clampCount = (value: string | null, min: number) =>
+  Math.min(100, Math.max(min, Math.floor(Number(value) || min)))
+
+function Stepper({
+  value,
+  min,
+  onChange,
+}: {
+  value: number
+  min: number
+  onChange: (next: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label="-"
+        disabled={value <= min}
+        onClick={() => onChange(value - 1)}
+        className="flex size-9 items-center justify-center rounded-[9px] border border-[#e1e7f0] text-[#0b1738] hover:bg-[#f7f9fc] disabled:opacity-40"
+      >
+        <Minus className="size-4" />
+      </button>
+      <span className="w-9 text-center text-[16px] font-extrabold text-[#0b1738]">{value}</span>
+      <button
+        type="button"
+        aria-label="+"
+        disabled={value >= 100}
+        onClick={() => onChange(value + 1)}
+        className="flex size-9 items-center justify-center rounded-[9px] border border-[#e1e7f0] text-[#0b1738] hover:bg-[#f7f9fc] disabled:opacity-40"
+      >
+        <Plus className="size-4" />
+      </button>
+    </div>
+  )
+}
 
 // A dedicated, unconstrained page for the Moyasar checkout form -- see moyasar-payment-panel.tsx's
 // own comment for why this moved out of the activation dialog's modal. The amount shown here is
@@ -52,27 +100,56 @@ export function MoyasarCheckoutPage() {
   const packageId = searchParams.get("packageId")
   const interval = searchParams.get("interval")
   const applicationName = searchParams.get("name")
+  // purpose=branches: add branches to the running subscription instead of buying a package.
+  const addingBranches = searchParams.get("purpose") === "branches"
+  // Total branches for a new subscription (the package includes one), or branches to add.
+  // Branches on top of those the package includes.
+  const [extraCount, setExtraCount] = useState(() => clampCount(searchParams.get("extra"), 0))
+  const [addCount, setAddCount] = useState(() => clampCount(searchParams.get("count"), 1))
+  const [allowance, setAllowance] = useState<BranchAllowance | null>(null)
+
+  useEffect(() => {
+    if (!addingBranches) return
+    branchAllowanceService
+      .get()
+      .then(setAllowance)
+      .catch(() => setAllowance(null))
+  }, [addingBranches])
   const [couponInput, setCouponInput] = useState("")
   const [coupon, setCoupon] = useState<CouponQuote | null>(null)
   const [couponError, setCouponError] = useState<string | null>(null)
   const [checkingCoupon, setCheckingCoupon] = useState(false)
 
-  const isValid =
-    Boolean(application && VALID_APPLICATIONS.has(application)) &&
-    Boolean(packageId) &&
-    Boolean(interval && VALID_INTERVALS.has(interval)) &&
-    Boolean(applicationName)
+  const isWorkspaceUnit = Boolean(application && WORKSPACE_APPLICATIONS.has(application))
+  const unitKey = isWorkspaceUnit ? "workspaces" : "branches"
+  const addKey = isWorkspaceUnit ? "addWorkspaces" : "addBranches"
+  const isValid = addingBranches
+    ? Boolean(application && BRANCH_APPLICATIONS.has(application)) &&
+      Boolean(interval && VALID_INTERVALS.has(interval)) &&
+      Boolean(applicationName)
+    : Boolean(application && VALID_APPLICATIONS.has(application)) &&
+      Boolean(packageId) &&
+      Boolean(interval && VALID_INTERVALS.has(interval)) &&
+      Boolean(applicationName)
+
+  const pkg = catalog
+    ?.find((entry) => entry.application === application)
+    ?.packages.find((entry) => entry.id === packageId)
+  const branchPrice = pkg && interval ? extraBranchPriceFor(pkg, interval as BillingInterval) : null
+  const includedBranches = pkg?.includedBranches ?? 1
+  const extraBranches = !addingBranches && branchPrice !== null ? extraCount : 0
 
   const purchase = useMemo<MoyasarPurchase | null>(
     () =>
       isValid
         ? {
             application: application as PurchasableApplication,
-            packageId: packageId as string,
+            packageId: (packageId ?? "") as string,
             interval: interval as BillingInterval,
+            ...(addingBranches ? { addBranches: addCount } : { extraBranches }),
           }
         : null,
-    [isValid, application, packageId, interval]
+    [isValid, application, packageId, interval, addingBranches, addCount, extraBranches]
   )
 
   // The checkout (and its Moyasar form) is re-created whenever the coupon changes, so the amount
@@ -93,6 +170,7 @@ export function MoyasarCheckoutPage() {
           application: purchase.application,
           packageId: purchase.packageId,
           interval: purchase.interval,
+          extraBranches: purchase.extraBranches ?? 0,
         })
       )
     } catch (error) {
@@ -129,10 +207,21 @@ export function MoyasarCheckoutPage() {
     )
   }
 
-  const pkg = catalog
-    ?.find((entry) => entry.application === purchase.application)
-    ?.packages.find((entry) => entry.id === purchase.packageId)
-  const amount = pkg ? priceFor(pkg, purchase.interval) : null
+  const basePrice = pkg ? priceFor(pkg, purchase.interval) : null
+  const amount = addingBranches
+    ? allowance?.proratedHalalasPerBranch != null
+      ? allowance.proratedHalalasPerBranch * addCount
+      : null
+    : basePrice === null
+      ? null
+      : basePrice + extraBranches * (branchPrice ?? 0)
+  const periodEnd = allowance?.subscription?.currentPeriodEnd
+    ? new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(new Date(allowance.subscription.currentPeriodEnd))
+    : null
 
   return (
     <div dir={localeDirection(locale)} className="mx-auto max-w-[32rem] p-6">
@@ -150,7 +239,10 @@ export function MoyasarCheckoutPage() {
           <div>
             <p className="text-[16px] font-extrabold text-[#0b1738]">{applicationName}</p>
             <p className="text-[12px] text-[#6b7b96]">
-              {t("planLabel", { tier: pkg?.name ?? "…" })} ·{" "}
+              {addingBranches
+                ? t(`${addKey}.subtitle`, { count: addCount })
+                : t("planLabel", { tier: pkg?.name ?? "…" })}{" "}
+              ·{" "}
               {purchase.interval === "yearly"
                 ? tDialog("billingYearly")
                 : tDialog("billingMonthly")}
@@ -165,15 +257,72 @@ export function MoyasarCheckoutPage() {
               ) : null}
               <p className="text-[18px] font-extrabold text-[#2878ff]">
                 SAR {formatRiyals(coupon ? coupon.finalAmountHalalas : amount)}{" "}
-                <span className="text-[12px] font-semibold text-[#6b7b96]">
-                  {purchase.interval === "yearly" ? tDialog("perYear") : tDialog("perMonth")}
-                </span>
+                {addingBranches ? null : (
+                  <span className="text-[12px] font-semibold text-[#6b7b96]">
+                    {purchase.interval === "yearly" ? tDialog("perYear") : tDialog("perMonth")}
+                  </span>
+                )}
               </p>
             </div>
           ) : null}
         </div>
 
-        <div className="mb-5">
+        {addingBranches ? (
+          <div className="mb-5 rounded-[12px] border border-[#e1e7f0] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-[13px] font-bold text-[#0b1738]">
+                <Building2 className="size-4 text-[#2878ff]" />
+                {t(`${addKey}.label`)}
+              </p>
+              <Stepper value={addCount} min={1} onChange={setAddCount} />
+            </div>
+            <p className="mt-2.5 text-[12px] leading-5 text-[#6b7b96]">
+              {allowance?.proratedHalalasPerBranch != null && periodEnd
+                ? t(`${addKey}.hint`, {
+                    price: formatRiyals(allowance.proratedHalalasPerBranch),
+                    date: periodEnd,
+                    full: formatRiyals(allowance.extraBranchPriceHalalas ?? 0),
+                  })
+                : allowance && !allowance.canBuyBranches
+                  ? t(`${addKey}.unavailable`)
+                  : "…"}
+            </p>
+          </div>
+        ) : branchPrice !== null && basePrice !== null ? (
+          <div className="mb-5 rounded-[12px] border border-[#e1e7f0] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-[13px] font-bold text-[#0b1738]">
+                <Building2 className="size-4 text-[#2878ff]" />
+                {t(`${unitKey}.label`)}
+              </p>
+              <Stepper
+                value={includedBranches + extraCount}
+                min={includedBranches}
+                onChange={(next) => {
+                  setExtraCount(Math.max(0, next - includedBranches))
+                  setCoupon(null)
+                }}
+              />
+            </div>
+            <p className="mt-2.5 text-[12px] leading-5 text-[#6b7b96]">
+              {t(`${unitKey}.hint`, {
+                included: includedBranches,
+                price: formatRiyals(branchPrice),
+              })}
+            </p>
+            {extraBranches > 0 ? (
+              <p className="mt-1.5 text-[12px] font-semibold text-[#0b1738]">
+                {t(`${unitKey}.breakdown`, {
+                  base: formatRiyals(basePrice),
+                  count: extraBranches,
+                  price: formatRiyals(branchPrice),
+                })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className={addingBranches ? "hidden" : "mb-5"}>
           <label className="mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-[#0b1738]">
             <TicketPercent className="size-4 text-[#2878ff]" />
             {t("couponLabel")}
@@ -231,7 +380,7 @@ export function MoyasarCheckoutPage() {
         </div>
 
         <MoyasarPaymentPanel
-          key={`${purchase.application}:${purchase.packageId}:${purchase.interval}:${coupon?.code ?? ""}`}
+          key={`${purchase.application}:${purchase.packageId}:${purchase.interval}:${coupon?.code ?? ""}:${purchase.extraBranches ?? 0}:${purchase.addBranches ?? 0}`}
           purchase={purchaseWithCoupon}
           applicationName={applicationName as string}
         />

@@ -8,6 +8,7 @@ import {
   updateStaffSchema,
   customerListQuerySchema,
   grantSubscriptionSchema,
+  setExtraBranchesSchema,
   packageInputSchema,
   paymentListQuerySchema,
   platformSettingsPatchSchema,
@@ -177,6 +178,15 @@ export async function handlePlatformAdminRoute(input: {
   }
   if (method === "GET" && path === "/subscriptions/summary") {
     return send(200, await service.getSubscriptionSummary(actor))
+  }
+
+  const subscriptionBranchesMatch = path.match(/^\/subscriptions\/([^/]+)\/branches$/)
+  if (method === "PUT" && subscriptionBranchesMatch) {
+    const { extraBranches } = setExtraBranchesSchema.parse(await readJsonBody())
+    return send(
+      200,
+      await service.setExtraBranches(actor, subscriptionBranchesMatch[1], extraBranches)
+    )
   }
 
   const subscriptionActionMatch = path.match(/^\/subscriptions\/([^/]+)\/(renew|cancel)$/)

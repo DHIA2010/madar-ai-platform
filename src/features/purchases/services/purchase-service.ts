@@ -157,6 +157,14 @@ export const purchaseService = {
     return withWarehouseName(dto)
   },
 
+  // Whether the organization's package includes the invoice reader (نمو / احترافي).
+  async invoiceReaderAccess(): Promise<boolean> {
+    const result = await client.get<{ allowed: boolean }>(
+      [PURCHASES_ENDPOINT, "invoice-reader", "access"].join(PATH_SEPARATOR)
+    )
+    return result.allowed
+  },
+
   // Uploads a supplier's invoice and reads its lines, matched to products where possible.
   async scanInvoice(supplierId: string, file: File): Promise<ScannedInvoice> {
     return client.post<

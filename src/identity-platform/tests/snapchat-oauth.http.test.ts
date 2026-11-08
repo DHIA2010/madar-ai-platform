@@ -109,8 +109,8 @@ describe("snapchat oauth http flow", () => {
       [actor.userId]
     )
     await database.query(
-      `insert into organizations (id, name, owner_user_id, status)
-       values ($1, 'Snapchat Org', $2, 'active')
+      `insert into organizations (id, name, owner_user_id, status, settings)
+       values ($1, 'Snapchat Org', $2, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)
        on conflict (id) do nothing`,
       [actor.organizationId, actor.userId]
     )
@@ -291,8 +291,8 @@ describe("snapchat oauth http flow", () => {
       [baseActor.userId]
     )
     await database.query(
-      `insert into organizations (id, name, owner_user_id, status)
-       values ($1, 'Snapchat Isolation Org', $2, 'active')
+      `insert into organizations (id, name, owner_user_id, status, settings)
+       values ($1, 'Snapchat Isolation Org', $2, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)
        on conflict (id) do nothing`,
       [baseActor.organizationId, baseActor.userId]
     )
@@ -389,8 +389,8 @@ describe("snapchat oauth http flow", () => {
       [actor.userId]
     )
     await database.query(
-      `insert into organizations (id, name, owner_user_id, status)
-       values ($1, 'Snapchat Select Org', $2, 'active')
+      `insert into organizations (id, name, owner_user_id, status, settings)
+       values ($1, 'Snapchat Select Org', $2, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)
        on conflict (id) do nothing`,
       [actor.organizationId, actor.userId]
     )
@@ -584,8 +584,8 @@ describe("snapchat oauth http flow", () => {
       [actor.userId]
     )
     await database.query(
-      `insert into organizations (id, name, owner_user_id, status)
-       values ($1, 'Snapchat Lifecycle Org', $2, 'active')
+      `insert into organizations (id, name, owner_user_id, status, settings)
+       values ($1, 'Snapchat Lifecycle Org', $2, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)
        on conflict (id) do nothing`,
       [actor.organizationId, actor.userId]
     )

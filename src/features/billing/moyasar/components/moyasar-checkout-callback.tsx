@@ -38,6 +38,8 @@ export function MoyasarCheckoutCallback() {
   // effect here tripped react-hooks/set-state-in-effect regardless of shape; this is the
   // react.dev-canonical "fetch in an effect" pattern (inline async fn + cancelled flag) instead.
   const [retryToken, setRetryToken] = useState(0)
+  // Branches added to a running subscription get their own message and a way back to them.
+  const [isBranchPurchase, setIsBranchPurchase] = useState(false)
 
   useEffect(() => {
     if (!hasValidLink) return
@@ -46,7 +48,9 @@ export function MoyasarCheckoutCallback() {
     moyasarBillingService
       .confirmCheckout(checkoutId as string, moyasarPaymentId as string)
       .then((result) => {
-        if (!cancelled) setState(result.status === "paid" ? "paid" : "failed")
+        if (cancelled) return
+        setIsBranchPurchase(result.purpose === "branches")
+        setState(result.status === "paid" ? "paid" : "failed")
       })
       .catch(() => {
         if (!cancelled) setState("error")
@@ -78,13 +82,19 @@ export function MoyasarCheckoutCallback() {
         {state === "paid" ? (
           <>
             <CheckCircle2 className="mx-auto size-12 text-[#16a34a]" />
-            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">{t("paid.title")}</p>
-            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">{t("paid.description")}</p>
+            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">
+              {isBranchPurchase ? t("branchesPaid.title") : t("paid.title")}
+            </p>
+            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">
+              {isBranchPurchase ? t("branchesPaid.description") : t("paid.description")}
+            </p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
-              onClick={() => router.push(ROUTES.marketplace)}
+              onClick={() =>
+                router.push(isBranchPurchase ? ROUTES.settingsWorkspaces : ROUTES.marketplace)
+              }
             >
-              {tCommon("backToMarketplace")}
+              {isBranchPurchase ? t("branchesPaid.cta") : tCommon("backToMarketplace")}
             </AppButton>
           </>
         ) : null}

@@ -100,6 +100,7 @@ function toView(
     packageName: subscription.packageName,
     billingInterval: subscription.billingInterval,
     priceHalalas: subscription.priceHalalas,
+    extraBranches: subscription.extraBranches,
     currency: subscription.currency,
     source: subscription.source,
     startedAt: subscription.startedAt,
@@ -366,9 +367,17 @@ export class PlatformAdminService {
       if (source?.company) latestBrand.set(key, source.company)
     }
 
+    // Branches each package includes, so the list can show a subscription's total branches.
+    const includedByPackage = new Map(
+      (await this.pricing.getCatalog({ includeInactive: true }))
+        .flatMap((entry) => entry.packages)
+        .map((pkg) => [pkg.id, pkg.includedBranches])
+    )
+
     return customers.flatMap((customer) =>
       customer.subscriptions.map((view) => ({
         ...view,
+        includedBranches: view.packageId ? (includedByPackage.get(view.packageId) ?? 1) : 1,
         organizationName: customer.name,
         ownerEmail: customer.owner?.email ?? null,
         paymentMethod:
@@ -435,6 +444,7 @@ export class PlatformAdminService {
       packageId: string | null
       interval: BillingInterval
       priceHalalas: number | null
+      extraBranches?: number
     }
   ): Promise<PlatformAdminSubscriptionView> {
     requirePlatformAdmin(actor)
@@ -458,6 +468,7 @@ export class PlatformAdminService {
           package: pkg ? { id: pkg.id, name: pkg.name } : null,
           interval: input.interval,
           priceHalalas: input.priceHalalas,
+          extraBranches: input.extraBranches,
           source: "admin",
           now,
         }
@@ -509,6 +520,29 @@ export class PlatformAdminService {
         application: next.application,
         interval: input.interval,
         currentPeriodEnd: next.currentPeriodEnd,
+      })
+      return toView(next, now)
+    })
+  }
+
+  // Sets how many branches beyond the included one a subscription has -- e.g. for a customer who
+  // already ran more branches before branches were sold, or one paying by bank transfer. The price
+  // isn't changed here (use grant for a new price).
+  async setExtraBranches(
+    actor: AuthenticatedActor,
+    subscriptionId: string,
+    extraBranches: number
+  ): Promise<PlatformAdminSubscriptionView> {
+    requirePlatformAdmin(actor)
+    const now = new Date().toISOString()
+    return this.db.withTransaction(async () => {
+      const existing = await this.requireSubscription(subscriptionId)
+      const next = { ...existing, extraBranches, updatedAt: now }
+      await this.subscriptions.save(next)
+      await this.audit(actor, "platform_admin.subscription_branches_set", next, {
+        application: next.application,
+        from: existing.extraBranches,
+        to: extraBranches,
       })
       return toView(next, now)
     })

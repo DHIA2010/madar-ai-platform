@@ -95,8 +95,8 @@ async function signIn(email: string, orgName: string) {
     [actor.userId, email, `${orgName} Owner`]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb) on conflict (id) do nothing`,
     [actor.organizationId, orgName, actor.userId]
   )
   return { token, actor }
@@ -110,6 +110,8 @@ interface PricingEntry {
     name: string
     monthlyPriceHalalas: number | null
     yearlyPriceHalalas: number | null
+    includedBranches: number
+    extraBranchMonthlyHalalas: number | null
     isActive: boolean
     legacyPlanTier: string | null
   }>
@@ -126,7 +128,7 @@ const newPackage = {
 }
 
 describe("pricing: the marketplace shows and checkout charges exactly what staff set", () => {
-  it("seeds every application with today's Starter/Growth/Pro, and the bundle as contact-us", async () => {
+  it("seeds every application with the November 2026 pricing", async () => {
     const customer = await signIn("owner@shop.test", "Shop")
     const pricing = await call<PricingEntry[]>("GET", "/v1/pricing", customer.token)
     expect(pricing.status).toBe(200)
@@ -135,13 +137,31 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     const advertising = pricing.body.find((entry) => entry.application === "advertising")!
     expect(advertising.mode).toBe("packages")
     expect(advertising.packages.map((pkg) => [pkg.name, pkg.monthlyPriceHalalas])).toEqual([
-      ["Starter", 9900],
-      ["Growth", 29900],
-      ["Pro", 49900],
+      ["أساسي", 14900],
+      ["نمو", 29900],
+      ["احترافي", 54900],
     ])
-    expect(pricing.body.find((entry) => entry.application === "madarComplete")!.mode).toBe(
-      "contact"
-    )
+    // POS: one branch included, each further branch an add-on; yearly is two months free.
+    const pos = pricing.body.find((entry) => entry.application === "pos")!
+    expect(
+      pos.packages.map((pkg) => [
+        pkg.name,
+        pkg.monthlyPriceHalalas,
+        pkg.yearlyPriceHalalas,
+        pkg.includedBranches,
+        pkg.extraBranchMonthlyHalalas,
+      ])
+    ).toEqual([
+      ["أساسي", 14900, 149000, 1, 9900],
+      ["نمو", 24900, 249000, 2, 9900],
+      ["احترافي", 39900, 399000, 3, 9900],
+    ])
+    const bundle = pricing.body.find((entry) => entry.application === "madarComplete")!
+    expect(bundle.mode).toBe("fixed")
+    expect(bundle.packages[0]).toMatchObject({
+      monthlyPriceHalalas: 89900,
+      extraBranchMonthlyHalalas: 9900,
+    })
   })
 
   it("charges a package's yearly price at checkout, and refuses contact-us and missing prices", async () => {
@@ -192,18 +212,26 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
       ).status
     ).toBe(409)
 
-    // A seeded package has no yearly price.
-    const advertising = adminPricing.body.find((entry) => entry.application === "advertising")!
+    // A package with no yearly price isn't sold yearly.
+    const monthlyOnly = await call<{ id: string }>(
+      "POST",
+      "/v1/platform-admin/pricing/advertising/packages",
+      staff.token,
+      { ...newPackage, name: "Monthly only", yearlyPriceHalalas: null }
+    )
     const noYearly = await call<{ code: string }>(
       "POST",
       "/v1/billing/moyasar/checkout",
       customer.token,
-      { application: "advertising", packageId: advertising.packages[0].id, interval: "yearly" }
+      { application: "advertising", packageId: monthlyOnly.body.id, interval: "yearly" }
     )
     expect(noYearly).toMatchObject({ status: 409, body: { code: "PACKAGE_NOT_PURCHASABLE" } })
 
-    // The bundle is contact-us until staff price it.
+    // Contact-us isn't sold online.
     const bundle = adminPricing.body.find((entry) => entry.application === "madarComplete")!
+    await call("PUT", "/v1/platform-admin/pricing/madarComplete/mode", staff.token, {
+      mode: "contact",
+    })
     expect(
       (
         await call("POST", "/v1/billing/moyasar/checkout", customer.token, {
@@ -213,6 +241,303 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
         })
       ).status
     ).toBe(409)
+  })
+
+  it("sells extra branches on top of the one a package includes, and stops a branch past them", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const customer = await signIn("owner@shop.test", "Shop")
+    const pricing = await call<PricingEntry[]>("GET", "/v1/pricing", customer.token)
+    const growth = pricing.body
+      .find((entry) => entry.application === "pos")!
+      .packages.find((pkg) => pkg.legacyPlanTier === "growth")!
+
+    // Package + 2 branches x 99 (the same on every package).
+    const checkout = await call<{ amount: number }>(
+      "POST",
+      "/v1/billing/moyasar/checkout",
+      customer.token,
+      { application: "pos", packageId: growth.id, interval: "monthly", extraBranches: 2 }
+    )
+    expect(checkout).toMatchObject({ status: 201, body: { amount: 24900 + 2 * 9900 } })
+    // Ads sells the same add-on as workspaces, at the same price.
+    const advertising = pricing.body.find((entry) => entry.application === "advertising")!
+    const adsCheckout = await call<{ amount: number }>(
+      "POST",
+      "/v1/billing/moyasar/checkout",
+      customer.token,
+      {
+        application: "advertising",
+        packageId: advertising.packages[0].id,
+        interval: "monthly",
+        extraBranches: 1,
+      }
+    )
+    expect(adsCheckout).toMatchObject({ status: 201, body: { amount: 14900 + 9900 } })
+
+    // No POS subscription: branches aren't limited.
+    const free = await call<{ enforced: boolean }>("GET", "/v1/branches/allowance", customer.token)
+    expect(free.body.enforced).toBe(false)
+
+    // Granted Growth (2 branches included) with one extra branch: 3 allowed.
+    const granted = await call<{ id: string; extraBranches: number }>(
+      "POST",
+      `/v1/platform-admin/customers/${customer.actor.organizationId}/subscriptions`,
+      staff.token,
+      { application: "pos", packageId: growth.id, interval: "monthly", extraBranches: 1 }
+    )
+    expect(granted).toMatchObject({ status: 201, body: { extraBranches: 1 } })
+    const addBranchRow = () =>
+      database.query(
+        `insert into workspaces (id, organization_id, name, status) values ($1, $2, 'Branch', 'active')`,
+        [randomUUID(), customer.actor.organizationId]
+      )
+    await addBranchRow()
+    const allowance = await call<{
+      enforced: boolean
+      used: number
+      allowed: number
+      canBuyBranches: boolean
+      proratedHalalasPerBranch: number
+    }>("GET", "/v1/branches/allowance", customer.token)
+    expect(allowance.body).toMatchObject({
+      enforced: true,
+      used: 1,
+      allowed: 3,
+      canBuyBranches: true,
+    })
+    // A whole month is left: about a full branch's price.
+    expect(allowance.body.proratedHalalasPerBranch).toBeGreaterThan(9000)
+    expect(allowance.body.proratedHalalasPerBranch).toBeLessThanOrEqual(9900)
+
+    await addBranchRow()
+    await addBranchRow()
+    const blocked = await call<{ code: string }>("POST", "/v1/workspaces", customer.token, {
+      organizationId: customer.actor.organizationId,
+      name: "Third branch",
+    })
+    expect(blocked).toMatchObject({ status: 409, body: { code: "BRANCH_LIMIT_REACHED" } })
+
+    // Buying one more branch charges what's left of the period.
+    const branchCheckout = await call<{ amount: number }>(
+      "POST",
+      "/v1/billing/moyasar/branches/checkout",
+      customer.token,
+      { count: 1 }
+    )
+    expect(branchCheckout).toMatchObject({
+      status: 201,
+      body: { amount: allowance.body.proratedHalalasPerBranch },
+    })
+
+    // Staff can set the branches by hand.
+    const set = await call<{ extraBranches: number }>(
+      "PUT",
+      `/v1/platform-admin/subscriptions/${granted.body.id}/branches`,
+      staff.token,
+      { extraBranches: 4 }
+    )
+    expect(set).toMatchObject({ status: 200, body: { extraBranches: 4 } })
+    const after = await call<{ allowed: number }>("GET", "/v1/branches/allowance", customer.token)
+    expect(after.body.allowed).toBe(6)
+
+    // Workspaces are shared by every app: the most generous plan sets the limit (they don't add
+    // up). Ads احترافي (3 included) on top of POS نمو (2 + 4) still allows 6.
+    const adsPro = advertising.packages.find((pkg) => pkg.legacyPlanTier === "pro")!
+    await call(
+      "POST",
+      `/v1/platform-admin/customers/${customer.actor.organizationId}/subscriptions`,
+      staff.token,
+      { application: "advertising", packageId: adsPro.id, interval: "monthly" }
+    )
+    expect(
+      (await call<{ allowed: number }>("GET", "/v1/branches/allowance", customer.token)).body
+        .allowed
+    ).toBe(6)
+    await call("PUT", `/v1/platform-admin/subscriptions/${granted.body.id}/branches`, staff.token, {
+      extraBranches: 0,
+    })
+    const best = await call<{ allowed: number; subscription: { application: string } }>(
+      "GET",
+      "/v1/branches/allowance",
+      customer.token
+    )
+    expect(best.body).toMatchObject({ allowed: 3, subscription: { application: "advertising" } })
+  })
+
+  it("gives the purchase-invoice reader only to packages that include it", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const customer = await signIn("owner@shop.test", "Shop")
+    const pos = (await call<PricingEntry[]>("GET", "/v1/pricing", customer.token)).body.find(
+      (entry) => entry.application === "pos"
+    )!
+    const byTier = (tier: string) => pos.packages.find((pkg) => pkg.legacyPlanTier === tier)!
+    const access = async () =>
+      (
+        await call<{ allowed: boolean }>(
+          "GET",
+          "/v1/purchases/invoice-reader/access",
+          customer.token
+        )
+      ).body.allowed
+    const scan = () =>
+      call<{ code: string }>("POST", "/v1/purchases/invoice-scan", customer.token, {})
+
+    // No package, or أساسي: not included.
+    expect(await access()).toBe(false)
+    expect(await scan()).toMatchObject({
+      status: 403,
+      body: { code: "INVOICE_READER_NOT_INCLUDED" },
+    })
+    const grant = (packageId: string) =>
+      call(
+        "POST",
+        `/v1/platform-admin/customers/${customer.actor.organizationId}/subscriptions`,
+        staff.token,
+        {
+          application: "pos",
+          packageId,
+          interval: "monthly",
+        }
+      )
+    await grant(byTier("starter").id)
+    expect(await access()).toBe(false)
+
+    // نمو includes it.
+    await grant(byTier("growth").id)
+    expect(await access()).toBe(true)
+    expect((await scan()).status).not.toBe(403)
+  })
+
+  it("locks every plan feature the customer's plans don't include", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const customer = await signIn("owner@shop.test", "Shop")
+    const org = customer.actor.organizationId
+    const catalog = (await call<PricingEntry[]>("GET", "/v1/pricing", customer.token)).body
+    const pkg = (application: string, tier: string) =>
+      catalog
+        .find((entry) => entry.application === application)!
+        .packages.find((entry) => entry.legacyPlanTier === tier)!
+    const grant = (application: string, tier: string) =>
+      call("POST", `/v1/platform-admin/customers/${org}/subscriptions`, staff.token, {
+        application,
+        packageId: pkg(application, tier).id,
+        interval: "monthly",
+      })
+    const entitlements = async () =>
+      (await call<Record<string, unknown>>("GET", "/v1/entitlements", customer.token)).body
+    const createRole = () =>
+      call<{ code: string }>("POST", `/v1/organizations/${org}/roles`, customer.token, {
+        name: "Cashier lead",
+        description: "",
+        permissions: ["pos:view"],
+      })
+    const cashMovement = () =>
+      call<{ code: string }>(
+        "POST",
+        `/v1/pos/shifts/${randomUUID()}/cash-movements`,
+        customer.token,
+        { type: "withdrawal", amount: 10, note: null }
+      )
+    const suppliers = () => call("GET", "/v1/suppliers", customer.token)
+
+    // An Ads trial doesn't unlock POS features (only what Ads plans can include).
+    await database.query(
+      `insert into organization_subscriptions
+         (id, organization_id, application, status, source, started_at, trial_ends_at)
+       values ($1, $2, 'advertising', 'trial', 'trial', now(), $3)`,
+      [randomUUID(), org, new Date(Date.now() + 7 * 86_400_000)]
+    )
+    expect(await entitlements()).toMatchObject({
+      shiftCash: false,
+      procurement: false,
+      customRoles: true,
+    })
+    await database.query(
+      `delete from organization_subscriptions where organization_id = $1 and application = 'advertising'`,
+      [org]
+    )
+
+    // POS أساسي: cash movements and shift reports, but none of the نمو features.
+    await grant("pos", "starter")
+    expect(await entitlements()).toMatchObject({
+      shiftCash: true,
+      customRoles: false,
+      procurement: false,
+      customReports: false,
+    })
+    expect(await createRole()).toMatchObject({
+      status: 403,
+      body: { code: "PLAN_FEATURE_NOT_INCLUDED" },
+    })
+    expect((await cashMovement()).body.code).not.toBe("PLAN_FEATURE_NOT_INCLUDED")
+    expect((await suppliers()).status).toBe(403)
+
+    // POS نمو: roles, suppliers/purchases/expenses -- but not custom reports.
+    await grant("pos", "growth")
+    expect(await entitlements()).toMatchObject({
+      shiftCash: true,
+      customRoles: true,
+      procurement: true,
+      customReports: false,
+    })
+    expect((await createRole()).status).not.toBe(403)
+    expect((await cashMovement()).body.code).not.toBe("PLAN_FEATURE_NOT_INCLUDED")
+    expect((await suppliers()).status).toBe(200)
+    expect((await call("GET", "/v1/reports/custom", customer.token)).status).toBe(403)
+
+    // POS احترافي adds custom reports.
+    await grant("pos", "pro")
+    expect((await call("GET", "/v1/reports/custom", customer.token)).status).toBe(200)
+
+    // Ads أساسي: two ad platforms. Meta and Snapchat are connected; a third is refused, while
+    // reconnecting one already connected is fine.
+    await grant("advertising", "starter")
+    expect((await entitlements()).maxAdPlatforms).toBe(2)
+    for (const table of ["meta_oauth_connections", "snapchat_oauth_connections"]) {
+      await database.query(
+        `insert into ${table} (id, organization_id, project_id, status, created_by_user_id,
+           updated_by_user_id) values ($1, $2, $3, 'connected', $4, $4)`,
+        [randomUUID(), org, randomUUID(), customer.actor.userId]
+      )
+    }
+    const connectGoogle = await call<{ code: string }>(
+      "POST",
+      "/v1/integrations/google-ads/oauth/start",
+      customer.token,
+      {}
+    )
+    expect(connectGoogle).toMatchObject({
+      status: 403,
+      body: { code: "PLAN_FEATURE_NOT_INCLUDED" },
+    })
+    const reconnectMeta = await call<{ code: string }>(
+      "POST",
+      "/v1/integrations/meta-ads/oauth/start",
+      customer.token,
+      {}
+    )
+    expect(reconnectMeta.body.code).not.toBe("PLAN_FEATURE_NOT_INCLUDED")
+    // Ads نمو: every platform.
+    await grant("advertising", "growth")
+    expect((await entitlements()).maxAdPlatforms).toBeNull()
+
+    // E-commerce أساسي: one store.
+    await grant("ecommerce", "starter")
+    expect((await entitlements()).maxStores).toBe(1)
+    await database.query(
+      `insert into salla_oauth_connections (id, organization_id, project_id, status,
+         created_by_user_id, updated_by_user_id) values ($1, $2, $3, 'connected', $4, $4)`,
+      [randomUUID(), org, randomUUID(), customer.actor.userId]
+    )
+    const secondStore = await call<{ code: string }>(
+      "POST",
+      "/v1/integrations/zid/oauth/start",
+      customer.token,
+      {}
+    )
+    expect(secondStore).toMatchObject({ status: 403, body: { code: "PLAN_FEATURE_NOT_INCLUDED" } })
+    await grant("ecommerce", "growth")
+    expect((await entitlements()).maxStores).toBe(3)
   })
 
   it("stops selling and trialling an application staff hid, until it's shown again", async () => {
@@ -523,8 +848,8 @@ describe("coupons", () => {
         { code: "ADS-POS-10", application, packageId: growth(application).id, interval }
       )
     expect((await quote("pos")).body).toMatchObject({
-      discountHalalas: 2990,
-      finalAmountHalalas: 26910,
+      discountHalalas: 2490,
+      finalAmountHalalas: 22410,
     })
     expect((await quote("ecommerce")).body).toMatchObject({ code: "COUPON_NOT_APPLICABLE" })
 

@@ -5,9 +5,45 @@ import { toast } from "sonner"
 
 import { AppButton, AppDialog, AppInput, AppSwitch, AppTextarea } from "@/components/app"
 
-import type { AdminPackage, PackageInput } from "../types/platform-admin.types"
+import type { AdminPackage, PackageEntitlements, PackageInput } from "../types/platform-admin.types"
 
 const FIELD_LABEL = "mb-1.5 block text-sm font-medium text-foreground"
+
+type EntitlementSwitch =
+  | "invoiceReader"
+  | "shiftCash"
+  | "customRoles"
+  | "procurement"
+  | "customReports"
+
+// The switches a package can turn on (see the backend's subscriptions/entitlements.ts).
+const ENTITLEMENT_SWITCHES: Array<{ key: EntitlementSwitch; label: string; hint: string }> = [
+  {
+    key: "shiftCash",
+    label: "حركات النقد وتقارير الورديات",
+    hint: "السحب والإيداع وتقرير الوردية التفصيلي (فتح وإغلاق الوردية متاح للجميع).",
+  },
+  {
+    key: "customRoles",
+    label: "الأدوار والصلاحيات المخصصة",
+    hint: "إنشاء أدوار مخصصة وتعيينها للأعضاء.",
+  },
+  {
+    key: "procurement",
+    label: "الموردون والمشتريات والمصروفات",
+    hint: "متاحة بدون اشتراك منفصل فيها.",
+  },
+  {
+    key: "invoiceReader",
+    label: "قارئ فواتير المشتريات",
+    hint: "قراءة فواتير الموردين بالذكاء الاصطناعي.",
+  },
+  {
+    key: "customReports",
+    label: "التقارير المخصصة",
+    hint: "منشئ التقارير بدون اشتراك منفصل فيه.",
+  },
+]
 
 function riyals(halalas: number | null): string {
   return halalas === null ? "" : String(halalas / 100)
@@ -41,12 +77,32 @@ export function PackageEditorDialog({
   const [features, setFeatures] = useState((initial?.features ?? []).join("\n"))
   const [monthly, setMonthly] = useState(riyals(initial?.monthlyPriceHalalas ?? null))
   const [yearly, setYearly] = useState(riyals(initial?.yearlyPriceHalalas ?? null))
+  const [includedBranches, setIncludedBranches] = useState(String(initial?.includedBranches ?? 1))
+  const [branchMonthly, setBranchMonthly] = useState(
+    riyals(initial?.extraBranchMonthlyHalalas ?? null)
+  )
+  const [branchYearly, setBranchYearly] = useState(
+    riyals(initial?.extraBranchYearlyHalalas ?? null)
+  )
   const [isRecommended, setIsRecommended] = useState(initial?.isRecommended ?? false)
+  const [entitlements, setEntitlements] = useState<PackageEntitlements>(initial?.entitlements ?? {})
+  const [maxAdPlatforms, setMaxAdPlatforms] = useState(
+    initial?.entitlements?.maxAdPlatforms === undefined
+      ? ""
+      : String(initial.entitlements.maxAdPlatforms)
+  )
+  const [maxStores, setMaxStores] = useState(
+    initial?.entitlements?.maxStores === undefined ? "" : String(initial.entitlements.maxStores)
+  )
+  const toggleEntitlement = (key: EntitlementSwitch, on: boolean) =>
+    setEntitlements((current) => ({ ...current, [key]: on }))
   const [isActive, setIsActive] = useState(initial?.isActive ?? true)
   const [saving, setSaving] = useState(false)
 
   const monthlyHalalas = toHalalas(monthly)
   const yearlyHalalas = toHalalas(yearly)
+  const branchMonthlyHalalas = toHalalas(branchMonthly)
+  const branchYearlyHalalas = toHalalas(branchYearly)
   const saving12 =
     typeof monthlyHalalas === "number" && typeof yearlyHalalas === "number" && monthlyHalalas > 0
       ? Math.round(((monthlyHalalas * 12 - yearlyHalalas) / (monthlyHalalas * 12)) * 100)
@@ -57,13 +113,34 @@ export function PackageEditorDialog({
       toast.error("يرجى إدخال اسم الباقة.")
       return
     }
-    if (monthlyHalalas === "invalid" || yearlyHalalas === "invalid") {
+    if (
+      monthlyHalalas === "invalid" ||
+      yearlyHalalas === "invalid" ||
+      branchMonthlyHalalas === "invalid" ||
+      branchYearlyHalalas === "invalid"
+    ) {
       toast.error("يرجى إدخال أسعار صحيحة أو تركها فارغة.")
+      return
+    }
+    const included = Number(includedBranches)
+    if (!Number.isInteger(included) || included < 1) {
+      toast.error("عدد الفروع المشمولة يجب أن يكون 1 أو أكثر.")
       return
     }
     setSaving(true)
     try {
       await onSave({
+        includedBranches: included,
+        entitlements: {
+          ...Object.fromEntries(
+            ENTITLEMENT_SWITCHES.filter(({ key }) => entitlements[key]).map(({ key }) => [
+              key,
+              true,
+            ])
+          ),
+          ...(maxAdPlatforms.trim() === "" ? {} : { maxAdPlatforms: Number(maxAdPlatforms) }),
+          ...(maxStores.trim() === "" ? {} : { maxStores: Number(maxStores) }),
+        },
         name: name.trim(),
         description: description.trim(),
         features: features
@@ -72,6 +149,8 @@ export function PackageEditorDialog({
           .filter(Boolean),
         monthlyPriceHalalas: monthlyHalalas,
         yearlyPriceHalalas: yearlyHalalas,
+        extraBranchMonthlyHalalas: branchMonthlyHalalas,
+        extraBranchYearlyHalalas: branchYearlyHalalas,
         isRecommended,
         isActive,
       })
@@ -163,6 +242,48 @@ export function PackageEditorDialog({
             : ""}
         </p>
 
+        <div className="rounded-[12px] border border-border p-3.5">
+          <p className="text-sm font-semibold text-foreground">الفروع / مساحات العمل</p>
+          <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
+            عدد الفروع المشمولة في سعر الباقة، وسعر كل فرع إضافي يضيفه العميل. اترك سعر الفرع فارغاً
+            إذا كانت الباقة لا تبيع فروعاً. أجهزة الكاشير غير محدودة داخل الفرع.
+          </p>
+          <div className="mb-3.5">
+            <label className={FIELD_LABEL}>الفروع المشمولة</label>
+            <AppInput
+              type="number"
+              min={1}
+              value={includedBranches}
+              onChange={(event) => setIncludedBranches(event.target.value)}
+              className="h-11 rounded-[10px]"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3.5">
+            <div>
+              <label className={FIELD_LABEL}>للفرع شهرياً (SAR)</label>
+              <AppInput
+                type="number"
+                min={0}
+                value={branchMonthly}
+                onChange={(event) => setBranchMonthly(event.target.value)}
+                placeholder="لا تبيع فروعاً"
+                className="h-11 rounded-[10px]"
+              />
+            </div>
+            <div>
+              <label className={FIELD_LABEL}>للفرع سنوياً (SAR)</label>
+              <AppInput
+                type="number"
+                min={0}
+                value={branchYearly}
+                onChange={(event) => setBranchYearly(event.target.value)}
+                placeholder="لا تبيع فروعاً"
+                className="h-11 rounded-[10px]"
+              />
+            </div>
+          </div>
+        </div>
+
         <div>
           <label className={FIELD_LABEL}>المميزات (ميزة في كل سطر)</label>
           <AppTextarea
@@ -175,6 +296,53 @@ export function PackageEditorDialog({
         </div>
 
         <div className="space-y-2.5">
+          <div className="rounded-[12px] border border-border p-3.5">
+            <p className="text-sm font-semibold text-foreground">مزايا الباقة</p>
+            <p className="mb-2.5 mt-0.5 text-xs text-muted-foreground">
+              ما تفتحه الباقة لمشتركيها -- يمنع الخادم أي ميزة غير مفعّلة هنا.
+            </p>
+            <div className="space-y-2">
+              {ENTITLEMENT_SWITCHES.map(({ key, label, hint }) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-3 rounded-[10px] bg-muted/40 px-3.5 py-2.5"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <p className="text-xs text-muted-foreground">{hint}</p>
+                  </div>
+                  <AppSwitch
+                    checked={entitlements[key] === true}
+                    onCheckedChange={(on) => toggleEntitlement(key, on)}
+                  />
+                </div>
+              ))}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className={FIELD_LABEL}>حد المنصات الإعلانية</label>
+                  <AppInput
+                    type="number"
+                    min={0}
+                    value={maxAdPlatforms}
+                    onChange={(event) => setMaxAdPlatforms(event.target.value)}
+                    placeholder="بدون حد"
+                    className="h-11 rounded-[10px]"
+                  />
+                </div>
+                <div>
+                  <label className={FIELD_LABEL}>حد المتاجر</label>
+                  <AppInput
+                    type="number"
+                    min={0}
+                    value={maxStores}
+                    onChange={(event) => setMaxStores(event.target.value)}
+                    placeholder="بدون حد"
+                    className="h-11 rounded-[10px]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="flex items-center justify-between rounded-[10px] bg-muted/40 px-3.5 py-2.5">
             <div>
               <p className="text-sm font-medium text-foreground">الباقة الموصى بها</p>

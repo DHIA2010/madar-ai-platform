@@ -49,6 +49,7 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
         packageName: null,
         billingInterval: null,
         priceHalalas: null,
+        extraBranches: 0,
         currency: "SAR",
         source: isTrial ? "trial" : "existing",
         // A pre-existing paid activation's start is unknown ("existing" tells the UI not to show

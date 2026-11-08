@@ -12,6 +12,7 @@ import {
   AppDropdownMenuContent,
   AppDropdownMenuItem,
   AppDropdownMenuTrigger,
+  AppInput,
   AppSearchInput,
   AppSelect,
   AppSelectContent,
@@ -62,6 +63,10 @@ const INITIAL_FILTERS: AdminSubscriptionFilters = {
 type PendingAction =
   | { kind: "renew"; row: AdminSubscriptionRow; interval: BillingInterval }
   | { kind: "cancel"; row: AdminSubscriptionRow }
+  | { kind: "branches"; row: AdminSubscriptionRow; extraBranches: string }
+
+// Branches (workspaces in Ads and E-commerce) are sold with these apps.
+const BRANCH_APPLICATIONS = new Set(["pos", "madarComplete", "advertising", "ecommerce"])
 
 export function MadarAdminSubscriptions() {
   const onError = useCallback((message: string) => toast.error(message), [])
@@ -123,6 +128,14 @@ export function MadarAdminSubscriptions() {
       if (pending.kind === "renew") {
         await platformAdminService.renewSubscription(pending.row.id, pending.interval)
         toast.success(`تم تجديد اشتراك ${pending.row.organizationName}.`)
+      } else if (pending.kind === "branches") {
+        const extraBranches = Number(pending.extraBranches)
+        if (!Number.isInteger(extraBranches) || extraBranches < 0 || extraBranches > 500) {
+          toast.error("أدخل عدداً صحيحاً من الفروع الإضافية.")
+          return
+        }
+        await platformAdminService.setExtraBranches(pending.row.id, extraBranches)
+        toast.success(`تم تحديث فروع ${pending.row.organizationName}.`)
       } else {
         await platformAdminService.cancelSubscription(pending.row.id)
         toast.success(`تم إلغاء اشتراك ${pending.row.organizationName}.`)
@@ -130,7 +143,13 @@ export function MadarAdminSubscriptions() {
       setPending(null)
       list.reload()
     } catch {
-      toast.error(pending.kind === "renew" ? "تعذر تجديد الاشتراك." : "تعذر إلغاء الاشتراك.")
+      toast.error(
+        pending.kind === "renew"
+          ? "تعذر تجديد الاشتراك."
+          : pending.kind === "branches"
+            ? "تعذر تحديث الفروع."
+            : "تعذر إلغاء الاشتراك."
+      )
     } finally {
       setActing(false)
     }
@@ -232,6 +251,7 @@ export function MadarAdminSubscriptions() {
               <AppTableHead>الحالة</AppTableHead>
               <AppTableHead>تاريخ الاشتراك</AppTableHead>
               <AppTableHead>التجديد / الانتهاء</AppTableHead>
+              <AppTableHead>الفروع / المساحات</AppTableHead>
               <AppTableHead>القيمة</AppTableHead>
               <AppTableHead>طريقة الدفع</AppTableHead>
               <AppTableHead className="w-10" />
@@ -264,6 +284,21 @@ export function MadarAdminSubscriptions() {
                 </AppTableCell>
                 <AppTableCell className="text-muted-foreground">
                   {formatDate(nextRenewalDate(row))}
+                </AppTableCell>
+                <AppTableCell className="text-muted-foreground">
+                  {BRANCH_APPLICATIONS.has(row.application) ? (
+                    <span>
+                      {row.includedBranches + row.extraBranches}
+                      {row.extraBranches > 0 ? (
+                        <span className="text-xs">
+                          {" "}
+                          ({row.includedBranches} + {row.extraBranches})
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </AppTableCell>
                 <AppTableCell className="font-medium text-foreground">
                   {formatSar(row.priceHalalas)}
@@ -298,6 +333,19 @@ export function MadarAdminSubscriptions() {
                       >
                         تجديد يدوي
                       </AppDropdownMenuItem>
+                      {BRANCH_APPLICATIONS.has(row.application) && row.status !== "cancelled" ? (
+                        <AppDropdownMenuItem
+                          onSelect={() =>
+                            setPending({
+                              kind: "branches",
+                              row,
+                              extraBranches: String(row.extraBranches),
+                            })
+                          }
+                        >
+                          تعديل الفروع
+                        </AppDropdownMenuItem>
+                      ) : null}
                       {row.status !== "cancelled" ? (
                         <AppDropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -342,14 +390,21 @@ export function MadarAdminSubscriptions() {
         }}
         title={
           <span dir="rtl">
-            {pending?.kind === "renew" ? "تجديد يدوي" : "إلغاء الاشتراك"} — {pendingApplication}
+            {pending?.kind === "renew"
+              ? "تجديد يدوي"
+              : pending?.kind === "branches"
+                ? "تعديل الفروع"
+                : "إلغاء الاشتراك"}{" "}
+            — {pendingApplication}
           </span>
         }
         description={
           <span dir="rtl">
             {pending?.kind === "renew"
               ? `إضافة فترة جديدة لاشتراك ${pending.row.organizationName} فوق المدة المتبقية، بنفس السعر الحالي.`
-              : `سيتم إيقاف ${pendingApplication} لـ ${pending?.row.organizationName} فوراً. يبقى بإمكان العميل تسجيل الدخول والاشتراك مجدداً.`}
+              : pending?.kind === "branches"
+                ? `الباقة تشمل ${pending.row.includedBranches} ${pending.row.includedBranches === 1 ? "فرعاً" : "فروع"}. حدّد عدد الفروع الإضافية لـ ${pending.row.organizationName} -- لا يتغير سعر الاشتراك من هنا.`
+                : `سيتم إيقاف ${pendingApplication} لـ ${pending?.row.organizationName} فوراً. يبقى بإمكان العميل تسجيل الدخول والاشتراك مجدداً.`}
           </span>
         }
         contentClassName="[direction:rtl] max-w-[30rem] p-6"
@@ -368,7 +423,11 @@ export function MadarAdminSubscriptions() {
               loading={acting}
               onClick={confirmPending}
             >
-              {pending?.kind === "renew" ? "تأكيد التجديد" : "تأكيد الإلغاء"}
+              {pending?.kind === "renew"
+                ? "تأكيد التجديد"
+                : pending?.kind === "branches"
+                  ? "حفظ الفروع"
+                  : "تأكيد الإلغاء"}
             </AppButton>
           </div>
         }
@@ -390,6 +449,24 @@ export function MadarAdminSubscriptions() {
                 <AppSelectItem value="yearly">سنة كاملة</AppSelectItem>
               </AppSelectContent>
             </AppSelect>
+          </div>
+        ) : null}
+        {pending?.kind === "branches" ? (
+          <div dir="rtl">
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              الفروع الإضافية
+            </label>
+            <AppInput
+              type="number"
+              min={0}
+              value={pending.extraBranches}
+              onChange={(event) => setPending({ ...pending, extraBranches: event.target.value })}
+              className="h-11 rounded-[10px]"
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              إجمالي الفروع المسموحة:{" "}
+              {pending.row.includedBranches + (Number(pending.extraBranches) || 0)}
+            </p>
           </div>
         ) : null}
       </AppDialog>

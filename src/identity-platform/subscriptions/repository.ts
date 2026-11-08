@@ -27,6 +27,7 @@ export function mapOrganizationSubscription(
       row.price_halalas === null || row.price_halalas === undefined
         ? null
         : Number(row.price_halalas),
+    extraBranches: Number(row.extra_branches ?? 0),
     currency: String(row.currency ?? "SAR"),
     source: row.source as OrganizationSubscriptionState["source"],
     startedAt: toIso(row.started_at) ?? "",
@@ -73,9 +74,9 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
         INSERT INTO organization_subscriptions (
           id, organization_id, application, status, plan_tier, billing_interval, price_halalas,
           currency, source, started_at, current_period_end, trial_ends_at, cancelled_at,
-          cancelled_by_user_id, created_at, updated_at, package_id, package_name
+          cancelled_by_user_id, created_at, updated_at, package_id, package_name, extra_branches
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         ON CONFLICT (organization_id, application) DO UPDATE SET
           status = EXCLUDED.status,
           plan_tier = EXCLUDED.plan_tier,
@@ -90,7 +91,8 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
           cancelled_by_user_id = EXCLUDED.cancelled_by_user_id,
           updated_at = EXCLUDED.updated_at,
           package_id = EXCLUDED.package_id,
-          package_name = EXCLUDED.package_name
+          package_name = EXCLUDED.package_name,
+          extra_branches = EXCLUDED.extra_branches
       `,
       values: [
         entry.id,
@@ -111,6 +113,7 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
         entry.updatedAt,
         entry.packageId,
         entry.packageName,
+        entry.extraBranches,
       ],
     })
   }

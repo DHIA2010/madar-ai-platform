@@ -78,8 +78,8 @@ async function signIn(email: string, orgName: string) {
     [actor.userId, email]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb) on conflict (id) do nothing`,
     [actor.organizationId, orgName, actor.userId]
   )
   if (actor.workspaceId) {
@@ -206,7 +206,10 @@ describe("public pricing", () => {
         expect(Object.keys(pkg).sort()).toEqual(
           [
             "description",
+            "extraBranchMonthlyHalalas",
+            "extraBranchYearlyHalalas",
             "features",
+            "includedBranches",
             "isRecommended",
             "monthlyPriceHalalas",
             "name",

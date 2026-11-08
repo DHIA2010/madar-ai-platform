@@ -80,8 +80,8 @@ async function signIn(email: string, orgName: string) {
     [actor.userId, email]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb) on conflict (id) do nothing`,
     [actor.organizationId, orgName, actor.userId]
   )
   if (actor.workspaceId) {
@@ -265,5 +265,14 @@ describe("custom reports: application-activation gate", () => {
       { headers: authHeaders(token) }
     )
     expect(response.status).not.toBe(403)
+
+    // The ready-made report list too -- only the organization's own custom reports are locked.
+    const system = await fetch(`${baseUrl}/v1/reports/custom?isSystem=true`, {
+      headers: authHeaders(token),
+    })
+    expect(system.status).toBe(200)
+    expect(
+      (await fetch(`${baseUrl}/v1/reports/custom`, { headers: authHeaders(token) })).status
+    ).toBe(403)
   })
 })

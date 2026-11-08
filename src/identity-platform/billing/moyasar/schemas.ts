@@ -6,7 +6,12 @@ export const createCheckoutIntentSchema = z.object({
   application: z.enum(PURCHASABLE_APPLICATIONS),
   packageId: z.string().uuid(),
   interval: z.enum(["monthly", "yearly"]),
+  extraBranches: z.number().int().min(0).max(500).default(0),
   couponCode: z.string().trim().max(40).nullish(),
+})
+
+export const createBranchCheckoutSchema = z.object({
+  count: z.number().int().min(1).max(100),
 })
 
 export const confirmCheckoutSchema = z.object({
@@ -18,4 +23,5 @@ export const couponQuoteSchema = z.object({
   application: z.enum(PURCHASABLE_APPLICATIONS),
   packageId: z.string().uuid(),
   interval: z.enum(["monthly", "yearly"]),
+  extraBranches: z.number().int().min(0).max(500).default(0),
 })

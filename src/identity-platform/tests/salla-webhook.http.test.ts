@@ -104,8 +104,8 @@ async function seedOrganization() {
     [userId]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, 'Webhook Test Org', $2, 'active')`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, 'Webhook Test Org', $2, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)`,
     [organizationId, userId]
   )
   await database.query(

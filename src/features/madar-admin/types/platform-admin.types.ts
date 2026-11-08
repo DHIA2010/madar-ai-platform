@@ -34,6 +34,8 @@ export interface AdminSubscriptionView {
   packageName: string | null
   billingInterval: BillingInterval | null
   priceHalalas: number | null
+  // Branches paid for beyond the one included.
+  extraBranches: number
   currency: string
   source: SubscriptionSource
   startedAt: string
@@ -87,6 +89,8 @@ export interface AdminCustomerSummary {
 }
 
 export interface AdminSubscriptionRow extends AdminSubscriptionView {
+  // Branches the subscribed package includes (total = this + extraBranches).
+  includedBranches: number
   organizationName: string
   ownerEmail: string | null
   paymentMethod: string | null
@@ -113,9 +117,21 @@ export interface GrantSubscriptionInput {
   packageId: string | null
   interval: BillingInterval
   priceHalalas: number | null
+  // Branches beyond the one included (packages that sell branches).
+  extraBranches?: number
 }
 
 export type PricingMode = "packages" | "fixed" | "contact" | "free"
+
+export interface PackageEntitlements {
+  invoiceReader?: boolean
+  shiftCash?: boolean
+  customRoles?: boolean
+  procurement?: boolean
+  customReports?: boolean
+  maxAdPlatforms?: number
+  maxStores?: number
+}
 
 export interface AdminPackage {
   id: string
@@ -125,6 +141,12 @@ export interface AdminPackage {
   features: string[]
   monthlyPriceHalalas: number | null
   yearlyPriceHalalas: number | null
+  // Branches the package includes, and each further one (null = the package doesn't sell them).
+  includedBranches: number
+  // What the package unlocks beyond its app (switches; absent limit = no limit).
+  entitlements: PackageEntitlements
+  extraBranchMonthlyHalalas: number | null
+  extraBranchYearlyHalalas: number | null
   isRecommended: boolean
   isActive: boolean
   sortOrder: number
@@ -147,6 +169,12 @@ export interface PackageInput {
   features: string[]
   monthlyPriceHalalas: number | null
   yearlyPriceHalalas: number | null
+  // Branches the package includes, and each further one (null = the package doesn't sell them).
+  includedBranches: number
+  // What the package unlocks beyond its app (switches; absent limit = no limit).
+  entitlements: PackageEntitlements
+  extraBranchMonthlyHalalas: number | null
+  extraBranchYearlyHalalas: number | null
   isRecommended: boolean
   isActive: boolean
 }

@@ -83,8 +83,8 @@ async function signIn(email: string, orgName: string) {
     [actor.userId, email]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb) on conflict (id) do nothing`,
     [actor.organizationId, orgName, actor.userId]
   )
 
@@ -301,7 +301,12 @@ describe("point-of-sale invoices", () => {
     expect((await post(promotion)).status).toBe(403)
     await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
       actor.organizationId,
-      JSON.stringify({ promotionsEnabled: true }),
+      JSON.stringify({
+        posEnabled: true,
+        ecommerceEnabled: true,
+        advertisingEnabled: true,
+        promotionsEnabled: true,
+      }),
     ])
 
     expect((await post({ ...promotion, discountValue: 150 })).status).toBe(400)
@@ -948,6 +953,9 @@ describe("point-of-sale invoices", () => {
     await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
       actor.organizationId,
       JSON.stringify({
+        posEnabled: true,
+        ecommerceEnabled: true,
+        advertisingEnabled: true,
         storeName: "مطعم الاختبار",
         taxNumber: "300000000000003",
         addressShort: "الرياض 1234 5678",
@@ -968,7 +976,13 @@ describe("point-of-sale invoices", () => {
     // snapshot -- only the NEXT invoice reflects the change.
     await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
       actor.organizationId,
-      JSON.stringify({ storeName: "اسم جديد", taxNumber: "300000000000003" }),
+      JSON.stringify({
+        posEnabled: true,
+        ecommerceEnabled: true,
+        advertisingEnabled: true,
+        storeName: "اسم جديد",
+        taxNumber: "300000000000003",
+      }),
     ])
     const reread = await listInvoices(token)
     expect(reread.body.items[0]).toMatchObject({ sellerName: "مطعم الاختبار" })

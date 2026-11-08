@@ -10,7 +10,12 @@ import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { NavMain } from "@/components/nav-main"
 import { SettingsHelpCard } from "@/components/settings-help-card"
-import { getActiveApplications, type ApplicationCategoryId } from "@/features/applications"
+import {
+  applicationsFromEntitlements,
+  getActiveApplications,
+  type ApplicationCategoryId,
+  useEntitlements,
+} from "@/features/applications"
 import { usePermissions } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import {
@@ -84,7 +89,13 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   // brand-new org has none active, so only "التطبيقات" (the one item with no `applications` gate
   // at all) shows until something is activated from /marketplace. Shared with HomeTabs.tsx's own
   // tab-filtering rather than each re-deriving this independently.
-  const activeApplications = getActiveApplications(currentOrganization?.settings)
+  // Plus the apps a plan brings along (POS نمو / احترافي: suppliers, purchases, expenses, custom
+  // reports) -- see the backend's subscriptions/entitlements.ts.
+  const entitlements = useEntitlements()
+  const activeApplications = [
+    ...getActiveApplications(currentOrganization?.settings),
+    ...applicationsFromEntitlements(entitlements),
+  ]
 
   const navMain = [
     {

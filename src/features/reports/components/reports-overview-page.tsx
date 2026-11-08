@@ -41,7 +41,12 @@ import {
   AppSelectValue,
 } from "@/components/app"
 
-import { type ApplicationCategoryId, getActiveApplications } from "@/features/applications"
+import {
+  type ApplicationCategoryId,
+  applicationsFromEntitlements,
+  getActiveApplications,
+  useEntitlements,
+} from "@/features/applications"
 import { Can } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
@@ -732,7 +737,12 @@ export function ReportsOverviewPage() {
   // hasn't activated it never sees the tab at all, same treatment dashboard/analytics's
   // HomeTabs.tsx gives its own app-scoped tabs.
   // getActiveApplications (not the raw flag) so a lapsed trial counts as inactive here too.
-  const activeApplications = getActiveApplications(currentOrganization?.settings)
+  // Plus custom reports when the plan includes them (احترافي).
+  const entitlements = useEntitlements()
+  const activeApplications = [
+    ...getActiveApplications(currentOrganization?.settings),
+    ...applicationsFromEntitlements(entitlements),
+  ]
   const customReportsEnabled = activeApplications.includes("customReports")
   const [selectedTab, setSelectedTab] = useState<"ready" | "custom">("ready")
   const activeTab = selectedTab === "custom" && !customReportsEnabled ? "ready" : selectedTab

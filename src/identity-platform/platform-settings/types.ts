@@ -32,7 +32,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   announcementBanner: "",
   maintenanceMode: false,
   newSignupsEnabled: true,
-  trialDays: 7,
+  trialDays: 14,
   renewalReminderDays: 3,
   gracePeriodDays: 7,
   legalName: "",

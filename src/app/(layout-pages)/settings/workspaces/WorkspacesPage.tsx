@@ -51,6 +51,7 @@ import { useUserMutations } from "@/features/administration/queries/use-user-mut
 import { useApplicationServices } from "@/application/context"
 import type { AdministrationUserDto } from "@/application/contracts/administration.contracts"
 import { posDevicesService } from "@/features/pos/services/pos-device-settings.service"
+import { type BranchAllowance, branchAllowanceService } from "@/features/billing"
 
 import {
   AppCheckbox,
@@ -222,6 +223,69 @@ export default function WorkspacesPage() {
 
   const [deviceCounts, setDeviceCounts] = useState<Record<string, number>>({})
 
+  // Every package includes one branch; more are an add-on (see the backend's
+  // subscriptions/branches.ts). Re-read after a branch is added or brought back.
+  const [allowance, setAllowance] = useState<BranchAllowance | null>(null)
+  const [allowanceVersion, setAllowanceVersion] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    branchAllowanceService
+      .get()
+      .then((next) => {
+        if (!cancelled) setAllowance(next)
+      })
+      .catch(() => {
+        if (!cancelled) setAllowance(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [allowanceVersion])
+  // Ads and E-commerce sell the same records as workspaces; POS calls them branches.
+  const isWorkspaceUnit =
+    allowance?.subscription?.application === "advertising" ||
+    allowance?.subscription?.application === "ecommerce"
+  const atBranchLimit =
+    !!allowance?.enforced && allowance.allowed !== null && allowance.used >= allowance.allowed
+
+  // The checkout page in "add branches" mode, for the running POS / Madar Complete subscription.
+  function buyBranches() {
+    const subscription = allowance?.subscription
+    if (!allowance?.canBuyBranches || !subscription?.interval) return
+    const params = new URLSearchParams({
+      purpose: "branches",
+      application: subscription.application,
+      interval: subscription.interval,
+      name: t(
+        `branchAllowance.applications.${subscription.application as "pos" | "madarComplete" | "advertising" | "ecommerce"}`
+      ),
+      count: "1",
+    })
+    router.push(`${ROUTES.marketplaceBillingCheckout}?${params.toString()}`)
+  }
+
+  function showBranchLimit() {
+    toast.error(
+      isWorkspaceUnit ? t("branchAllowance.limitTitleWorkspaces") : t("branchAllowance.limitTitle"),
+      {
+        description: allowance?.canBuyBranches
+          ? isWorkspaceUnit
+            ? t("branchAllowance.limitBuyWorkspaces")
+            : t("branchAllowance.limitBuy")
+          : t("branchAllowance.limitContact"),
+        action: allowance?.canBuyBranches
+          ? {
+              label: isWorkspaceUnit ? t("branchAllowance.buyWorkspace") : t("branchAllowance.buy"),
+              onClick: buyBranches,
+            }
+          : undefined,
+      }
+    )
+  }
+
+  const isBranchLimitError = (error: unknown) =>
+    error instanceof AppError && error.code === "BRANCH_LIMIT_REACHED"
+
   useEffect(() => {
     let cancelled = false
     void posDevicesService
@@ -295,6 +359,10 @@ export default function WorkspacesPage() {
   const archivedCount = workspaces.length - activeCount
 
   function openCreate() {
+    if (atBranchLimit) {
+      showBranchLimit()
+      return
+    }
     setEditingId(null)
     setDraft(emptyDraft())
     setIsActive(true)
@@ -424,8 +492,10 @@ export default function WorkspacesPage() {
       }
 
       setIsFormOpen(false)
+      setAllowanceVersion((version) => version + 1)
     } catch (error) {
-      toast.error(error instanceof AppError ? error.message : t("toasts.saveFailed"))
+      if (isBranchLimitError(error)) showBranchLimit()
+      else toast.error(error instanceof AppError ? error.message : t("toasts.saveFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -441,8 +511,10 @@ export default function WorkspacesPage() {
         await restoreWorkspace(workspace.id)
         toast.success(t("toasts.activated", { name: workspace.name }))
       }
+      setAllowanceVersion((version) => version + 1)
     } catch (error) {
-      toast.error(error instanceof AppError ? error.message : t("toasts.statusUpdateFailed"))
+      if (isBranchLimitError(error)) showBranchLimit()
+      else toast.error(error instanceof AppError ? error.message : t("toasts.statusUpdateFailed"))
     } finally {
       setPendingActionId(null)
     }
@@ -492,6 +564,73 @@ export default function WorkspacesPage() {
           {t("addWorkspace")}
         </Button>
       </div>
+
+      {allowance?.enforced && allowance.allowed !== null ? (
+        <div
+          className={cn(
+            PANEL,
+            "flex flex-wrap items-center justify-between gap-3 p-4",
+            atBranchLimit && "border-[#fed7aa] bg-[#fffaf5]"
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className={cn(
+                "flex size-10 items-center justify-center rounded-[10px]",
+                atBranchLimit ? "bg-[#fff4e5] text-[#ea580c]" : BLUE_TINT
+              )}
+            >
+              <Building2 className="size-5" />
+            </span>
+            <div>
+              <p className={cn("text-[13.5px] font-bold", HEADING)}>
+                {t(isWorkspaceUnit ? "branchAllowance.usageWorkspaces" : "branchAllowance.usage", {
+                  used: allowance.used,
+                  allowed: allowance.allowed,
+                })}
+              </p>
+              <p className={cn("text-[12px]", MUTED)}>
+                {allowance.subscription?.packageName
+                  ? t(
+                      isWorkspaceUnit
+                        ? "branchAllowance.includedWorkspaces"
+                        : "branchAllowance.included",
+                      {
+                        plan: allowance.subscription.packageName,
+                        included: allowance.subscription.includedBranches,
+                        extra: allowance.subscription.extraBranches,
+                      }
+                    )
+                  : t("branchAllowance.includedNoPlan", {
+                      included: allowance.subscription?.includedBranches ?? 1,
+                      extra: allowance.subscription?.extraBranches ?? 0,
+                    })}
+              </p>
+            </div>
+          </div>
+          {allowance.canBuyBranches && allowance.extraBranchPriceHalalas !== null ? (
+            <Button
+              variant="outline"
+              className="h-10 gap-2 rounded-[10px] border-[#2563eb] px-4 text-[12.5px] font-semibold text-[#2563eb] hover:bg-[#eff6ff]"
+              onClick={buyBranches}
+            >
+              <Plus className="size-4" />
+              {t(
+                isWorkspaceUnit
+                  ? "branchAllowance.buyWorkspaceWithPrice"
+                  : "branchAllowance.buyWithPrice",
+                {
+                  price: (allowance.extraBranchPriceHalalas / 100).toLocaleString("en-US"),
+                  period:
+                    allowance.subscription?.interval === "yearly"
+                      ? t("branchAllowance.perYear")
+                      : t("branchAllowance.perMonth"),
+                }
+              )}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

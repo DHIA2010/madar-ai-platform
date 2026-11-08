@@ -143,6 +143,10 @@ export function MadarAdminPackages() {
       features: pkg.features,
       monthlyPriceHalalas: pkg.monthlyPriceHalalas,
       yearlyPriceHalalas: pkg.yearlyPriceHalalas,
+      includedBranches: pkg.includedBranches,
+      entitlements: pkg.entitlements,
+      extraBranchMonthlyHalalas: pkg.extraBranchMonthlyHalalas,
+      extraBranchYearlyHalalas: pkg.extraBranchYearlyHalalas,
       isRecommended: pkg.isRecommended,
       isActive: !pkg.isActive,
     }
@@ -411,6 +415,24 @@ export function MadarAdminPackages() {
                     </p>
                   </div>
                 </div>
+                {pkg.extraBranchMonthlyHalalas !== null || pkg.extraBranchYearlyHalalas !== null ? (
+                  <p className="mt-2 rounded-[10px] bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    {pkg.includedBranches === 1
+                      ? "يشمل فرعاً واحداً"
+                      : `يشمل ${pkg.includedBranches} فروع`}{" "}
+                    · فرع إضافي:{" "}
+                    {[
+                      pkg.extraBranchMonthlyHalalas !== null
+                        ? `${formatSar(pkg.extraBranchMonthlyHalalas)} / شهر`
+                        : null,
+                      pkg.extraBranchYearlyHalalas !== null
+                        ? `${formatSar(pkg.extraBranchYearlyHalalas)} / سنة`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                ) : null}
 
                 <ul className="mt-4 flex-1 space-y-1.5">
                   {pkg.features.map((feature) => (

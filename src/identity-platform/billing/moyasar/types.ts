@@ -3,6 +3,9 @@ import type { BillingInterval, PurchasableApplication } from "../../subscription
 export type MoyasarApplication = PurchasableApplication
 export type MoyasarSelfServePlanTier = "starter" | "growth" | "pro"
 export type MoyasarPaymentStatus = "initiated" | "paid" | "failed"
+// "subscription" buys a package (with any extra branches); "branches" adds branches to a running
+// subscription for what's left of its period.
+export type MoyasarPaymentPurpose = "subscription" | "branches"
 
 export interface MoyasarPaymentRecord {
   id: string
@@ -13,6 +16,9 @@ export interface MoyasarPaymentRecord {
   planTier: MoyasarSelfServePlanTier | null
   packageId: string | null
   billingInterval: BillingInterval
+  purpose: MoyasarPaymentPurpose
+  // Branches bought: on top of the package's included one ("subscription"), or added ("branches").
+  extraBranches: number
   // The coupon used, and the price before it (null when no coupon was used).
   couponId: string | null
   originalAmount: number | null
@@ -30,7 +36,13 @@ export interface CreateCheckoutIntentInput {
   application: MoyasarApplication
   packageId: string
   interval: BillingInterval
+  extraBranches?: number
   couponCode?: string | null
+}
+
+// Adds branches to the organization's running POS / Madar Complete subscription.
+export interface CreateBranchCheckoutInput {
+  count: number
 }
 
 export interface CreateCheckoutIntentResult {

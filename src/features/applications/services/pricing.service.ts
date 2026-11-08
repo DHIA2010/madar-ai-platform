@@ -14,6 +14,11 @@ export interface PricingPackage {
   features: string[]
   monthlyPriceHalalas: number | null
   yearlyPriceHalalas: number | null
+  // Branches the package includes; each further branch costs this per period (null = the
+  // package doesn't sell branches).
+  includedBranches: number
+  extraBranchMonthlyHalalas: number | null
+  extraBranchYearlyHalalas: number | null
   isRecommended: boolean
 }
 
@@ -64,6 +69,7 @@ export const pricingService = {
     application: PurchasableApplication
     packageId: string
     interval: BillingInterval
+    extraBranches?: number
   }): Promise<CouponQuote> {
     return client.post(COUPON_QUOTE_ENDPOINT, input)
   },
@@ -80,6 +86,11 @@ export function purchasablePackages(pricing: ApplicationPricing | undefined): Pr
 
 export function priceFor(pkg: PricingPackage, interval: BillingInterval): number | null {
   return interval === "yearly" ? pkg.yearlyPriceHalalas : pkg.monthlyPriceHalalas
+}
+
+// One branch beyond the included one, for the period -- null when the package doesn't sell them.
+export function extraBranchPriceFor(pkg: PricingPackage, interval: BillingInterval): number | null {
+  return interval === "yearly" ? pkg.extraBranchYearlyHalalas : pkg.extraBranchMonthlyHalalas
 }
 
 // How much cheaper a year is than 12 monthly payments, as a whole percentage (null when the

@@ -11,11 +11,43 @@ import {
 import { defaultPricingFor } from "./defaults"
 import type {
   ApplicationPricing,
+  PackageEntitlements,
   PackageInput,
   PlatformPackage,
   PricingMode,
   ResolvedPurchase,
 } from "./types"
+
+// Only the known keys, with the right types -- anything else stored there is ignored.
+export function parseEntitlements(value: unknown): PackageEntitlements {
+  const raw =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value) as Record<string, unknown>
+          } catch {
+            return {}
+          }
+        })()
+      : ((value ?? {}) as Record<string, unknown>)
+  const entitlements: PackageEntitlements = {}
+  for (const key of [
+    "invoiceReader",
+    "shiftCash",
+    "customRoles",
+    "procurement",
+    "customReports",
+  ] as const) {
+    if (raw[key] === true) entitlements[key] = true
+  }
+  for (const key of ["maxAdPlatforms", "maxStores"] as const) {
+    const limit = Number(raw[key])
+    if (raw[key] !== undefined && raw[key] !== null && Number.isInteger(limit) && limit >= 0) {
+      entitlements[key] = limit
+    }
+  }
+  return entitlements
+}
 
 function mapPackage(row: Record<string, unknown>): PlatformPackage {
   const toPrice = (value: unknown) => (value === null || value === undefined ? null : Number(value))
@@ -27,6 +59,10 @@ function mapPackage(row: Record<string, unknown>): PlatformPackage {
     features: Array.isArray(row.features) ? (row.features as unknown[]).map(String) : [],
     monthlyPriceHalalas: toPrice(row.monthly_price_halalas),
     yearlyPriceHalalas: toPrice(row.yearly_price_halalas),
+    includedBranches: Math.max(1, Number(row.included_branches ?? 1)),
+    entitlements: parseEntitlements(row.entitlements),
+    extraBranchMonthlyHalalas: toPrice(row.extra_branch_monthly_halalas),
+    extraBranchYearlyHalalas: toPrice(row.extra_branch_yearly_halalas),
     isRecommended: row.is_recommended === true,
     isActive: row.is_active === true,
     sortOrder: Number(row.sort_order ?? 0),
@@ -35,6 +71,12 @@ function mapPackage(row: Record<string, unknown>): PlatformPackage {
 }
 
 const purchaseUnavailable = (message: string) => ERRORS.conflict("PACKAGE_NOT_PURCHASABLE", message)
+
+// What one branch beyond the included one costs on this package for the period -- null when the
+// package doesn't sell branches.
+export function extraBranchPrice(pkg: PlatformPackage, interval: BillingInterval): number | null {
+  return interval === "yearly" ? pkg.extraBranchYearlyHalalas : pkg.extraBranchMonthlyHalalas
+}
 
 // Per-application pricing (modes + packages), edited from Madar Admin and read by the customer
 // marketplace, Moyasar checkout, and bank-transfer requests -- the single source of every price.
@@ -64,8 +106,10 @@ export class PricingService {
           await this.db.query(
             `INSERT INTO platform_packages (
                id, application, name, description, features, monthly_price_halalas,
-               yearly_price_halalas, is_recommended, is_active, sort_order, legacy_plan_tier
-             ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, true, $9, $10)`,
+               yearly_price_halalas, is_recommended, is_active, sort_order, legacy_plan_tier,
+               extra_branch_monthly_halalas, extra_branch_yearly_halalas, included_branches,
+               entitlements
+             ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, true, $9, $10, $11, $12, $13, $14::jsonb)`,
             [
               randomUUID(),
               application,
@@ -77,6 +121,10 @@ export class PricingService {
               pkg.isRecommended,
               index,
               pkg.legacyPlanTier,
+              pkg.extraBranchMonthlyHalalas ?? null,
+              pkg.extraBranchYearlyHalalas ?? null,
+              pkg.includedBranches ?? 1,
+              JSON.stringify(pkg.entitlements ?? {}),
             ]
           )
         }
@@ -123,6 +171,7 @@ export class PricingService {
     application: PurchasableApplication
     packageId: string
     interval: BillingInterval
+    extraBranches?: number
   }): Promise<ResolvedPurchase> {
     const pricing = (await this.getCatalog({ includeInactive: false })).find(
       (entry) => entry.application === input.application
@@ -140,11 +189,19 @@ export class PricingService {
     if (amount === null) {
       throw purchaseUnavailable(`This package has no ${input.interval} price.`)
     }
+    const extraBranches = Math.max(0, Math.floor(input.extraBranches ?? 0))
+    const branchPrice = extraBranchPrice(pkg, input.interval)
+    if (extraBranches > 0 && branchPrice === null) {
+      throw purchaseUnavailable("This package doesn't sell extra branches.")
+    }
+    const extraBranchesHalalas = extraBranches * (branchPrice ?? 0)
     return {
       application: input.application,
       package: pkg,
       interval: input.interval,
-      amountHalalas: amount,
+      extraBranches,
+      extraBranchesHalalas,
+      amountHalalas: amount + extraBranchesHalalas,
     }
   }
 
@@ -191,8 +248,10 @@ export class PricingService {
     await this.db.query(
       `INSERT INTO platform_packages (
          id, application, name, description, features, monthly_price_halalas,
-         yearly_price_halalas, is_recommended, is_active, sort_order
-       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)`,
+         yearly_price_halalas, is_recommended, is_active, sort_order,
+         extra_branch_monthly_halalas, extra_branch_yearly_halalas, included_branches,
+         entitlements
+       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)`,
       [
         id,
         application,
@@ -204,6 +263,10 @@ export class PricingService {
         input.isRecommended,
         input.isActive,
         Number(order.rows[0]?.next ?? 0),
+        input.extraBranchMonthlyHalalas,
+        input.extraBranchYearlyHalalas,
+        input.includedBranches,
+        JSON.stringify(input.entitlements ?? {}),
       ]
     )
     return this.getPackage(id)
@@ -214,7 +277,9 @@ export class PricingService {
     await this.db.query(
       `UPDATE platform_packages
           SET name = $2, description = $3, features = $4::jsonb, monthly_price_halalas = $5,
-              yearly_price_halalas = $6, is_recommended = $7, is_active = $8, updated_at = now()
+              yearly_price_halalas = $6, is_recommended = $7, is_active = $8,
+              extra_branch_monthly_halalas = $9, extra_branch_yearly_halalas = $10,
+              included_branches = $11, entitlements = $12::jsonb, updated_at = now()
         WHERE id = $1`,
       [
         packageId,
@@ -225,6 +290,10 @@ export class PricingService {
         input.yearlyPriceHalalas,
         input.isRecommended,
         input.isActive,
+        input.extraBranchMonthlyHalalas,
+        input.extraBranchYearlyHalalas,
+        input.includedBranches,
+        JSON.stringify(input.entitlements ?? {}),
       ]
     )
     return this.getPackage(packageId)

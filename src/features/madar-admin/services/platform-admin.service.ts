@@ -115,6 +115,13 @@ export const platformAdminService = {
     })
   },
 
+  // Branches beyond the one included -- set by hand (e.g. a customer paying by bank transfer).
+  setExtraBranches(subscriptionId: string, extraBranches: number): Promise<AdminSubscriptionView> {
+    return client.put(`${ENDPOINT}/subscriptions/${encodeURIComponent(subscriptionId)}/branches`, {
+      extraBranches,
+    })
+  },
+
   cancelSubscription(subscriptionId: string): Promise<AdminSubscriptionView> {
     return client.post(`${ENDPOINT}/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {})
   },

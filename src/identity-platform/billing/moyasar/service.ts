@@ -8,8 +8,10 @@ import { crmPaymentReceived } from "../../crm/service"
 import { notify } from "../../notifications/service"
 import type { CouponService } from "../../coupons/service"
 import type { PricingService } from "../../pricing/service"
+import { extraBranchPrice } from "../../pricing/service"
 import { activationSettingsPatch } from "../../subscriptions/activation"
-import { activatePaid } from "../../subscriptions/lifecycle"
+import { BranchAllowanceService } from "../../subscriptions/branches"
+import { activatePaid, addExtraBranches } from "../../subscriptions/lifecycle"
 import { PostgresOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 import { MoyasarApiClient } from "./client"
@@ -18,6 +20,7 @@ import { MOYASAR_CURRENCY } from "./plan-pricing"
 import { MoyasarBillingRepository } from "./repository"
 import type {
   ConfirmCheckoutInput,
+  CreateBranchCheckoutInput,
   CreateCheckoutIntentInput,
   CreateCheckoutIntentResult,
   MoyasarPaymentRecord,
@@ -72,6 +75,7 @@ export class MoyasarBillingService {
         purchase.package.legacyPlanTier === "enterprise" ? null : purchase.package.legacyPlanTier,
       packageId: purchase.package.id,
       billingInterval: purchase.interval,
+      extraBranches: purchase.extraBranches,
       coupon: quote
         ? {
             id: quote.couponId,
@@ -83,6 +87,49 @@ export class MoyasarBillingService {
       currency: MOYASAR_CURRENCY,
     })
 
+    return {
+      checkoutId: payment.id,
+      amount: payment.amount,
+      currency: payment.currency,
+      publishableKey: credentials.publishableKey,
+    }
+  }
+
+  // Branches added to the running POS / Madar Complete subscription, charged for what's left of
+  // its current period. The price comes from the package, never from the client.
+  async createBranchCheckout(
+    actor: AuthenticatedActor,
+    input: CreateBranchCheckoutInput
+  ): Promise<CreateCheckoutIntentResult> {
+    const branches = new BranchAllowanceService(this.db, this.pricing)
+    const allowance = await branches.get(actor.organizationId)
+    const subscription = allowance.subscription
+    if (
+      !allowance.canBuyBranches ||
+      !subscription ||
+      !subscription.interval ||
+      allowance.proratedHalalasPerBranch === null
+    ) {
+      throw ERRORS.conflict(
+        "BRANCHES_NOT_PURCHASABLE",
+        "Branches can be added to a running paid subscription only."
+      )
+    }
+    const running = (await branches.branchSubscription(actor.organizationId))?.subscription
+    const credentials = await this.requireCredentials()
+    const payment = await this.repository.createCheckout({
+      organizationId: actor.organizationId,
+      requestedByUserId: actor.userId,
+      application: subscription.application,
+      planTier: null,
+      packageId: running?.packageId ?? null,
+      billingInterval: subscription.interval,
+      purpose: "branches",
+      extraBranches: input.count,
+      coupon: null,
+      amount: allowance.proratedHalalasPerBranch * input.count,
+      currency: MOYASAR_CURRENCY,
+    })
     return {
       checkoutId: payment.id,
       amount: payment.amount,
@@ -152,7 +199,40 @@ export class MoyasarBillingService {
         rawPayload: moyasarPayment,
       })
 
-      if (isGenuinelyPaid) {
+      if (isGenuinelyPaid && payment.purpose === "branches") {
+        // More branches on the running subscription; its next renewal charges for them too.
+        const subscriptions = new PostgresOrganizationSubscriptionRepository(this.db)
+        const existing = await subscriptions.findByOrganizationAndApplication(
+          payment.organizationId,
+          payment.application
+        )
+        if (existing) {
+          const pkg = existing.packageId
+            ? await this.pricing.getPackage(existing.packageId).catch(() => null)
+            : null
+          const perBranch = pkg ? (extraBranchPrice(pkg, payment.billingInterval) ?? 0) : 0
+          await subscriptions.save(
+            addExtraBranches(existing, {
+              count: payment.extraBranches,
+              addedPriceHalalas: perBranch * payment.extraBranches,
+              now: new Date().toISOString(),
+            })
+          )
+        }
+        await writeAuditLog(this.db, {
+          action: "billing.branches_added",
+          actorUserId: payment.requestedByUserId,
+          organizationId: payment.organizationId,
+          workspaceId: null,
+          entityType: "billing_moyasar_payment",
+          entityId: payment.id,
+          metadata: {
+            application: payment.application,
+            count: payment.extraBranches,
+            moyasarPaymentId: moyasarPayment.id,
+          },
+        })
+      } else if (isGenuinelyPaid) {
         await this.repository.applySettingsPatch(
           payment.organizationId,
           activationSettingsPatch(payment.application, payment.planTier)
@@ -178,6 +258,7 @@ export class MoyasarBillingService {
               package: payment.packageId ? { id: payment.packageId, name: pkg?.name ?? "" } : null,
               interval: payment.billingInterval,
               priceHalalas: payment.amount,
+              extraBranches: payment.extraBranches,
               source: "payment",
               now: new Date().toISOString(),
             }

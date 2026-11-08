@@ -78,12 +78,23 @@ function extractApiError(body: unknown): ApiError | undefined {
   return undefined
 }
 
+// Fired whenever the server refuses a feature the customer's plan doesn't include, so the app can
+// explain it in one place (see features/applications PlanUpgradeNotifier).
+export const PLAN_FEATURE_REQUIRED_EVENT = "madar:plan-feature-required"
+
 export function mapHttpResponseError(response: Response, body: unknown): AppError {
   const apiError = extractApiError(body)
   const traceId =
     response.headers.get("x-correlation-id") ?? response.headers.get("x-request-id") ?? undefined
 
   if (response.status === 401 || response.status === 403) {
+    if (apiError?.code === "PLAN_FEATURE_NOT_INCLUDED" && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(PLAN_FEATURE_REQUIRED_EVENT, {
+          detail: { feature: (apiError.details as { feature?: string } | undefined)?.feature },
+        })
+      )
+    }
     return new AuthorizationError({
       code: apiError?.code ?? "authorization_error",
       message: apiError?.message ?? "You are not authorized to perform this action.",

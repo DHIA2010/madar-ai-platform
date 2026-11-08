@@ -28,8 +28,8 @@ describe("google ads repository", () => {
        values ('00000000-0000-4000-8000-000000000001', 'owner@repo.test', 'hash', 'Owner', now())`
     )
     await database.query(
-      `insert into organizations (id, name, owner_user_id, status)
-       values ('00000000-0000-4000-8000-000000000002', 'Org', '00000000-0000-4000-8000-000000000001', 'active')`
+      `insert into organizations (id, name, owner_user_id, status, settings)
+       values ('00000000-0000-4000-8000-000000000002', 'Org', '00000000-0000-4000-8000-000000000001', 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)`
     )
     await database.query(
       `insert into workspaces (id, organization_id, name, status)

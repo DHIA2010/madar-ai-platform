@@ -41,13 +41,22 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
 
 // Which application categories this organization currently has activated -- the single shared
 // computation app-sidebar.tsx's own nav-filtering and HomeTabs.tsx's own tab-filtering both read,
-// rather than each re-deriving this from APPLICATION_SETTINGS_KEY + settings on their own.
+// rather than each re-deriving this from APPLICATION_SETTINGS_KEY + settings on their own. A trial
+// past its end counts as off -- exactly what the backend's access checks (subscriptions/
+// app-access.ts and the per-app guards) do, so a screen is never shown for an app the server
+// refuses. A paid activation clears the trial date.
 export function getActiveApplications(
   settings: OrganizationSettings | undefined
 ): ApplicationCategoryId[] {
-  return (Object.keys(APPLICATION_SETTINGS_KEY) as ApplicationCategoryId[]).filter((app) =>
-    Boolean(settings?.[APPLICATION_SETTINGS_KEY[app]])
-  )
+  return (Object.keys(APPLICATION_SETTINGS_KEY) as ApplicationCategoryId[]).filter((app) => {
+    if (!settings?.[APPLICATION_SETTINGS_KEY[app]]) return false
+    const trialEndsAt = settings[APPLICATION_TRIAL_ENDS_AT_KEY[app]]
+    return !(
+      typeof trialEndsAt === "string" &&
+      trialEndsAt !== "" &&
+      new Date(trialEndsAt).getTime() <= Date.now()
+    )
+  })
 }
 
 // Free 7-day trial bookkeeping -- see command-handlers.ts's startApplicationTrial (backend) for

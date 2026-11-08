@@ -23,10 +23,38 @@ function withDefaults(stored: Record<string, unknown> | null | undefined): Platf
 export class PostgresPlatformSettingsRepository implements PlatformSettingsRepository {
   private cache: { value: PlatformSettings; expiresAt: number } | null = null
 
+  private revisionsApplied = false
+
   constructor(private readonly db: PostgresDatabase) {}
+
+  // Settings changes shipped with the code, applied once per environment (recorded in
+  // platform_pricing_revisions, like migration 158's prices) so a value edited afterwards in Madar
+  // Admin is kept. Done here rather than in SQL: the test database has no jsonb_set.
+  private async applyRevisions(): Promise<void> {
+    if (this.revisionsApplied) return
+    this.revisionsApplied = true
+    const id = "2026-11-trial-14-days"
+    const done = await this.db.query("SELECT 1 FROM platform_pricing_revisions WHERE id = $1", [id])
+    if (done.rows.length > 0) return
+    // The approved November 2026 pricing comes with a 14-day free trial.
+    const stored = await this.db.query<{ settings: Record<string, unknown> }>(
+      "SELECT settings FROM platform_settings WHERE id = 1"
+    )
+    if (stored.rows[0]) {
+      await this.db.query(
+        "UPDATE platform_settings SET settings = $1::jsonb, updated_at = now() WHERE id = 1",
+        [JSON.stringify({ ...stored.rows[0].settings, trialDays: 14 })]
+      )
+    }
+    await this.db.query(
+      "INSERT INTO platform_pricing_revisions (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
+      [id]
+    )
+  }
 
   async get(): Promise<PlatformSettings> {
     if (this.cache && this.cache.expiresAt > Date.now()) return this.cache.value
+    await this.applyRevisions()
     const result = await this.db.query<{ settings: Record<string, unknown> }>(
       "SELECT settings FROM platform_settings WHERE id = 1"
     )

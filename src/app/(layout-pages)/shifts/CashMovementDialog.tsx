@@ -80,8 +80,11 @@ export function CashMovementDialog({
         type === "withdrawal" ? t("toasts.withdrawalRecorded") : t("toasts.depositRecorded")
       )
       onRecorded()
-    } catch {
-      toast.error(t("toasts.recordFailed"))
+    } catch (error) {
+      // A plan without cash movements is explained by the app-wide upgrade notice.
+      if ((error as { code?: string })?.code !== "PLAN_FEATURE_NOT_INCLUDED") {
+        toast.error(t("toasts.recordFailed"))
+      }
     } finally {
       setSaving(false)
     }

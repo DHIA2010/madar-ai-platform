@@ -253,11 +253,13 @@ export function SupplierInvoiceDialog({
       toast.error(
         code === "INVOICE_UNREADABLE"
           ? t("toasts.readFailed")
-          : status === 503
-            ? t("toasts.unavailable")
-            : status === 403
-              ? t("toasts.forbidden")
-              : t("toasts.uploadFailed")
+          : code === "INVOICE_READER_NOT_INCLUDED"
+            ? t("toasts.notIncluded")
+            : status === 503
+              ? t("toasts.unavailable")
+              : status === 403
+                ? t("toasts.forbidden")
+                : t("toasts.uploadFailed")
       )
       setFileName(null)
     } finally {

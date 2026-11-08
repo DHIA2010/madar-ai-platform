@@ -34,6 +34,8 @@ export interface PlatformAdminSubscriptionView {
   packageName: string | null
   billingInterval: BillingInterval | null
   priceHalalas: number | null
+  // Branches paid for beyond the one included.
+  extraBranches: number
   currency: string
   source: SubscriptionSource
   startedAt: string
@@ -88,6 +90,8 @@ export interface PlatformAdminCustomerDetail extends PlatformAdminCustomer {
 }
 
 export interface PlatformAdminSubscriptionRow extends PlatformAdminSubscriptionView {
+  // Branches the subscribed package includes (total = this + extraBranches).
+  includedBranches: number
   organizationName: string
   ownerEmail: string | null
   // Card brand of the latest successful Moyasar charge for this app ("mada", "visa", ...), or

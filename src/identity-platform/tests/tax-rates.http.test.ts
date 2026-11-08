@@ -83,8 +83,8 @@ async function signIn(email: string, orgName: string) {
     [actor.userId, email]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb) on conflict (id) do nothing`,
     [actor.organizationId, orgName, actor.userId]
   )
   if (actor.workspaceId) {
@@ -288,7 +288,12 @@ describe("configurable tax rates", () => {
     // "snapshots the seller's tax profile" test for the same workaround).
     await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
       actor.organizationId,
-      JSON.stringify({ taxAutoApplyToProducts: false }),
+      JSON.stringify({
+        posEnabled: true,
+        ecommerceEnabled: true,
+        advertisingEnabled: true,
+        taxAutoApplyToProducts: false,
+      }),
     ])
     await fetch(`${baseUrl}/v1/pos/payment-methods/cash`, {
       method: "PATCH",

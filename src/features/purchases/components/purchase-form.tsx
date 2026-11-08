@@ -1,9 +1,9 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
-import { ExternalLink, FileText, Plus, Sparkles, X } from "lucide-react"
+import { ExternalLink, FileText, Lock, Plus, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { openPrivateFile } from "@/lib/open-private-file"
@@ -83,6 +83,36 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
   const [taxLevel, setTaxLevel] = useState<CalculationLevel>(() => inferTaxLevel(values))
   const [submitting, setSubmitting] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
+  // The invoice reader comes with the نمو / احترافي packages; null until known (shown unlocked).
+  const [readerIncluded, setReaderIncluded] = useState<boolean | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    purchaseService
+      .invoiceReaderAccess()
+      .then((allowed) => {
+        if (!cancelled) setReaderIncluded(allowed)
+      })
+      .catch(() => {
+        if (!cancelled) setReaderIncluded(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function openInvoiceReader() {
+    if (readerIncluded === false) {
+      toast.error(t("invoiceUpload.notIncludedTitle"), {
+        description: t("invoiceUpload.notIncludedDescription"),
+        action: {
+          label: t("invoiceUpload.upgrade"),
+          onClick: () => router.push(ROUTES.marketplace),
+        },
+      })
+      return
+    }
+    setInvoiceOpen(true)
+  }
 
   function openInvoice(url: string) {
     openPrivateFile(() => purchaseService.fetchPrivateFile(url)).catch(() =>
@@ -252,8 +282,15 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
             <AppButton
               type="button"
               disabled={!values.supplierId}
-              onClick={() => setInvoiceOpen(true)}
-              icon={<Sparkles className="size-4" />}
+              onClick={openInvoiceReader}
+              title={readerIncluded === false ? t("invoiceUpload.notIncludedTitle") : undefined}
+              icon={
+                readerIncluded === false ? (
+                  <Lock className="size-4" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )
+              }
               className="h-10 gap-2 rounded-full bg-[#2878ff] px-4 text-[12.5px] font-bold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] hover:bg-[#1f63d6] disabled:opacity-50 disabled:shadow-none"
             >
               {t("invoiceUpload.button")}

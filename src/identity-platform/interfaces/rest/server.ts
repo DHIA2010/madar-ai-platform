@@ -124,6 +124,9 @@ import type { ReportLevelFilter } from "../../reports/types"
 import { AiChatService, ChatTurnCancelledError } from "../../ai-chat/service"
 import { AiChatLlmClient } from "../../ai-chat/llm-client"
 import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
+import { ApplicationAccessService } from "../../subscriptions/app-access"
+import { PackageEntitlementsService } from "../../subscriptions/entitlements"
+import { BranchAllowanceService } from "../../subscriptions/branches"
 import { MoyasarBillingService } from "../../billing/moyasar/service"
 import { MoyasarBillingRepository } from "../../billing/moyasar/repository"
 import { resolveMoyasarCredentials } from "../../billing/moyasar/credentials"
@@ -131,6 +134,7 @@ import { verifyMoyasarWebhookSecret } from "../../billing/moyasar/webhook-verifi
 import {
   confirmCheckoutSchema,
   couponQuoteSchema,
+  createBranchCheckoutSchema,
   createCheckoutIntentSchema,
 } from "../../billing/moyasar/schemas"
 import type { MoyasarWebhookPayload } from "../../billing/moyasar/types"
@@ -720,6 +724,16 @@ export function createIdentityApiServer(
   const couponService = container.infrastructure.database
     ? new CouponService(container.infrastructure.database)
     : null
+  const applicationAccess = container.infrastructure.database
+    ? new ApplicationAccessService(container.infrastructure.database)
+    : null
+  const packageEntitlements = container.infrastructure.database
+    ? new PackageEntitlementsService(container.infrastructure.database)
+    : null
+  const branchAllowanceService =
+    container.infrastructure.database && pricingService
+      ? new BranchAllowanceService(container.infrastructure.database, pricingService)
+      : null
   const moyasarBillingService =
     container.infrastructure.database && pricingService && couponService
       ? new MoyasarBillingService(
@@ -1959,6 +1973,9 @@ export function createIdentityApiServer(
                 features: pkg.features,
                 monthlyPriceHalalas: pkg.monthlyPriceHalalas,
                 yearlyPriceHalalas: pkg.yearlyPriceHalalas,
+                includedBranches: pkg.includedBranches,
+                extraBranchMonthlyHalalas: pkg.extraBranchMonthlyHalalas,
+                extraBranchYearlyHalalas: pkg.extraBranchYearlyHalalas,
                 isRecommended: pkg.isRecommended,
               })),
             }))
@@ -2579,6 +2596,10 @@ export function createIdentityApiServer(
       })
       if (handledByPlatformAdmin) return
 
+      // POS, Ads and E-commerce answer only for an organization subscribed to them
+      // (subscriptions/app-access.ts).
+      await applicationAccess?.requireForPath(actor.organizationId, url.pathname)
+
       // The feature flags Madar Admin has switched on for this customer (override, else the global
       // switch narrowed by its rollout percentage).
       if (method === "GET" && url.pathname === "/v1/feature-flags") {
@@ -2838,6 +2859,12 @@ export function createIdentityApiServer(
         }
 
         const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
+        // Plans limit how many ad platforms can be connected (subscriptions/entitlements.ts).
+        await packageEntitlements?.requireRoomToConnect(
+          actor.organizationId,
+          "google-ads",
+          payload.workspaceId ?? actor.workspaceId ?? null
+        )
         return send(200, await googleOAuthController.start(actor, payload))
       }
 
@@ -2850,6 +2877,12 @@ export function createIdentityApiServer(
         }
 
         const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
+        // Plans limit how many ad platforms can be connected (subscriptions/entitlements.ts).
+        await packageEntitlements?.requireRoomToConnect(
+          actor.organizationId,
+          "google-ads",
+          payload.workspaceId ?? actor.workspaceId ?? null
+        )
         return send(200, await googleOAuthController.start(actor, payload))
       }
 
@@ -2863,6 +2896,12 @@ export function createIdentityApiServer(
         }
 
         const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
+        // Plans limit how many ad platforms / stores can be connected.
+        await packageEntitlements?.requireRoomToConnect(
+          actor.organizationId,
+          providerOauthStartMatch[1],
+          payload.workspaceId ?? actor.workspaceId ?? null
+        )
         return send(200, await provider.oauthStart(actor, payload))
       }
 
@@ -2876,6 +2915,11 @@ export function createIdentityApiServer(
         }
 
         const payload = integrationDirectConnectSchema.parse(await readJsonBody(request))
+        await packageEntitlements?.requireRoomToConnect(
+          actor.organizationId,
+          providerDirectConnectMatch[1],
+          payload.workspaceId ?? actor.workspaceId ?? null
+        )
         return send(200, await provider.connectDirect(actor, payload))
       }
 
@@ -3169,13 +3213,16 @@ export function createIdentityApiServer(
 
         if (method === "GET" && url.pathname === "/v1/reports/custom") {
           if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
-          // Custom report building is its own subscription, independent of ready-made reports
-          // (which stay free/unpaywalled) -- see reports/custom-reports-guard.ts.
-          await requireCustomReportsEnabled(
-            container.infrastructure.database!,
-            actor.organizationId
-          )
+          // The ready-made (system) reports are in every plan; the organization's own custom
+          // reports need custom reports (its own subscription, or an احترافي plan) -- see
+          // reports/custom-reports-guard.ts.
           const isSystem = url.searchParams.get("isSystem") === "true"
+          if (!isSystem) {
+            await requireCustomReportsEnabled(
+              container.infrastructure.database!,
+              actor.organizationId
+            )
+          }
           return send(200, await reportsService.listCustomReports(actor, isSystem))
         }
 
@@ -4027,6 +4074,8 @@ export function createIdentityApiServer(
         return send(200, await container.queries.listRoles(actor, organizationRolesMatch[1]))
       }
       if (method === "POST" && organizationRolesMatch) {
+        // Custom roles and permissions come with the نمو / احترافي plans.
+        await packageEntitlements?.require(organizationRolesMatch[1], "customRoles")
         const payload = createCustomRoleSchema.parse(await readJsonBody(request))
         return send(
           201,
@@ -4045,6 +4094,7 @@ export function createIdentityApiServer(
 
       const customRoleMatch = url.pathname.match(/^\/v1\/organizations\/roles\/([^/]+)$/)
       if (method === "PATCH" && customRoleMatch) {
+        await packageEntitlements?.require(actor.organizationId, "customRoles")
         const payload = updateCustomRoleSchema.parse(await readJsonBody(request))
         return send(
           200,
@@ -4381,6 +4431,26 @@ export function createIdentityApiServer(
         )
       }
 
+      // Branches added to the running POS / Madar Complete subscription (see subscriptions/branches.ts).
+      if (url.pathname === "/v1/billing/moyasar/branches/checkout" && method === "POST") {
+        if (!moyasarBillingService) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          201,
+          await moyasarBillingService.createBranchCheckout(
+            actor,
+            createBranchCheckoutSchema.parse(await readJsonBody(request))
+          )
+        )
+      }
+
       const moyasarCheckoutConfirmMatch = url.pathname.match(
         /^\/v1\/billing\/moyasar\/checkout\/([^/]+)\/confirm$/
       )
@@ -4527,30 +4597,27 @@ export function createIdentityApiServer(
           )
         }
         if (action === "custom-role") {
+          const { customRoleId } = assignCustomRoleSchema.parse(await readJsonBody(request))
+          // Assigning a custom role needs the plan; taking one off never does.
+          if (customRoleId) await packageEntitlements?.require(organizationId, "customRoles")
           return send(
             200,
             await container.commands.assignMemberCustomRole(
               actor,
-              {
-                organizationId,
-                memberUserId,
-                customRoleId: assignCustomRoleSchema.parse(await readJsonBody(request))
-                  .customRoleId,
-              },
+              { organizationId, memberUserId, customRoleId },
               context
             )
           )
         }
         if (action === "module-access") {
+          // Cutting a member off from every module (or giving access back) is basic member
+          // management -- every plan can, unlike custom roles.
+          const { revoked } = setMemberModuleAccessSchema.parse(await readJsonBody(request))
           return send(
             200,
             await container.commands.setMemberModuleAccess(
               actor,
-              {
-                organizationId,
-                memberUserId,
-                revoked: setMemberModuleAccessSchema.parse(await readJsonBody(request)).revoked,
-              },
+              { organizationId, memberUserId, revoked },
               context
             )
           )
@@ -4611,14 +4678,26 @@ export function createIdentityApiServer(
       }
 
       if (method === "POST" && url.pathname === "/v1/workspaces") {
-        return send(
-          201,
-          await container.commands.createWorkspace(
-            actor,
-            createWorkspaceSchema.parse(await readJsonBody(request)),
-            context
-          )
-        )
+        const payload = createWorkspaceSchema.parse(await readJsonBody(request))
+        // Every package includes one branch; more are an add-on (subscriptions/branches.ts).
+        await branchAllowanceService?.assertCanAddBranch(payload.organizationId)
+        return send(201, await container.commands.createWorkspace(actor, payload, context))
+      }
+
+      // How many branches the subscription allows, how many are in use, and what one more costs.
+      if (method === "GET" && url.pathname === "/v1/branches/allowance") {
+        if (!branchAllowanceService) {
+          return send(200, {
+            enforced: false,
+            used: 0,
+            allowed: null,
+            subscription: null,
+            extraBranchPriceHalalas: null,
+            canBuyBranches: false,
+            proratedHalalasPerBranch: null,
+          })
+        }
+        return send(200, await branchAllowanceService.get(actor.organizationId))
       }
 
       if (method === "GET" && url.pathname === "/v1/workspaces") {
@@ -4663,6 +4742,7 @@ export function createIdentityApiServer(
 
       const workspaceRestoreMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/restore$/)
       if (method === "POST" && workspaceRestoreMatch) {
+        await branchAllowanceService?.assertCanReactivate(workspaceRestoreMatch[1])
         const result = await container.commands.restoreWorkspace(
           actor,
           { workspaceId: workspaceRestoreMatch[1] },
@@ -4696,14 +4776,13 @@ export function createIdentityApiServer(
         return send(200, await container.queries.getWorkspace(actor, workspaceItemMatch[1]))
       }
       if (workspaceItemMatch && method === "PATCH") {
+        const payload = updateWorkspaceSchema.parse(await readJsonBody(request))
+        if (payload.status === "active") {
+          await branchAllowanceService?.assertCanReactivate(workspaceItemMatch[1])
+        }
         return send(
           200,
-          await container.commands.updateWorkspace(
-            actor,
-            workspaceItemMatch[1],
-            updateWorkspaceSchema.parse(await readJsonBody(request)),
-            context
-          )
+          await container.commands.updateWorkspace(actor, workspaceItemMatch[1], payload, context)
         )
       }
 
@@ -5017,6 +5096,8 @@ export function createIdentityApiServer(
 
         if (method === "POST") {
           if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          // Cash movements come with the نمو / احترافي plans (opening/closing shifts doesn't).
+          await packageEntitlements?.require(actor.organizationId, "shiftCash")
           const payload = recordCashMovementSchema.parse(await readJsonBody(request))
           return send(
             201,
@@ -5043,6 +5124,8 @@ export function createIdentityApiServer(
           })
         }
         if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+        // The detailed shift report comes with the نمو / احترافي plans.
+        await packageEntitlements?.require(actor.organizationId, "shiftCash")
 
         return send(
           200,
@@ -6387,11 +6470,39 @@ export function createIdentityApiServer(
           })
         }
         if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+        // Comes with the نمو / احترافي packages (subscriptions/entitlements.ts).
+        await packageEntitlements?.require(actor.organizationId, "invoiceReader")
         const payload = scanSupplierInvoiceSchema.parse(await readJsonBody(request))
         return send(
           200,
           await supplierInvoicesService.scan({ organizationId: actor.organizationId, ...payload })
         )
+      }
+
+      // What the organization's plans unlock (subscriptions/entitlements.ts) -- for the app to show
+      // locked features; the server enforces each one on its own route.
+      if (method === "GET" && url.pathname === "/v1/entitlements") {
+        if (!packageEntitlements) {
+          return send(200, {
+            invoiceReader: true,
+            shiftCash: true,
+            customRoles: true,
+            procurement: true,
+            customReports: true,
+            maxAdPlatforms: null,
+            maxStores: null,
+          })
+        }
+        return send(200, await packageEntitlements.get(actor.organizationId))
+      }
+
+      // Whether this organization's package includes the purchase-invoice reader.
+      if (method === "GET" && url.pathname === "/v1/purchases/invoice-reader/access") {
+        return send(200, {
+          allowed: packageEntitlements
+            ? await packageEntitlements.has(actor.organizationId, "invoiceReader")
+            : true,
+        })
       }
 
       if (method === "POST" && url.pathname === "/v1/purchases/supplier-codes") {

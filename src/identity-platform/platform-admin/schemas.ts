@@ -38,6 +38,12 @@ export const grantSubscriptionSchema = z.object({
   interval: billingInterval,
   // Halalas; null = complimentary.
   priceHalalas: z.number().int().min(0).nullable().default(null),
+  // Branches beyond the one included; omitted keeps what the subscription has.
+  extraBranches: z.number().int().min(0).max(500).optional(),
+})
+
+export const setExtraBranchesSchema = z.object({
+  extraBranches: z.number().int().min(0).max(500),
 })
 
 export { application as purchasableApplicationSchema }
@@ -50,6 +56,23 @@ export const packageInputSchema = z.object({
   features: z.array(z.string().trim().min(1).max(200)).max(30).default([]),
   monthlyPriceHalalas: halalas,
   yearlyPriceHalalas: halalas,
+  // Branches the package includes, and each further one (null = the package doesn't sell them).
+  includedBranches: z.number().int().min(1).max(500).default(1),
+  // What the package unlocks beyond its app (subscriptions/entitlements.ts).
+  entitlements: z
+    .object({
+      invoiceReader: z.boolean().optional(),
+      shiftCash: z.boolean().optional(),
+      customRoles: z.boolean().optional(),
+      procurement: z.boolean().optional(),
+      customReports: z.boolean().optional(),
+      // Absent = no limit.
+      maxAdPlatforms: z.number().int().min(0).max(100).optional(),
+      maxStores: z.number().int().min(0).max(1000).optional(),
+    })
+    .default({}),
+  extraBranchMonthlyHalalas: halalas.default(null),
+  extraBranchYearlyHalalas: halalas.default(null),
   isRecommended: z.boolean().default(false),
   isActive: z.boolean().default(true),
 })

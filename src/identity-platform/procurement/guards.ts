@@ -1,5 +1,6 @@
 import { ERRORS } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { loadOrganizationEntitlements } from "../subscriptions/entitlements"
 
 // Procurement's own copy of ai-chat/guards.ts's isApplicationEnabled/requireApplicationEnabled --
 // same duplication convention as every other APPLICATION_SETTINGS_KEY-style copy in this codebase
@@ -12,7 +13,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 // Procurement is the second app in this codebase (after AI chat) to get real server-side
 // enforcement of its activation flag -- every other app (POS, ecommerce, advertising) is gated
 // only by role-based modulePermissions today, never organizations.settings.
-export async function isProcurementEnabled(
+async function isProcurementEnabledBySubscription(
   db: PostgresDatabase,
   organizationId: string
 ): Promise<boolean> {
@@ -33,6 +34,16 @@ export async function isProcurementEnabled(
     return false
   }
   return true
+}
+
+// The app's own subscription, or a plan that includes it (POS نمو / احترافي, Madar Complete --
+// see subscriptions/entitlements.ts).
+export async function isProcurementEnabled(
+  db: PostgresDatabase,
+  organizationId: string
+): Promise<boolean> {
+  if (await isProcurementEnabledBySubscription(db, organizationId)) return true
+  return (await loadOrganizationEntitlements(db, organizationId)).procurement
 }
 
 export async function requireProcurementEnabled(

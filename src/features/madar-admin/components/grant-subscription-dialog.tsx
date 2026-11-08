@@ -43,6 +43,7 @@ export function GrantSubscriptionDialog({
   const [packageId, setPackageId] = useState<string>(NO_PACKAGE)
   const [interval, setBillingInterval] = useState<BillingInterval>("monthly")
   const [price, setPrice] = useState("")
+  const [extraBranches, setExtraBranches] = useState("0")
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -58,13 +59,30 @@ export function GrantSubscriptionDialog({
     [pricing, application]
   )
 
-  function prefillPrice(nextPackageId: string, nextInterval: BillingInterval) {
+  const selectedPackage = packages.find((entry) => entry.id === packageId) ?? null
+  const sellsBranches =
+    selectedPackage !== null &&
+    (selectedPackage.extraBranchMonthlyHalalas !== null ||
+      selectedPackage.extraBranchYearlyHalalas !== null)
+
+  // The package's price plus its extra branches, for the chosen period.
+  function prefillPrice(
+    nextPackageId: string,
+    nextInterval: BillingInterval,
+    branches = Number(extraBranches) || 0
+  ) {
     const pkg = packages.find((entry) => entry.id === nextPackageId)
-    setPrice(
-      riyalsInput(
-        pkg ? (nextInterval === "yearly" ? pkg.yearlyPriceHalalas : pkg.monthlyPriceHalalas) : null
-      )
-    )
+    const base = pkg
+      ? nextInterval === "yearly"
+        ? pkg.yearlyPriceHalalas
+        : pkg.monthlyPriceHalalas
+      : null
+    const branchPrice = pkg
+      ? nextInterval === "yearly"
+        ? pkg.extraBranchYearlyHalalas
+        : pkg.extraBranchMonthlyHalalas
+      : null
+    setPrice(riyalsInput(base === null ? null : base + branches * (branchPrice ?? 0)))
   }
 
   async function handleGrant() {
@@ -81,6 +99,7 @@ export function GrantSubscriptionDialog({
         packageId: packageId === NO_PACKAGE ? null : packageId,
         interval,
         priceHalalas: priceRiyals === null ? null : Math.round(priceRiyals * 100),
+        extraBranches: sellsBranches ? Math.max(0, Math.floor(Number(extraBranches) || 0)) : 0,
       })
       toast.success(`تم تفعيل ${APPLICATION_LABEL[application]} لـ ${customer.name}.`)
       setPrice("")
@@ -193,6 +212,26 @@ export function GrantSubscriptionDialog({
             </AppSelect>
           </div>
         </div>
+
+        {sellsBranches ? (
+          <div>
+            <label className={FIELD_LABEL}>الفروع الإضافية</label>
+            <AppInput
+              type="number"
+              min={0}
+              value={extraBranches}
+              onChange={(event) => {
+                setExtraBranches(event.target.value)
+                prefillPrice(packageId, interval, Number(event.target.value) || 0)
+              }}
+              className="h-11 rounded-[10px]"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              الباقة تشمل {selectedPackage?.includedBranches ?? 1} -- إجمالي الفروع:{" "}
+              {(selectedPackage?.includedBranches ?? 1) + (Number(extraBranches) || 0)}
+            </p>
+          </div>
+        ) : null}
 
         <div>
           <label className={FIELD_LABEL}>السعر (SAR) — اختياري</label>

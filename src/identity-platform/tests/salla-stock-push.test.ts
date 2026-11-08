@@ -33,8 +33,8 @@ beforeEach(async () => {
     [userId]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, 'Stock Push Test Org', $2, 'active')`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, 'Stock Push Test Org', $2, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)`,
     [organizationId, userId]
   )
 

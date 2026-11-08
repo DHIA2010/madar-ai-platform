@@ -30,6 +30,29 @@ const PACKAGE_LABEL: Record<string, string> = {
 
 // The main apps, as tabs in this order.
 const MAIN_APPS = ["advertising", "ecommerce", "pos"]
+
+// POS sells branches; Ads and E-commerce call the same add-on a workspace.
+const WORKSPACE_APPS = ["advertising", "ecommerce"]
+
+// "يشمل فرعاً واحداً · كل فرع إضافي" / "يشمل مساحتي عمل · كل مساحة عمل إضافية".
+function includedLabel(count: number, application: string) {
+  if (WORKSPACE_APPS.includes(application)) {
+    const included =
+      count === 1
+        ? "يشمل مساحة عمل واحدة"
+        : count === 2
+          ? "يشمل مساحتي عمل"
+          : `يشمل ${count} مساحات عمل`
+    return `${included} · كل مساحة عمل إضافية`
+  }
+  const included =
+    count === 1
+      ? "يشمل فرعاً واحداً"
+      : count === 2
+        ? "يشمل فرعين"
+        : `يشمل ${count} ${count <= 10 ? "فروع" : "فرعاً"}`
+  return `${included} · كل فرع إضافي`
+}
 // Not shown as apps here ("madarApps" is a retired bundle; Madar Complete has its own banner).
 const HIDDEN = ["madarApps", "customReports", "madarComplete"]
 
@@ -67,6 +90,12 @@ function PackageCard({
     ? interval === "yearly"
       ? pkg.yearlyPriceHalalas
       : pkg.monthlyPriceHalalas
+    : null
+  // Every package includes one branch; each further branch is an add-on.
+  const branchPrice = pkg
+    ? interval === "yearly"
+      ? (pkg.extraBranchYearlyHalalas ?? null)
+      : (pkg.extraBranchMonthlyHalalas ?? null)
     : null
   const saving =
     interval === "yearly" && pkg && price !== null && pkg.monthlyPriceHalalas !== null
@@ -125,6 +154,17 @@ function PackageCard({
       >
         {saving > 0 ? `توفّر ${sar(saving)} ر.س مقارنة بالدفع الشهري` : ""}
       </p>
+      {branchPrice !== null && !isContact && !isFree ? (
+        <p
+          className={cn(
+            "mt-3 rounded-2xl px-3.5 py-2.5 text-[13.5px] font-bold",
+            highlighted ? "bg-white/10 text-white" : "bg-[#eff6ff] text-[#1d4ed8]"
+          )}
+        >
+          {includedLabel(pkg?.includedBranches ?? 1, entry.application)} {sar(branchPrice)} ر.س /{" "}
+          {interval === "yearly" ? "سنة" : "شهر"}
+        </p>
+      ) : null}
 
       <ul className="mt-6 flex-1 space-y-3">
         {(pkg?.features ?? []).map((feature) => (
@@ -380,6 +420,12 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
                     {complete.packages[0].yearlyPriceHalalas ? (
                       <p className="mt-2 text-[14px] font-semibold text-[#99f6e4]">
                         أو {sar(complete.packages[0].yearlyPriceHalalas)} ر.س سنويًا
+                      </p>
+                    ) : null}
+                    {complete.packages[0].extraBranchMonthlyHalalas ? (
+                      <p className="mt-2 text-[13px] font-semibold text-slate-200">
+                        يشمل فرعاً واحداً · كل فرع إضافي{" "}
+                        {sar(complete.packages[0].extraBranchMonthlyHalalas)} ر.س / شهر
                       </p>
                     ) : null}
                   </>

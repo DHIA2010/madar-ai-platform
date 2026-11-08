@@ -58,6 +58,7 @@ export function startTrial(
     packageName: null,
     billingInterval: null,
     priceHalalas: null,
+    extraBranches: 0,
     currency: "SAR",
     source: "trial",
     startedAt: input.now,
@@ -81,6 +82,8 @@ export function activatePaid(
     package?: { id: string; name: string } | null
     interval: BillingInterval
     priceHalalas: number | null
+    // Omitted = keep the branches the subscription already has (a renewal).
+    extraBranches?: number
     source: SubscriptionSource
     now: string
   }
@@ -102,6 +105,7 @@ export function activatePaid(
       input.package === undefined ? (existing?.packageName ?? null) : (input.package?.name ?? null),
     billingInterval: input.interval,
     priceHalalas: input.priceHalalas,
+    extraBranches: input.extraBranches ?? existing?.extraBranches ?? 0,
     currency: "SAR",
     source: input.source,
     startedAt: stillRunning ? existing.startedAt : input.now,
@@ -130,6 +134,7 @@ export function activateFree(
     packageName: null,
     billingInterval: null,
     priceHalalas: 0,
+    extraBranches: 0,
     currency: "SAR",
     source: "free",
     startedAt: input.now,
@@ -151,6 +156,21 @@ export function cancelSubscription(
     status: "cancelled",
     cancelledAt: input.now,
     cancelledByUserId: input.cancelledByUserId,
+    updatedAt: input.now,
+  }
+}
+
+// Branches added to a running subscription mid-period: its dates stay, its price per period grows
+// by what the new branches cost (so the next renewal charges for them too).
+export function addExtraBranches(
+  existing: OrganizationSubscriptionState,
+  input: { count: number; addedPriceHalalas: number; now: string }
+): OrganizationSubscriptionState {
+  return {
+    ...existing,
+    extraBranches: existing.extraBranches + input.count,
+    priceHalalas:
+      existing.priceHalalas === null ? null : existing.priceHalalas + input.addedPriceHalalas,
     updatedAt: input.now,
   }
 }

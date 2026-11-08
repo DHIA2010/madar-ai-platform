@@ -57,6 +57,8 @@ export interface OrganizationSubscriptionState {
   packageName: string | null
   billingInterval: BillingInterval | null
   priceHalalas: number | null
+  // Branches paid for on top of the one every package includes (see subscriptions/branches.ts).
+  extraBranches: number
   currency: string
   source: SubscriptionSource
   startedAt: string

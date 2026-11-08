@@ -7,6 +7,10 @@ export interface PublicPackage {
   features: string[]
   monthlyPriceHalalas: number | null
   yearlyPriceHalalas: number | null
+  // Branches the package includes (absent = 1); each further branch costs this (null = not sold).
+  includedBranches?: number
+  extraBranchMonthlyHalalas?: number | null
+  extraBranchYearlyHalalas?: number | null
   isRecommended: boolean
 }
 
@@ -22,52 +26,77 @@ const pkg = (
   monthly: number | null,
   yearly: number | null,
   features: string[],
-  isRecommended = false
+  isRecommended = false,
+  extraBranch: number | null = null,
+  includedBranches = 1
 ): PublicPackage => ({
   name,
   description: "",
   features,
   monthlyPriceHalalas: monthly === null ? null : monthly * 100,
   yearlyPriceHalalas: yearly === null ? null : yearly * 100,
+  includedBranches,
+  extraBranchMonthlyHalalas: extraBranch === null ? null : extraBranch * 100,
+  // Every extra branch is 999 a year, whatever the package.
+  extraBranchYearlyHalalas: extraBranch === null ? null : 99900,
   isRecommended,
 })
 
-// Shown only if the API can't be reached: the marketplace's prices as of 3 November 2026.
+// Shown only if the API can't be reached: the marketplace's prices as of 8 November 2026 (the
+// approved per-branch pricing -- see pricing/defaults.ts on the backend).
 const FALLBACK_PRICING: PublicApplicationPricing[] = [
   {
     application: "pos",
     mode: "packages",
     freeDays: null,
     packages: [
-      pkg("Starter", 99, 1099, [
-        "فرع واحد",
-        "فواتير إلكترونية",
-        "تقارير أساسية",
-        "مخزون متقدم",
-        "إدارة العملاء",
-      ]),
       pkg(
-        "Growth",
-        299,
-        2999,
+        "أساسي",
+        149,
+        1490,
         [
-          "حتى ٣ فروع",
-          "فواتير إلكترونية",
-          "تقارير متقدمة",
-          "مخزون متقدم",
-          "إدارة الورديات",
-          "الأدوار والصلاحيات",
+          "فرع واحد (فروع إضافية بـ 99 ر.س/شهر)",
+          "أجهزة كاشير غير محدودة في الفرع",
+          "فواتير معتمدة من هيئة الزكاة (المرحلة الثانية)",
+          "العمل بدون إنترنت",
+          "إدارة الورديات وحركات النقد وتقاريرها",
+          "إدارة المخزون والعملاء",
+          "التقارير الجاهزة",
         ],
-        true
+        false,
+        99
       ),
-      pkg("Pro", 499, 3999, [
-        "فروع غير محدودة",
-        "فواتير إلكترونية",
-        "تقارير متقدمة ومخصصة",
-        "مخزون متقدم",
-        "إدارة الورديات",
-        "الأدوار والصلاحيات",
-      ]),
+      pkg(
+        "نمو",
+        249,
+        2490,
+        [
+          "كل مزايا الأساسي",
+          "فرعان (فروع إضافية بـ 99 ر.س/شهر)",
+          "أجهزة كاشير غير محدودة في كل فرع",
+          "الأدوار والصلاحيات المخصصة",
+          "الموردون والمشتريات والمصروفات",
+          "قارئ فواتير المشتريات بالذكاء الاصطناعي",
+        ],
+        true,
+        99,
+        2
+      ),
+      pkg(
+        "احترافي",
+        399,
+        3990,
+        [
+          "كل مزايا النمو",
+          "3 فروع (فروع إضافية بـ 99 ر.س/شهر)",
+          "أجهزة كاشير غير محدودة في كل فرع",
+          "التقارير المخصصة",
+          "دعم بأولوية",
+        ],
+        false,
+        99,
+        3
+      ),
     ],
   },
   {
@@ -75,15 +104,43 @@ const FALLBACK_PRICING: PublicApplicationPricing[] = [
     mode: "packages",
     freeDays: null,
     packages: [
-      pkg("Starter", 99, 1099, ["متجر واحد", "تقارير أساسية"]),
       pkg(
-        "Growth",
-        299,
-        3199,
-        ["حتى ٣ متاجر", "تقارير متقدمة", "دعم بأولوية", "الأدوار والصلاحيات"],
-        true
+        "أساسي",
+        79,
+        790,
+        ["مساحة عمل واحدة (مساحات إضافية بـ 99 ر.س/شهر)", "متجر واحد", "التقارير الجاهزة"],
+        false,
+        99
       ),
-      pkg("Pro", 499, 5499, ["متاجر غير محدودة", "جميع المزايا", "دعم مخصص", "الأدوار والصلاحيات"]),
+      pkg(
+        "نمو",
+        149,
+        1490,
+        [
+          "كل مزايا الأساسي",
+          "مساحتان عمل (مساحات إضافية بـ 99 ر.س/شهر)",
+          "حتى 3 متاجر",
+          "الأدوار والصلاحيات المخصصة",
+        ],
+        true,
+        99,
+        2
+      ),
+      pkg(
+        "احترافي",
+        299,
+        2990,
+        [
+          "كل مزايا النمو",
+          "3 مساحات عمل (مساحات إضافية بـ 99 ر.س/شهر)",
+          "متاجر غير محدودة",
+          "التقارير المخصصة",
+          "دعم بأولوية",
+        ],
+        false,
+        99,
+        3
+      ),
     ],
   },
   {
@@ -91,37 +148,84 @@ const FALLBACK_PRICING: PublicApplicationPricing[] = [
     mode: "packages",
     freeDays: null,
     packages: [
-      pkg("Starter", 99, 1099, ["منصة إعلانية واحدة", "تقارير أساسية"]),
-      pkg("Growth", 299, 3199, [
-        "حتى ٣ منصات إعلانية",
-        "تقارير متقدمة",
-        "دعم بأولوية",
-        "الأدوار والصلاحيات",
-      ]),
       pkg(
-        "Pro",
-        499,
-        5499,
-        ["منصات غير محدودة", "جميع المزايا", "دعم مخصص", "الأدوار والصلاحيات"],
-        true
+        "أساسي",
+        149,
+        1490,
+        [
+          "مساحة عمل واحدة (مساحات إضافية بـ 99 ر.س/شهر)",
+          "منصتان إعلانيتان (مثل ميتا وسناب)",
+          "لوحة موحدة للحملات",
+          "التقارير الجاهزة",
+        ],
+        false,
+        99
+      ),
+      pkg(
+        "نمو",
+        299,
+        2990,
+        [
+          "كل مزايا الأساسي",
+          "مساحتان عمل (مساحات إضافية بـ 99 ر.س/شهر)",
+          "كل المنصات الإعلانية: ميتا، جوجل، تيك توك، سناب",
+          "الأدوار والصلاحيات المخصصة",
+        ],
+        true,
+        99,
+        2
+      ),
+      pkg(
+        "احترافي",
+        549,
+        5490,
+        [
+          "كل مزايا النمو",
+          "3 مساحات عمل (مساحات إضافية بـ 99 ر.س/شهر)",
+          "التقارير المخصصة",
+          "دعم بأولوية",
+        ],
+        false,
+        99,
+        3
       ),
     ],
   },
   {
-    application: "customReports",
-    mode: "packages",
+    application: "promotions",
+    mode: "fixed",
     freeDays: null,
     packages: [
-      pkg("Starter", 99, null, []),
-      pkg("Growth", 299, null, [], true),
-      pkg("Pro", 499, null, []),
+      pkg(
+        "العروض الترويجية",
+        59,
+        590,
+        [
+          "خصومات تلقائية في الكاشير",
+          "على كل المنتجات أو منتجات وفئات محددة",
+          "جدولة بالأيام والساعات لكل فرع",
+        ],
+        true
+      ),
     ],
   },
   {
     application: "ai",
     mode: "fixed",
     freeDays: null,
-    packages: [pkg("الذكاء الاصطناعي", 99, 999, [])],
+    packages: [
+      pkg(
+        "الذكاء الاصطناعي",
+        99,
+        990,
+        [
+          "إجابات فورية بلغة طبيعية",
+          "تحليلات ورسوم بيانية تلقائية",
+          "يعمل مع كل تطبيقاتك المفعّلة",
+        ],
+        true
+      ),
+    ],
   },
   { application: "procurement", mode: "free", freeDays: 365, packages: [] },
   { application: "expenses", mode: "free", freeDays: 365, packages: [] },
@@ -130,12 +234,19 @@ const FALLBACK_PRICING: PublicApplicationPricing[] = [
     mode: "fixed",
     freeDays: null,
     packages: [
-      pkg("مدار الكامل", 1099, 6999, [
-        "جميع التطبيقات الحالية والمستقبلية",
-        "دعم فني مخصص",
-        "أولوية في الميزات الجديدة",
-        "الأدوار والصلاحيات",
-      ]),
+      pkg(
+        "مدار الكامل",
+        899,
+        8990,
+        [
+          "جميع التطبيقات الحالية والمستقبلية",
+          "فرع واحد (فروع إضافية بـ 99 ر.س/شهر)",
+          "دعم فني مخصص",
+          "أولوية في الميزات الجديدة",
+        ],
+        true,
+        99
+      ),
     ],
   },
 ]

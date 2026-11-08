@@ -18,6 +18,8 @@ function mapPayment(row: Record<string, unknown>): MoyasarPaymentRecord {
     planTier: (row.plan_tier as MoyasarSelfServePlanTier | null) ?? null,
     packageId: (row.package_id as string | null) ?? null,
     billingInterval: (row.billing_interval as MoyasarPaymentRecord["billingInterval"]) ?? "monthly",
+    purpose: (row.purpose as MoyasarPaymentRecord["purpose"]) ?? "subscription",
+    extraBranches: Number(row.extra_branches ?? 0),
     couponId: (row.coupon_id as string | null) ?? null,
     originalAmount:
       row.original_amount === null || row.original_amount === undefined
@@ -44,8 +46,10 @@ export class MoyasarBillingRepository {
     requestedByUserId: string
     application: MoyasarApplication
     planTier: MoyasarSelfServePlanTier | null
-    packageId: string
+    packageId: string | null
     billingInterval: MoyasarPaymentRecord["billingInterval"]
+    purpose?: MoyasarPaymentRecord["purpose"]
+    extraBranches?: number
     coupon: { id: string; originalAmount: number; discountHalalas: number } | null
     amount: number
     currency: string
@@ -54,8 +58,9 @@ export class MoyasarBillingRepository {
     const result = await this.db.query(
       `INSERT INTO billing_moyasar_payments (
          id, organization_id, requested_by_user_id, application, plan_tier, amount, currency,
-         package_id, billing_interval, coupon_id, original_amount, discount_halalas
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         package_id, billing_interval, coupon_id, original_amount, discount_halalas, purpose,
+         extra_branches
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         id,
@@ -70,6 +75,8 @@ export class MoyasarBillingRepository {
         input.coupon?.id ?? null,
         input.coupon?.originalAmount ?? null,
         input.coupon?.discountHalalas ?? null,
+        input.purpose ?? "subscription",
+        input.extraBranches ?? 0,
       ]
     )
     return mapPayment(result.rows[0])

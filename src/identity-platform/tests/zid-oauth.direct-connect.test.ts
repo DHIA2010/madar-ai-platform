@@ -171,8 +171,9 @@ async function registerAndProvisionOrg(email: string, orgName: string) {
     [actor.userId, email]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)
+     on conflict (id) do update set settings = excluded.settings`,
     [actor.organizationId, orgName, actor.userId]
   )
   if (actor.workspaceId) {

@@ -53,15 +53,18 @@ describe("google ads campaign management service", () => {
     repository = new GoogleAdsRepository(database)
 
     await runIdentityMigrations(database, process.cwd())
-    await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
+    await runSqlFile(
+      database,
+      `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+    )
 
     await database.query(
       `insert into users (id, email, password_hash, full_name, email_verified_at)
        values ('00000000-0000-4000-8000-000000000300', 'owner@campaign.test', 'hash', 'Owner', now())`
     )
     await database.query(
-      `insert into organizations (id, name, owner_user_id, status)
-       values ($1, 'Org', '00000000-0000-4000-8000-000000000300', 'active')`,
+      `insert into organizations (id, name, owner_user_id, status, settings)
+       values ($1, 'Org', '00000000-0000-4000-8000-000000000300', 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb)`,
       [CONNECTION.organizationId]
     )
     await database.query(
@@ -92,7 +95,10 @@ describe("google ads campaign management service", () => {
 
   it("discovers campaigns and persists new canonical rows", async () => {
     const service = new GoogleAdsCampaignManagementService(repository, {
-      listCampaigns: async () => [makeCampaign({ id: "cmp-1" }), makeCampaign({ id: "cmp-2", status: "PAUSED" })],
+      listCampaigns: async () => [
+        makeCampaign({ id: "cmp-1" }),
+        makeCampaign({ id: "cmp-2", status: "PAUSED" }),
+      ],
     })
 
     const result = await service.synchronizeCampaigns({
@@ -132,7 +138,9 @@ describe("google ads campaign management service", () => {
     expect(first.summary.insertedCount).toBe(1)
 
     const secondService = new GoogleAdsCampaignManagementService(repository, {
-      listCampaigns: async () => [makeCampaign({ id: "cmp-1", name: "Campaign One Updated", budgetMicros: 2500 })],
+      listCampaigns: async () => [
+        makeCampaign({ id: "cmp-1", name: "Campaign One Updated", budgetMicros: 2500 }),
+      ],
     })
     const second = await secondService.synchronizeCampaigns({
       connection: CONNECTION,
@@ -223,10 +231,12 @@ describe("google ads campaign management service", () => {
       inactiveCount: 0,
     })
 
-    await expect(repository.listMarketingCampaigns({
-      connectionId: CONNECTION.id,
-      externalCustomerId: "123456",
-    })).resolves.toHaveLength(0)
+    await expect(
+      repository.listMarketingCampaigns({
+        connectionId: CONNECTION.id,
+        externalCustomerId: "123456",
+      })
+    ).resolves.toHaveLength(0)
   })
 
   it("propagates API failures without persisting campaigns", async () => {
@@ -236,16 +246,20 @@ describe("google ads campaign management service", () => {
       },
     })
 
-    await expect(service.synchronizeCampaigns({
-      connection: CONNECTION,
-      customerId: "123456",
-      currencyCode: "USD",
-      actorUserId: "00000000-0000-4000-8000-000000000300",
-    })).rejects.toThrow("upstream failed")
+    await expect(
+      service.synchronizeCampaigns({
+        connection: CONNECTION,
+        customerId: "123456",
+        currencyCode: "USD",
+        actorUserId: "00000000-0000-4000-8000-000000000300",
+      })
+    ).rejects.toThrow("upstream failed")
 
-    await expect(repository.listMarketingCampaigns({
-      connectionId: CONNECTION.id,
-      externalCustomerId: "123456",
-    })).resolves.toHaveLength(0)
+    await expect(
+      repository.listMarketingCampaigns({
+        connectionId: CONNECTION.id,
+        externalCustomerId: "123456",
+      })
+    ).resolves.toHaveLength(0)
   })
 })

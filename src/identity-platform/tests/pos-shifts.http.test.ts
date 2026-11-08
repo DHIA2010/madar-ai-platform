@@ -3,6 +3,7 @@
 // Covers point-of-sale cashier shifts (migration 054): POST /v1/pos/shifts (open),
 // PATCH /v1/pos/shifts/:id/close, and GET /v1/pos/shifts (history).
 
+import { randomUUID } from "node:crypto"
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
@@ -82,9 +83,16 @@ async function signIn(email: string, orgName: string) {
     [actor.userId, email]
   )
   await database.query(
-    `insert into organizations (id, name, owner_user_id, status)
-     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    `insert into organizations (id, name, owner_user_id, status, settings)
+     values ($1, $2, $3, 'active', '{"posEnabled": true, "ecommerceEnabled": true, "advertisingEnabled": true}'::jsonb) on conflict (id) do nothing`,
     [actor.organizationId, orgName, actor.userId]
+  )
+  // A running POS trial -- unlocks every plan feature (cash movements, shift reports).
+  await database.query(
+    `insert into organization_subscriptions
+       (id, organization_id, application, status, source, started_at, trial_ends_at)
+     values ($1, $2, 'pos', 'trial', 'trial', now(), $3)`,
+    [randomUUID(), actor.organizationId, new Date(Date.now() + 7 * 86_400_000)]
   )
 
   if (actor.workspaceId) {

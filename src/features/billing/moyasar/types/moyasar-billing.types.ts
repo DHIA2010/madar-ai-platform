@@ -20,6 +20,8 @@ export interface MoyasarPaymentRecord {
   planTier: MoyasarSelfServePlanTier | null
   packageId: string | null
   billingInterval: BillingInterval
+  // "branches" when the payment added branches to a running subscription.
+  purpose?: "subscription" | "branches"
 }
 
 // What's being bought at checkout -- the amount is priced server-side from this.
@@ -27,5 +29,10 @@ export interface MoyasarPurchase {
   application: PurchasableApplication
   packageId: string
   interval: BillingInterval
+  // Branches on top of the one the package includes.
+  extraBranches?: number
   couponCode?: string | null
+  // Set instead of buying a package: adds this many branches to the running subscription, for
+  // what's left of its period.
+  addBranches?: number
 }
