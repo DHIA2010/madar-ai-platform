@@ -2535,7 +2535,10 @@
         "sku": "SKU",
         "unitPrice": "Unit price",
         "quantity": "Quantity",
-        "removeItem": "Remove item"
+        "removeItem": "Remove item",
+        "variant": "Variant",
+        "variantPlaceholder": "Choose a variant",
+        "variantLoading": "Loading variants…"
       },
       "estimatedTotal": "Estimated total",
       "submit": "Create order",
@@ -2548,7 +2551,8 @@
         "customerRequired": "Enter the customer's name.",
         "receiverRequired": "Receiver name and phone are required.",
         "itemsRequired": "Add at least one item.",
-        "shipToRequired": "Enter the shipping city."
+        "shipToRequired": "Enter the shipping city.",
+        "variantRequired": "Choose a variant (size, colour…) for every product that has variants."
       }
     }
   },

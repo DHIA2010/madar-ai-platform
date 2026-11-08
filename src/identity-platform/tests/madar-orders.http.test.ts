@@ -199,6 +199,53 @@ describe("POST /v1/orders: Madar-created orders", () => {
     expect(Number(productRow.rows[0].stock_quantity)).toBe(7)
   })
 
+  // Found live in stage: an order for a variable product with no variant chosen deducted no
+  // stock (the variants hold it) and never reached Zid (only the variants are linked there).
+  it("refuses a variable product line that names no variant, and deducts a chosen variant's stock", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "madar-order-variant@madar.test",
+      "Variant Org"
+    )
+    const productId = "22222222-2222-4222-8222-222222222222"
+    const variantId = "33333333-3333-4333-8333-333333333333"
+    await database.query(
+      `insert into products (id, organization_id, product_type, name)
+       values ($1, $2, 'variable', 'قميص')`,
+      [productId, actor.organizationId]
+    )
+    await database.query(
+      `insert into product_variants (id, product_id, position, option_values, stock)
+       values ($1, $2, 0, '["أحمر"]'::jsonb, 5)`,
+      [variantId, productId]
+    )
+
+    const withoutVariant = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productId, productName: "قميص", unitPrice: 50, quantity: 1 }],
+      }),
+    })
+    expect(withoutVariant.status).toBe(400)
+    expect((await withoutVariant.json()).code).toBe("MADAR_ORDER_VARIANT_REQUIRED")
+
+    const withVariant = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productId, variantId, productName: "قميص", unitPrice: 50, quantity: 2 }],
+      }),
+    })
+    expect(withVariant.status).toBe(201)
+    const variantRow = await database.query<{ stock: string }>(
+      `select stock from product_variants where id = $1`,
+      [variantId]
+    )
+    expect(Number(variantRow.rows[0].stock)).toBe(3)
+  })
+
   // Found live in stage: a barcode-sized number pasted into the unit price field reached
   // Postgres raw and failed with "numeric field overflow" instead of a clean validation error.
   // schemas.ts now caps individual money fields well below that.

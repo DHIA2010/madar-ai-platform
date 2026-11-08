@@ -2535,7 +2535,10 @@
         "sku": "رمز المنتج",
         "unitPrice": "سعر الوحدة",
         "quantity": "الكمية",
-        "removeItem": "إزالة المنتج"
+        "removeItem": "إزالة المنتج",
+        "variant": "المتغير",
+        "variantPlaceholder": "اختر المتغير",
+        "variantLoading": "جارٍ تحميل المتغيرات…"
       },
       "estimatedTotal": "الإجمالي التقديري",
       "submit": "إنشاء الطلب",
@@ -2548,7 +2551,8 @@
         "customerRequired": "أدخل اسم العميل.",
         "receiverRequired": "اسم المستلم وهاتفه مطلوبان.",
         "itemsRequired": "أضف منتجًا واحدًا على الأقل.",
-        "shipToRequired": "أدخل مدينة الشحن."
+        "shipToRequired": "أدخل مدينة الشحن.",
+        "variantRequired": "اختر المتغير (المقاس أو اللون…) لكل منتج له متغيرات."
       }
     }
   },

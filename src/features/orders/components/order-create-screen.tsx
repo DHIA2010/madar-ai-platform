@@ -18,6 +18,8 @@ import {
   AppSwitch,
 } from "@/components/app"
 
+import { type ProductDetail, productListService } from "@/features/products"
+
 import { useProductCatalog } from "../hooks/use-product-catalog"
 import {
   type CreateOrderInput,
@@ -99,6 +101,12 @@ export function OrderCreateScreen() {
   const [discountAmount, setDiscountAmount] = useState(0)
   const [shippingDiscountAmount, setShippingDiscountAmount] = useState(0)
 
+  // A variable product's stock and Zid/Salla links live on its variants, so a line for one has to
+  // name the variant -- loaded per product the first time a row picks it.
+  const [variantsByProduct, setVariantsByProduct] = useState<
+    Record<string, ProductDetail["variants"]>
+  >({})
+
   const [notes, setNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
@@ -129,15 +137,41 @@ export function OrderCreateScreen() {
     if (!product) return
     updateItem(index, {
       productId: product.id,
+      variantId: null,
       productName: product.name,
       sku: product.sku,
       unitPrice: product.sellingPrice,
       costPrice: product.costPrice,
     })
+    if (product.productType === "variable" && !variantsByProduct[product.id]) {
+      productListService
+        .getProduct(product.id)
+        .then((detail) =>
+          setVariantsByProduct((current) => ({ ...current, [product.id]: detail.variants }))
+        )
+        .catch(() => toast.error(t("create.createError")))
+    }
+  }
+
+  function isVariableItem(item: CreateOrderItemInput): boolean {
+    if (!item.productId) return false
+    return products.find((product) => product.id === item.productId)?.productType === "variable"
+  }
+
+  function handleVariantSelect(index: number, item: CreateOrderItemInput, variantId: string) {
+    const variant = (variantsByProduct[item.productId ?? ""] ?? []).find(
+      (candidate) => candidate.id === variantId
+    )
+    if (!variant) return
+    updateItem(index, {
+      variantId: variant.id,
+      sku: variant.sku ?? item.sku,
+      unitPrice: variant.price ?? item.unitPrice,
+    })
   }
 
   function handleProductCreate(index: number, draft: string) {
-    updateItem(index, { productId: null, productName: draft, sku: null })
+    updateItem(index, { productId: null, variantId: null, productName: draft, sku: null })
   }
 
   const itemsSubtotal = items.reduce(
@@ -166,6 +200,10 @@ export function OrderCreateScreen() {
     const validItems = items.filter((item) => item.productName.trim().length > 0)
     if (validItems.length === 0) {
       toast.error(t("create.validation.itemsRequired"))
+      return
+    }
+    if (validItems.some((item) => isVariableItem(item) && !item.variantId)) {
+      toast.error(t("create.validation.variantRequired"))
       return
     }
     if (deliveryMethod === "shipping" && !shipToCity.trim()) {
@@ -389,6 +427,34 @@ export function OrderCreateScreen() {
                     <Trash2 className="size-4" />
                   </button>
                 </div>
+                {isVariableItem(item) ? (
+                  <div className="col-span-2 sm:col-span-3">
+                    <OrderField label={t("create.items.variant")} required>
+                      <AppSearchableSelect
+                        value={item.variantId ?? ""}
+                        onChange={(value) => handleVariantSelect(index, item, value)}
+                        options={(variantsByProduct[item.productId ?? ""] ?? []).map((variant) => ({
+                          value: variant.id,
+                          label: variant.optionValues.join(" / "),
+                          hint: [
+                            variant.sku,
+                            variant.price !== null ? formatAmount(variant.price, locale) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" — "),
+                        }))}
+                        disabled={!variantsByProduct[item.productId ?? ""]}
+                        placeholder={
+                          variantsByProduct[item.productId ?? ""]
+                            ? t("create.items.variantPlaceholder")
+                            : t("create.items.variantLoading")
+                        }
+                        ariaLabel={t("create.items.variant")}
+                        triggerClassName={FIELD_CLASS}
+                      />
+                    </OrderField>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

@@ -50,6 +50,13 @@ const MADAR_ORDER_ERRORS = {
       "validation",
       "The order total is too large. Check the unit prices and quantities and try again."
     ),
+  variantRequired: (productName: string) =>
+    new IdentityError(
+      "MADAR_ORDER_VARIANT_REQUIRED",
+      400,
+      "validation",
+      `Choose which variant of "${productName}" this order is for.`
+    ),
   outOfStockSaleNotAllowed: (productName: string) =>
     new IdentityError(
       "MADAR_ORDER_OUT_OF_STOCK",
@@ -387,6 +394,7 @@ export class MadarOrdersService {
 
   async create(input: CreateMadarOrderInput): Promise<MadarOrderView> {
     if (!input.workspaceId) throw MADAR_ORDER_ERRORS.noWorkspace()
+    await this.assertVariantsChosen(input.organizationId, input.items)
 
     const defaultTaxRate = await this.taxRatesService.getDefaultRatePercent(input.organizationId)
 
@@ -604,6 +612,28 @@ export class MadarOrdersService {
     return created
   }
 
+  // A variable product holds no stock of its own and is linked to Zid/Salla per variant, so a line
+  // without one would deduct nothing and push nothing -- refused up front instead.
+  private async assertVariantsChosen(
+    organizationId: string,
+    items: CreateMadarOrderInput["items"]
+  ): Promise<void> {
+    const productIds = [
+      ...new Set(
+        items.filter((item) => item.productId && !item.variantId).map((item) => item.productId)
+      ),
+    ]
+    if (productIds.length === 0) return
+    const placeholders = productIds.map((_, index) => `$${index + 2}`).join(", ")
+    const result = await this.database.query<{ name: string }>(
+      `SELECT name FROM products
+        WHERE organization_id = $1 AND id IN (${placeholders}) AND product_type = 'variable'
+        LIMIT 1`,
+      [organizationId, ...productIds]
+    )
+    if (result.rows[0]) throw MADAR_ORDER_ERRORS.variantRequired(result.rows[0].name)
+  }
+
   async retryPush(actor: AuthenticatedActor, orderId: string): Promise<MadarOrderView> {
     const existing = await this.findById(actor.organizationId, orderId)
     if (!existing) throw MADAR_ORDER_ERRORS.notFound()
@@ -801,7 +831,15 @@ export class MadarOrdersService {
       if (link?.zidProductSku)
         linkedItems.push({ zidSku: link.zidProductSku, quantity: Number(item.quantity) })
     }
-    if (linkedItems.length === 0) return
+    if (linkedItems.length === 0) {
+      // Nothing on this order is a Zid product -- there is nothing to send, so it must not sit
+      // at "pending" forever.
+      await this.database.query(
+        `UPDATE madar_orders SET zid_push_status = 'not_applicable', updated_at = now() WHERE id = $1`,
+        [orderId]
+      )
+      return
+    }
 
     try {
       const pushResult = await this.zidPushService.pushOrder(
