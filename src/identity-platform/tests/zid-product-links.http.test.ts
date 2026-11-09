@@ -227,3 +227,76 @@ describe("POST /v1/products/:id/push-to-zid", () => {
     expect(linkRow.rows).toEqual([{ zid_product_id: "999888" }])
   })
 })
+
+describe("DELETE /v1/products/:id with a Zid link", () => {
+  async function seedLinkedProduct() {
+    const { token, actor } = await signIn("delete-on-zid@madar.test", "Delete On Zid Org")
+    await insertActiveZidConnection(actor.organizationId, actor.workspaceId)
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, workspace_id, product_type, name, sku, sell_price, stock_quantity, status)
+       values ($1, $2, $3, 'simple', 'Linked Product', 'SKU-DEL', 100, 10, 'active')`,
+      [productId, actor.organizationId, actor.workspaceId]
+    )
+    await database.query(
+      `insert into zid_product_links (id, organization_id, product_id, variant_id, zid_product_id, zid_product_sku, created_at, updated_at)
+       values ($1, $2, $3, null, '999888', 'SKU-DEL', now(), now())`,
+      [randomUUID(), actor.organizationId, productId]
+    )
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "test-access-token",
+      authorizationHeader: "Bearer test-access-token",
+    })
+    return { token, productId }
+  }
+
+  function mockZid(status: number) {
+    const nativeFetch = globalThis.fetch
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      return new Response(status === 204 ? null : "{}", { status })
+    })
+  }
+
+  it("deletes the product on Zid too, then in Madar", async () => {
+    const { token, productId } = await seedLinkedProduct()
+    const fetchSpy = mockZid(204)
+
+    const response = await fetch(`${baseUrl}/v1/products/${productId}`, {
+      method: "DELETE",
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(204)
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/products/999888/"),
+      expect.objectContaining({ method: "DELETE" })
+    )
+    const product = await database.query(
+      `select 1 from products where id = $1 and deleted_at is null`,
+      [productId]
+    )
+    expect(product.rows).toHaveLength(0)
+    const links = await database.query(`select 1 from zid_product_links where product_id = $1`, [
+      productId,
+    ])
+    expect(links.rows).toHaveLength(0)
+  })
+
+  it("keeps the product in Madar when Zid refuses the delete", async () => {
+    const { token, productId } = await seedLinkedProduct()
+    mockZid(500)
+
+    const response = await fetch(`${baseUrl}/v1/products/${productId}`, {
+      method: "DELETE",
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(502)
+    expect((await response.json()).code).toBe("ZID_PRODUCT_DELETE_FAILED")
+    const product = await database.query(
+      `select 1 from products where id = $1 and deleted_at is null`,
+      [productId]
+    )
+    expect(product.rows).toHaveLength(1)
+  })
+})

@@ -72,6 +72,7 @@ import { ProductCatalogService, toNormalizedProduct } from "../../products/catal
 import { countUncategorized, ProductCategoriesService } from "../../products/categories-service"
 import { SallaProductCreatePushService } from "../../products/salla-product-create-push-service"
 import { ZidProductCreatePushService } from "../../products/zid-product-create-push-service"
+import { ZidProductDeletePushService } from "../../products/zid-product-delete-push-service"
 import { ZidProductLinksService } from "../../products/zid-product-links-service"
 import { ZidProductPromotionService } from "../../products/zid-product-promotion-service"
 import { SallaProductLinksService } from "../../products/salla-product-links-service"
@@ -960,6 +961,13 @@ export function createIdentityApiServer(
     : null
   const zidProductCreatePushService = container.infrastructure.database
     ? new ZidProductCreatePushService(
+        new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
+      )
+    : null
+  const zidProductDeletePushService = container.infrastructure.database
+    ? new ZidProductDeletePushService(
+        container.infrastructure.database,
+        new ZidOAuthRepository(container.infrastructure.database),
         new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
       )
     : null
@@ -6384,6 +6392,11 @@ export function createIdentityApiServer(
           throw ERRORS.forbidden()
         }
 
+        // Zid first: a refusal there keeps the product here too (see ZidProductDeletePushService).
+        await zidProductDeletePushService?.deleteLinkedProduct(
+          actor.organizationId,
+          nativeProductMatch[1]
+        )
         await productCatalogService.delete(actor.organizationId, nativeProductMatch[1])
         return send(204, null)
       }
