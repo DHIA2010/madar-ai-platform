@@ -117,14 +117,14 @@ function encryptionKey(): Buffer {
   throw new Error("WHATSAPP_CONFIGURATION_ERROR")
 }
 
-function encryptSecret(plainText: string): string {
+export function encryptSecret(plainText: string): string {
   const iv = randomBytes(12)
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv)
   const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()])
   return `v1:${iv.toString("base64")}:${cipher.getAuthTag().toString("base64")}:${encrypted.toString("base64")}`
 }
 
-function decryptSecret(value: string): string {
+export function decryptSecret(value: string): string {
   const [version, iv, tag, encrypted] = value.split(":")
   if (version !== "v1" || !iv || !tag || !encrypted) throw new Error("WHATSAPP_DECRYPTION_ERROR")
   const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(iv, "base64"))
@@ -269,6 +269,27 @@ export class WhatsAppPlatformService {
       wabaId: config.wabaId,
       appId: config.appId,
     }
+  }
+
+  // What a merchant's browser needs to open Meta's Embedded Signup (both are public values), and
+  // whether it can be opened at all yet.
+  async embeddedSignup(): Promise<{ appId: string; configId: string; apiVersion: string } | null> {
+    const row = await this.row()
+    const config = await this.effective(row)
+    if (!config.appId || !row.embedded_signup_config_id || !config.appSecret) return null
+    return {
+      appId: config.appId,
+      configId: row.embedded_signup_config_id,
+      apiVersion: config.apiVersion,
+    }
+  }
+
+  // The app's id, secret and API version -- for swapping an Embedded Signup code for a token.
+  async appCredentials(): Promise<{ appId: string; appSecret: string; apiVersion: string }> {
+    const config = await this.effective(await this.row())
+    if (!config.appId) throw notConfigured("the Meta app ID")
+    if (!config.appSecret) throw notConfigured("the app secret")
+    return { appId: config.appId, appSecret: config.appSecret, apiVersion: config.apiVersion }
   }
 
   // The app secret in use -- for verifying webhook signatures. Null when not set.

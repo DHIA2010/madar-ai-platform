@@ -155,3 +155,35 @@ export function subscribeWabaToApp(wabaId: string, auth: GraphAuth) {
     auth
   )
 }
+
+// Embedded Signup hands the browser a short-lived code; Madar swaps it (with the app secret) for
+// the business token that acts on the merchant's own WhatsApp account.
+export function exchangeSignupCode(input: {
+  appId: string
+  appSecret: string
+  code: string
+  version?: string
+}) {
+  return graphRequest<{ access_token: string; token_type?: string }>(
+    "GET",
+    "/oauth/access_token",
+    { token: `${input.appId}|${input.appSecret}`, version: input.version },
+    { client_id: input.appId, client_secret: input.appSecret, code: input.code }
+  )
+}
+
+// Turns a number on for the Cloud API. The 6-digit pin becomes its two-step verification pin.
+export function registerPhoneNumber(phoneNumberId: string, pin: string, auth: GraphAuth) {
+  return graphRequest<{ success: boolean }>(
+    "POST",
+    `/${encodeURIComponent(phoneNumberId)}/register`,
+    auth,
+    { messaging_product: "whatsapp", pin }
+  )
+}
+
+export function getPhoneNumber(phoneNumberId: string, auth: GraphAuth) {
+  return graphRequest<WhatsAppPhoneNumber>("GET", `/${encodeURIComponent(phoneNumberId)}`, auth, {
+    fields: "display_phone_number,verified_name,quality_rating,name_status,messaging_limit_tier",
+  })
+}

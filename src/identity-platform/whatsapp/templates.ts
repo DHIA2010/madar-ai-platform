@@ -7,7 +7,7 @@ import {
   type TemplateDefinition,
   type TemplateStatus,
 } from "./messaging"
-import type { WhatsAppPlatformService } from "./platform-config"
+import type { WhatsAppPlatformService, WhatsAppSendingContext } from "./platform-config"
 
 // The message templates Madar sends from its own number. Meta must approve each one before it can
 // be used (usually minutes to a few hours); Madar Admin -> settings -> WhatsApp submits them and
@@ -100,7 +100,7 @@ export const DAILY_REPORT_TEMPLATE: TemplateDefinition = {
 export const MADAR_TEMPLATES: TemplateDefinition[] = [POS_INVOICE_TEMPLATE, DAILY_REPORT_TEMPLATE]
 
 // The sample document Meta reviews with a document-header template.
-function sampleDocument(template: TemplateDefinition) {
+export function sampleDocument(template: TemplateDefinition) {
   if (template.name !== POS_INVOICE_TEMPLATE.name) return undefined
   return {
     filename: "INV-000068.pdf",
@@ -170,11 +170,17 @@ export class WhatsAppTemplatesService {
     return getTemplateStatus(context.auth, context.wabaId, template.name, template.language)
   }
 
-  // Whether a template can be sent right now (an approval is remembered for a few minutes).
-  async requireApproved(template: TemplateDefinition): Promise<void> {
-    const cachedAt = this.approvedCache.get(template.name)
+  // Whether a template can be sent right now (an approval is remembered for a few minutes) -- on
+  // Madar's own account, or on the account `sendingFrom` belongs to (a merchant's own number,
+  // whose templates are approved on their own account).
+  async requireApproved(
+    template: TemplateDefinition,
+    sendingFrom?: WhatsAppSendingContext
+  ): Promise<void> {
+    const context = sendingFrom ?? (await this.platform.sendingContext())
+    const cacheKey = `${context.wabaId}:${template.name}`
+    const cachedAt = this.approvedCache.get(cacheKey)
     if (cachedAt && Date.now() - cachedAt < STATUS_CACHE_MS) return
-    const context = await this.platform.sendingContext()
     const status = await getTemplateStatus(
       context.auth,
       context.wabaId,
@@ -190,6 +196,6 @@ export class WhatsAppTemplatesService {
         { status: status.status }
       )
     }
-    this.approvedCache.set(template.name, Date.now())
+    this.approvedCache.set(cacheKey, Date.now())
   }
 }

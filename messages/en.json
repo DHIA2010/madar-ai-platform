@@ -3908,7 +3908,8 @@
         "tax": "Taxes",
         "zatca": "E-invoicing (ZATCA)",
         "backup": "Backup",
-        "dailyReport": "Daily report (WhatsApp)"
+        "dailyReport": "Daily report (WhatsApp)",
+        "whatsapp": "WhatsApp"
       },
       "backupPendingReason": "Backup isn't available yet"
     },
@@ -5157,6 +5158,121 @@
         "testSent": "Report sent to {count, plural, one {# number} other {# numbers}}.",
         "testFailed": "Couldn't send the report."
       }
+    },
+    "whatsapp": {
+      "title": "WhatsApp",
+      "subtitle": "Choose how your invoices and messages reach your customers on WhatsApp.",
+      "current": "Current method",
+      "selected": "Selected",
+      "modes": {
+        "web": {
+          "name": "WhatsApp Web",
+          "badge": "Free · No setup",
+          "tagline": "You send from the WhatsApp you use today",
+          "points": [
+            "Madar opens the customer's chat in WhatsApp Web (or the app on a phone) with the message ready",
+            "You review it and press Send yourself",
+            "No Meta fees — from your current number"
+          ]
+        },
+        "business": {
+          "name": "Your business number",
+          "badge": "Automatic sending",
+          "tagline": "Madar sends automatically from your store's number",
+          "points": [
+            "The invoice reaches the customer right after the sale, without opening WhatsApp",
+            "Under your store's business name, verified by Meta",
+            "Meta bills conversation fees to your own account"
+          ]
+        }
+      },
+      "web": {
+        "howTitle": "How it works",
+        "steps": [
+          "Press “WhatsApp” on the invoice or after the sale",
+          "WhatsApp Web opens on the customer's chat with the message and invoice link ready",
+          "Press Send — the invoice goes from your number"
+        ],
+        "tip": "Log in to web.whatsapp.com once on the cashier device, and Madar will open the chat directly every time.",
+        "tipTitle": "Tip",
+        "use": "Use WhatsApp Web"
+      },
+      "business": {
+        "beforeTitle": "Before you start — have these ready",
+        "before": [
+          {
+            "title": "A personal Facebook account",
+            "body": "You'll log in with it in Meta's window. Ideally an admin of your business on Meta — you can also create the business during the steps."
+          },
+          {
+            "title": "A mobile number for the store",
+            "body": "It receives an SMS or call with the verification code. It must not be registered in the WhatsApp or WhatsApp Business app right now — delete that account first, or use a new number."
+          },
+          {
+            "title": "A display name",
+            "body": "The name your customers see. It must match your business name, and Meta reviews it."
+          },
+          {
+            "title": "A payment method on Meta",
+            "body": "Conversation fees are paid to Meta directly. Add a card in WhatsApp Manager after connecting."
+          }
+        ],
+        "duration": "The steps take about 10 minutes in one window, without leaving Madar.",
+        "stepsTitle": "What happens in Meta's window",
+        "steps": [
+          "Log in with Facebook",
+          "Choose your business or create one",
+          "Choose a WhatsApp Business account or create one",
+          "Enter the store's number and display name",
+          "Enter the verification code sent to the number",
+          "Approve Madar's permissions — done"
+        ],
+        "afterTitle": "After connecting",
+        "after": [
+          "Madar sends invoices automatically from your number when you sell",
+          "The invoice template is sent to your account for Meta's approval (usually minutes)",
+          "You can go back to WhatsApp Web or disconnect the number any time"
+        ],
+        "connect": "Connect my number with Meta",
+        "opening": "Opening Meta's window…",
+        "finishing": "Finishing the connection…",
+        "unavailableTitle": "Connecting is being enabled",
+        "unavailableBody": "We're waiting for Meta to approve Madar's app for connecting merchant numbers. Get everything ready now, and use WhatsApp Web until connecting is enabled.",
+        "secure": "The steps happen in Meta's official window — Madar never sees your Facebook password."
+      },
+      "connected": {
+        "title": "Your number is connected",
+        "since": "Connected since {date}",
+        "quality": "Number quality",
+        "qualityValues": {
+          "GREEN": "High",
+          "YELLOW": "Medium",
+          "RED": "Low",
+          "UNKNOWN": "Unknown"
+        },
+        "attention": "Needs attention",
+        "autoOn": "Automatic sending is on",
+        "autoOff": "Automatic sending is off — Madar sends through WhatsApp Web",
+        "useAuto": "Turn on automatic sending",
+        "manage": "Manage the number in WhatsApp Manager",
+        "disconnect": "Disconnect number",
+        "disconnectConfirm": "Madar will go back to WhatsApp Web. Your number stays in your Meta account and can be connected again. Continue?",
+        "previous": "Your number {number} was connected before. Connect it again with the button below."
+      },
+      "toasts": {
+        "modeWeb": "Madar will send through WhatsApp Web.",
+        "modeBusiness": "Madar will send automatically from your number.",
+        "connected": "{number} connected successfully.",
+        "connectedWithIssues": "Connected, but something still needs attention — see the details.",
+        "cancelled": "Meta's window was closed before finishing.",
+        "failed": "Couldn't finish connecting. Try again.",
+        "sdkFailed": "Couldn't load Meta's window — check your ad blocker or connection.",
+        "disconnected": "Number disconnected.",
+        "saveFailed": "Couldn't save. Try again.",
+        "forbidden": "You don't have permission to change settings."
+      },
+      "loadError": "Couldn't load WhatsApp settings.",
+      "retry": "Try again"
     }
   },
   "administration": {
@@ -8739,7 +8855,13 @@
         "notConfigured": "WhatsApp isn't set up in Madar yet.",
         "failed": "Couldn't prepare the invoice link. Try again."
       },
-      "open": "Open WhatsApp"
+      "open": "Open WhatsApp",
+      "sendAuto": "Send automatically from the store's number",
+      "sending": "Sending…",
+      "sentAuto": "Invoice sent to {phone}.",
+      "autoFailed": "Couldn't send automatically.",
+      "orWeb": "or open it in WhatsApp Web",
+      "autoDescription": "Madar sends the invoice now from your connected store number."
     }
   },
   "shifts": {

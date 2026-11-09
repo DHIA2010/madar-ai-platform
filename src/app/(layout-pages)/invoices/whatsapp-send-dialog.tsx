@@ -1,15 +1,21 @@
 "use client"
 
-// Sharing a sale's receipt from the merchant's own WhatsApp (Web on a computer, the app on a phone
-// or tablet): the customer's chat opens with a ready message that links to the invoice PDF -- the
-// cashier only presses send. No message is sent by Madar (backend whatsapp/invoice-links.ts).
+// Sharing a sale's receipt on WhatsApp, the way the store chose in Settings -> WhatsApp:
+// - WhatsApp Web (default): the customer's chat opens in the merchant's own WhatsApp (Web on a
+//   computer, the app on a phone or tablet) with a ready message linking to the invoice PDF -- the
+//   cashier only presses send (backend whatsapp/invoice-links.ts).
+// - Their connected business number: Madar sends the PDF itself from that number (backend
+//   whatsapp/invoice-sender.ts); opening WhatsApp Web stays available beside it.
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, MessageCircle } from "lucide-react"
+import { Loader2, MessageCircle, Zap } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
 
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { posInvoicesService } from "@/features/pos/services/pos-invoices.service"
+import { whatsAppConnectionService } from "@/features/settings/services/whatsapp-connection.service"
+import { AppError } from "@/lib/errors/app-error"
+import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -79,6 +85,28 @@ function ShareBody({
   const [phone, setPhone] = useState(invoice.customerPhone ?? "")
   const [message, setMessage] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  // Whether the store sends from its own connected number (Settings -> WhatsApp).
+  const [automatic, setAutomatic] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    whatsAppConnectionService
+      .get()
+      .then((overview) => {
+        if (!cancelled) {
+          setAutomatic(
+            overview.sendMode === "business" && overview.connection?.status === "connected"
+          )
+        }
+      })
+      .catch(() => {
+        // Unknown -- WhatsApp Web works either way.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Prepared as soon as the dialog opens, so the button below is a plain link -- browsers don't
   // block a window opened from a direct click.
@@ -99,8 +127,28 @@ function ShareBody({
 
   const number = useMemo(() => toWhatsAppNumber(phone), [phone])
   const href = number && message ? whatsAppUrl(number, message) : null
+
+  const sendAutomatically = async () => {
+    if (!number) return
+    setSending(true)
+    try {
+      await posInvoicesService.sendInvoiceWhatsApp(invoice.id, phone)
+      toast.success(t("sentAuto", { phone }))
+      onDone()
+    } catch (error) {
+      toast.error(t("autoFailed"), {
+        description: error instanceof AppError ? error.message : undefined,
+      })
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <>
+      {automatic ? (
+        <p className="-mt-1 text-[12px] leading-6 text-[#1a9e55]">{t("autoDescription")}</p>
+      ) : null}
       <div className="flex flex-col gap-1.5">
         <Input
           dir="ltr"
@@ -120,6 +168,18 @@ function ShareBody({
         <p className="text-[12px] font-medium text-[#d92d20]">{t("toasts.failed")}</p>
       ) : null}
 
+      {automatic ? (
+        <button
+          type="button"
+          disabled={!number || sending}
+          onClick={() => void sendAutomatically()}
+          className="flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#1f9d55] px-4 text-[13.5px] font-bold text-white hover:bg-[#188045] disabled:pointer-events-none disabled:bg-[#1f9d55]/50"
+        >
+          {sending ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
+          {sending ? t("sending") : t("sendAuto")}
+        </button>
+      ) : null}
+
       <a
         href={href ?? undefined}
         target="_blank"
@@ -133,9 +193,13 @@ function ShareBody({
           onDone()
         }}
         className={
-          href
-            ? "flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#1f9d55] px-4 text-[13.5px] font-bold text-white hover:bg-[#188045]"
-            : "pointer-events-none flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#1f9d55]/50 px-4 text-[13.5px] font-bold text-white"
+          automatic
+            ? href
+              ? "flex items-center justify-center gap-1.5 text-[12.5px] font-semibold text-[#1f9d55] hover:underline"
+              : "pointer-events-none flex items-center justify-center gap-1.5 text-[12.5px] font-semibold text-[#1f9d55]/50"
+            : href
+              ? "flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#1f9d55] px-4 text-[13.5px] font-bold text-white hover:bg-[#188045]"
+              : "pointer-events-none flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#1f9d55]/50 px-4 text-[13.5px] font-bold text-white"
         }
       >
         {!message && !failed ? (
@@ -143,7 +207,7 @@ function ShareBody({
         ) : (
           <MessageCircle className="size-4" />
         )}
-        {t("open")}
+        {automatic ? t("orWeb") : t("open")}
       </a>
     </>
   )

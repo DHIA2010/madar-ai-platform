@@ -37,6 +37,7 @@ interface SettingsSection {
     | "tax"
     | "zatca"
     | "dailyReport"
+    | "whatsapp"
     | "backup"
   href?: string
   // Whether this section has no destination yet. When true, it's shown disabled with a reason.
@@ -53,6 +54,7 @@ const SECTIONS: SettingsSection[] = [
   { key: "payments", href: ROUTES.settingsPayments },
   { key: "tax", href: ROUTES.settingsTaxes },
   { key: "zatca", href: ROUTES.settingsZatca, applications: ["pos"] },
+  { key: "whatsapp", href: ROUTES.settingsWhatsApp, applications: ["pos", "ecommerce"] },
   { key: "dailyReport", href: ROUTES.settingsDailyReport, applications: ["pos"] },
   { key: "backup", pending: true },
 ]

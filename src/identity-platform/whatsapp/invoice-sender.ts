@@ -9,6 +9,7 @@ import type { PosSettingsService } from "../pos/pos-settings-service"
 import { sendTemplateMessage, uploadMedia } from "./messaging"
 import type { WhatsAppPlatformService } from "./platform-config"
 import { POS_INVOICE_TEMPLATE, type WhatsAppTemplatesService } from "./templates"
+import type { WhatsAppMerchantConnectionService } from "./merchant-connection"
 
 // Sends a POS sale's receipt to the customer on WhatsApp, as a PDF, from Madar's own number (with
 // the store's name in the message) until merchants connect their own numbers. Every send is kept
@@ -59,7 +60,9 @@ export class WhatsAppInvoiceSender {
     private readonly invoices: PosInvoicesService,
     private readonly paymentMethods: PosPaymentMethodsService,
     // Optional: the receipt title/description printed on the receipt (POS settings).
-    private readonly posSettings: PosSettingsService | null = null
+    private readonly posSettings: PosSettingsService | null = null,
+    // Optional: an organization that connected its own business number sends from it.
+    private readonly merchantConnections: WhatsAppMerchantConnectionService | null = null
   ) {}
 
   // The store's current logo, as on the printed receipt -- PNG or JPEG only (what a PDF embeds);
@@ -192,13 +195,21 @@ export class WhatsAppInvoiceSender {
     if (!invoice)
       throw new IdentityError("POS_INVOICE_NOT_FOUND", 404, "business", "Invoice not found.")
 
+    // From the merchant's own number when they connected one (Meta bills their account), otherwise
+    // from Madar's -- which Madar pays for, hence the daily cap below.
+    const merchantContext =
+      (await this.merchantConnections?.sendingContext(input.organizationId)) ?? null
+
     const since = new Date(Date.now() - 24 * 60 * 60_000)
     const sentToday = await this.database.query<{ count: string | number }>(
       `SELECT COUNT(*) AS count FROM whatsapp_messages
         WHERE organization_id = $1 AND created_at > $2`,
       [input.organizationId, since]
     )
-    if (Number(sentToday.rows[0]?.count ?? 0) >= DAILY_INVOICE_MESSAGES_PER_ORGANIZATION) {
+    if (
+      !merchantContext &&
+      Number(sentToday.rows[0]?.count ?? 0) >= DAILY_INVOICE_MESSAGES_PER_ORGANIZATION
+    ) {
       throw new IdentityError(
         "WHATSAPP_DAILY_LIMIT",
         429,
@@ -207,8 +218,8 @@ export class WhatsAppInvoiceSender {
       )
     }
 
-    await this.templates.requireApproved(POS_INVOICE_TEMPLATE)
-    const context = await this.platform.sendingContext()
+    const context = merchantContext ?? (await this.platform.sendingContext())
+    await this.templates.requireApproved(POS_INVOICE_TEMPLATE, context)
 
     const { pdf, filename, storeName } = await this.renderPdf(input.organizationId, invoice)
 

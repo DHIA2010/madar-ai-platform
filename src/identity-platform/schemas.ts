@@ -1577,6 +1577,22 @@ export const promotionSchema = z.object({
   isPaused: z.boolean().optional().default(false),
 })
 
+// How the organization sends WhatsApp to customers -- see whatsapp/merchant-connection.ts.
+export const whatsAppSendModeSchema = z.object({ sendMode: z.enum(["web", "business"]) })
+
+// What the browser receives at the end of Meta's Embedded Signup.
+export const whatsAppEmbeddedSignupSchema = z.object({
+  code: z.string().trim().min(1).max(2000),
+  wabaId: z
+    .string()
+    .trim()
+    .regex(/^\d{5,30}$/),
+  phoneNumberId: z
+    .string()
+    .trim()
+    .regex(/^\d{5,30}$/),
+})
+
 // The daily store report on WhatsApp -- see whatsapp/daily-report.ts.
 export const dailyReportSettingsSchema = z.object({
   enabled: z.boolean(),

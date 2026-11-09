@@ -88,6 +88,7 @@ export const ROUTES = {
   settingsCashier: "/settings/cashier",
   settingsNotes: "/settings/notes",
   settingsDailyReport: "/settings/daily-report",
+  settingsWhatsApp: "/settings/whatsapp",
   madarAdmin: "/madar-admin",
   madarAdminRequests: "/madar-admin/requests",
   madarAdminCustomers: "/madar-admin/customers",

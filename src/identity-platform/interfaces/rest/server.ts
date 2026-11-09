@@ -128,6 +128,7 @@ import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../..
 import { ApplicationAccessService } from "../../subscriptions/app-access"
 import { invoiceIdFromLinkToken, invoiceWhatsAppLink } from "../../whatsapp/invoice-links"
 import { registerDailyReportService, WhatsAppDailyReportService } from "../../whatsapp/daily-report"
+import { WhatsAppMerchantConnectionService } from "../../whatsapp/merchant-connection"
 import { PackageEntitlementsService } from "../../subscriptions/entitlements"
 import { BranchAllowanceService } from "../../subscriptions/branches"
 import { MoyasarBillingService } from "../../billing/moyasar/service"
@@ -245,6 +246,8 @@ import {
   posSettingsUpdateSchema,
   promotionSchema,
   dailyReportSettingsSchema,
+  whatsAppEmbeddedSignupSchema,
+  whatsAppSendModeSchema,
   saveConnectionSyncScheduleSchema,
   loginSchema,
   removeMemberSchema,
@@ -991,6 +994,13 @@ export function createIdentityApiServer(
   const whatsAppTemplatesService = whatsAppPlatformService
     ? new WhatsAppTemplatesService(whatsAppPlatformService)
     : null
+  const whatsAppMerchantConnections =
+    container.infrastructure.database && whatsAppPlatformService
+      ? new WhatsAppMerchantConnectionService(
+          container.infrastructure.database,
+          whatsAppPlatformService
+        )
+      : null
   const whatsAppInvoiceSender =
     container.infrastructure.database &&
     whatsAppPlatformService &&
@@ -1003,7 +1013,8 @@ export function createIdentityApiServer(
           whatsAppTemplatesService,
           posInvoicesService,
           posPaymentMethodsService,
-          posSettingsService
+          posSettingsService,
+          whatsAppMerchantConnections
         )
       : null
   const posShiftsService =
@@ -6586,6 +6597,40 @@ export function createIdentityApiServer(
           200,
           await supplierInvoicesService.scan({ organizationId: actor.organizationId, ...payload })
         )
+      }
+
+      // How the organization sends WhatsApp to its customers (whatsapp/merchant-connection.ts):
+      // through its own WhatsApp Web, or automatically from its own business number connected with
+      // Meta's Embedded Signup.
+      if (url.pathname.startsWith("/v1/whatsapp/connection")) {
+        if (!whatsAppMerchantConnections) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
+        }
+        if (method === "GET" && url.pathname === "/v1/whatsapp/connection") {
+          return send(200, await whatsAppMerchantConnections.get(actor.organizationId))
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) throw ERRORS.forbidden()
+        if (method === "PUT" && url.pathname === "/v1/whatsapp/connection") {
+          const { sendMode } = whatsAppSendModeSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await whatsAppMerchantConnections.setMode(actor.organizationId, sendMode)
+          )
+        }
+        if (method === "DELETE" && url.pathname === "/v1/whatsapp/connection") {
+          return send(200, await whatsAppMerchantConnections.disconnect(actor.organizationId))
+        }
+        if (method === "POST" && url.pathname === "/v1/whatsapp/connection/embedded-signup") {
+          const payload = whatsAppEmbeddedSignupSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await whatsAppMerchantConnections.completeEmbeddedSignup({
+              organizationId: actor.organizationId,
+              actorUserId: actor.userId,
+              ...payload,
+            })
+          )
+        }
       }
 
       // The daily store report on WhatsApp (whatsapp/daily-report.ts): the organization's choice of
