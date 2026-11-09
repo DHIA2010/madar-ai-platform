@@ -121,10 +121,13 @@ describe("ZidOrderPushService.pushOrder", () => {
       }
       if (url.includes("/managers/store/payment-methods")) {
         return new Response(
+          // docs.zid.sa/list-of-payment-method: the methods come under `payload`.
           JSON.stringify({
-            data: [
-              { id: 20, code: "cod", name: "Cash on delivery", enabled: true },
-              { id: 21, code: "online", name: "Online payment", enabled: true },
+            code: 200,
+            payload: [
+              { id: 19, code: "zid_bank_transfer", name: "Bank transfer", enabled: false },
+              { id: 20, code: "zid_cod", name: "Cash on delivery", enabled: true },
+              { id: 21, code: "payment_link.zidpay", name: "Zid Pay", enabled: true },
             ],
           }),
           { status: options.paymentMethodsStatus ?? 200 }
@@ -150,17 +153,22 @@ describe("ZidOrderPushService.pushOrder", () => {
     expect(result).toEqual({ zidOrderId: "999" })
   })
 
-  it("picks the payment method whose code/name matches the order's paymentMethodCode over the first enabled one", async () => {
-    const fetchSpy = mockFetchSequence({})
+  it("matches Madar's payment code to the store's enabled Zid method by meaning", async () => {
     const service = new ZidOrderPushService(new ZidOAuthService({} as never))
+    const methodFor = async (paymentMethodCode: string) => {
+      const fetchSpy = mockFetchSequence({})
+      await service.pushOrder("connection-1", { ...BASE_ORDER, paymentMethodCode }, [
+        { zidSku: "ZID-SKU-1", quantity: 1 },
+      ])
+      const draftCall = fetchSpy.mock.calls.find((call) => String(call[0]).includes("/drafts"))
+      fetchSpy.mockRestore()
+      return JSON.parse(String(draftCall?.[1]?.body)).payment_method
+    }
 
-    await service.pushOrder("connection-1", { ...BASE_ORDER, paymentMethodCode: "online" }, [
-      { zidSku: "ZID-SKU-1", quantity: 1 },
-    ])
-
-    const draftCall = fetchSpy.mock.calls.find((call) => String(call[0]).includes("/drafts"))
-    const body = JSON.parse(String(draftCall?.[1]?.body))
-    expect(body.payment_method).toEqual({ id: 21 })
+    expect(await methodFor("card")).toEqual({ id: 21 })
+    expect(await methodFor("cash")).toEqual({ id: 20 })
+    // Bank transfer is disabled on this store -- the first enabled method stands in.
+    expect(await methodFor("bank_transfer")).toEqual({ id: 20 })
   })
 
   it("throws ZID_PUSH_NO_LINKED_ITEMS when no items are given", async () => {

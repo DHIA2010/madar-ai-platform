@@ -4,6 +4,16 @@ import type { MadarOrderPushInput } from "./salla-order-push-service"
 
 const DEFAULT_ZID_API_BASE_URL = "https://api.zid.sa/v1"
 
+// What each of Madar's payment codes looks like among a Zid store's payment methods (their codes
+// and names, e.g. "zid_cod", "payment_link.zidpay", "Bank transfer").
+const PAYMENT_METHOD_HINTS: Record<string, string[]> = {
+  cash: ["cod", "cash"],
+  cod: ["cod", "cash"],
+  bank_transfer: ["bank", "transfer"],
+  card: ["zidpay", "credit", "card", "mada"],
+  mada: ["mada", "zidpay", "credit", "card"],
+}
+
 // Zid's 401/403 body names what it refused (a missing scope, a bad token) -- kept in the logs,
 // since the error stored on the order is a generic message.
 async function logZidRefusal(response: Response) {
@@ -165,10 +175,11 @@ export class ZidOrderPushService {
     return { id: first.id, type: first.system_option_code ?? "delivery" }
   }
 
-  // https://docs.zid.sa -- GET /managers/store/payment-methods. Matched against Madar's own
-  // paymentMethodCode by substring (case-insensitive) against Zid's own code/name fields, falling
-  // back to the first enabled method -- Zid's real code vocabulary isn't confirmed, so this is a
-  // best-effort match, not a guaranteed-correct one.
+  // https://docs.zid.sa/list-of-payment-method -- GET /managers/store/payment-methods, which
+  // answers {code, payload: [{id, code, name, enabled, type, ...}]} (found live: reading `data`
+  // instead found nothing, and every push failed with "no enabled payment method"). Madar's own
+  // payment code is matched to one of the store's enabled methods by what it means; failing that,
+  // the first enabled method is used.
   private async resolvePaymentMethodId(
     accessToken: string,
     authorizationHeader: string,
@@ -178,6 +189,7 @@ export class ZidOrderPushService {
       headers: {
         authorization: authorizationHeader,
         "x-manager-token": accessToken,
+        "accept-language": "en",
         accept: "application/json",
       },
     })
@@ -190,17 +202,46 @@ export class ZidOrderPushService {
         response.status
       )
     }
-    if (!response.ok) return null
-    const body = (await response.json()) as {
-      data?: Array<{ id?: number; code?: string; name?: string; enabled?: boolean }>
+    const text = await response.text().catch(() => "")
+    if (!response.ok) {
+      console.error("zid.payment_methods_failed", {
+        status: response.status,
+        body: text.slice(0, 500),
+      })
+      return null
     }
-    const enabled = (body.data ?? []).filter((method) => method.enabled && method.id !== undefined)
-    const needle = paymentMethodCode.toLowerCase()
-    const matched = enabled.find(
+    let body: { payload?: unknown; data?: unknown } = {}
+    try {
+      body = JSON.parse(text) as typeof body
+    } catch {
+      // Not JSON -- logged below as "nothing usable".
+    }
+    const list = (
+      Array.isArray(body.payload) ? body.payload : Array.isArray(body.data) ? body.data : []
+    ) as Array<{
+      id?: number | string
+      code?: string
+      name?: string
+      enabled?: boolean | number | string
+    }>
+    const enabled = list.filter(
       (method) =>
-        method.code?.toLowerCase().includes(needle) || method.name?.toLowerCase().includes(needle)
+        method.id !== undefined &&
+        method.id !== null &&
+        (method.enabled === true || method.enabled === 1 || method.enabled === "1")
     )
-    return (matched ?? enabled[0])?.id ?? null
+    if (enabled.length === 0) {
+      console.error("zid.payment_methods_none_enabled", { body: text.slice(0, 800) })
+      return null
+    }
+    const hints = PAYMENT_METHOD_HINTS[paymentMethodCode.toLowerCase()] ?? [
+      paymentMethodCode.toLowerCase(),
+    ]
+    const matched = enabled.find((method) => {
+      const haystack = `${method.code ?? ""} ${method.name ?? ""}`.toLowerCase()
+      return hints.some((hint) => haystack.includes(hint))
+    })
+    return Number((matched ?? enabled[0]).id)
   }
 
   async pushOrder(
