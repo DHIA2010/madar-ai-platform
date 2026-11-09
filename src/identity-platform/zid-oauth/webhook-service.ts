@@ -50,6 +50,31 @@ const ZID_EVENT_TO_ENTITY_TYPE: Record<string, ZidWebhookEntityType> = {
   "customer.merchant.update": "customers",
 }
 
+function zidIdOf(value: unknown): string | null {
+  if (typeof value === "string" || typeof value === "number") return String(value) || null
+  if (!value || typeof value !== "object") return null
+  const record = value as Record<string, unknown>
+  const id = record.id ?? record.product_id ?? record.uuid
+  return typeof id === "string" || typeof id === "number" ? String(id) || null : null
+}
+
+function deletedZidProductIds(body: unknown): string[] {
+  if (Array.isArray(body)) {
+    return [...new Set(body.map(zidIdOf).filter((id): id is string => id !== null))]
+  }
+  if (!body || typeof body !== "object") return []
+  const own = zidIdOf(body)
+  if (own) return [own]
+  const record = body as Record<string, unknown>
+  for (const key of ["ids", "product_ids", "products", "data", "product", "payload"]) {
+    if (record[key] !== undefined) {
+      const nested = deletedZidProductIds(record[key])
+      if (nested.length > 0) return nested
+    }
+  }
+  return []
+}
+
 type WebhookTarget = NonNullable<
   Awaited<ReturnType<ZidOAuthRepository["findWebhookTargetByStoreId"]>>
 >
@@ -81,12 +106,17 @@ export class ZidWebhookService {
     // A product.stock.* delivery's own `id` is the stock entry's id, not the product's -- the
     // product itself is `product_id`. Every other mapped event's body is the product resource
     // itself, so `id` at the top level already is the product's id.
+    if (event === "product.delete") {
+      await this.handleProductDeleteEvent(payload, storeIdHint ?? null)
+      return
+    }
+
     const isStockEvent = event.startsWith("product.stock.")
     const entityId = String((isStockEvent ? payload.product_id : payload.id) ?? "")
 
     console.log("zid.webhook_received", { event, entityId })
 
-    const entityType = event === "product.delete" ? "products" : ZID_EVENT_TO_ENTITY_TYPE[event]
+    const entityType = ZID_EVENT_TO_ENTITY_TYPE[event]
     if (!entityType) {
       console.log("zid.webhook_event_unmapped", { event })
       return
@@ -138,12 +168,46 @@ export class ZidWebhookService {
       return
     }
 
-    if (event === "product.delete") {
-      await this.handleProductDeleted(target, entityId, payload)
+    await this.syncProduct(target, entityId, event)
+  }
+
+  // Found live: a real product.delete delivery has no top-level `id` (unlike product.update), and
+  // Zid's docs don't spell its body out -- so the ids are looked for in every shape it plausibly
+  // takes (the product itself, a wrapper, or a bulk list), and a body none of them match is logged
+  // so the real shape can be read off the logs.
+  private async handleProductDeleteEvent(body: unknown, storeIdHint: string | null) {
+    const ids = deletedZidProductIds(body)
+    console.log("zid.webhook_received", { event: "product.delete", ids })
+    if (ids.length === 0) {
+      console.log("zid.product_delete_unrecognized", {
+        body: JSON.stringify(body).slice(0, 1500),
+      })
       return
     }
 
-    await this.syncProduct(target, entityId, event)
+    const first = (Array.isArray(body) ? body[0] : body) as Record<string, unknown> | undefined
+    const storeId = String(
+      (first && typeof first === "object" ? first.store_id : undefined) ?? storeIdHint ?? ""
+    )
+    const target =
+      (storeId ? await this.oauthRepository.findWebhookTargetByStoreId(storeId) : null) ??
+      (await this.oauthRepository.findWebhookTargetByZidProductId(ids[0]))
+    if (!target) {
+      console.log("zid.webhook_target_unknown", { event: "product.delete", ids, storeId })
+      return
+    }
+    const components = await this.syncRepository.findSyncComponents(target.connectionId)
+    if (!components.products) return
+
+    for (const id of ids) {
+      const payload =
+        Array.isArray(body) && typeof body[0] === "object"
+          ? ((body as Record<string, unknown>[]).find((item) => zidIdOf(item) === id) ?? {})
+          : first && typeof first === "object" && zidIdOf(first) === id
+            ? first
+            : {}
+      await this.handleProductDeleted(target, id, payload)
+    }
   }
 
   // Zid's delete body isn't documented field by field, so the record synced earlier -- which

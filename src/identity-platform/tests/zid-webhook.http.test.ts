@@ -266,6 +266,7 @@ describe("POST /v1/integrations/zid/webhook", () => {
   })
 
   async function promoteZidProduct(product: Record<string, unknown>) {
+    vi.restoreAllMocks()
     vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
       accessToken: "test-access-token",
       authorizationHeader: "Bearer test-access-token",
@@ -329,6 +330,33 @@ describe("POST /v1/integrations/zid/webhook", () => {
       connectionId,
     ])
     expect(records.rows).toHaveLength(0)
+  })
+
+  it("finds the deleted product's id in a bulk list or a wrapped body, not only at the top level", async () => {
+    const org = await seedOrganization()
+    await seedConnectedStore({ ...org, storeId: STORE_ID })
+    await promoteZidProduct(ZID_PRODUCT)
+    const second = { ...ZID_PRODUCT, id: "777002", sku: "ZID-TEA", name: { ar: "شاي" } }
+    await promoteZidProduct(second)
+
+    const live = async () =>
+      (
+        await database.query<{ sku: string }>(
+          `select sku from products where organization_id = $1 and deleted_at is null order by sku`,
+          [org.organizationId]
+        )
+      ).rows.map((row) => row.sku)
+    expect(await live()).toEqual(["ZID-COFFEE", "ZID-TEA"])
+
+    await authedPost(`/v1/integrations/zid/webhook?store_id=${STORE_ID}`, "product.delete", [
+      { id: ZID_PRODUCT.id },
+    ])
+    expect(await live()).toEqual(["ZID-TEA"])
+
+    await authedPost(`/v1/integrations/zid/webhook?store_id=${STORE_ID}`, "product.delete", {
+      product: { id: second.id },
+    })
+    expect(await live()).toEqual([])
   })
 
   it("only unlinks a product someone linked to the deleted Zid product by hand", async () => {
