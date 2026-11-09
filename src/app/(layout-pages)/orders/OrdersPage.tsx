@@ -204,12 +204,31 @@ function PlatformIcon({ platform }: { platform: OrderRecord["platform"] }) {
 }
 
 // Only ever rendered for platform === "Madar" rows -- the three synced platforms have no push
-// concept of their own (sallaPushStatus is undefined for them).
+// concept of their own (their push statuses are undefined).
 const PUSH_STATUS_TINT: Record<NonNullable<OrderRecord["sallaPushStatus"]>, string> = {
   not_applicable: "bg-[#f2f5fa] text-[#5b6b85]",
   pending: "bg-[#fff3e3] text-[#e08b00]",
   pushed: "bg-[#e9f8ef] text-[#1f9d55]",
   failed: "bg-[#fdeeee] text-[#e0484d]",
+}
+
+type PushPlatform = "salla" | "zid"
+
+// The platforms a Madar order was actually sent to: each only gets the lines whose products are
+// linked to it, so one with no such lines ("not_applicable") isn't shown at all.
+function orderPushes(order: OrderRecord) {
+  const pushes: Array<{
+    platform: PushPlatform
+    status: NonNullable<OrderRecord["sallaPushStatus"]>
+  }> = []
+  if (order.platform !== "Madar") return pushes
+  if (order.zidPushStatus && order.zidPushStatus !== "not_applicable") {
+    pushes.push({ platform: "zid", status: order.zidPushStatus })
+  }
+  if (order.sallaPushStatus && order.sallaPushStatus !== "not_applicable") {
+    pushes.push({ platform: "salla", status: order.sallaPushStatus })
+  }
+  return pushes
 }
 
 function getStatusFilterOptions(t: OrdersTranslator) {
@@ -627,28 +646,46 @@ export default function OrdersPage() {
   const [paymentFilter, setPaymentFilter] = useState("All Payment")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [viewedOrder, setViewedOrder] = useState<OrderRecord | null>(null)
-  const [retryingOrderId, setRetryingOrderId] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState<{ orderId: string; platform: PushPlatform } | null>(null)
 
   // order.id here is the "madar:<uuid>" composite id used everywhere else on this page --
   // retry-push only ever operates on the bare madar_orders.id, hence the slice.
-  async function handleRetryPush(order: OrderRecord) {
+  async function handleRetryPush(order: OrderRecord, platform: PushPlatform) {
     const bareId = order.id.startsWith("madar:") ? order.id.slice("madar:".length) : order.id
-    setRetryingOrderId(order.id)
+    const platformName = t(`pushStatus.${platform}`)
+    setRetrying({ orderId: order.id, platform })
     try {
-      const updated = await orderListService.retryPush(bareId)
+      const updated = await orderListService.retryPush(bareId, platform)
       setOrders((current) =>
         current.map((candidate) =>
           candidate.id === order.id
-            ? { ...candidate, sallaPushStatus: updated.sallaPushStatus }
+            ? {
+                ...candidate,
+                sallaPushStatus: updated.sallaPushStatus,
+                zidPushStatus: updated.zidPushStatus,
+              }
             : candidate
         )
       )
-      toast.success(t("pushStatus.retrySuccess"))
+      toast.success(t("pushStatus.retrySuccess", { platform: platformName }))
     } catch (error) {
-      console.error("Failed to retry Salla push", error)
-      toast.error(t("pushStatus.retryError"))
+      console.error(`Failed to retry ${platform} push`, error)
+      // The refusal is recorded on the order either way -- reflect it without a reload.
+      setOrders((current) =>
+        current.map((candidate) =>
+          candidate.id === order.id
+            ? {
+                ...candidate,
+                [platform === "zid" ? "zidPushStatus" : "sallaPushStatus"]: "failed",
+              }
+            : candidate
+        )
+      )
+      toast.error(t("pushStatus.retryError", { platform: platformName }), {
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
-      setRetryingOrderId(null)
+      setRetrying(null)
     }
   }
 
@@ -983,25 +1020,27 @@ export default function OrdersPage() {
                             <PlatformIcon platform={order.platform} />
                           </span>
                           <span className={cn("text-[12px]", MUTED)}>{order.channel}</span>
-                          {order.platform === "Madar" && order.sallaPushStatus ? (
+                          {orderPushes(order).map(({ platform, status }) => (
                             <span
-                              title={t(
-                                `pushStatus.${order.sallaPushStatus === "not_applicable" ? "notApplicable" : order.sallaPushStatus}`
-                              )}
+                              key={platform}
+                              title={t(`pushStatus.${status as "pending" | "pushed" | "failed"}`, {
+                                platform: t(`pushStatus.${platform}`),
+                              })}
                               className={cn(
-                                "flex size-5 shrink-0 items-center justify-center rounded-full",
-                                PUSH_STATUS_TINT[order.sallaPushStatus]
+                                "flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-[10.5px] font-semibold",
+                                PUSH_STATUS_TINT[status]
                               )}
                             >
-                              {order.sallaPushStatus === "pushed" ? (
+                              {status === "pushed" ? (
                                 <CheckCircle2 className="size-3" />
-                              ) : order.sallaPushStatus === "failed" ? (
+                              ) : status === "failed" ? (
                                 <AlertTriangle className="size-3" />
-                              ) : order.sallaPushStatus === "pending" ? (
+                              ) : (
                                 <Loader2 className="size-3 animate-spin" />
-                              ) : null}
+                              )}
+                              {t(`pushStatus.${platform}`)}
                             </span>
-                          ) : null}
+                          ))}
                         </div>
                       </td>
                       <td className={cn("px-3 py-3 text-[12.5px] font-bold tabular-nums", HEADING)}>
@@ -1062,21 +1101,27 @@ export default function OrdersPage() {
                               <Eye className="size-4" />
                               {t("table.viewProducts")}
                             </DropdownMenuItem>
-                            {order.platform === "Madar" && order.sallaPushStatus === "failed" ? (
-                              <DropdownMenuItem
-                                disabled={retryingOrderId === order.id}
-                                className="cursor-pointer gap-2 text-[12.5px]"
-                                onSelect={() => void handleRetryPush(order)}
-                              >
-                                <RotateCw
-                                  className={cn(
-                                    "size-4",
-                                    retryingOrderId === order.id && "animate-spin"
-                                  )}
-                                />
-                                {t("pushStatus.retry")}
-                              </DropdownMenuItem>
-                            ) : null}
+                            {orderPushes(order)
+                              .filter(({ status }) => status === "failed")
+                              .map(({ platform }) => {
+                                const isRetrying =
+                                  retrying?.orderId === order.id && retrying.platform === platform
+                                return (
+                                  <DropdownMenuItem
+                                    key={platform}
+                                    disabled={isRetrying}
+                                    className="cursor-pointer gap-2 text-[12.5px]"
+                                    onSelect={() => void handleRetryPush(order, platform)}
+                                  >
+                                    <RotateCw
+                                      className={cn("size-4", isRetrying && "animate-spin")}
+                                    />
+                                    {t("pushStatus.retry", {
+                                      platform: t(`pushStatus.${platform}`),
+                                    })}
+                                  </DropdownMenuItem>
+                                )
+                              })}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

@@ -43,6 +43,13 @@ const MADAR_ORDER_ERRORS = {
       "business",
       "No connected Salla store was found to push this order to."
     ),
+  noZidConnection: () =>
+    new IdentityError(
+      "MADAR_ORDER_NO_ZID_CONNECTION",
+      409,
+      "business",
+      "No connected Zid store was found to push this order to."
+    ),
   amountTooLarge: () =>
     new IdentityError(
       "MADAR_ORDER_AMOUNT_TOO_LARGE",
@@ -634,10 +641,32 @@ export class MadarOrdersService {
     if (result.rows[0]) throw MADAR_ORDER_ERRORS.variantRequired(result.rows[0].name)
   }
 
-  async retryPush(actor: AuthenticatedActor, orderId: string): Promise<MadarOrderView> {
+  async retryPush(
+    actor: AuthenticatedActor,
+    orderId: string,
+    platform: "salla" | "zid" = "salla"
+  ): Promise<MadarOrderView> {
     const existing = await this.findById(actor.organizationId, orderId)
     if (!existing) throw MADAR_ORDER_ERRORS.notFound()
     if (existing.status === "refunded") throw MADAR_ORDER_ERRORS.refundedOrdersNotPushed()
+
+    if (platform === "zid") {
+      const zidConnection = this.zidOAuthRepository
+        ? await this.zidOAuthRepository.findActiveConnection(
+            actor.organizationId,
+            existing.workspaceId
+          )
+        : null
+      if (!zidConnection) throw MADAR_ORDER_ERRORS.noZidConnection()
+      await this.database.query(
+        `UPDATE madar_orders SET zid_connection_id = $2, updated_at = now() WHERE id = $1`,
+        [orderId, zidConnection.id]
+      )
+      await this.pushToZid(orderId)
+      const updated = await this.findById(actor.organizationId, orderId)
+      if (!updated) throw MADAR_ORDER_ERRORS.notFound()
+      return updated
+    }
 
     const connection = await this.sallaOAuthRepository.findActiveConnection(
       actor.organizationId,
@@ -700,12 +729,38 @@ export class MadarOrdersService {
     if (!row || !row.salla_connection_id) return
     if (row.payment_status === "refunded") return
 
-    const itemRows = await this.database.query<MadarOrderItemRow>(
+    // Only the lines whose product is a Salla product (linked to one, per product or per
+    // variant) -- the same rule pushToZid follows, so an order of Zid or Madar-only products is
+    // never sent to a Salla store that has never heard of them.
+    const allItems = await this.database.query<MadarOrderItemRow>(
       `SELECT id, order_id, product_id, variant_id, product_name, sku, unit_price, quantity, tax_amount,
               discount_amount, line_total, cost_price, weight
          FROM madar_order_items WHERE order_id = $1`,
       [orderId]
     )
+    const links = await this.database.query<{ product_id: string; variant_id: string | null }>(
+      `SELECT l.product_id, l.variant_id
+         FROM salla_product_links l
+         JOIN madar_order_items i ON i.product_id = l.product_id
+        WHERE i.order_id = $1`,
+      [orderId]
+    )
+    const itemRows = {
+      rows: allItems.rows.filter((item) =>
+        links.rows.some(
+          (link) =>
+            link.product_id === item.product_id &&
+            (link.variant_id === null || link.variant_id === item.variant_id)
+        )
+      ),
+    }
+    if (itemRows.rows.length === 0) {
+      await this.database.query(
+        `UPDATE madar_orders SET salla_push_status = 'not_applicable', updated_at = now() WHERE id = $1`,
+        [orderId]
+      )
+      return
+    }
 
     try {
       const pushResult = await this.sallaPushService.pushOrder(row.salla_connection_id, {

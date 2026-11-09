@@ -56,8 +56,11 @@ export interface OrderRecord {
   statusLabel: string
   paymentStatus: PaymentStatus
   createdAt: string
-  // Only ever set for platform === "Madar" -- see MadarOrdersService/SallaOrderPushService.
+  // Only ever set for platform === "Madar" -- see MadarOrdersService. Each platform only gets
+  // the order's lines whose products are linked to it, so an order is usually pushed to one
+  // and "not_applicable" on the other.
   sallaPushStatus?: SallaPushStatus
+  zidPushStatus?: SallaPushStatus
   // Only ever set for platform === "Zid" today -- see orders/service.ts's normalizeZidOrder.
   marketingSource?: {
     medium: string | null
@@ -172,6 +175,7 @@ export interface MadarOrderRecord {
   orderNumber: string
   sallaPushStatus: SallaPushStatus
   sallaOrderId: string | null
+  zidPushStatus: SallaPushStatus
   subtotalAmount: number
   taxAmount: number
   totalAmount: number
@@ -225,19 +229,19 @@ export const orderListService = {
     return client.get<OrderDetail>(endpoint)
   },
 
-  // Creates an order directly in Madar -- if the organization has a connected Salla store, it's
-  // also pushed there as a side effect (see MadarOrdersService.create()); a push failure never
-  // fails this call, it only affects the returned record's own sallaPushStatus.
+  // Creates an order directly in Madar -- its Salla-linked lines are also pushed to a connected
+  // Salla store and its Zid-linked lines to a connected Zid store (see MadarOrdersService.create());
+  // a push failure never fails this call, it only shows in the returned push statuses.
   async createOrder(input: CreateOrderInput): Promise<MadarOrderRecord> {
     return client.post<CreateOrderInput, MadarOrderRecord>(ORDERS_ENDPOINT, input)
   },
 
   // orderId here is the bare madar_orders.id (not the "madar:<id>" composite id used elsewhere
   // in this file) -- this endpoint only ever operates on Madar-created orders.
-  async retryPush(orderId: string): Promise<MadarOrderRecord> {
-    const endpoint = [ORDERS_ENDPOINT, encodeURIComponent(orderId), "retry-push"].join(
+  async retryPush(orderId: string, platform: "salla" | "zid"): Promise<MadarOrderRecord> {
+    const endpoint = `${[ORDERS_ENDPOINT, encodeURIComponent(orderId), "retry-push"].join(
       String.fromCharCode(47)
-    )
+    )}?platform=${platform}`
     return client.post<Record<string, never>, MadarOrderRecord>(endpoint, {})
   },
 }

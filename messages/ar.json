@@ -2472,16 +2472,21 @@
     "newOrder": "طلب جديد",
     "pushStatus": {
       "notApplicable": "محلي فقط",
-      "pending": "جارٍ الإرسال إلى سلة…",
-      "pushed": "مُزامن مع سلة",
-      "failed": "فشلت المزامنة",
-      "retry": "إعادة المزامنة مع سلة",
-      "retrySuccess": "تمت مزامنة الطلب مع سلة بنجاح.",
-      "retryError": "تعذرت مزامنة هذا الطلب مع سلة. حاول مرة أخرى بعد قليل."
+      "pending": "جارٍ الإرسال إلى {platform}…",
+      "pushed": "مُزامن مع {platform}",
+      "failed": "فشلت المزامنة مع {platform}",
+      "retry": "إعادة المزامنة مع {platform}",
+      "retrySuccess": "تمت مزامنة الطلب مع {platform} بنجاح.",
+      "retryError": "تعذرت مزامنة هذا الطلب مع {platform}.",
+      "salla": "سلة",
+      "zid": "زد",
+      "createPushed": "تم إنشاء الطلب {orderNumber} ومزامنته مع {platforms}.",
+      "createPushFailed": "تم إنشاء الطلب {orderNumber}، لكن فشلت مزامنته مع {platforms} — يمكنك إعادة المحاولة من قائمة الطلبات.",
+      "and": " و"
     },
     "create": {
       "heading": "طلب جديد",
-      "subheading": "أنشئ طلبًا مباشرة في مدار — سيتمت مزامنته أيضًا مع متجر سلة المتصل",
+      "subheading": "أنشئ طلبًا مباشرة في مدار — تُرسل منتجات سلة إلى متجر سلة ومنتجات زد إلى متجر زد إن كانا متصلين",
       "sections": {
         "customer": "العميل",
         "receiver": "المستلم",
@@ -2544,8 +2549,6 @@
       "submit": "إنشاء الطلب",
       "cancel": "إلغاء",
       "createSuccess": "تم إنشاء الطلب {orderNumber}.",
-      "createSuccessPushed": "تم إنشاء الطلب {orderNumber} ومزامنته مع سلة.",
-      "createSuccessPushFailed": "تم إنشاء الطلب {orderNumber}، لكن فشلت مزامنته مع سلة — يمكنك إعادة المحاولة من قائمة الطلبات.",
       "createError": "تعذر إنشاء الطلب. تحقق من البيانات وحاول مرة أخرى.",
       "validation": {
         "customerRequired": "أدخل اسم العميل.",

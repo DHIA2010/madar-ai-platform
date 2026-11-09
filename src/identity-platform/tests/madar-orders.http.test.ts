@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { randomUUID } from "node:crypto"
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
@@ -10,6 +11,7 @@ import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/mi
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { SallaIntegrationProvider } from "../integrations/salla/provider"
 import { createIdentityApiServer } from "../interfaces/rest/server"
+import { ZidOAuthService } from "../zid-oauth/service"
 
 let database: PostgresDatabase
 let server: ReturnType<typeof createIdentityApiServer>
@@ -244,6 +246,14 @@ describe("POST /v1/orders: Madar-created orders", () => {
       [variantId]
     )
     expect(Number(variantRow.rows[0].stock)).toBe(3)
+
+    // The variant can still be removed from its product afterwards -- the sale keeps its line.
+    await database.query(`delete from product_variants where id = $1`, [variantId])
+    const line = await database.query<{ variant_id: string | null; product_name: string }>(
+      `select variant_id, product_name from madar_order_items where product_id = $1`,
+      [productId]
+    )
+    expect(line.rows).toEqual([{ variant_id: null, product_name: "قميص" }])
   })
 
   // Found live in stage: a barcode-sized number pasted into the unit price field reached
@@ -352,6 +362,25 @@ describe("POST /v1/orders with a connected Salla store: push + retry", () => {
     })
   }
 
+  // Only lines whose product is linked to Salla are pushed there.
+  async function sallaLinkedOrderPayload(organizationId: string) {
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, product_type, name, stock_quantity)
+       values ($1, $2, 'simple', 'فستان', 10)`,
+      [productId, organizationId]
+    )
+    await database.query(
+      `insert into salla_product_links (id, organization_id, product_id, salla_product_id)
+       values ($1, $2, $3, '7001')`,
+      [randomUUID(), organizationId, productId]
+    )
+    return {
+      ...ORDER_PAYLOAD,
+      items: [{ productId, productName: "فستان", unitPrice: 100, quantity: 2 }],
+    }
+  }
+
   async function connectSallaStore(
     login: { session: { accessToken: string } },
     workspaceId: string
@@ -400,7 +429,7 @@ describe("POST /v1/orders with a connected Salla store: push + retry", () => {
     const createResponse = await fetch(`${baseUrl}/v1/orders`, {
       method: "POST",
       headers: authHeaders(login),
-      body: JSON.stringify(ORDER_PAYLOAD),
+      body: JSON.stringify(await sallaLinkedOrderPayload(actor.organizationId)),
     })
     expect(createResponse.status).toBe(201)
     const created = (await createResponse.json()) as {
@@ -410,6 +439,38 @@ describe("POST /v1/orders with a connected Salla store: push + retry", () => {
     }
     expect(created.sallaPushStatus).toBe("pushed")
     expect(created.sallaOrderId).toBe("555")
+  })
+
+  it("doesn't send Salla an order with no Salla products on it", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "madar-order-not-salla@madar.test",
+      "Not Salla Org"
+    )
+    const workspaceId = actor.workspaceId!
+    await database.query(
+      `insert into projects (id, organization_id, workspace_id, owner_user_id, name, status)
+       values ($1, $2, $3, $4, 'Not Salla Project', 'active') on conflict (id) do nothing`,
+      ["00000000-0000-4000-8000-000000009003", actor.organizationId, workspaceId, actor.userId]
+    )
+    const fetchMock = mockSallaExternalOrders({
+      baseUrl,
+      accessToken: "salla-access-token",
+      refreshToken: "salla-refresh-token",
+      pushBehavior: "success",
+    })
+    await connectSallaStore(login, workspaceId)
+
+    const createResponse = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify(ORDER_PAYLOAD),
+    })
+    const created = (await createResponse.json()) as { sallaPushStatus: string }
+    expect(created.sallaPushStatus).toBe("not_applicable")
+    const pushCalls = fetchMock.mock.calls.filter(([input]) =>
+      String(input).includes("/orders/external")
+    )
+    expect(pushCalls).toHaveLength(0)
   })
 
   it("retries a failed push and recovers once Salla accepts it", async () => {
@@ -436,7 +497,7 @@ describe("POST /v1/orders with a connected Salla store: push + retry", () => {
     const createResponse = await fetch(`${baseUrl}/v1/orders`, {
       method: "POST",
       headers: authHeaders(login),
-      body: JSON.stringify(ORDER_PAYLOAD),
+      body: JSON.stringify(await sallaLinkedOrderPayload(actor.organizationId)),
     })
     const created = (await createResponse.json()) as { id: string; sallaPushStatus: string }
     expect(created.sallaPushStatus).toBe("failed")
@@ -460,5 +521,102 @@ describe("POST /v1/orders with a connected Salla store: push + retry", () => {
     }
     expect(retried.sallaPushStatus).toBe("pushed")
     expect(retried.sallaOrderId).toBe("555")
+  })
+})
+
+describe("POST /v1/orders/:id/retry-push?platform=zid", () => {
+  async function connectZid(organizationId: string, workspaceId: string) {
+    const userId = randomUUID()
+    await database.query(
+      `insert into users (id, email, password_hash, full_name, email_verified_at)
+       values ($1, $2, 'hash', 'Zid Owner', now())`,
+      [userId, `zid-owner-${userId}@madar.test`]
+    )
+    const connectionId = randomUUID()
+    await database.query(
+      `insert into zid_oauth_connections (
+         id, organization_id, workspace_id, project_id, provider_account_id, status,
+         created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1, $2, $3, $4, '3257669', 'connected', $5, $5, now(), now())`,
+      [connectionId, organizationId, workspaceId, randomUUID(), userId]
+    )
+    await database.query(
+      `insert into zid_stores (id, connection_id, account_id, status, is_selected)
+       values ($1, $2, '3257669', 'active', true)`,
+      [randomUUID(), connectionId]
+    )
+  }
+
+  it("says so when no Zid store is connected", async () => {
+    const { login } = await registerAndProvisionOrg("retry-zid-none@madar.test", "No Zid Org")
+    const created = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify(ORDER_PAYLOAD),
+    })
+    const order = (await created.json()) as { id: string; zidPushStatus: string }
+    expect(order.zidPushStatus).toBe("not_applicable")
+
+    const retry = await fetch(`${baseUrl}/v1/orders/${order.id}/retry-push?platform=zid`, {
+      method: "POST",
+      headers: authHeaders(login),
+    })
+    expect(retry.status).toBe(409)
+    expect(((await retry.json()) as { code: string }).code).toBe("MADAR_ORDER_NO_ZID_CONNECTION")
+  })
+
+  it("pushes the order's Zid-linked lines again, reporting and recording Zid's refusal", async () => {
+    const { login, actor } = await registerAndProvisionOrg("retry-zid@madar.test", "Retry Zid Org")
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, product_type, name, stock_quantity)
+       values ($1, $2, 'simple', 'قهوة', 10)`,
+      [productId, actor.organizationId]
+    )
+    await database.query(
+      `insert into zid_product_links (id, organization_id, product_id, zid_product_id, zid_product_sku, created_at, updated_at)
+       values ($1, $2, $3, '8801', 'ZID-COFFEE', now(), now())`,
+      [randomUUID(), actor.organizationId, productId]
+    )
+    const created = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productId, productName: "قهوة", unitPrice: 20, quantity: 1 }],
+      }),
+    })
+    const order = (await created.json()) as { id: string }
+
+    await connectZid(actor.organizationId, actor.workspaceId!)
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "zid-access-token",
+      authorizationHeader: "Bearer zid-access-token",
+    })
+    const nativeFetch = globalThis.fetch
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      return new Response(JSON.stringify({ message: "Invalid scope(s) provided." }), {
+        status: 401,
+      })
+    })
+
+    const retry = await fetch(`${baseUrl}/v1/orders/${order.id}/retry-push?platform=zid`, {
+      method: "POST",
+      headers: authHeaders(login),
+    })
+    // A manual retry reports Zid's refusal back to the caller, and the order keeps the outcome.
+    expect(retry.status).toBe(401)
+    expect(((await retry.json()) as { code: string }).code).toBe("ZID_PUSH_UNAUTHORIZED")
+    const row = await database.query<{ zid_push_status: string; zid_push_error_code: string }>(
+      `select zid_push_status, zid_push_error_code from madar_orders where id = $1`,
+      [order.id]
+    )
+    expect(row.rows[0]).toEqual({
+      zid_push_status: "failed",
+      zid_push_error_code: "ZID_PUSH_UNAUTHORIZED",
+    })
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).includes("api.zid.sa"))).toBe(true)
   })
 })

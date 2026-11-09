@@ -2472,16 +2472,21 @@
     "newOrder": "New order",
     "pushStatus": {
       "notApplicable": "Local only",
-      "pending": "Pushing to Salla…",
-      "pushed": "Synced to Salla",
-      "failed": "Push failed",
-      "retry": "Retry push to Salla",
-      "retrySuccess": "Order pushed to Salla successfully.",
-      "retryError": "Couldn't push this order to Salla. Try again shortly."
+      "pending": "Pushing to {platform}…",
+      "pushed": "Synced to {platform}",
+      "failed": "Push to {platform} failed",
+      "retry": "Retry push to {platform}",
+      "retrySuccess": "Order pushed to {platform} successfully.",
+      "retryError": "Couldn't push this order to {platform}.",
+      "salla": "Salla",
+      "zid": "Zid",
+      "createPushed": "Order {orderNumber} created and synced to {platforms}.",
+      "createPushFailed": "Order {orderNumber} was created, but syncing it to {platforms} failed — you can retry from the orders list.",
+      "and": " and "
     },
     "create": {
       "heading": "New order",
-      "subheading": "Create an order directly in Madar — it will also sync to your connected Salla store",
+      "subheading": "Create an order directly in Madar — its Salla products go to your Salla store and its Zid products to your Zid store, when connected",
       "sections": {
         "customer": "Customer",
         "receiver": "Receiver",
@@ -2544,8 +2549,6 @@
       "submit": "Create order",
       "cancel": "Cancel",
       "createSuccess": "Order {orderNumber} created.",
-      "createSuccessPushed": "Order {orderNumber} created and synced to Salla.",
-      "createSuccessPushFailed": "Order {orderNumber} created, but the push to Salla failed — you can retry it from the orders list.",
       "createError": "Couldn't create the order. Check the form and try again.",
       "validation": {
         "customerRequired": "Enter the customer's name.",

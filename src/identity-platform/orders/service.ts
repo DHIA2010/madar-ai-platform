@@ -88,6 +88,10 @@ export interface OrderSummaryView {
   // merchant's connected Salla store yet (see MadarOrdersService/SallaOrderPushService).
   // undefined for every synced provider, which never has a push concept of its own.
   sallaPushStatus?: "not_applicable" | "pending" | "pushed" | "failed"
+  // Same, for the order's push to a connected Zid store -- each platform only gets the lines
+  // whose products are linked to it, so an order can be "pushed" on one and not applicable on
+  // the other.
+  zidPushStatus?: "not_applicable" | "pending" | "pushed" | "failed"
   // Only ever set for platform === "Zid" today -- read from the order's own marketing_source
   // field (docs.zid.sa's MarketingChannelSource_Order schema; see normalizeZidOrder below).
   // Salla doesn't have a confirmed equivalent field yet (see attribution/repository.ts's
@@ -363,6 +367,7 @@ interface MadarOrderAggregateRow {
   currency: string
   created_at: Date | string
   salla_push_status: string
+  zid_push_status: string
   [key: string]: unknown
 }
 
@@ -398,6 +403,7 @@ function normalizeMadarOrder(
     paymentStatus,
     createdAt: toIsoDate(row.created_at),
     sallaPushStatus: row.salla_push_status as OrderSummaryView["sallaPushStatus"],
+    zidPushStatus: row.zid_push_status as OrderSummaryView["zidPushStatus"],
   }
 }
 
@@ -742,7 +748,8 @@ export class OrdersAggregationService {
       name: "orders-aggregation-madar",
       text: `
         SELECT o.id, o.order_number, o.customer_name, o.status, o.payment_status,
-               o.total_amount, o.currency, o.created_at, o.salla_push_status
+               o.total_amount, o.currency, o.created_at, o.salla_push_status,
+               o.zid_push_status
         FROM madar_orders o
         WHERE o.organization_id = $1
           AND ($2::uuid IS NULL OR o.workspace_id = $2::uuid)

@@ -248,10 +248,29 @@ export function OrderCreateScreen() {
     setSubmitting(true)
     try {
       const order = await orderListService.createOrder(payload)
-      if (order.sallaPushStatus === "pushed") {
-        toast.success(t("create.createSuccessPushed", { orderNumber: order.orderNumber }))
-      } else if (order.sallaPushStatus === "failed") {
-        toast.success(t("create.createSuccessPushFailed", { orderNumber: order.orderNumber }))
+      const pushes = [
+        { name: t("pushStatus.zid"), status: order.zidPushStatus },
+        { name: t("pushStatus.salla"), status: order.sallaPushStatus },
+      ]
+      const namesWith = (status: string) =>
+        pushes
+          .filter((push) => push.status === status)
+          .map((push) => push.name)
+          .join(t("pushStatus.and"))
+      if (namesWith("failed")) {
+        toast.success(
+          t("pushStatus.createPushFailed", {
+            orderNumber: order.orderNumber,
+            platforms: namesWith("failed"),
+          })
+        )
+      } else if (namesWith("pushed")) {
+        toast.success(
+          t("pushStatus.createPushed", {
+            orderNumber: order.orderNumber,
+            platforms: namesWith("pushed"),
+          })
+        )
       } else {
         toast.success(t("create.createSuccess", { orderNumber: order.orderNumber }))
       }

@@ -7118,7 +7118,8 @@ export function createIdentityApiServer(
         if (!actor.modulePermissions.includes("orders:manage")) throw ERRORS.forbidden()
 
         const orderId = decodeURIComponent(orderRetryPushMatch[1])
-        const order = await madarOrdersService.retryPush(actor, orderId)
+        const platform = url.searchParams.get("platform") === "zid" ? "zid" : "salla"
+        const order = await madarOrdersService.retryPush(actor, orderId, platform)
         return send(200, order)
       }
 
