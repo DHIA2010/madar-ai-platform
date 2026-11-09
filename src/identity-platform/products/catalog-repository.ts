@@ -575,7 +575,7 @@ export class ProductCatalogRepository {
       await this.database.query(`DELETE FROM product_variant_options WHERE product_id = $1`, [
         input.id,
       ])
-      await this.database.query(`DELETE FROM product_variants WHERE product_id = $1`, [input.id])
+      await this.syncVariants(input.id, input.product.variants)
 
       const components = await this.materializeCustomComponents({
         organizationId: input.organizationId,
@@ -586,10 +586,84 @@ export class ProductCatalogRepository {
         components: input.product.components,
       })
 
-      await this.insertChildren(input.id, { ...input.product, components })
+      await this.insertChildren(input.id, { ...input.product, components, variants: [] })
     })
 
     return updated ? this.findById(input.organizationId, input.id) : null
+  }
+
+  // A variant keeps its id across an edit when its option values are unchanged: sales lines
+  // (madar_order_items, pos_invoice_items) and storefront links point at that id, so rewriting
+  // every variant -- as the other children are -- would orphan them, or fail outright on the
+  // foreign key (found live: a Zid sync of a product with one sold variant). Only a variant
+  // that is really gone is deleted.
+  private async syncVariants(productId: string, variants: CreateProductInput["variants"]) {
+    const existing = await this.database.query<{ id: string; option_values: unknown }>(
+      `SELECT id, option_values FROM product_variants WHERE product_id = $1`,
+      [productId]
+    )
+    const keyOf = (values: unknown) =>
+      JSON.stringify(typeof values === "string" ? JSON.parse(values) : values)
+    const unmatched = new Map<string, string[]>()
+    for (const row of existing.rows) {
+      const key = keyOf(row.option_values)
+      unmatched.set(key, [...(unmatched.get(key) ?? []), row.id])
+    }
+
+    const matchedIds = variants.map(
+      (variant) => unmatched.get(keyOf(variant.optionValues))?.shift() ?? null
+    )
+    const keptIds = new Set(matchedIds.filter((id): id is string => id !== null))
+
+    const removed = existing.rows.map((row) => row.id).filter((id) => !keptIds.has(id))
+    if (removed.length > 0) {
+      const placeholders = removed.map((_, index) => `$${index + 1}`).join(", ")
+      await this.database.query(
+        `DELETE FROM product_variants WHERE id IN (${placeholders})`,
+        removed
+      )
+    }
+    // Two kept variants may swap SKUs; cleared first so uq_product_variants_org_sku never sees
+    // the same SKU twice part-way through.
+    if (keptIds.size > 0) {
+      await this.database.query(`UPDATE product_variants SET sku = NULL WHERE product_id = $1`, [
+        productId,
+      ])
+    }
+
+    for (const [index, variant] of variants.entries()) {
+      const id = matchedIds[index]
+      if (id) {
+        await this.database.query(
+          `UPDATE product_variants
+              SET sku = $2, price = $3, stock = $4, option_values = $5::jsonb, position = $6
+            WHERE id = $1`,
+          [
+            id,
+            variant.sku,
+            variant.price,
+            variant.stock,
+            JSON.stringify(variant.optionValues),
+            index,
+          ]
+        )
+      } else {
+        await this.database.query(
+          `INSERT INTO product_variants (
+             id, product_id, sku, price, stock, option_values, position
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+          [
+            randomUUID(),
+            productId,
+            variant.sku,
+            variant.price,
+            variant.stock,
+            JSON.stringify(variant.optionValues),
+            index,
+          ]
+        )
+      }
+    }
   }
 
   // The product and its children are one unit: a bundle with no components or a variable

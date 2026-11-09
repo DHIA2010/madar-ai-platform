@@ -194,6 +194,33 @@ describe("ZidProductPromotionService.promoteOrSync", () => {
     }
   })
 
+  // Found live: a re-sync rewrote every variant with a new id, which failed on the foreign key
+  // once one of them had been sold (and would have orphaned its sales lines otherwise).
+  it("keeps each variant's id across a re-sync, removing only the variant Zid dropped", async () => {
+    await service.promoteOrSync(organizationId, null, PARENT_PAYLOAD)
+    const idsBySku = async () =>
+      new Map(
+        (
+          await database.query<{ id: string; sku: string }>(
+            `select v.id, v.sku from product_variants v join products p on p.id = v.product_id
+              where p.organization_id = $1`,
+            [organizationId]
+          )
+        ).rows.map((row) => [row.sku, row.id])
+      )
+    const before = await idsBySku()
+
+    await service.promoteOrSync(organizationId, null, {
+      ...PARENT_PAYLOAD,
+      variants: (PARENT_PAYLOAD.variants ?? []).slice(0, 2),
+    })
+
+    const after = await idsBySku()
+    expect([...after.keys()].sort()).toEqual(["SPRAY-12-S", "SPRAY-55-S"])
+    expect(after.get("SPRAY-12-S")).toBe(before.get("SPRAY-12-S"))
+    expect(after.get("SPRAY-55-S")).toBe(before.get("SPRAY-55-S"))
+  })
+
   it("turns a product that gained variants into a variable product in place", async () => {
     await service.promoteOrSync(organizationId, null, { ...PARENT_PAYLOAD, variants: [] })
     const before = await database.query<{ id: string; product_type: string }>(
