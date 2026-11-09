@@ -104,8 +104,20 @@ function describePushError(error: unknown, providerName = "Salla"): string {
   }
   // Zid's own error body shape (confirmed live, this session's other Zid work): {status,
   // message: {description}}, nothing like Salla's {error:{fields}} above.
-  const zidDescription = (details as { message?: { description?: string } })?.message?.description
-  if (zidDescription) return `${error.message} (${zidDescription})`.slice(0, 2000)
+  const zidMessage = (
+    details as {
+      message?: {
+        description?: string | null
+        validations?: Array<{ field?: string; errors?: string[] }>
+      }
+    }
+  )?.message
+  // A 422 lists each refused field (docs.zid.sa: message.validations[{field, errors}]).
+  const validations = (zidMessage?.validations ?? [])
+    .map((entry) => `${entry.field ?? "?"}: ${(entry.errors ?? []).join("; ")}`)
+    .join(" | ")
+  if (validations) return `${error.message} (${validations})`.slice(0, 2000)
+  if (zidMessage?.description) return `${error.message} (${zidMessage.description})`.slice(0, 2000)
   return error.message
 }
 
@@ -958,7 +970,16 @@ export class MadarOrdersService {
           WHERE id = $1`,
         [orderId, code, message]
       )
-      throw error
+      // A manual retry shows this to the merchant -- with Zid's own reason, not just "rejected".
+      throw error instanceof IntegrationProviderError
+        ? new IntegrationProviderError(
+            message,
+            error.code,
+            error.retryable,
+            error.status,
+            error.details
+          )
+        : error
     }
   }
 

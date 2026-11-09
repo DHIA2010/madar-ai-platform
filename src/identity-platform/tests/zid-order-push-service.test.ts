@@ -52,7 +52,9 @@ describe("mapMadarOrderToZidDraft", () => {
 
     expect(payload).toMatchObject({
       currency_code: "SAR",
-      coupon_code: "",
+      coupon_code: null,
+      customer_comment: null,
+      created_by: "api",
       customer: {
         full_name: "Test Customer",
         mobile_country_code: "966",
@@ -70,7 +72,15 @@ describe("mapMadarOrderToZidDraft", () => {
           line_2: "Olaya",
           city_name: "Riyadh",
           country_code: "SA",
-          meta: { postcode: "12345" },
+          lat: null,
+          lng: null,
+          short_address: null,
+          meta: {
+            postcode: "12345",
+            building_number: "",
+            additional_number: "",
+            city_name: "Riyadh",
+          },
         },
       },
       is_gift: false,
@@ -134,9 +144,12 @@ describe("ZidOrderPushService.pushOrder", () => {
         )
       }
       if (url.includes("/managers/store/drafts")) {
-        return new Response(JSON.stringify(options.draftBody ?? { data: { id: "999" } }), {
-          status: options.draftStatus ?? 201,
-        })
+        return new Response(
+          JSON.stringify(options.draftBody ?? { status: "object", order: { id: 999 } }),
+          {
+            status: options.draftStatus ?? 201,
+          }
+        )
       }
       throw new Error(`unexpected fetch: ${url}`)
     })
@@ -169,6 +182,39 @@ describe("ZidOrderPushService.pushOrder", () => {
     expect(await methodFor("cash")).toEqual({ id: 20 })
     // Bank transfer is disabled on this store -- the first enabled method stands in.
     expect(await methodFor("bank_transfer")).toEqual({ id: 20 })
+  })
+
+  it("sends a pickup order with the store's pickup option, and a shipped one with delivery", async () => {
+    const service = new ZidOrderPushService(new ZidOAuthService({} as never))
+    const shippingFor = async (deliveryMethod: "pickup" | "shipping") => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+        const url = String(rawInput)
+        if (url.includes("/delivery-options")) {
+          return new Response(
+            JSON.stringify({
+              delivery_options: [
+                { id: 10, system_option_code: "delivery" },
+                { id: 11, system_option_code: "pickup" },
+              ],
+            })
+          )
+        }
+        if (url.includes("/payment-methods")) {
+          return new Response(
+            JSON.stringify({ payload: [{ id: 20, code: "zid_cod", enabled: true }] })
+          )
+        }
+        return new Response(JSON.stringify({ order: { id: 5 } }), { status: 200 })
+      })
+      await service.pushOrder("connection-1", { ...BASE_ORDER, deliveryMethod }, [
+        { zidSku: "ZID-SKU-1", quantity: 1 },
+      ])
+      const draftCall = fetchSpy.mock.calls.find((call) => String(call[0]).includes("/drafts"))
+      fetchSpy.mockRestore()
+      return JSON.parse(String(draftCall?.[1]?.body)).shipping_method
+    }
+    expect(await shippingFor("pickup")).toEqual({ id: 11, type: "pickup" })
+    expect(await shippingFor("shipping")).toEqual({ id: 10, type: "delivery" })
   })
 
   it("throws ZID_PUSH_NO_LINKED_ITEMS when no items are given", async () => {

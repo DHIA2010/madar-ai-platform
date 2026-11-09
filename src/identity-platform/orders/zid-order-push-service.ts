@@ -84,9 +84,13 @@ export function mapMadarOrderToZidDraft(
     : splitPhone(order.receiver.phone, order.receiver.countryCode)
   const consigneePhone = splitPhone(order.receiver.phone, order.receiver.countryCode)
 
+  // docs.zid.sa/create-order-20612055e0: every address field is required, unknown ones as null
+  // (lat/lng/short_address) or "" (meta), and an absent coupon/comment is null -- an empty string
+  // coupon is looked up as a code.
+  const address = order.shipTo
   return {
     currency_code: order.currency,
-    coupon_code: order.discountCode ?? "",
+    coupon_code: order.discountCode?.trim() || null,
     customer: {
       full_name: order.customerName,
       mobile_country_code: customerPhone.countryCode,
@@ -100,27 +104,28 @@ export function mapMadarOrderToZidDraft(
         mobile_number: consigneePhone.number,
         email: order.receiver.email ?? "",
       },
-      address: order.shipTo
-        ? {
-            line_1: order.shipTo.address ?? "",
-            line_2: order.shipTo.district ?? "",
-            city_name: order.shipTo.city,
-            country_code: order.shipTo.country,
-            meta: { postcode: order.shipTo.postalCode ?? "" },
-          }
-        : {
-            line_1: "",
-            city_name: "",
-            country_code: order.receiver.countryCode,
-            meta: {},
-          },
+      address: {
+        line_1: address?.address ?? "",
+        line_2: address?.district ?? "",
+        city_name: address?.city ?? "",
+        country_code: address?.country ?? order.receiver.countryCode,
+        lat: null,
+        lng: null,
+        short_address: null,
+        meta: {
+          postcode: address?.postalCode ?? "",
+          building_number: "",
+          additional_number: "",
+          city_name: address?.city ?? "",
+        },
+      },
     },
     is_gift: false,
     is_gifted_consignee_notifiable: false,
     products: items.map((item) => ({ sku: item.zidSku, quantity: item.quantity })),
     shipping_method: { id: shippingMethod.id, type: shippingMethod.type },
     payment_method: { id: paymentMethodId },
-    customer_comment: "",
+    customer_comment: null,
     created_by: "api",
   }
 }
@@ -145,7 +150,8 @@ export class ZidOrderPushService {
   // delivery options configured would need a real per-order choice this pass doesn't have.
   private async resolveShippingMethod(
     accessToken: string,
-    authorizationHeader: string
+    authorizationHeader: string,
+    deliveryMethod: "shipping" | "pickup" | null
   ): Promise<ResolvedShippingMethod | null> {
     const response = await fetch(
       `${this.apiBaseUrl}/managers/store/delivery-options?payload_type=simple`,
@@ -170,9 +176,16 @@ export class ZidOrderPushService {
     const body = (await response.json()) as {
       delivery_options?: Array<{ id?: number; system_option_code?: string }>
     }
-    const first = body.delivery_options?.[0]
-    if (!first || first.id === undefined) return null
-    return { id: first.id, type: first.system_option_code ?? "delivery" }
+    const options = (body.delivery_options ?? []).filter((option) => option.id !== undefined)
+    // A pickup order goes to the store's pickup option when it has one; otherwise (and for a
+    // shipped order) the first option.
+    const isPickup = (option: { system_option_code?: string }) =>
+      /pick/i.test(option.system_option_code ?? "")
+    const chosen =
+      (deliveryMethod === "pickup" ? options.find(isPickup) : options.find((o) => !isPickup(o))) ??
+      options[0]
+    if (!chosen || chosen.id === undefined) return null
+    return { id: chosen.id, type: chosen.system_option_code ?? "delivery" }
   }
 
   // https://docs.zid.sa/list-of-payment-method -- GET /managers/store/payment-methods, which
@@ -264,7 +277,11 @@ export class ZidOrderPushService {
     const { accessToken, authorizationHeader } =
       await this.zidOAuthService.resolveAccessToken(connectionId)
 
-    const shippingMethod = await this.resolveShippingMethod(accessToken, authorizationHeader)
+    const shippingMethod = await this.resolveShippingMethod(
+      accessToken,
+      authorizationHeader,
+      order.deliveryMethod
+    )
     if (!shippingMethod) {
       throw new IntegrationProviderError(
         "Zid has no delivery option configured for this store.",
@@ -312,7 +329,17 @@ export class ZidOrderPushService {
     }
 
     if (!response.ok) {
-      const body = await response.json().catch(() => null)
+      const text = await response.text().catch(() => "")
+      let body: unknown = null
+      try {
+        body = JSON.parse(text)
+      } catch {
+        body = text
+      }
+      console.error("zid.order_push_rejected", {
+        status: response.status,
+        body: text.slice(0, 1500),
+      })
       throw new IntegrationProviderError(
         "Zid rejected the order payload.",
         "ZID_PUSH_VALIDATION_FAILED",
@@ -322,7 +349,11 @@ export class ZidOrderPushService {
       )
     }
 
-    const body = (await response.json()) as { data?: { id?: string | number } }
-    return { zidOrderId: String(body.data?.id ?? "") }
+    // docs.zid.sa: the created draft comes back as `order`.
+    const body = (await response.json()) as {
+      order?: { id?: string | number }
+      data?: { id?: string | number }
+    }
+    return { zidOrderId: String(body.order?.id ?? body.data?.id ?? "") }
   }
 }
