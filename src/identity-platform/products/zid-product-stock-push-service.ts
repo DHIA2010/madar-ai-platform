@@ -167,9 +167,13 @@ export class ZidProductStockPushService {
     // wrong quantity, matching the docs' own "set the quantity to null when unlimited" guidance.
     const isInfinite = quantity >= INFINITE_STOCK_SENTINEL
     // Zid takes no negative figure (minimum 0) -- an oversold product is simply out of stock there.
+    // Found live: this endpoint answers 403 "Authentication credentials were not provided." to the
+    // product endpoints' `access-token` header -- like every other Manager endpoint Madar calls
+    // (drafts, delivery options, payment methods, webhooks), it reads the token from
+    // X-Manager-Token.
     const response = await fetch(`${this.apiBaseUrl}/locations/${locationId}/stock-update/`, {
       method: "POST",
-      headers,
+      headers: { ...headers, "x-manager-token": accessToken },
       body: JSON.stringify([
         {
           product_id: zidProductId,
