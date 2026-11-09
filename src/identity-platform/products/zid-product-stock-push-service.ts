@@ -118,11 +118,11 @@ export class ZidProductStockPushService {
     return stock === null || stock === undefined ? null : Number(stock)
   }
 
-  // Confirmed via docs.zid.sa ("Update Single Product Stock"): a product's stock is a list of
-  // per-location entries (stocks[]), each with its own id -- unlike push-to-create's initial POST
-  // (which accepts a flat `quantity` and auto-creates a default location), updating an existing
-  // product's stock means PATCHing that specific location entry, so its id has to be looked up
-  // first. The sandbox store used for every other Zid finding this session has exactly one
+  // docs.zid.sa "Update Product Stock for Location": POST /locations/{location_id}/stock-update/
+  // with [{product_id, available_quantity, is_infinite}], under the inventories.read_write scope.
+  // Found live: the older per-entry PATCH /products/{id}/stocks/{stock_id}/ answers every call
+  // with 403 "Insufficient role privileges", whatever scopes the app holds. The location comes
+  // from the product's own stocks[] (each entry carries location.id); the sandbox store has one
   // location ("Default"), so only stocks[0] is targeted -- a product with several real locations
   // would need a real per-location mapping this pass doesn't have.
   private async pushQuantity(
@@ -132,8 +132,7 @@ export class ZidProductStockPushService {
     zidProductId: string,
     quantity: number
   ): Promise<void> {
-    // Found live: without Authorization, Zid answers every stock PATCH with 403 (reads go
-    // through on the access token alone) -- docs.zid.sa marks both headers required.
+    // docs.zid.sa marks Authorization, Access-Token, Store-Id and Role all required.
     const headers = {
       authorization: authorizationHeader,
       "access-token": accessToken,
@@ -154,9 +153,11 @@ export class ZidProductStockPushService {
       })
       return
     }
-    const product = (await productResponse.json()) as { stocks?: Array<{ id?: string }> }
-    const stockId = product.stocks?.[0]?.id
-    if (!stockId) {
+    const product = (await productResponse.json()) as {
+      stocks?: Array<{ location?: { id?: string } | null }>
+    }
+    const locationId = product.stocks?.[0]?.location?.id
+    if (!locationId) {
       console.error("zid.stock_push_no_stock_location", { zidProductId })
       return
     }
@@ -165,13 +166,17 @@ export class ZidProductStockPushService {
     // (see zid-product-mapper.ts) -- pushed back as is_infinite: true rather than a concrete,
     // wrong quantity, matching the docs' own "set the quantity to null when unlimited" guidance.
     const isInfinite = quantity >= INFINITE_STOCK_SENTINEL
-    const response = await fetch(`${this.apiBaseUrl}/products/${zidProductId}/stocks/${stockId}/`, {
-      method: "PATCH",
+    // Zid takes no negative figure (minimum 0) -- an oversold product is simply out of stock there.
+    const response = await fetch(`${this.apiBaseUrl}/locations/${locationId}/stock-update/`, {
+      method: "POST",
       headers,
-      body: JSON.stringify({
-        available_quantity: isInfinite ? null : quantity,
-        is_infinite: isInfinite,
-      }),
+      body: JSON.stringify([
+        {
+          product_id: zidProductId,
+          available_quantity: isInfinite ? 0 : Math.max(0, Math.floor(quantity)),
+          is_infinite: isInfinite,
+        },
+      ]),
     })
     if (!response.ok) {
       const body = await response.text().catch(() => "")

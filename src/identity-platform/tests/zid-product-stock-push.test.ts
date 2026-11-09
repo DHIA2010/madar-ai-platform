@@ -82,7 +82,7 @@ async function insertProduct(stockQuantity: number): Promise<string> {
 
 function mockFetchSequence(productGetBody: unknown, patchStatus = 200) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (_rawInput, init) => {
-    if (init?.method === "PATCH") {
+    if (init?.method === "POST") {
       return new Response("{}", { status: patchStatus })
     }
     return new Response(JSON.stringify(productGetBody), { status: 200 })
@@ -90,7 +90,7 @@ function mockFetchSequence(productGetBody: unknown, patchStatus = 200) {
 }
 
 describe("ZidProductStockPushService.pushStockForLines", () => {
-  it("re-fetches the product's stock-location id, then PATCHes that entry with the current figure", async () => {
+  it("re-fetches the product's stock location, then posts the current figure to that location", async () => {
     const productId = await insertProduct(42)
     await linksService.upsertLink(
       organizationId,
@@ -100,7 +100,9 @@ describe("ZidProductStockPushService.pushStockForLines", () => {
 
     const fetchSpy = mockFetchSequence({
       id: "555",
-      stocks: [{ id: "stock-location-1", is_infinite: false, available_quantity: 10 }],
+      stocks: [
+        { id: "stock-1", location: { id: "loc-1" }, is_infinite: false, available_quantity: 10 },
+      ],
     })
 
     await pushService.pushStockForLines(organizationId, null, [{ productId }], -1)
@@ -109,17 +111,16 @@ describe("ZidProductStockPushService.pushStockForLines", () => {
     const [getUrl] = fetchSpy.mock.calls[0]
     expect(String(getUrl)).toContain("/products/555/")
     const [patchUrl, patchInit] = fetchSpy.mock.calls[1]
-    expect(String(patchUrl)).toContain("/products/555/stocks/stock-location-1/")
-    expect(patchInit?.method).toBe("PATCH")
+    expect(String(patchUrl)).toContain("/locations/loc-1/stock-update/")
+    expect(patchInit?.method).toBe("POST")
     // Zid refuses a stock write without the Authorization header (found live: 403).
     expect(patchInit?.headers).toMatchObject({
       authorization: "Bearer test-access-token",
       "access-token": "test-access-token",
     })
-    expect(JSON.parse(String(patchInit?.body))).toEqual({
-      available_quantity: 42,
-      is_infinite: false,
-    })
+    expect(JSON.parse(String(patchInit?.body))).toEqual([
+      { product_id: "555", available_quantity: 42, is_infinite: false },
+    ])
   })
 
   it("pushes a sold variant's own stock to the Zid child it is linked to", async () => {
@@ -148,17 +149,23 @@ describe("ZidProductStockPushService.pushStockForLines", () => {
     )
     const fetchSpy = mockFetchSequence({
       id: "child-a",
-      stocks: [{ id: "child-stock-1", is_infinite: false, available_quantity: 7 }],
+      stocks: [
+        {
+          id: "child-stock-1",
+          location: { id: "loc-1" },
+          is_infinite: false,
+          available_quantity: 7,
+        },
+      ],
     })
 
     await pushService.pushStockForLines(organizationId, null, [{ productId, variantId }], -1)
 
     const [patchUrl, patchInit] = fetchSpy.mock.calls[1]
-    expect(String(patchUrl)).toContain("/products/child-a/stocks/child-stock-1/")
-    expect(JSON.parse(String(patchInit?.body))).toEqual({
-      available_quantity: 6,
-      is_infinite: false,
-    })
+    expect(String(patchUrl)).toContain("/locations/loc-1/stock-update/")
+    expect(JSON.parse(String(patchInit?.body))).toEqual([
+      { product_id: "child-a", available_quantity: 6, is_infinite: false },
+    ])
   })
 
   it("pushes is_infinite: true instead of the sentinel figure for a product Zid tracks as unlimited", async () => {
@@ -174,16 +181,17 @@ describe("ZidProductStockPushService.pushStockForLines", () => {
 
     const fetchSpy = mockFetchSequence({
       id: "555",
-      stocks: [{ id: "stock-location-1", is_infinite: true, available_quantity: null }],
+      stocks: [
+        { id: "stock-1", location: { id: "loc-1" }, is_infinite: true, available_quantity: null },
+      ],
     })
 
     await pushService.pushStockForLines(organizationId, null, [{ productId }], -1)
 
     const [, patchInit] = fetchSpy.mock.calls[1]
-    expect(JSON.parse(String(patchInit?.body))).toEqual({
-      available_quantity: null,
-      is_infinite: true,
-    })
+    expect(JSON.parse(String(patchInit?.body))).toEqual([
+      { product_id: "555", available_quantity: 0, is_infinite: true },
+    ])
   })
 
   it("is a silent no-op for a line with no link at all", async () => {
