@@ -71,8 +71,11 @@ export class ZidProductStockPushService {
     if (!storeId) return
 
     let accessToken: string
+    let authorizationHeader: string
     try {
-      ;({ accessToken } = await this.zidOAuthService.resolveAccessToken(connection.id))
+      ;({ accessToken, authorizationHeader } = await this.zidOAuthService.resolveAccessToken(
+        connection.id
+      ))
     } catch (error) {
       console.error("zid.stock_push_access_token_failed", error)
       return
@@ -84,7 +87,13 @@ export class ZidProductStockPushService {
       try {
         const currentStock = await this.readCurrentStock(target.productId, target.variantId)
         if (currentStock === null) continue
-        await this.pushQuantity(accessToken, storeId, zidProductId, currentStock)
+        await this.pushQuantity(
+          accessToken,
+          authorizationHeader,
+          storeId,
+          zidProductId,
+          currentStock
+        )
       } catch (error) {
         // One failing product must never block another's push.
         console.error("zid.stock_push_failed", { zidProductId, error })
@@ -118,11 +127,15 @@ export class ZidProductStockPushService {
   // would need a real per-location mapping this pass doesn't have.
   private async pushQuantity(
     accessToken: string,
+    authorizationHeader: string,
     storeId: string,
     zidProductId: string,
     quantity: number
   ): Promise<void> {
+    // Found live: without Authorization, Zid answers every stock PATCH with 403 (reads go
+    // through on the access token alone) -- docs.zid.sa marks both headers required.
     const headers = {
+      authorization: authorizationHeader,
       "access-token": accessToken,
       "store-id": storeId,
       "accept-language": "en",
@@ -161,7 +174,12 @@ export class ZidProductStockPushService {
       }),
     })
     if (!response.ok) {
-      console.error("zid.stock_push_rejected", { zidProductId, status: response.status })
+      const body = await response.text().catch(() => "")
+      console.error("zid.stock_push_rejected", {
+        zidProductId,
+        status: response.status,
+        body: body.slice(0, 500),
+      })
     }
   }
 }

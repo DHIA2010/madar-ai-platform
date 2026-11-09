@@ -111,6 +111,11 @@ describe("ZidProductStockPushService.pushStockForLines", () => {
     const [patchUrl, patchInit] = fetchSpy.mock.calls[1]
     expect(String(patchUrl)).toContain("/products/555/stocks/stock-location-1/")
     expect(patchInit?.method).toBe("PATCH")
+    // Zid refuses a stock write without the Authorization header (found live: 403).
+    expect(patchInit?.headers).toMatchObject({
+      authorization: "Bearer test-access-token",
+      "access-token": "test-access-token",
+    })
     expect(JSON.parse(String(patchInit?.body))).toEqual({
       available_quantity: 42,
       is_infinite: false,

@@ -4,6 +4,17 @@ import type { MadarOrderPushInput } from "./salla-order-push-service"
 
 const DEFAULT_ZID_API_BASE_URL = "https://api.zid.sa/v1"
 
+// Zid's 401/403 body names what it refused (a missing scope, a bad token) -- kept in the logs,
+// since the error stored on the order is a generic message.
+async function logZidRefusal(response: Response) {
+  const body = await response.text().catch(() => "")
+  console.error("zid.order_push_refused", {
+    url: response.url,
+    status: response.status,
+    body: body.slice(0, 500),
+  })
+}
+
 // https://docs.zid.sa/create-order-20612055e0 -- POST /managers/store/drafts, Zid's own
 // "merchant creates an order on the customer's behalf" endpoint, the closest equivalent to
 // Salla's /orders/external push. Needs the third_create_order scope (docs.zid.sa lists both
@@ -137,6 +148,7 @@ export class ZidOrderPushService {
       }
     )
     if (response.status === 401 || response.status === 403) {
+      await logZidRefusal(response)
       throw new IntegrationProviderError(
         "Zid rejected the push -- the connection is missing a required scope.",
         "ZID_PUSH_UNAUTHORIZED",
@@ -170,6 +182,7 @@ export class ZidOrderPushService {
       },
     })
     if (response.status === 401 || response.status === 403) {
+      await logZidRefusal(response)
       throw new IntegrationProviderError(
         "Zid rejected the push -- the connection is missing a required scope.",
         "ZID_PUSH_UNAUTHORIZED",
@@ -248,6 +261,7 @@ export class ZidOrderPushService {
     })
 
     if (response.status === 401 || response.status === 403) {
+      await logZidRefusal(response)
       throw new IntegrationProviderError(
         "Zid rejected the push -- the connection is missing the third_create_order scope.",
         "ZID_PUSH_UNAUTHORIZED",
