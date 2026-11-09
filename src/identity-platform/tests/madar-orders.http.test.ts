@@ -525,6 +525,45 @@ describe("POST /v1/orders with a connected Salla store: push + retry", () => {
 })
 
 describe("POST /v1/orders/:id/retry-push?platform=zid", () => {
+  it("asks for the store's address before sending a pickup order Zid would refuse", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "retry-zid-address@madar.test",
+      "No Address Org"
+    )
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, product_type, name, stock_quantity)
+       values ($1, $2, 'simple', 'شاي', 10)`,
+      [productId, actor.organizationId]
+    )
+    await database.query(
+      `insert into zid_product_links (id, organization_id, product_id, zid_product_id, zid_product_sku, created_at, updated_at)
+       values ($1, $2, $3, '8802', 'ZID-TEA', now(), now())`,
+      [randomUUID(), actor.organizationId, productId]
+    )
+    const created = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productId, productName: "شاي", unitPrice: 10, quantity: 1 }],
+      }),
+    })
+    const order = (await created.json()) as { id: string }
+    await connectZid(actor.organizationId, actor.workspaceId!)
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "zid-access-token",
+      authorizationHeader: "Bearer zid-access-token",
+    })
+
+    const retry = await fetch(`${baseUrl}/v1/orders/${order.id}/retry-push?platform=zid`, {
+      method: "POST",
+      headers: authHeaders(login),
+    })
+    expect(retry.status).toBe(422)
+    expect(((await retry.json()) as { code: string }).code).toBe("ZID_PUSH_NO_ADDRESS")
+  })
+
   async function connectZid(organizationId: string, workspaceId: string) {
     const userId = randomUUID()
     await database.query(
@@ -588,6 +627,20 @@ describe("POST /v1/orders/:id/retry-push?platform=zid", () => {
     })
     const order = (await created.json()) as { id: string }
 
+    // A pickup order is sent with the store's own address (Settings -> General).
+    const current = await database.query<{ settings: Record<string, unknown> | null }>(
+      `select settings from organizations where id = $1`,
+      [actor.organizationId]
+    )
+    await database.query(`update organizations set settings = $2::jsonb where id = $1`, [
+      actor.organizationId,
+      JSON.stringify({
+        ...(current.rows[0]?.settings ?? {}),
+        city: "الرياض",
+        district: "العليا",
+        street: "طريق الملك فهد",
+      }),
+    ])
     await connectZid(actor.organizationId, actor.workspaceId!)
     vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
       accessToken: "zid-access-token",

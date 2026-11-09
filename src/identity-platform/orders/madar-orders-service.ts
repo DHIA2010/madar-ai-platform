@@ -931,6 +931,8 @@ export class MadarOrdersService {
             notify: row.receiver_notify,
           },
           deliveryMethod: row.delivery_method as "shipping" | "pickup" | null,
+          // A pickup order has no address of its own, and Zid requires one -- it's the store's
+          // (where the customer collects), from Settings -> General's national address.
           shipTo: row.ship_to_country
             ? {
                 country: row.ship_to_country,
@@ -939,7 +941,7 @@ export class MadarOrdersService {
                 address: row.ship_to_address,
                 postalCode: row.ship_to_postal_code,
               }
-            : null,
+            : await this.storeAddress(row.organization_id),
           courierId: row.courier_id,
           shippingCost: Number(row.shipping_cost),
           discountCode: row.discount_code,
@@ -980,6 +982,33 @@ export class MadarOrdersService {
             error.details
           )
         : error
+    }
+  }
+
+  // The store's national address (Settings -> General), in an order's ship-to shape -- null when
+  // the store hasn't entered a city.
+  private async storeAddress(organizationId: string): Promise<{
+    country: string
+    city: string
+    district: string | null
+    address: string | null
+    postalCode: string | null
+  } | null> {
+    const result = await this.database.query<{ settings: Record<string, unknown> | null }>(
+      `SELECT settings FROM organizations WHERE id = $1`,
+      [organizationId]
+    )
+    const settings = result.rows[0]?.settings ?? {}
+    const text = (key: string) =>
+      typeof settings[key] === "string" ? String(settings[key]).trim() : ""
+    if (!text("city")) return null
+    const street = [text("buildingNumber"), text("street")].filter(Boolean).join(" ")
+    return {
+      country: "SA",
+      city: text("city"),
+      district: text("district") || null,
+      address: street || text("addressShort") || null,
+      postalCode: text("postalCode") || null,
     }
   }
 

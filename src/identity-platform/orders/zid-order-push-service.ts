@@ -104,9 +104,11 @@ export function mapMadarOrderToZidDraft(
         mobile_number: consigneePhone.number,
         email: order.receiver.email ?? "",
       },
+      // Zid requires both lines and the city filled in: a missing line falls back to what the
+      // address does have (its district, then its city).
       address: {
-        line_1: address?.address ?? "",
-        line_2: address?.district ?? "",
+        line_1: address?.address?.trim() || address?.district?.trim() || address?.city || "",
+        line_2: address?.district?.trim() || address?.city || "",
         city_name: address?.city ?? "",
         country_code: address?.country ?? order.receiver.countryCode,
         lat: null,
@@ -276,6 +278,15 @@ export class ZidOrderPushService {
 
     const { accessToken, authorizationHeader } =
       await this.zidOAuthService.resolveAccessToken(connectionId)
+
+    if (!order.shipTo?.city?.trim()) {
+      throw new IntegrationProviderError(
+        "Zid needs an address for every order: add the store's address (at least the city) in Settings -> General, or a shipping city on the order.",
+        "ZID_PUSH_NO_ADDRESS",
+        false,
+        422
+      )
+    }
 
     const shippingMethod = await this.resolveShippingMethod(
       accessToken,
