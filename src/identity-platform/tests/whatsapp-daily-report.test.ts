@@ -14,8 +14,10 @@ import {
   dailyReportParameters,
   renderDailyReport,
   reportDayFor,
+  reportWindow,
   WhatsAppDailyReportService,
 } from "../whatsapp/daily-report"
+import { AddonsService } from "../subscriptions/addons"
 import { WhatsAppPlatformService } from "../whatsapp/platform-config"
 import { DAILY_REPORT_TEMPLATE, WhatsAppTemplatesService } from "../whatsapp/templates"
 
@@ -24,6 +26,7 @@ const WS = "30000000-0000-0000-0000-000000000001"
 const USER = "10000000-0000-0000-0000-000000000001"
 let database: PostgresDatabase
 let service: WhatsAppDailyReportService
+let addons: AddonsService
 
 beforeEach(async () => {
   process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET = "12345678901234567890123456789012"
@@ -53,11 +56,13 @@ beforeEach(async () => {
       apiVersion: "v26.0",
     }),
   })
+  addons = new AddonsService(database)
   service = new WhatsAppDailyReportService(
     database,
     platform,
     new WhatsAppTemplatesService(platform),
-    null
+    null,
+    addons
   )
 })
 
@@ -200,6 +205,8 @@ describe("WhatsAppDailyReportService", () => {
       }
       return json({})
     })
+    // Two numbers need the paid plan.
+    await addons.extend(ORG, "whatsapp_daily_report", "yearly", "grant")
     await service.updateSettings(ORG, USER, {
       enabled: true,
       sendTime: "09:00",
@@ -228,5 +235,196 @@ describe("WhatsAppDailyReportService", () => {
     expect((await service.runDue(new Date("2026-01-15T10:00:00Z"))).organizations).toBe(0)
     // The next day: again.
     expect((await service.runDue(new Date("2026-01-16T06:05:00Z"))).organizations).toBe(1)
+  })
+
+  it("works out each send's period: the default, a chosen from-to, overnight and a full day", () => {
+    const at = (iso: string) => new Date(iso)
+    // 16:00 Riyadh = 13:00 UTC.
+    expect(reportWindow(at("2026-01-15T13:00:00Z"), { from: "08:00", to: "16:00" })).toEqual({
+      start: "2026-01-15T05:00:00.000Z",
+      end: "2026-01-15T13:00:00.000Z",
+      label: "2026-01-15 من 08:00 إلى 16:00",
+    })
+    // Sent at 00:05 Riyadh, covering 16:00-24:00 the evening before.
+    expect(reportWindow(at("2026-01-15T21:05:00Z"), { from: "16:00", to: "00:00" })).toEqual({
+      start: "2026-01-15T13:00:00.000Z",
+      end: "2026-01-15T21:00:00.000Z",
+      label: "2026-01-15 من 16:00 إلى 24:00",
+    })
+    // Crossing midnight: 20:00 the day before to 08:00.
+    expect(reportWindow(at("2026-01-16T05:00:00Z"), { from: "20:00", to: "08:00" }).label).toBe(
+      "2026-01-15 20:00 إلى 2026-01-16 08:00"
+    )
+    // A whole day when from and to are both midnight.
+    expect(reportWindow(at("2026-01-16T06:00:00Z"), { from: "00:00", to: "00:00" }).label).toBe(
+      "2026-01-15"
+    )
+    // The default: the whole day before for a morning send, today so far for a later one.
+    expect(reportWindow(at("2026-01-16T06:00:00Z"), { from: null, to: null }).label).toBe(
+      "2026-01-15"
+    )
+    expect(reportWindow(at("2026-01-16T17:00:00Z"), { from: null, to: null }).label).toBe(
+      "2026-01-16 من 00:00 إلى 20:00"
+    )
+  })
+
+  it("keeps the free plan to one number, one send and the default period", async () => {
+    const settings = await service.getSettings(ORG)
+    expect(settings.plan).toEqual({
+      paid: false,
+      until: null,
+      limits: { recipients: 1, schedules: 1, customPeriod: false },
+    })
+    const twoNumbers = {
+      enabled: true,
+      sendTime: "09:00",
+      recipients: [
+        { phone: "0501234567", name: "" },
+        { phone: "0559876543", name: "" },
+      ],
+    }
+    await expect(service.updateSettings(ORG, USER, twoNumbers)).rejects.toMatchObject({
+      code: "DAILY_REPORT_PLAN_LIMIT",
+    })
+    const one = [{ phone: "0501234567", name: "" }]
+    await expect(
+      service.updateSettings(ORG, USER, {
+        enabled: true,
+        schedules: [{ sendTime: "09:00" }, { sendTime: "16:00" }],
+        recipients: one,
+      })
+    ).rejects.toMatchObject({ code: "DAILY_REPORT_PLAN_LIMIT" })
+    await expect(
+      service.updateSettings(ORG, USER, {
+        enabled: true,
+        schedules: [{ sendTime: "16:00", from: "08:00", to: "16:00" }],
+        recipients: one,
+      })
+    ).rejects.toMatchObject({ code: "DAILY_REPORT_PLAN_LIMIT" })
+  })
+
+  it("on the paid plan sends up to three reports a day, each covering its own period", async () => {
+    const sent: Array<{
+      template: { components: Array<{ parameters: Array<{ text: string }> }> }
+    }> = []
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input))
+      const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
+      if (url.pathname.endsWith("/message_templates")) {
+        return json({
+          data: [{ name: DAILY_REPORT_TEMPLATE.name, language: "ar", status: "APPROVED" }],
+        })
+      }
+      if (url.pathname.endsWith("/messages")) {
+        sent.push(JSON.parse(String(init?.body)))
+        return json({ messages: [{ id: `wamid.${sent.length}` }] })
+      }
+      return json({})
+    })
+    await addons.extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    const saved = await service.updateSettings(ORG, USER, {
+      enabled: true,
+      schedules: [
+        { sendTime: "16:00", from: "08:00", to: "16:00" },
+        { sendTime: "00:05", from: "16:00", to: "00:00" },
+        { sendTime: "12:00" },
+      ],
+      recipients: [{ phone: "0501234567", name: "" }],
+    })
+    expect(saved.schedules.map((schedule) => schedule.sendTime)).toEqual([
+      "00:05",
+      "12:00",
+      "16:00",
+    ])
+    expect(saved.coverage).toHaveLength(3)
+
+    // 00:10 Riyadh on the 15th: only the 00:05 send is due, covering the 14th 16:00-24:00.
+    expect(await service.runDue(new Date("2026-01-14T21:10:00Z"))).toEqual({
+      organizations: 1,
+      sent: 1,
+      failed: 0,
+    })
+    const firstLine = (index: number) => sent[index].template.components[0].parameters[0].text
+    expect(firstLine(0)).toBe("2026-01-14 من 16:00 إلى 24:00")
+    // 16:30: the 12:00 and 16:00 sends go out, each once.
+    expect((await service.runDue(new Date("2026-01-15T13:30:00Z"))).sent).toBe(2)
+    expect(firstLine(2)).toBe("2026-01-15 من 08:00 إلى 16:00")
+    expect((await service.runDue(new Date("2026-01-15T14:00:00Z"))).sent).toBe(0)
+  })
+
+  it("goes back to the free plan when the add-on lapses, keeping the settings", async () => {
+    await addons.extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    await service.updateSettings(ORG, USER, {
+      enabled: true,
+      schedules: [{ sendTime: "09:00", from: "08:00", to: "09:00" }, { sendTime: "21:00" }],
+      recipients: [
+        { phone: "0501234567", name: "" },
+        { phone: "0559876543", name: "" },
+      ],
+    })
+    await addons.revoke(ORG, "whatsapp_daily_report")
+    const settings = await service.getSettings(ORG)
+    expect(settings.plan.paid).toBe(false)
+    expect(settings.schedules).toHaveLength(2)
+    expect(settings.coverage).toHaveLength(1)
+  })
+
+  it("doesn't resend a report already sent today before per-send claims existed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input))
+      const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
+      if (url.pathname.endsWith("/message_templates")) {
+        return json({
+          data: [{ name: DAILY_REPORT_TEMPLATE.name, language: "ar", status: "APPROVED" }],
+        })
+      }
+      return json({ messages: [{ id: "wamid.1" }] })
+    })
+    await database.query(
+      `insert into whatsapp_daily_report_settings (organization_id, enabled, send_time, recipients, last_sent_on)
+       values ($1, true, '00:00', $2::jsonb, '2026-01-15')`,
+      [ORG, JSON.stringify([{ phone: "966501234567", name: "" }])]
+    )
+    expect((await service.runDue(new Date("2026-01-15T07:00:00Z"))).organizations).toBe(0)
+    expect((await service.runDue(new Date("2026-01-16T07:00:00Z"))).organizations).toBe(1)
+  })
+
+  it("runs a chosen period past midnight when each end names its day", async () => {
+    // Sent at 03:00 Riyadh on the 16th (00:00 UTC): yesterday 00:00 to today 02:00 -- 26 hours.
+    const window = reportWindow(new Date("2026-01-16T00:00:00Z"), {
+      from: "00:00",
+      fromDay: -1,
+      to: "02:00",
+      toDay: 0,
+    })
+    expect(window).toEqual({
+      start: "2026-01-14T21:00:00.000Z",
+      end: "2026-01-15T23:00:00.000Z",
+      label: "2026-01-15 00:00 إلى 2026-01-16 02:00",
+    })
+
+    await addons.extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    const recipients = [{ phone: "0501234567", name: "" }]
+    const saved = await service.updateSettings(ORG, USER, {
+      enabled: true,
+      schedules: [{ sendTime: "03:00", from: "00:00", fromDay: -1, to: "02:00", toDay: 0 }],
+      recipients,
+    })
+    expect(saved.schedules[0]).toMatchObject({ fromDay: -1, toDay: 0 })
+    // Ending after the send, or starting after the end, is refused.
+    await expect(
+      service.updateSettings(ORG, USER, {
+        enabled: true,
+        schedules: [{ sendTime: "03:00", from: "00:00", fromDay: -1, to: "04:00", toDay: 0 }],
+        recipients,
+      })
+    ).rejects.toMatchObject({ code: "DAILY_REPORT_INVALID_PERIOD" })
+    await expect(
+      service.updateSettings(ORG, USER, {
+        enabled: true,
+        schedules: [{ sendTime: "03:00", from: "02:00", fromDay: 0, to: "01:00", toDay: 0 }],
+        recipients,
+      })
+    ).rejects.toMatchObject({ code: "DAILY_REPORT_INVALID_PERIOD" })
   })
 })

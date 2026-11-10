@@ -129,6 +129,7 @@ import { ApplicationAccessService } from "../../subscriptions/app-access"
 import { invoiceIdFromLinkToken, invoiceWhatsAppLink } from "../../whatsapp/invoice-links"
 import { registerDailyReportService, WhatsAppDailyReportService } from "../../whatsapp/daily-report"
 import { WhatsAppMerchantConnectionService } from "../../whatsapp/merchant-connection"
+import { AddonsService } from "../../subscriptions/addons"
 import { PackageEntitlementsService } from "../../subscriptions/entitlements"
 import { BranchAllowanceService } from "../../subscriptions/branches"
 import { MoyasarBillingService } from "../../billing/moyasar/service"
@@ -139,6 +140,7 @@ import {
   confirmCheckoutSchema,
   couponQuoteSchema,
   createBranchCheckoutSchema,
+  createAddonCheckoutSchema,
   createCheckoutIntentSchema,
 } from "../../billing/moyasar/schemas"
 import type { MoyasarWebhookPayload } from "../../billing/moyasar/types"
@@ -1068,7 +1070,8 @@ export function createIdentityApiServer(
           container.infrastructure.database,
           whatsAppPlatformService,
           whatsAppTemplatesService,
-          posShiftsService ?? null
+          posShiftsService ?? null,
+          new AddonsService(container.infrastructure.database)
         )
       : null
   registerDailyReportService(whatsAppDailyReportService)
@@ -4508,6 +4511,37 @@ export function createIdentityApiServer(
         )
       }
 
+      // A period of a paid add-on (subscriptions/addons.ts), e.g. the WhatsApp daily report's
+      // paid plan.
+      if (url.pathname === "/v1/billing/moyasar/addon-checkout" && method === "POST") {
+        if (!moyasarBillingService) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          201,
+          await moyasarBillingService.createAddonCheckout(
+            actor,
+            createAddonCheckoutSchema.parse(await readJsonBody(request))
+          )
+        )
+      }
+
+      // The paid add-ons, their prices, and the organization's own while they run.
+      if (url.pathname === "/v1/addons" && method === "GET") {
+        if (!container.infrastructure.database) return send(200, { items: [] })
+        return send(200, {
+          items: await new AddonsService(container.infrastructure.database).overview(
+            actor.organizationId
+          ),
+        })
+      }
+
       // Branches added to the running POS / Madar Complete subscription (see subscriptions/branches.ts).
       if (url.pathname === "/v1/billing/moyasar/branches/checkout" && method === "POST") {
         if (!moyasarBillingService) {
@@ -6664,8 +6698,8 @@ export function createIdentityApiServer(
           return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
         }
         if (!actor.modulePermissions.includes("settings:edit")) throw ERRORS.forbidden()
-        const { day } = await whatsAppDailyReportService.preview(actor.organizationId)
-        return send(200, await whatsAppDailyReportService.send(actor.organizationId, day))
+        const window = await whatsAppDailyReportService.windowNow(actor.organizationId)
+        return send(200, await whatsAppDailyReportService.send(actor.organizationId, window))
       }
 
       // What the organization's plans unlock (subscriptions/entitlements.ts) -- for the app to show

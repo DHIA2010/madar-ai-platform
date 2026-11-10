@@ -5,6 +5,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { PAYMENT_METHOD_CATALOG, type PaymentKind } from "../pos/payment-methods-service"
 import type { PosShiftsService } from "../pos/shifts-service"
 import { ReadyReportsRepository } from "../reports/ready-reports-repository"
+import type { AddonsService } from "../subscriptions/addons"
 import { toWhatsAppNumber } from "./invoice-sender"
 import { sendTemplateMessage } from "./messaging"
 import type { WhatsAppPlatformService } from "./platform-config"
@@ -15,30 +16,87 @@ import { DAILY_REPORT_TEMPLATE, type WhatsAppTemplatesService } from "./template
 // organization chose -- sales, purchases, expenses, returns, shifts, payment methods, best
 // sellers and low stock for the day, across all its branches.
 //
-// Which day: a morning send (before noon) reports the day before; a later one reports the day it
-// is sent on, up to that moment -- so 09:00 brings yesterday's closing figures and 23:00 brings
-// today's.
+// Which period: by default a morning send (before noon) reports the whole day before, and a later
+// one reports the day it is sent on, up to that moment -- so 09:00 brings yesterday's closing
+// figures and 23:00 brings today's.
+//
+// Plans: every package includes the free report -- one number, one send a day, the default
+// period. The paid add-on (subscriptions/addons.ts, "whatsapp_daily_report") allows up to five
+// numbers and three sends a day, each covering a period of the merchant's choosing (from-to,
+// Riyadh time). When the add-on lapses, the settings stay but only the first send and number
+// are used, with the default period.
 
 export interface DailyReportRecipient {
   phone: string
   name: string
 }
 
+// One send a day: when ("HH:MM", Riyadh), and the period it covers -- from/to "HH:MM", or both
+// null for the default period. Each end of a chosen period names its day relative to the send
+// (fromDay/toDay: 0 the send day, -1 the day before), so a period can run past midnight and past
+// a whole day -- yesterday 00:00 to today 02:00 covers 26 hours. Without the days (periods saved
+// before they existed), the period ends at the last `to` at or before the send and starts at the
+// last `from` before that.
+export interface DailyReportSchedule {
+  sendTime: string
+  from: string | null
+  to: string | null
+  fromDay?: -1 | 0 | null
+  toDay?: -1 | 0 | null
+}
+
+export interface DailyReportLimits {
+  recipients: number
+  schedules: number
+  customPeriod: boolean
+}
+
+export const FREE_DAILY_REPORT_LIMITS: DailyReportLimits = {
+  recipients: 1,
+  schedules: 1,
+  customPeriod: false,
+}
+export const PAID_DAILY_REPORT_LIMITS: DailyReportLimits = {
+  recipients: 5,
+  schedules: 3,
+  customPeriod: true,
+}
+export const DAILY_REPORT_ADDON = "whatsapp_daily_report"
+
+export interface DailyReportWindow {
+  start: string
+  end: string
+  // As the report's first line shows it, e.g. "2026-11-11 من 08:00 إلى 16:00".
+  label: string
+}
+
 export interface DailyReportSettings {
   enabled: boolean
-  // "HH:MM", Riyadh time.
+  // The first send's time -- kept for older clients.
   sendTime: string
+  schedules: DailyReportSchedule[]
   recipients: DailyReportRecipient[]
   lastSentOn: string | null
+  plan: { paid: boolean; until: string | null; limits: DailyReportLimits }
+  // The period each send covers on its next run, in the order of `schedules` (only the sends
+  // the current plan uses).
+  coverage: Array<{ sendTime: string } & DailyReportWindow>
 }
 
 export interface DailyReportSettingsInput {
   enabled: boolean
-  sendTime: string
+  sendTime?: string
+  schedules?: Array<{
+    sendTime: string
+    from?: string | null
+    to?: string | null
+    fromDay?: number | null
+    toDay?: number | null
+  }>
   recipients: DailyReportRecipient[]
 }
 
-export const MAX_DAILY_REPORT_RECIPIENTS = 5
+export const MAX_DAILY_REPORT_RECIPIENTS = PAID_DAILY_REPORT_LIMITS.recipients
 
 // Saudi Arabia has no daylight saving: Riyadh is always UTC+3.
 const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000
@@ -65,6 +123,68 @@ export function reportDayFor(now: Date): string {
   return riyadhTime(now) < "12:00" ? shiftDay(today, -1) : today
 }
 
+// The instant a Riyadh day and "HH:MM" stand for.
+function riyadhMoment(day: string, time: string): Date {
+  return new Date(new Date(`${day}T${time}:00.000Z`).getTime() - RIYADH_OFFSET_MS)
+}
+
+// The period a send at `sendAt` covers (see DailyReportSchedule).
+export function reportWindow(
+  sendAt: Date,
+  period: {
+    from: string | null
+    to: string | null
+    fromDay?: number | null
+    toDay?: number | null
+  }
+): DailyReportWindow {
+  let start: Date
+  let end: Date
+  if (period.from && period.to && isDayOffset(period.fromDay) && isDayOffset(period.toDay)) {
+    const day = riyadhDay(sendAt)
+    end = riyadhMoment(shiftDay(day, period.toDay), period.to)
+    start = riyadhMoment(shiftDay(day, period.fromDay), period.from)
+  } else if (period.from && period.to) {
+    const day = riyadhDay(sendAt)
+    end = riyadhMoment(day, period.to)
+    if (end.getTime() > sendAt.getTime()) end = riyadhMoment(shiftDay(day, -1), period.to)
+    const endDay = riyadhDay(end)
+    start = riyadhMoment(endDay, period.from)
+    if (start.getTime() >= end.getTime()) start = riyadhMoment(shiftDay(endDay, -1), period.from)
+  } else {
+    const day = reportDayFor(sendAt)
+    const bounds = dayBounds(day)
+    start = bounds.start
+    end = day === riyadhDay(sendAt) ? sendAt : bounds.end
+  }
+  return { start: start.toISOString(), end: end.toISOString(), label: windowLabel(start, end) }
+}
+
+const isDayOffset = (value: unknown): value is -1 | 0 => value === -1 || value === 0
+
+// Whether a chosen period makes sense for its send: it ends no later than the send and starts
+// before it ends.
+export function isValidPeriod(schedule: DailyReportSchedule): boolean {
+  if (!schedule.from || !schedule.to) return true
+  if (!isDayOffset(schedule.fromDay) || !isDayOffset(schedule.toDay)) return true
+  const sendAt = riyadhMoment("2026-01-15", schedule.sendTime)
+  const window = reportWindow(sendAt, schedule)
+  return (
+    new Date(window.end).getTime() <= sendAt.getTime() &&
+    new Date(window.start).getTime() < new Date(window.end).getTime()
+  )
+}
+
+function windowLabel(start: Date, end: Date): string {
+  const startDay = riyadhDay(start)
+  const lastDay = riyadhDay(new Date(end.getTime() - 1))
+  const from = riyadhTime(start)
+  const to = riyadhTime(end) === "00:00" ? "24:00" : riyadhTime(end)
+  if (startDay === lastDay && from === "00:00" && to === "24:00") return startDay
+  if (startDay === lastDay) return `${startDay} من ${from} إلى ${to}`
+  return `${startDay} ${from} إلى ${lastDay} ${to}`
+}
+
 const amount = (value: number) =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Math.round(value * 100) / 100)
 
@@ -76,6 +196,7 @@ function param(value: string): string {
 }
 
 export interface DailyReport {
+  // The period the figures cover, as the report's first line shows it.
   day: string
   sales: number
   purchases: number
@@ -126,6 +247,26 @@ const KIND_BY_CODE = new Map<string, PaymentKind>(
 
 const isValidTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
 
+const planLimit = (message: string) =>
+  new IdentityError("DAILY_REPORT_PLAN_LIMIT", 403, "business", message)
+
+function parseSchedules(raw: unknown, legacySendTime: string): DailyReportSchedule[] {
+  const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw
+  const list = Array.isArray(value) ? (value as Array<Partial<DailyReportSchedule>>) : []
+  const schedules = list
+    .filter((entry) => typeof entry?.sendTime === "string" && isValidTime(entry.sendTime))
+    .map((entry) => ({
+      sendTime: entry.sendTime as string,
+      from: typeof entry.from === "string" && isValidTime(entry.from) ? entry.from : null,
+      to: typeof entry.to === "string" && isValidTime(entry.to) ? entry.to : null,
+      fromDay: isDayOffset(entry.fromDay) ? entry.fromDay : null,
+      toDay: isDayOffset(entry.toDay) ? entry.toDay : null,
+    }))
+  return schedules.length > 0
+    ? schedules
+    : [{ sendTime: legacySendTime, from: null, to: null, fromDay: null, toDay: null }]
+}
+
 export class WhatsAppDailyReportService {
   private readonly readyReports: ReadyReportsRepository
 
@@ -133,29 +274,49 @@ export class WhatsAppDailyReportService {
     private readonly db: PostgresDatabase,
     private readonly platform: WhatsAppPlatformService,
     private readonly templates: WhatsAppTemplatesService,
-    private readonly shifts: PosShiftsService | null
+    private readonly shifts: PosShiftsService | null,
+    // Optional: without it every organization is on the free plan.
+    private readonly addons: AddonsService | null = null
   ) {
     this.readyReports = new ReadyReportsRepository(db)
   }
 
-  async getSettings(organizationId: string): Promise<DailyReportSettings> {
+  // The organization's plan: the paid add-on while it runs, the free report otherwise.
+  async plan(organizationId: string): Promise<DailyReportSettings["plan"]> {
+    const active = this.addons
+      ? await this.addons.active(organizationId, DAILY_REPORT_ADDON).catch(() => null)
+      : null
+    return active
+      ? { paid: true, until: active.currentPeriodEnd, limits: PAID_DAILY_REPORT_LIMITS }
+      : { paid: false, until: null, limits: FREE_DAILY_REPORT_LIMITS }
+  }
+
+  private async storedSettings(organizationId: string) {
     const result = await this.db.query<{
       enabled: boolean
       send_time: string
+      schedules: unknown
       recipients: unknown
       last_sent_on: unknown
     }>(
-      `SELECT enabled, send_time, recipients, last_sent_on FROM whatsapp_daily_report_settings
-        WHERE organization_id = $1`,
+      `SELECT enabled, send_time, schedules, recipients, last_sent_on
+         FROM whatsapp_daily_report_settings WHERE organization_id = $1`,
       [organizationId]
     )
     const row = result.rows[0]
-    if (!row) return { enabled: false, sendTime: "23:00", recipients: [], lastSentOn: null }
+    if (!row) {
+      return {
+        enabled: false,
+        schedules: [{ sendTime: "23:00", from: null, to: null, fromDay: null, toDay: null }],
+        recipients: [] as DailyReportRecipient[],
+        lastSentOn: null as string | null,
+      }
+    }
     const recipients =
       typeof row.recipients === "string" ? JSON.parse(row.recipients) : row.recipients
     return {
       enabled: row.enabled,
-      sendTime: row.send_time,
+      schedules: parseSchedules(row.schedules, row.send_time),
       recipients: Array.isArray(recipients) ? (recipients as DailyReportRecipient[]) : [],
       lastSentOn: row.last_sent_on
         ? (row.last_sent_on instanceof Date
@@ -168,14 +329,97 @@ export class WhatsAppDailyReportService {
     }
   }
 
+  // What the plan lets the stored settings do: its number of sends and numbers, and the default
+  // period on the free plan.
+  private effective(
+    stored: { schedules: DailyReportSchedule[]; recipients: DailyReportRecipient[] },
+    limits: DailyReportLimits
+  ) {
+    return {
+      schedules: stored.schedules
+        .slice(0, limits.schedules)
+        .map((schedule) =>
+          limits.customPeriod
+            ? schedule
+            : { ...schedule, from: null, to: null, fromDay: null, toDay: null }
+        ),
+      recipients: stored.recipients.slice(0, limits.recipients),
+    }
+  }
+
+  async getSettings(organizationId: string, now = new Date()): Promise<DailyReportSettings> {
+    const [stored, plan] = await Promise.all([
+      this.storedSettings(organizationId),
+      this.plan(organizationId),
+    ])
+    const { schedules } = this.effective(stored, plan.limits)
+    const today = riyadhDay(now)
+    return {
+      enabled: stored.enabled,
+      sendTime: stored.schedules[0]?.sendTime ?? "23:00",
+      schedules: stored.schedules,
+      recipients: stored.recipients,
+      lastSentOn: stored.lastSentOn,
+      plan,
+      coverage: schedules.map((schedule) => {
+        // The next run: today's when its time hasn't passed yet, tomorrow's otherwise.
+        const todayRun = riyadhMoment(today, schedule.sendTime)
+        const run =
+          todayRun.getTime() >= now.getTime()
+            ? todayRun
+            : riyadhMoment(shiftDay(today, 1), schedule.sendTime)
+        return { sendTime: schedule.sendTime, ...reportWindow(run, schedule) }
+      }),
+    }
+  }
+
   async updateSettings(
     organizationId: string,
     actorUserId: string | null,
     input: DailyReportSettingsInput
   ): Promise<DailyReportSettings> {
-    if (!isValidTime(input.sendTime)) {
-      throw new IdentityError("DAILY_REPORT_INVALID_TIME", 400, "validation", "Pick a valid time.")
+    const requested = input.schedules?.length
+      ? input.schedules
+      : [{ sendTime: input.sendTime ?? "23:00", from: null, to: null, fromDay: null, toDay: null }]
+    const schedules: DailyReportSchedule[] = []
+    for (const entry of requested) {
+      const from = entry.from || null
+      const to = entry.to || null
+      if (
+        !isValidTime(entry.sendTime) ||
+        (from !== null && !isValidTime(from)) ||
+        (to !== null && !isValidTime(to)) ||
+        (from === null) !== (to === null)
+      ) {
+        throw new IdentityError(
+          "DAILY_REPORT_INVALID_TIME",
+          400,
+          "validation",
+          "Pick a valid time."
+        )
+      }
+      const custom = from !== null && to !== null
+      const schedule: DailyReportSchedule = {
+        sendTime: entry.sendTime,
+        from,
+        to,
+        fromDay: custom && isDayOffset(entry.fromDay) ? entry.fromDay : null,
+        toDay: custom && isDayOffset(entry.toDay) ? entry.toDay : null,
+      }
+      if (!isValidPeriod(schedule)) {
+        throw new IdentityError(
+          "DAILY_REPORT_INVALID_PERIOD",
+          400,
+          "validation",
+          "The period has to end by the send time and start before it ends."
+        )
+      }
+      if (!schedules.some((existing) => existing.sendTime === entry.sendTime)) {
+        schedules.push(schedule)
+      }
     }
+    schedules.sort((a, b) => a.sendTime.localeCompare(b.sendTime))
+
     const recipients: DailyReportRecipient[] = []
     for (const recipient of input.recipients) {
       const phone = toWhatsAppNumber(recipient.phone)
@@ -191,13 +435,30 @@ export class WhatsAppDailyReportService {
         recipients.push({ phone, name: recipient.name.trim().slice(0, 80) })
       }
     }
-    if (recipients.length > MAX_DAILY_REPORT_RECIPIENTS) {
-      throw new IdentityError(
-        "DAILY_REPORT_TOO_MANY_RECIPIENTS",
-        400,
-        "validation",
-        `Up to ${MAX_DAILY_REPORT_RECIPIENTS} numbers.`
-      )
+
+    const { limits, paid } = await this.plan(organizationId)
+    if (recipients.length > limits.recipients) {
+      throw paid
+        ? new IdentityError(
+            "DAILY_REPORT_TOO_MANY_RECIPIENTS",
+            400,
+            "validation",
+            `Up to ${limits.recipients} numbers.`
+          )
+        : planLimit("The free report goes to one number -- more need the paid plan.")
+    }
+    if (schedules.length > limits.schedules) {
+      throw paid
+        ? new IdentityError(
+            "DAILY_REPORT_TOO_MANY_SCHEDULES",
+            400,
+            "validation",
+            `Up to ${limits.schedules} reports a day.`
+          )
+        : planLimit("The free report is sent once a day -- more need the paid plan.")
+    }
+    if (!limits.customPeriod && schedules.some((schedule) => schedule.from !== null)) {
+      throw planLimit("Choosing the report's period needs the paid plan.")
     }
     if (input.enabled && recipients.length === 0) {
       throw new IdentityError(
@@ -209,19 +470,40 @@ export class WhatsAppDailyReportService {
     }
     await this.db.query(
       `INSERT INTO whatsapp_daily_report_settings
-         (organization_id, enabled, send_time, recipients, updated_by, updated_at)
-       VALUES ($1, $2, $3, $4::jsonb, $5, now())
+         (organization_id, enabled, send_time, schedules, recipients, updated_by, updated_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, now())
        ON CONFLICT (organization_id) DO UPDATE SET
          enabled = EXCLUDED.enabled, send_time = EXCLUDED.send_time,
-         recipients = EXCLUDED.recipients, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-      [organizationId, input.enabled, input.sendTime, JSON.stringify(recipients), actorUserId]
+         schedules = EXCLUDED.schedules, recipients = EXCLUDED.recipients,
+         updated_by = EXCLUDED.updated_by, updated_at = now()`,
+      [
+        organizationId,
+        input.enabled,
+        schedules[0].sendTime,
+        JSON.stringify(schedules),
+        JSON.stringify(recipients),
+        actorUserId,
+      ]
     )
     return this.getSettings(organizationId)
   }
 
-  // The figures for one Riyadh day, across all the organization's branches.
-  async build(organizationId: string, day: string): Promise<DailyReport> {
-    const { start, end } = dayBounds(day)
+  // The figures for one period (a whole Riyadh day by default), across all the organization's
+  // branches. Expenses and purchases are recorded by date, so they count every day the period
+  // touches.
+  async build(organizationId: string, period: string | DailyReportWindow): Promise<DailyReport> {
+    const window =
+      typeof period === "string"
+        ? {
+            start: dayBounds(period).start.toISOString(),
+            end: dayBounds(period).end.toISOString(),
+            label: period,
+          }
+        : period
+    const start = new Date(window.start)
+    const end = new Date(window.end)
+    const day = riyadhDay(start)
+    const lastDay = riyadhDay(new Date(end.getTime() - 1))
     const sum = async (sql: string, params: unknown[]) =>
       Number((await this.db.query<{ total: unknown }>(sql, params)).rows[0]?.total ?? 0)
 
@@ -238,12 +520,12 @@ export class WhatsAppDailyReportService {
       ),
       sum(
         `SELECT COALESCE(SUM(amount), 0) AS total FROM expenses
-          WHERE organization_id = $1 AND expense_date = $2 AND deleted_at IS NULL
-            AND status <> 'cancelled'`,
-        [organizationId, day]
+          WHERE organization_id = $1 AND expense_date >= $2 AND expense_date <= $3
+            AND deleted_at IS NULL AND status <> 'cancelled'`,
+        [organizationId, day, lastDay]
       ),
       this.readyReports
-        .purchaseInvoices({ organizationId, workspaceId: null, from: day, to: day })
+        .purchaseInvoices({ organizationId, workspaceId: null, from: day, to: lastDay })
         .catch(() => []),
     ])
     const purchases = purchaseRows.reduce((total, row) => total + row.total, 0)
@@ -278,7 +560,7 @@ export class WhatsAppDailyReportService {
       payments[key] += Number(row.total ?? 0)
     }
 
-    // Shifts opened that day.
+    // Shifts opened in the period.
     const shiftRows = await this.db.query<{
       id: string
       status: string
@@ -336,7 +618,7 @@ export class WhatsAppDailyReportService {
     )
 
     return {
-      day,
+      day: window.label,
       sales,
       purchases,
       expenses,
@@ -357,18 +639,43 @@ export class WhatsAppDailyReportService {
     }
   }
 
-  async preview(organizationId: string, now = new Date()): Promise<{ day: string; text: string }> {
-    const day = reportDayFor(now)
-    return { day, text: renderDailyReport(await this.build(organizationId, day)) }
+  // The report as the plan's first send would carry it right now.
+  async preview(
+    organizationId: string,
+    now = new Date()
+  ): Promise<{ day: string; text: string; window: DailyReportWindow }> {
+    const window = await this.windowNow(organizationId, now)
+    return {
+      day: window.label,
+      text: renderDailyReport(await this.build(organizationId, window)),
+      window,
+    }
   }
 
-  // Sends the report for `day` to every chosen number; each send is kept in whatsapp_messages.
+  // The first send's period, for a send happening at `now` (preview and test send).
+  async windowNow(organizationId: string, now = new Date()): Promise<DailyReportWindow> {
+    const [stored, plan] = await Promise.all([
+      this.storedSettings(organizationId),
+      this.plan(organizationId),
+    ])
+    const [first] = this.effective(stored, plan.limits).schedules
+    return reportWindow(now, first ?? { from: null, to: null })
+  }
+
+  // Sends the report for a period to the plan's numbers; each send is kept in whatsapp_messages.
   async send(
     organizationId: string,
-    day: string,
+    period: string | DailyReportWindow,
     recipients?: DailyReportRecipient[]
   ): Promise<{ sent: number; failed: number }> {
-    const to = recipients ?? (await this.getSettings(organizationId)).recipients
+    let to = recipients
+    if (!to) {
+      const [stored, plan] = await Promise.all([
+        this.storedSettings(organizationId),
+        this.plan(organizationId),
+      ])
+      to = this.effective(stored, plan.limits).recipients
+    }
     if (to.length === 0) {
       throw new IdentityError(
         "DAILY_REPORT_NO_RECIPIENTS",
@@ -379,7 +686,7 @@ export class WhatsAppDailyReportService {
     }
     await this.templates.requireApproved(DAILY_REPORT_TEMPLATE)
     const context = await this.platform.sendingContext()
-    const parameters = dailyReportParameters(await this.build(organizationId, day))
+    const parameters = dailyReportParameters(await this.build(organizationId, period))
     let sent = 0
     let failed = 0
     for (const recipient of to) {
@@ -416,34 +723,62 @@ export class WhatsAppDailyReportService {
     return { sent, failed }
   }
 
-  // The scheduled pass: every organization whose chosen time has come today and hasn't had its
-  // report yet. The day is claimed before sending, so several backend tasks never send twice.
+  // The scheduled pass: every send whose time has come today and hasn't gone out yet. Each send
+  // (day + time) is claimed before sending, so several backend tasks never send it twice.
   async runDue(now = new Date()): Promise<{ organizations: number; sent: number; failed: number }> {
     const today = riyadhDay(now)
-    const due = await this.db.query<{ organization_id: string }>(
-      `SELECT organization_id FROM whatsapp_daily_report_settings
-        WHERE enabled = true AND send_time <= $1
-          AND (last_sent_on IS NULL OR last_sent_on < $2)`,
-      [riyadhTime(now), today]
+    const nowTime = riyadhTime(now)
+    const rows = await this.db.query<{ organization_id: string }>(
+      `SELECT organization_id FROM whatsapp_daily_report_settings WHERE enabled = true`
     )
     let organizations = 0
     let sent = 0
     let failed = 0
-    for (const { organization_id: organizationId } of due.rows) {
-      const claimed = await this.db.query(
-        `UPDATE whatsapp_daily_report_settings SET last_sent_on = $2
-          WHERE organization_id = $1 AND (last_sent_on IS NULL OR last_sent_on < $2)
-          RETURNING organization_id`,
-        [organizationId, today]
+    for (const { organization_id: organizationId } of rows.rows) {
+      const [stored, plan] = await Promise.all([
+        this.storedSettings(organizationId),
+        this.plan(organizationId),
+      ])
+      const { schedules, recipients } = this.effective(stored, plan.limits)
+      const due = schedules.filter((schedule) => schedule.sendTime <= nowTime)
+      if (due.length === 0 || recipients.length === 0) continue
+
+      // A report sent today before per-send claims existed (only last_sent_on) counts as the
+      // first send's.
+      const claimedToday = await this.db.query<{ slot: string }>(
+        `SELECT slot FROM whatsapp_daily_report_sends WHERE organization_id = $1 AND slot LIKE $2`,
+        [organizationId, `${today}@%`]
       )
-      if (claimed.rows.length === 0) continue
-      organizations += 1
-      try {
-        const result = await this.send(organizationId, reportDayFor(now))
-        sent += result.sent
-        failed += result.failed
-      } catch (error) {
-        console.error("whatsapp.daily_report_failed", { organizationId, error })
+      const legacySentToday = stored.lastSentOn === today && claimedToday.rows.length === 0
+
+      let sentAny = false
+      for (const schedule of due) {
+        if (legacySentToday && schedule.sendTime === stored.schedules[0]?.sendTime) continue
+        const claim = await this.db.query(
+          `INSERT INTO whatsapp_daily_report_sends (organization_id, slot) VALUES ($1, $2)
+           ON CONFLICT DO NOTHING RETURNING slot`,
+          [organizationId, `${today}@${schedule.sendTime}`]
+        )
+        if (claim.rows.length === 0) continue
+        sentAny = true
+        try {
+          const result = await this.send(
+            organizationId,
+            reportWindow(riyadhMoment(today, schedule.sendTime), schedule),
+            recipients
+          )
+          sent += result.sent
+          failed += result.failed
+        } catch (error) {
+          console.error("whatsapp.daily_report_failed", { organizationId, error })
+        }
+      }
+      if (sentAny) {
+        organizations += 1
+        await this.db.query(
+          `UPDATE whatsapp_daily_report_settings SET last_sent_on = $2 WHERE organization_id = $1`,
+          [organizationId, today]
+        )
       }
     }
     return { organizations, sent, failed }

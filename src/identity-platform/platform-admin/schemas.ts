@@ -42,6 +42,16 @@ export const grantSubscriptionSchema = z.object({
   extraBranches: z.number().int().min(0).max(500).optional(),
 })
 
+// A paid add-on's price (subscriptions/addons.ts), in halalas.
+export const addonPriceSchema = z.object({
+  monthlyPriceHalalas: z.number().int().min(0).max(100_000_000),
+  yearlyPriceHalalas: z.number().int().min(0).max(100_000_000),
+  isActive: z.boolean(),
+})
+
+// Giving an organization a period of an add-on without payment.
+export const grantAddonSchema = z.object({ interval: z.enum(["monthly", "yearly"]) })
+
 export const setExtraBranchesSchema = z.object({
   extraBranches: z.number().int().min(0).max(500),
 })

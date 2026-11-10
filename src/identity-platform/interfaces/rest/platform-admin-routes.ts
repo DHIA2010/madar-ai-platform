@@ -9,6 +9,8 @@ import {
   customerListQuerySchema,
   grantSubscriptionSchema,
   setExtraBranchesSchema,
+  addonPriceSchema,
+  grantAddonSchema,
   packageInputSchema,
   paymentListQuerySchema,
   platformSettingsPatchSchema,
@@ -201,6 +203,26 @@ export async function handlePlatformAdminRoute(input: {
 
   if (method === "GET" && path === "/pricing") {
     return send(200, await service.getPricing(actor))
+  }
+  if (method === "GET" && path === "/pricing/addons") {
+    return send(200, await service.listAddons(actor))
+  }
+  const addonPriceMatch = path.match(/^\/pricing\/addons\/([^/]+)$/)
+  if (method === "PATCH" && addonPriceMatch) {
+    const body = addonPriceSchema.parse(await readJsonBody())
+    return send(200, await service.updateAddonPrice(actor, addonPriceMatch[1], body))
+  }
+  const customerAddonMatch = path.match(/^\/customers\/([^/]+)\/addons\/([^/]+)$/)
+  if (method === "PUT" && customerAddonMatch) {
+    const { interval } = grantAddonSchema.parse(await readJsonBody())
+    return send(
+      200,
+      await service.grantAddon(actor, customerAddonMatch[1], customerAddonMatch[2], interval)
+    )
+  }
+  if (method === "DELETE" && customerAddonMatch) {
+    await service.revokeAddon(actor, customerAddonMatch[1], customerAddonMatch[2])
+    return send(200, { ok: true })
   }
   const pricingMatch = path.match(/^\/pricing\/([^/]+)\/(mode|visibility|packages|order)$/)
   if (pricingMatch) {

@@ -4,8 +4,9 @@ export type MoyasarApplication = PurchasableApplication
 export type MoyasarSelfServePlanTier = "starter" | "growth" | "pro"
 export type MoyasarPaymentStatus = "initiated" | "paid" | "failed"
 // "subscription" buys a package (with any extra branches); "branches" adds branches to a running
-// subscription for what's left of its period.
-export type MoyasarPaymentPurpose = "subscription" | "branches"
+// subscription for what's left of its period; "addon" buys a period of a paid add-on
+// (subscriptions/addons.ts), independent of any package.
+export type MoyasarPaymentPurpose = "subscription" | "branches" | "addon"
 
 export interface MoyasarPaymentRecord {
   id: string
@@ -17,6 +18,8 @@ export interface MoyasarPaymentRecord {
   packageId: string | null
   billingInterval: BillingInterval
   purpose: MoyasarPaymentPurpose
+  // The add-on bought, for an "addon" payment.
+  addonCode: string | null
   // Branches bought: on top of the package's included one ("subscription"), or added ("branches").
   extraBranches: number
   // The coupon used, and the price before it (null when no coupon was used).
@@ -38,6 +41,12 @@ export interface CreateCheckoutIntentInput {
   interval: BillingInterval
   extraBranches?: number
   couponCode?: string | null
+}
+
+// Buys a period of a paid add-on (subscriptions/addons.ts).
+export interface CreateAddonCheckoutInput {
+  addonCode: string
+  interval: BillingInterval
 }
 
 // Adds branches to the organization's running POS / Madar Complete subscription.

@@ -34,6 +34,7 @@ import type {
   SubscriptionStatus,
 } from "../subscriptions/types"
 import { requirePlatformAdmin } from "./guard"
+import { ADDON_CODES, ADDON_ERRORS, type AddonCode, AddonsService } from "../subscriptions/addons"
 import type {
   CustomerStatus,
   Page,
@@ -1077,6 +1078,52 @@ export class PlatformAdminService {
   }
 
   // A platform-level change (pricing, settings) -- not tied to any one customer.
+  // Paid add-ons (subscriptions/addons.ts): their prices, and giving or ending one for a customer.
+  async listAddons(actor: AuthenticatedActor) {
+    requirePlatformAdmin(actor)
+    return new AddonsService(this.db).prices()
+  }
+
+  async updateAddonPrice(
+    actor: AuthenticatedActor,
+    code: string,
+    input: { monthlyPriceHalalas: number; yearlyPriceHalalas: number; isActive: boolean }
+  ) {
+    requirePlatformAdmin(actor)
+    const updated = await new AddonsService(this.db).updatePrice(code, input, actor.userId)
+    await this.auditPlatform(actor, "platform_admin.addon_price_changed", null, { code, ...input })
+    return updated
+  }
+
+  async grantAddon(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    code: string,
+    interval: "monthly" | "yearly"
+  ) {
+    requirePlatformAdmin(actor)
+    if (!(ADDON_CODES as readonly string[]).includes(code)) throw ADDON_ERRORS.unknown()
+    const granted = await new AddonsService(this.db).extend(
+      organizationId,
+      code as AddonCode,
+      interval,
+      "grant"
+    )
+    await this.auditPlatform(actor, "platform_admin.addon_granted", organizationId, {
+      code,
+      interval,
+      currentPeriodEnd: granted.currentPeriodEnd,
+    })
+    return granted
+  }
+
+  async revokeAddon(actor: AuthenticatedActor, organizationId: string, code: string) {
+    requirePlatformAdmin(actor)
+    if (!(ADDON_CODES as readonly string[]).includes(code)) throw ADDON_ERRORS.unknown()
+    await new AddonsService(this.db).revoke(organizationId, code as AddonCode)
+    await this.auditPlatform(actor, "platform_admin.addon_revoked", organizationId, { code })
+  }
+
   private async auditPlatform(
     actor: AuthenticatedActor,
     action: string,

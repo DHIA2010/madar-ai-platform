@@ -14,6 +14,11 @@ export const createBranchCheckoutSchema = z.object({
   count: z.number().int().min(1).max(100),
 })
 
+export const createAddonCheckoutSchema = z.object({
+  addonCode: z.string().trim().min(1).max(64),
+  interval: z.enum(["monthly", "yearly"]),
+})
+
 export const confirmCheckoutSchema = z.object({
   moyasarPaymentId: z.string().min(1),
 })

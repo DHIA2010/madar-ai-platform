@@ -12,6 +12,12 @@ import { extraBranchPrice } from "../../pricing/service"
 import { activationSettingsPatch } from "../../subscriptions/activation"
 import { BranchAllowanceService } from "../../subscriptions/branches"
 import { activatePaid, addExtraBranches } from "../../subscriptions/lifecycle"
+import {
+  ADDON_CODES,
+  ADDON_ERRORS,
+  type AddonCode,
+  AddonsService,
+} from "../../subscriptions/addons"
 import { PostgresOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 import { MoyasarApiClient } from "./client"
@@ -20,6 +26,7 @@ import { MOYASAR_CURRENCY } from "./plan-pricing"
 import { MoyasarBillingRepository } from "./repository"
 import type {
   ConfirmCheckoutInput,
+  CreateAddonCheckoutInput,
   CreateBranchCheckoutInput,
   CreateCheckoutIntentInput,
   CreateCheckoutIntentResult,
@@ -138,6 +145,39 @@ export class MoyasarBillingService {
     }
   }
 
+  // A period of a paid add-on, priced from Madar Admin's add-on price -- never from the client.
+  // Not tied to any app, so the payment row carries the generic "madarApps" application.
+  async createAddonCheckout(
+    actor: AuthenticatedActor,
+    input: CreateAddonCheckoutInput
+  ): Promise<CreateCheckoutIntentResult> {
+    if (!(ADDON_CODES as readonly string[]).includes(input.addonCode)) throw ADDON_ERRORS.unknown()
+    const price = await new AddonsService(this.db).price(input.addonCode)
+    const amount =
+      input.interval === "yearly" ? price.yearlyPriceHalalas : price.monthlyPriceHalalas
+    if (!price.isActive || amount <= 0) throw ADDON_ERRORS.unavailable()
+    const credentials = await this.requireCredentials()
+    const payment = await this.repository.createCheckout({
+      organizationId: actor.organizationId,
+      requestedByUserId: actor.userId,
+      application: "madarApps",
+      planTier: null,
+      packageId: null,
+      billingInterval: input.interval,
+      purpose: "addon",
+      addonCode: input.addonCode,
+      coupon: null,
+      amount,
+      currency: MOYASAR_CURRENCY,
+    })
+    return {
+      checkoutId: payment.id,
+      amount: payment.amount,
+      currency: payment.currency,
+      publishableKey: credentials.publishableKey,
+    }
+  }
+
   async confirmCheckout(
     actor: AuthenticatedActor,
     input: ConfirmCheckoutInput
@@ -199,7 +239,28 @@ export class MoyasarBillingService {
         rawPayload: moyasarPayment,
       })
 
-      if (isGenuinelyPaid && payment.purpose === "branches") {
+      if (isGenuinelyPaid && payment.purpose === "addon" && payment.addonCode) {
+        const addon = await new AddonsService(this.db).extend(
+          payment.organizationId,
+          payment.addonCode as AddonCode,
+          payment.billingInterval,
+          "payment"
+        )
+        await writeAuditLog(this.db, {
+          action: "billing.addon_purchased",
+          actorUserId: payment.requestedByUserId,
+          organizationId: payment.organizationId,
+          workspaceId: null,
+          entityType: "billing_moyasar_payment",
+          entityId: payment.id,
+          metadata: {
+            addonCode: payment.addonCode,
+            interval: payment.billingInterval,
+            currentPeriodEnd: addon.currentPeriodEnd,
+            moyasarPaymentId: moyasarPayment.id,
+          },
+        })
+      } else if (isGenuinelyPaid && payment.purpose === "branches") {
         // More branches on the running subscription; its next renewal charges for them too.
         const subscriptions = new PostgresOrganizationSubscriptionRepository(this.db)
         const existing = await subscriptions.findByOrganizationAndApplication(

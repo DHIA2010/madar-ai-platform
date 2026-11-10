@@ -24,6 +24,12 @@ interface DefaultPackage {
 
 const sar = (amount: number) => amount * 100
 
+// Every app package includes the free WhatsApp daily report. The paid add-on (more numbers and
+// sends, subscriptions/addons.ts) is deliberately not mentioned here: it's offered only from
+// Settings -> scheduled reports, never while buying an app. Migration 163 added the same line to
+// environments that already had pricing.
+export const DAILY_REPORT_FEATURE = "التقرير اليومي على واتساب مجانًا (رقم واحد، مرة يوميًا)"
+
 // Every package sells extra branches / workspaces at the same price: 99 a month, 999 a year.
 function tier(
   legacyPlanTier: "starter" | "growth" | "pro",
@@ -41,7 +47,7 @@ function tier(
   return {
     name,
     description: "",
-    features,
+    features: options.sellsBranches === false ? features : [...features, DAILY_REPORT_FEATURE],
     monthlyPriceHalalas: sar(monthly),
     // Two months free.
     yearlyPriceHalalas: sar(monthly * 10),
@@ -265,6 +271,7 @@ export function defaultPricingFor(application: PurchasableApplication): {
               "فرع واحد (فروع إضافية بـ 99 ر.س/شهر)",
               "دعم فني مخصص",
               "أولوية في الميزات الجديدة",
+              DAILY_REPORT_FEATURE,
             ],
             monthlyPriceHalalas: sar(899),
             yearlyPriceHalalas: sar(8990),

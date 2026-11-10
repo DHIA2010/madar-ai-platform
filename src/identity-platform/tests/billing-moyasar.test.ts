@@ -14,6 +14,7 @@ import { MoyasarBillingService } from "../billing/moyasar/service"
 import type { MoyasarWebhookPayload } from "../billing/moyasar/types"
 import { CouponService } from "../coupons/service"
 import { PricingService } from "../pricing/service"
+import { AddonsService } from "../subscriptions/addons"
 import type { PurchasableApplication } from "../subscriptions/types"
 
 let database: PostgresDatabase
@@ -372,5 +373,63 @@ describe("coupons at checkout", () => {
         couponCode: "ONCE",
       })
     ).rejects.toMatchObject({ code: "COUPON_EXHAUSTED" })
+  })
+})
+
+describe("add-on checkout", () => {
+  const paid = (checkoutId: string, amount: number): MoyasarWebhookPayload => ({
+    id: "evt_addon",
+    type: "payment_paid",
+    secret_token: "whsec_fixture",
+    data: {
+      id: `pay_${checkoutId.slice(0, 6)}`,
+      status: "paid",
+      amount,
+      currency: "SAR",
+      metadata: { checkout_id: checkoutId },
+    },
+  })
+
+  it("prices the WhatsApp report add-on from Madar Admin and runs it for the period paid", async () => {
+    const monthly = await service.createAddonCheckout(actor(), {
+      addonCode: "whatsapp_daily_report",
+      interval: "monthly",
+    })
+    expect(monthly.amount).toBe(7000)
+    const yearly = await service.createAddonCheckout(actor(), {
+      addonCode: "whatsapp_daily_report",
+      interval: "yearly",
+    })
+    expect(yearly.amount).toBe(75000)
+
+    await service.handleWebhookEvent(paid(monthly.checkoutId, monthly.amount))
+    const addons = new AddonsService(database)
+    const first = await addons.active(ORG_A, "whatsapp_daily_report")
+    expect(first?.interval).toBe("monthly")
+
+    // Paying again extends from the running period's end, not from today.
+    await service.handleWebhookEvent(paid(yearly.checkoutId, yearly.amount))
+    const second = await addons.active(ORG_A, "whatsapp_daily_report")
+    const expected = new Date(first!.currentPeriodEnd)
+    expected.setUTCFullYear(expected.getUTCFullYear() + 1)
+    expect(second?.currentPeriodEnd).toBe(expected.toISOString())
+    expect(await addons.active(ORG_B, "whatsapp_daily_report")).toBeNull()
+  })
+
+  it("refuses an unknown add-on and one taken off sale", async () => {
+    await expect(
+      service.createAddonCheckout(actor(), { addonCode: "nope", interval: "monthly" })
+    ).rejects.toMatchObject({ code: "ADDON_NOT_FOUND" })
+    await new AddonsService(database).updatePrice(
+      "whatsapp_daily_report",
+      { monthlyPriceHalalas: 7000, yearlyPriceHalalas: 75000, isActive: false },
+      USER_A
+    )
+    await expect(
+      service.createAddonCheckout(actor(), {
+        addonCode: "whatsapp_daily_report",
+        interval: "monthly",
+      })
+    ).rejects.toMatchObject({ code: "ADDON_UNAVAILABLE" })
   })
 })

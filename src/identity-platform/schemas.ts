@@ -1594,9 +1594,26 @@ export const whatsAppEmbeddedSignupSchema = z.object({
 })
 
 // The daily store report on WhatsApp -- see whatsapp/daily-report.ts.
+const dailyReportTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+
 export const dailyReportSettingsSchema = z.object({
   enabled: z.boolean(),
-  sendTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  // The first send's time -- older clients send only this.
+  sendTime: dailyReportTimeSchema.optional(),
+  // Up to three sends a day, each with an optional period (both from and to, or neither).
+  schedules: z
+    .array(
+      z.object({
+        sendTime: dailyReportTimeSchema,
+        from: dailyReportTimeSchema.nullish(),
+        to: dailyReportTimeSchema.nullish(),
+        // Each end's day relative to the send: 0 the send day, -1 the day before.
+        fromDay: z.number().int().min(-1).max(0).nullish(),
+        toDay: z.number().int().min(-1).max(0).nullish(),
+      })
+    )
+    .max(3)
+    .optional(),
   recipients: z
     .array(
       z.object({
