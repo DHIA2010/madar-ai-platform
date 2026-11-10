@@ -9,31 +9,57 @@ import { createSessionManager } from "@/infrastructure/identity"
 const PATH_SEPARATOR = String.fromCharCode(47)
 const ENDPOINT = ["", "v1", "whatsapp", "daily-report"].join(PATH_SEPARATOR)
 
-export const MAX_DAILY_REPORT_RECIPIENTS = 5
-
 export interface DailyReportRecipient {
   phone: string
   name: string
 }
 
+// One send a day: when ("HH:MM", Riyadh) and the period it covers -- from/to, or both null for
+// the automatic period (the whole day before for a morning send, today so far for a later one).
+export interface DailyReportSchedule {
+  sendTime: string
+  from: string | null
+  to: string | null
+  // Each end's day relative to the send (0 the send day, -1 the day before), so a period can run
+  // past midnight -- yesterday 00:00 to today 02:00.
+  fromDay?: -1 | 0 | null
+  toDay?: -1 | 0 | null
+}
+
+export interface DailyReportLimits {
+  recipients: number
+  schedules: number
+  customPeriod: boolean
+}
+
+export interface DailyReportWindow {
+  start: string
+  end: string
+  label: string
+}
+
 export interface DailyReportSettings {
   enabled: boolean
-  // "HH:MM", Riyadh time.
   sendTime: string
+  schedules: DailyReportSchedule[]
   recipients: DailyReportRecipient[]
   lastSentOn: string | null
+  // The free report (1 number, 1 send, automatic period) or the paid add-on while it runs.
+  plan: { paid: boolean; until: string | null; limits: DailyReportLimits }
+  // What each send the plan uses covers on its next run.
+  coverage: Array<{ sendTime: string } & DailyReportWindow>
 }
 
 export interface DailyReportSettingsInput {
   enabled: boolean
-  sendTime: string
+  schedules: DailyReportSchedule[]
   recipients: DailyReportRecipient[]
 }
 
 export interface DailyReportOverview {
   settings: DailyReportSettings
-  // The report as it would be sent now: the day it covers and the message text.
-  preview: { day: string; text: string }
+  // The report as it would be sent now: the period it covers and the message text.
+  preview: { day: string; text: string; window: DailyReportWindow }
 }
 
 const sessionManager = createSessionManager()

@@ -3909,7 +3909,8 @@
         "zatca": "E-invoicing (ZATCA)",
         "backup": "Backup",
         "dailyReport": "Daily report (WhatsApp)",
-        "whatsapp": "WhatsApp"
+        "whatsapp": "WhatsApp",
+        "scheduledReports": "Scheduled reports (WhatsApp)"
       },
       "backupPendingReason": "Backup isn't available yet"
     },
@@ -5115,7 +5116,7 @@
       },
       "enable": {
         "title": "Send the daily report",
-        "on": "Sent every day at {time} (Riyadh time).",
+        "on": "{count, plural, one {Sent daily at {times}} other {Sent {count} times a day: {times}}} (Riyadh time).",
         "off": "Off — turn it on to get your store's report every day.",
         "lastSent": "Last sent: {day}"
       },
@@ -5127,18 +5128,19 @@
       },
       "recipients": {
         "title": "Recipients",
-        "hint": "The numbers that receive the report — up to {max} (owner, manager, accountant...).",
+        "hint": "The numbers the report goes to — up to {max, plural, one {# number} other {# numbers}}.",
         "empty": "No numbers added yet.",
         "namePlaceholder": "Name (optional)",
         "nameLabel": "Name",
         "phoneLabel": "Mobile number",
         "remove": "Remove number",
         "add": "Add number",
-        "full": "Limit reached"
+        "full": "Limit reached",
+        "lockedAdd": "More numbers on the Pro plan"
       },
       "preview": {
         "title": "Message preview",
-        "day": "Report for {day}",
+        "day": "Covers: {day}",
         "test": "Send test now",
         "testNeedsRecipients": "Add a number and save first",
         "note": "The report is sent from Madar's official WhatsApp number to the saved numbers."
@@ -5149,14 +5151,63 @@
         "noRecipients": "Add at least one number to receive the report.",
         "invalidPhone": "One of the numbers isn't valid — enter a mobile like 0501234567.",
         "templateNotReady": "The daily report template is awaiting WhatsApp's approval — try again later.",
-        "unavailable": "WhatsApp is unavailable right now."
+        "unavailable": "WhatsApp is unavailable right now.",
+        "planLimit": "This option is on the Pro plan."
       },
       "toasts": {
-        "savedOn": "Saved — the report will arrive daily at {time}.",
+        "savedOn": "Saved — the report will reach you daily: {times}.",
         "savedOff": "Saved — the daily report is off.",
         "saveFailed": "Couldn't save the settings.",
         "testSent": "Report sent to {count, plural, one {# number} other {# numbers}}.",
         "testFailed": "Couldn't send the report."
+      },
+      "plan": {
+        "free": "Free plan",
+        "freeLimits": "1 number · 1 report a day · automatic period",
+        "paid": "Pro plan",
+        "paidUntil": "Active until {date}",
+        "paidLimits": "Up to 5 numbers · up to 3 reports a day · a period you choose for each",
+        "upgradeTitle": "More reports, more numbers",
+        "upgradeBody": "Up to 5 numbers and 3 reports a day (morning, noon and evening, say), each covering the period you choose.",
+        "monthly": "SAR {price} / month",
+        "yearly": "SAR {price} / year",
+        "subscribe": "Subscribe",
+        "renew": "Extend",
+        "locked": "On the Pro plan"
+      },
+      "schedules": {
+        "title": "Send times",
+        "hint": "When the report reaches you, and the period it covers — Riyadh time.",
+        "sendAt": "Sent at",
+        "period": "Period",
+        "automatic": "Automatic",
+        "custom": "From — to",
+        "from": "From",
+        "to": "To",
+        "covers": "Covers: {label}",
+        "add": "Add a send time",
+        "full": "Up to 3 reports a day",
+        "remove": "Remove send time",
+        "lockedAdd": "More send times on the Pro plan",
+        "lockedPeriod": "Choosing the period is on the Pro plan",
+        "report": "Report {number}",
+        "yesterday": "Yesterday",
+        "today": "Today",
+        "coversTitle": "Period the report covers",
+        "sendTimeTag": "send time",
+        "automaticRule": "Automatic: a send before noon covers the whole previous day; a later one covers the send day up to the send time.",
+        "periodOptions": {
+          "automatic": {
+            "title": "Automatic period",
+            "hint": "Set by the send time"
+          },
+          "custom": {
+            "title": "Custom period",
+            "hint": "You choose where it starts and ends"
+          }
+        },
+        "invalidPeriod": "This period doesn't work: it has to end by the send time and start before it ends.",
+        "spans": "Covers {hours} hours: from {from} to {to}."
       }
     },
     "whatsapp": {
@@ -5273,6 +5324,71 @@
       },
       "loadError": "Couldn't load WhatsApp settings.",
       "retry": "Try again"
+    },
+    "scheduledReports": {
+      "title": "Scheduled WhatsApp reports",
+      "subtitle": "Reports that reach you on WhatsApp automatically, at the times you choose. Pick an app to see its reports.",
+      "count": "{count, plural, one {# report} other {# reports}}",
+      "soon": "Coming soon",
+      "open": "View reports",
+      "setUp": "Set up",
+      "sendsAt": "Sent at: {times}",
+      "status": {
+        "on": "On",
+        "off": "Off"
+      },
+      "plan": {
+        "free": "Free",
+        "paid": "Pro"
+      },
+      "moreSoon": {
+        "title": "More reports coming",
+        "body": "We're building new reports for this app — they'll appear here as soon as they launch."
+      },
+      "emptySoon": {
+        "title": "Reports for this app are coming",
+        "body": "No scheduled reports for this app yet — they'll appear here as soon as they launch."
+      },
+      "categories": {
+        "pos": {
+          "name": "Point of sale",
+          "description": "Sales, shifts, payment methods and stock."
+        },
+        "ecommerce": {
+          "name": "E-commerce",
+          "description": "Your online stores' orders and sales."
+        },
+        "advertising": {
+          "name": "Ad platforms",
+          "description": "Your campaigns' spend and results."
+        },
+        "procurement": {
+          "name": "Suppliers & purchases",
+          "description": "Purchase invoices and suppliers."
+        },
+        "expenses": {
+          "name": "Expenses",
+          "description": "Expenses and their categories."
+        },
+        "all": {
+          "name": "All apps",
+          "description": "Summaries across all your apps in one report."
+        }
+      },
+      "templates": {
+        "daily-report": {
+          "name": "Daily report",
+          "description": "The day in brief: sales, purchases, expenses, shifts, payment methods, best sellers and low stock."
+        }
+      },
+      "time": {
+        "am": "AM",
+        "pm": "PM",
+        "hour": "Hour",
+        "minute": "Minute",
+        "done": "Done",
+        "endOfDay": "End of day"
+      }
     }
   },
   "administration": {
@@ -6106,7 +6222,33 @@
           "title": "Added to your subscription",
           "description": "You can create the new branches / workspaces now.",
           "cta": "Go to workspaces"
+        },
+        "addonPaid": {
+          "title": "Pro plan activated",
+          "description": "You can now add numbers and send times, and choose each report's period.",
+          "cta": "Set up the daily report"
         }
+      },
+      "addonCheckout": {
+        "back": "Back to the daily report",
+        "unavailable": "This add-on isn't available right now.",
+        "names": {
+          "whatsapp_daily_report": "WhatsApp daily report — Pro plan"
+        },
+        "features": {
+          "whatsapp_daily_report": [
+            "Up to 5 numbers receive the report",
+            "Up to 3 reports a day",
+            "A period you choose for each report"
+          ]
+        },
+        "interval": {
+          "monthly": "Monthly",
+          "yearly": "Yearly"
+        },
+        "save": "Save SAR {amount}",
+        "extends": "Your current plan runs until {date} — paying adds another period.",
+        "secure": "Secure payment via Moyasar."
       }
     },
     "overview": {

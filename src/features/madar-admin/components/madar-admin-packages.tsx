@@ -10,6 +10,7 @@ import { AppButton, AppCard, AppDialog, AppInput, AppSwitch } from "@/components
 
 import { APPLICATION_LABEL, formatSar, platformAdminService } from "../services"
 import type {
+  AdminAddonPrice,
   AdminApplicationPricing,
   AdminPackage,
   AdminPlatformSettings,
@@ -482,6 +483,7 @@ export function MadarAdminPackages() {
         </div>
       )}
 
+      <AddonPricing />
       <TrialAndRenewalSettings />
 
       {editing ? (
@@ -548,6 +550,138 @@ export function MadarAdminPackages() {
 }
 
 // Trial length (the same for every application) and the renewal policy.
+// Paid add-ons sold on their own, the same price whatever the customer's package.
+const ADDON_LABEL: Record<AdminAddonPrice["code"], { name: string; hint: string }> = {
+  whatsapp_daily_report: {
+    name: "التقرير اليومي على واتساب — الخطة الاحترافية",
+    hint: "المجاني ضمن كل الباقات: رقم واحد وتقرير يومي. المدفوع: حتى 5 أرقام و3 تقارير يومياً وفترة يختارها العميل.",
+  },
+}
+
+function AddonPricing() {
+  const [addons, setAddons] = useState<AdminAddonPrice[] | null>(null)
+  const [drafts, setDrafts] = useState<
+    Record<string, { monthly: string; yearly: string; isActive: boolean }>
+  >({})
+  const [saving, setSaving] = useState<string | null>(null)
+
+  useEffect(() => {
+    platformAdminService
+      .listAddons()
+      .then((loaded) => {
+        setAddons(loaded)
+        setDrafts(
+          Object.fromEntries(
+            loaded.map((addon) => [
+              addon.code,
+              {
+                monthly: String(addon.monthlyPriceHalalas / 100),
+                yearly: String(addon.yearlyPriceHalalas / 100),
+                isActive: addon.isActive,
+              },
+            ])
+          )
+        )
+      })
+      .catch(() => toast.error("تعذر تحميل الإضافات."))
+  }, [])
+
+  async function save(code: AdminAddonPrice["code"]) {
+    const draft = drafts[code]
+    const monthly = Math.round(Number(draft.monthly) * 100)
+    const yearly = Math.round(Number(draft.yearly) * 100)
+    if (!Number.isFinite(monthly) || !Number.isFinite(yearly) || monthly < 0 || yearly < 0) {
+      toast.error("أدخل أسعاراً صحيحة.")
+      return
+    }
+    setSaving(code)
+    try {
+      const updated = await platformAdminService.updateAddon(code, {
+        monthlyPriceHalalas: monthly,
+        yearlyPriceHalalas: yearly,
+        isActive: draft.isActive,
+      })
+      setAddons((current) =>
+        (current ?? []).map((addon) => (addon.code === code ? updated : addon))
+      )
+      toast.success("تم حفظ سعر الإضافة.")
+    } catch {
+      toast.error("تعذر حفظ الإضافة.")
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <AppCard
+      title="الإضافات المدفوعة"
+      state={addons === null ? "loading" : "idle"}
+      className="rounded-2xl border-border/60 shadow-sm"
+    >
+      <div className="flex flex-col gap-4">
+        {(addons ?? []).map((addon) => {
+          const draft = drafts[addon.code]
+          if (!draft) return null
+          return (
+            <div key={addon.code} className="rounded-xl border border-border/60 p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-foreground">
+                    {ADDON_LABEL[addon.code]?.name ?? addon.code}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {ADDON_LABEL[addon.code]?.hint}
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <AppSwitch
+                    checked={draft.isActive}
+                    onCheckedChange={(isActive) =>
+                      setDrafts((current) => ({
+                        ...current,
+                        [addon.code]: { ...draft, isActive },
+                      }))
+                    }
+                  />
+                  متاحة للبيع
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                {(["monthly", "yearly"] as const).map((field) => (
+                  <div key={field}>
+                    <label className="mb-1.5 block text-sm font-medium text-foreground">
+                      {field === "monthly" ? "السعر الشهري (ر.س)" : "السعر السنوي (ر.س)"}
+                    </label>
+                    <AppInput
+                      type="number"
+                      min={0}
+                      value={draft[field]}
+                      onChange={(event) =>
+                        setDrafts((current) => ({
+                          ...current,
+                          [addon.code]: { ...draft, [field]: event.target.value },
+                        }))
+                      }
+                      className="h-11 rounded-[10px]"
+                    />
+                  </div>
+                ))}
+                <AppButton
+                  className="h-11 rounded-[10px] px-6 font-semibold"
+                  loading={saving === addon.code}
+                  onClick={() => save(addon.code)}
+                >
+                  حفظ
+                </AppButton>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </AppCard>
+  )
+}
+
 function TrialAndRenewalSettings() {
   const [settings, setSettings] = useState<AdminPlatformSettings | null>(null)
   const [draft, setDraft] = useState({

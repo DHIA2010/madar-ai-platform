@@ -20,6 +20,7 @@ import {
 
 import { type BranchAllowance, branchAllowanceService } from "../services"
 import type { MoyasarPurchase } from "../types"
+import { MoyasarAddonCheckout } from "./moyasar-addon-checkout"
 import { MoyasarPaymentPanel } from "./moyasar-payment-panel"
 
 import type { BillingInterval, PurchasableApplication } from "@/application/contracts"
@@ -85,10 +86,26 @@ function Stepper({
   )
 }
 
+// The checkout page: a paid add-on (purpose=addon, e.g. the WhatsApp daily report's paid plan) has
+// its own screen; everything else buys a package or adds branches.
+export function MoyasarCheckoutPage() {
+  const searchParams = useSearchParams()
+  if (searchParams.get("purpose") === "addon") {
+    const interval = searchParams.get("interval")
+    return (
+      <MoyasarAddonCheckout
+        code={searchParams.get("addon") ?? ""}
+        initialInterval={interval === "yearly" ? "yearly" : "monthly"}
+      />
+    )
+  }
+  return <PackageCheckoutPage />
+}
+
 // A dedicated, unconstrained page for the Moyasar checkout form -- see moyasar-payment-panel.tsx's
 // own comment for why this moved out of the activation dialog's modal. The amount shown here is
 // for the customer's information only; what's charged is priced server-side from the package.
-export function MoyasarCheckoutPage() {
+function PackageCheckoutPage() {
   const t = useTranslations("billing.moyasar.checkoutPage")
   const tCommon = useTranslations("billing.moyasar.common")
   const tDialog = useTranslations("applications.requestDialog")

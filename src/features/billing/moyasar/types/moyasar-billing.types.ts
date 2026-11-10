@@ -20,8 +20,10 @@ export interface MoyasarPaymentRecord {
   planTier: MoyasarSelfServePlanTier | null
   packageId: string | null
   billingInterval: BillingInterval
-  // "branches" when the payment added branches to a running subscription.
-  purpose?: "subscription" | "branches"
+  // "branches" when the payment added branches to a running subscription; "addon" when it bought
+  // a period of a paid add-on (e.g. the WhatsApp daily report's paid plan).
+  purpose?: "subscription" | "branches" | "addon"
+  addonCode?: string | null
 }
 
 // What's being bought at checkout -- the amount is priced server-side from this.
@@ -35,4 +37,6 @@ export interface MoyasarPurchase {
   // Set instead of buying a package: adds this many branches to the running subscription, for
   // what's left of its period.
   addBranches?: number
+  // Set instead of buying a package: a period of this paid add-on, priced server-side.
+  addon?: string
 }

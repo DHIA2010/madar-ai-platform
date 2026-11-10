@@ -40,6 +40,8 @@ export function MoyasarCheckoutCallback() {
   const [retryToken, setRetryToken] = useState(0)
   // Branches added to a running subscription get their own message and a way back to them.
   const [isBranchPurchase, setIsBranchPurchase] = useState(false)
+  // A paid add-on goes back to where it's used (the WhatsApp daily report).
+  const [isAddonPurchase, setIsAddonPurchase] = useState(false)
 
   useEffect(() => {
     if (!hasValidLink) return
@@ -50,6 +52,7 @@ export function MoyasarCheckoutCallback() {
       .then((result) => {
         if (cancelled) return
         setIsBranchPurchase(result.purpose === "branches")
+        setIsAddonPurchase(result.purpose === "addon")
         setState(result.status === "paid" ? "paid" : "failed")
       })
       .catch(() => {
@@ -83,18 +86,36 @@ export function MoyasarCheckoutCallback() {
           <>
             <CheckCircle2 className="mx-auto size-12 text-[#16a34a]" />
             <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">
-              {isBranchPurchase ? t("branchesPaid.title") : t("paid.title")}
+              {isAddonPurchase
+                ? t("addonPaid.title")
+                : isBranchPurchase
+                  ? t("branchesPaid.title")
+                  : t("paid.title")}
             </p>
             <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">
-              {isBranchPurchase ? t("branchesPaid.description") : t("paid.description")}
+              {isAddonPurchase
+                ? t("addonPaid.description")
+                : isBranchPurchase
+                  ? t("branchesPaid.description")
+                  : t("paid.description")}
             </p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
               onClick={() =>
-                router.push(isBranchPurchase ? ROUTES.settingsWorkspaces : ROUTES.marketplace)
+                router.push(
+                  isAddonPurchase
+                    ? ROUTES.settingsDailyReport
+                    : isBranchPurchase
+                      ? ROUTES.settingsWorkspaces
+                      : ROUTES.marketplace
+                )
               }
             >
-              {isBranchPurchase ? t("branchesPaid.cta") : tCommon("backToMarketplace")}
+              {isAddonPurchase
+                ? t("addonPaid.cta")
+                : isBranchPurchase
+                  ? t("branchesPaid.cta")
+                  : tCommon("backToMarketplace")}
             </AppButton>
           </>
         ) : null}

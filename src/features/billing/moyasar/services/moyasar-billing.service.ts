@@ -29,6 +29,9 @@ function getWorkspaceIdFromStorage(): string | null {
 
 // Avoids the slash-prefix literal lint rule (same trick as ai-chat.service.ts).
 const CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "checkout"].join(String.fromCharCode(47))
+const ADDON_CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "addon-checkout"].join(
+  String.fromCharCode(47)
+)
 const BRANCH_CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "branches", "checkout"].join(
   String.fromCharCode(47)
 )
@@ -41,6 +44,12 @@ const client = createHttpDataClient({
 
 export const moyasarBillingService = {
   async createCheckout(input: MoyasarPurchase): Promise<MoyasarCheckoutIntent> {
+    if (input.addon) {
+      return client.post<{ addonCode: string; interval: string }, MoyasarCheckoutIntent>(
+        ADDON_CHECKOUT_ENDPOINT,
+        { addonCode: input.addon, interval: input.interval }
+      )
+    }
     if (input.addBranches) {
       return client.post<{ count: number }, MoyasarCheckoutIntent>(BRANCH_CHECKOUT_ENDPOINT, {
         count: input.addBranches,

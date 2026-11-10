@@ -1,4 +1,5 @@
 import type {
+  AdminAddonPrice,
   AdminApplicationPricing,
   AdminCoupon,
   AdminCouponInput,
@@ -163,6 +164,17 @@ export const platformAdminService = {
 
   reorderPackages(application: PurchasableApplication, packageIds: string[]): Promise<unknown> {
     return client.put(`${ENDPOINT}/pricing/${application}/order`, { packageIds })
+  },
+
+  listAddons(): Promise<AdminAddonPrice[]> {
+    return client.get(`${ENDPOINT}/pricing/addons`)
+  },
+
+  updateAddon(
+    code: string,
+    input: { monthlyPriceHalalas: number; yearlyPriceHalalas: number; isActive: boolean }
+  ): Promise<AdminAddonPrice> {
+    return client.patch(`${ENDPOINT}/pricing/addons/${encodeURIComponent(code)}`, input)
   },
 
   getSettings(): Promise<AdminPlatformSettings> {

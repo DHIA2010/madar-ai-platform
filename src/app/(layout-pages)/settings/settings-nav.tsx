@@ -36,7 +36,7 @@ interface SettingsSection {
     | "payments"
     | "tax"
     | "zatca"
-    | "dailyReport"
+    | "scheduledReports"
     | "whatsapp"
     | "backup"
   href?: string
@@ -55,7 +55,8 @@ const SECTIONS: SettingsSection[] = [
   { key: "tax", href: ROUTES.settingsTaxes },
   { key: "zatca", href: ROUTES.settingsZatca, applications: ["pos"] },
   { key: "whatsapp", href: ROUTES.settingsWhatsApp, applications: ["pos", "ecommerce"] },
-  { key: "dailyReport", href: ROUTES.settingsDailyReport, applications: ["pos"] },
+  // التقارير المجدولة على واتساب -- every package includes the free daily report.
+  { key: "scheduledReports", href: ROUTES.settingsScheduledReports },
   { key: "backup", pending: true },
 ]
 

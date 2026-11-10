@@ -179,6 +179,14 @@ export interface PackageInput {
   isActive: boolean
 }
 
+// A paid add-on bought on its own, independent of any package (backend: subscriptions/addons.ts).
+export interface AdminAddonPrice {
+  code: "whatsapp_daily_report"
+  monthlyPriceHalalas: number
+  yearlyPriceHalalas: number
+  isActive: boolean
+}
+
 export interface AdminPlatformSettings {
   platformName: string
   supportEmail: string

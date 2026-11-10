@@ -87,7 +87,9 @@ export const ROUTES = {
   settingsZatca: "/settings/zatca",
   settingsCashier: "/settings/cashier",
   settingsNotes: "/settings/notes",
-  settingsDailyReport: "/settings/daily-report",
+  // التقارير المجدولة على واتساب: categories (one per app), each with its report templates.
+  settingsScheduledReports: "/settings/scheduled-reports",
+  settingsDailyReport: "/settings/scheduled-reports/pos/daily-report",
   settingsWhatsApp: "/settings/whatsapp",
   madarAdmin: "/madar-admin",
   madarAdminRequests: "/madar-admin/requests",
