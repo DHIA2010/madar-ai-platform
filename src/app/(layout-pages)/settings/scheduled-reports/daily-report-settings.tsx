@@ -39,6 +39,14 @@ import {
 } from "@/features/settings/services/daily-report.service"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 
@@ -136,6 +144,20 @@ function coverageFor(schedule: DailyReportSchedule, now = new Date()): Coverage 
     hours,
     invalid,
   }
+}
+
+// The number as it will be saved -- Saudi local forms (05XXXXXXXX) with the country code -- and
+// spaced for reading: "+966 50 123 4567". Same rules as the backend's toWhatsAppNumber.
+function displayPhone(raw: string): string {
+  let digits = raw.replace(/[^\d+]/g, "")
+  if (digits.startsWith("+")) digits = digits.slice(1)
+  else if (digits.startsWith("00")) digits = digits.slice(2)
+  else if (/^05\d{8}$/.test(digits)) digits = `966${digits.slice(1)}`
+  else if (/^5\d{8}$/.test(digits)) digits = `966${digits}`
+  if (/^9665\d{8}$/.test(digits)) {
+    return `+966 ${digits.slice(3, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`
+  }
+  return `+${digits}`
 }
 
 // Which day an end of a chosen period falls on, relative to the send.
@@ -270,11 +292,18 @@ export default function DailyReportSettings() {
 
   const errorMessage = (error: unknown, fallback: string): string => {
     if (!(error instanceof AppError)) return fallback
-    if (error.status === 403 && error.code !== "DAILY_REPORT_PLAN_LIMIT")
+    if (
+      error.status === 403 &&
+      error.code !== "DAILY_REPORT_PLAN_LIMIT" &&
+      error.code !== "DAILY_REPORT_NUMBER_LOCKED"
+    ) {
       return t("errors.forbidden")
+    }
     switch (error.code) {
       case "DAILY_REPORT_PLAN_LIMIT":
         return t("errors.planLimit")
+      case "DAILY_REPORT_NUMBER_LOCKED":
+        return t("recipients.freeLocked")
       case "DAILY_REPORT_INVALID_TIME":
         return t("errors.invalidTime")
       case "DAILY_REPORT_NO_RECIPIENTS":
@@ -326,7 +355,11 @@ export default function DailyReportSettings() {
     [draft, limits.schedules]
   )
 
-  const save = async () => {
+  // The free plan's number can't be changed once saved, so its first save asks the merchant to
+  // check it first.
+  const [confirmPhone, setConfirmPhone] = useState<string | null>(null)
+
+  const save = async (confirmed = false) => {
     if (!draft) return
     const recipients = draft.recipients
       .map((recipient) => ({ phone: recipient.phone.trim(), name: recipient.name.trim() }))
@@ -343,6 +376,11 @@ export default function DailyReportSettings() {
       toast.error(t("schedules.invalidPeriod"))
       return
     }
+    if (!confirmed && !paid && !lockedPhone && recipients[0]) {
+      setConfirmPhone(recipients[0].phone)
+      return
+    }
+    setConfirmPhone(null)
     setSaving(true)
     try {
       const saved = await dailyReportService.update({
@@ -412,6 +450,8 @@ export default function DailyReportSettings() {
   const usedSchedules = draft.schedules.length
   const canAddSchedule = usedSchedules < limits.schedules
   const canAddRecipient = draft.recipients.length < limits.recipients
+  // On the free plan the saved number can't be changed or removed (only renamed).
+  const lockedPhone = paid ? null : (settings.recipients[0]?.phone ?? null)
   const dateFormat = new Intl.DateTimeFormat(
     locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US",
     { day: "numeric", month: "long", year: "numeric" }
@@ -826,6 +866,35 @@ export default function DailyReportSettings() {
             hint={t("recipients.hint", { max: limits.recipients })}
           >
             <div className="flex flex-col gap-2.5">
+              {/* The free plan's one number is fixed once saved. */}
+              {!paid ? (
+                <div
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-[12px] border px-3.5 py-3 text-[12px] leading-5",
+                    lockedPhone
+                      ? "border-[#e4e7ec] bg-[#f8fafc] text-[#475467]"
+                      : "border-[#f5c26b] bg-[#fff7e6] text-[#7a4b00]"
+                  )}
+                >
+                  {lockedPhone ? (
+                    <Lock className="mt-0.5 size-3.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[#dc6803]" />
+                  )}
+                  <span>
+                    {lockedPhone ? (
+                      t("recipients.freeLocked")
+                    ) : (
+                      <>
+                        <strong className="block text-[12.5px]">
+                          {t("recipients.freeAddOneTitle")}
+                        </strong>
+                        {t("recipients.freeAddOne")}
+                      </>
+                    )}
+                  </span>
+                </div>
+              ) : null}
               {draft.recipients.length === 0 ? (
                 <p
                   className={cn(
@@ -836,45 +905,67 @@ export default function DailyReportSettings() {
                   {t("recipients.empty")}
                 </p>
               ) : (
-                draft.recipients.map((recipient, index) => (
-                  <div
-                    key={index}
-                    className={cn(
-                      "flex flex-wrap items-center gap-2",
-                      index >= limits.recipients && "opacity-50"
-                    )}
-                  >
-                    <Input
-                      value={recipient.name}
-                      placeholder={t("recipients.namePlaceholder")}
-                      aria-label={t("recipients.nameLabel")}
-                      onChange={(event) => updateRecipient(index, { name: event.target.value })}
-                      className={cn(FIELD_CLASS, "min-w-[140px] flex-1")}
-                    />
-                    <Input
-                      value={recipient.phone}
-                      dir="ltr"
-                      inputMode="tel"
-                      placeholder="05XXXXXXXX"
-                      aria-label={t("recipients.phoneLabel")}
-                      onChange={(event) => updateRecipient(index, { phone: event.target.value })}
-                      className={cn(FIELD_CLASS, "min-w-[160px] flex-1 text-left")}
-                    />
-                    <button
-                      type="button"
-                      aria-label={t("recipients.remove")}
-                      className="flex size-11 items-center justify-center rounded-[12px] text-[#98A2B3] transition-colors hover:bg-[#fef2f2] hover:text-[#dc2626]"
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          recipients: draft.recipients.filter((_, position) => position !== index),
-                        })
-                      }
+                draft.recipients.map((recipient, index) => {
+                  const locked = Boolean(lockedPhone) && index === 0
+                  return (
+                    <div
+                      key={index}
+                      className={cn(
+                        "flex flex-wrap items-center gap-2",
+                        index >= limits.recipients && "opacity-50"
+                      )}
                     >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                ))
+                      <Input
+                        value={recipient.name}
+                        placeholder={t("recipients.namePlaceholder")}
+                        aria-label={t("recipients.nameLabel")}
+                        onChange={(event) => updateRecipient(index, { name: event.target.value })}
+                        className={cn(FIELD_CLASS, "min-w-[140px] flex-1")}
+                      />
+                      <div className="relative min-w-[160px] flex-1">
+                        <Input
+                          value={recipient.phone}
+                          dir="ltr"
+                          inputMode="tel"
+                          placeholder="05XXXXXXXX"
+                          aria-label={t("recipients.phoneLabel")}
+                          readOnly={locked}
+                          title={locked ? t("recipients.freeLocked") : undefined}
+                          onChange={(event) =>
+                            updateRecipient(index, { phone: event.target.value })
+                          }
+                          className={cn(
+                            FIELD_CLASS,
+                            "w-full text-left",
+                            locked && "cursor-not-allowed bg-[#f8fafc] pr-9 text-[#475467]"
+                          )}
+                        />
+                        {locked ? (
+                          <Lock className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-[#b54708]" />
+                        ) : null}
+                      </div>
+                      {locked ? (
+                        <span className="size-11" />
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={t("recipients.remove")}
+                          className="flex size-11 items-center justify-center rounded-[12px] text-[#98A2B3] transition-colors hover:bg-[#fef2f2] hover:text-[#dc2626]"
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              recipients: draft.recipients.filter(
+                                (_, position) => position !== index
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })
               )}
               <div className="mt-1 flex flex-wrap items-center gap-3">
                 <Button
@@ -946,6 +1037,43 @@ export default function DailyReportSettings() {
           </p>
         </aside>
       </div>
+
+      <Dialog open={confirmPhone !== null} onOpenChange={(open) => !open && setConfirmPhone(null)}>
+        <DialogContent dir={localeDirection(locale)} className="max-w-[420px] rounded-2xl">
+          <DialogHeader className="text-start">
+            <span className="mb-2 flex size-11 items-center justify-center rounded-[12px] bg-[#fff7e6] text-[#dc6803]">
+              <AlertTriangle className="size-5" />
+            </span>
+            <DialogTitle className={cn("text-[16px] font-extrabold", HEADING)}>
+              {t("recipients.confirmTitle")}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-6 text-[#475467]">
+              {t("recipients.confirmBody")}
+            </DialogDescription>
+          </DialogHeader>
+          <p
+            dir="ltr"
+            className="rounded-[12px] border border-[#E8EBF0] bg-[#f8fafc] py-3 text-center text-[20px] font-extrabold tracking-wide tabular-nums text-[#0b1738]"
+          >
+            {displayPhone(confirmPhone ?? "")}
+          </p>
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button
+              className="h-11 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-bold text-white hover:bg-[#1d4ed8]"
+              onClick={() => void save(true)}
+            >
+              {t("recipients.confirmYes")}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 rounded-[10px] px-5 text-[13px] font-semibold"
+              onClick={() => setConfirmPhone(null)}
+            >
+              {t("recipients.confirmEdit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

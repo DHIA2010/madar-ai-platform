@@ -5136,7 +5136,14 @@
         "remove": "Remove number",
         "add": "Add number",
         "full": "Limit reached",
-        "lockedAdd": "More numbers on the Pro plan"
+        "lockedAdd": "More numbers on the Pro plan",
+        "freeAddOne": "The free plan takes one number, and once saved it can't be changed or removed. Enter the right number to receive the report. Changing it later or adding more needs the Pro plan.",
+        "freeLocked": "The free plan's number is fixed and can't be changed or removed (you can edit the name). To change it or add more, subscribe to the Pro plan.",
+        "freeAddOneTitle": "Check the number before saving",
+        "confirmTitle": "Is this the right number?",
+        "confirmBody": "The daily report will go to this number. On the free plan it can't be changed or removed after saving.",
+        "confirmYes": "Yes, it's right — save",
+        "confirmEdit": "Edit the number"
       },
       "preview": {
         "title": "Message preview",

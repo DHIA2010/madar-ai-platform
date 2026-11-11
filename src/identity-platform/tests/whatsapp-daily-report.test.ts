@@ -427,4 +427,31 @@ describe("WhatsAppDailyReportService", () => {
       })
     ).rejects.toMatchObject({ code: "DAILY_REPORT_INVALID_PERIOD" })
   })
+
+  it("keeps the free report's number fixed once saved, but lets the name change", async () => {
+    await service.updateSettings(ORG, USER, {
+      enabled: true,
+      sendTime: "09:00",
+      recipients: [{ phone: "0501234567", name: "المالك" }],
+    })
+    const renamed = await service.updateSettings(ORG, USER, {
+      enabled: true,
+      sendTime: "10:00",
+      recipients: [{ phone: "+966501234567", name: "أبو محمد" }],
+    })
+    expect(renamed.recipients).toEqual([{ phone: "966501234567", name: "أبو محمد" }])
+    for (const recipients of [[{ phone: "0559876543", name: "" }], []]) {
+      await expect(
+        service.updateSettings(ORG, USER, { enabled: false, sendTime: "10:00", recipients })
+      ).rejects.toMatchObject({ code: "DAILY_REPORT_NUMBER_LOCKED" })
+    }
+    // The paid plan can change it.
+    await addons.extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    const changed = await service.updateSettings(ORG, USER, {
+      enabled: true,
+      sendTime: "10:00",
+      recipients: [{ phone: "0559876543", name: "" }],
+    })
+    expect(changed.recipients[0].phone).toBe("966559876543")
+  })
 })

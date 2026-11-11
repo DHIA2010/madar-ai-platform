@@ -468,6 +468,19 @@ export class WhatsAppDailyReportService {
         "Add at least one number to receive the report."
       )
     }
+    // The free report's number is fixed once saved: changing or removing it needs the paid plan
+    // (otherwise one free number could be rotated between any number of people).
+    const savedPhone = paid
+      ? null
+      : (await this.storedSettings(organizationId)).recipients[0]?.phone
+    if (savedPhone && recipients[0]?.phone !== savedPhone) {
+      throw new IdentityError(
+        "DAILY_REPORT_NUMBER_LOCKED",
+        403,
+        "business",
+        "The free report's number can't be changed -- changing it needs the paid plan."
+      )
+    }
     await this.db.query(
       `INSERT INTO whatsapp_daily_report_settings
          (organization_id, enabled, send_time, schedules, recipients, updated_by, updated_at)
