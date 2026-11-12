@@ -11,6 +11,7 @@ import type {
   GoogleOAuthConnectionView,
   GoogleOAuthRecentEventView,
 } from "./types"
+import { createDefaultProject } from "../shared/default-project"
 
 interface GoogleOAuthStateRecord {
   id: string
@@ -30,6 +31,8 @@ interface ResolveProjectInput {
   organizationId: string
   workspaceId: string | null
   projectId: string | null
+  // Set when starting a connection: a workspace with no project gets its default one.
+  createForUserId?: string | null
 }
 
 interface ResolveProjectResult {
@@ -245,6 +248,13 @@ export class GoogleOAuthRepository
     })
 
     const row = result.rows[0]
+    if (!row && input.createForUserId && !input.projectId) {
+      return createDefaultProject(this.db, {
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.createForUserId,
+      })
+    }
     if (!row) {
       throw new Error("PROJECT_NOT_FOUND")
     }

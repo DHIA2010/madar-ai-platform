@@ -467,6 +467,7 @@ export class GoogleOAuthService {
           organizationId: actor.organizationId,
           workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
           projectId: input.projectId ?? null,
+          createForUserId: actor.userId,
         })
 
     const projectConnection = existingConnection

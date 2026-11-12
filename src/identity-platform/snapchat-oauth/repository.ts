@@ -7,6 +7,7 @@ import type {
 } from "../integrations/provider-repositories"
 
 import type { SnapchatAdsAccountView, SnapchatOAuthConnectionView } from "./types"
+import { createDefaultProject } from "../shared/default-project"
 
 function toIso(value: unknown): string | null {
   if (!value) return null
@@ -66,6 +67,8 @@ export class SnapchatOAuthRepository
     organizationId: string
     workspaceId: string | null
     projectId: string | null
+    // Set when starting a connection: a workspace with no project gets its default one.
+    createForUserId?: string | null
   }) {
     const result = await this.db.query<{ id: string; workspace_id: string | null }>({
       name: "snapchat-oauth-resolve-project",
@@ -84,6 +87,13 @@ export class SnapchatOAuthRepository
     })
 
     const row = result.rows[0]
+    if (!row && input.createForUserId && !input.projectId) {
+      return createDefaultProject(this.db, {
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.createForUserId,
+      })
+    }
     if (!row) {
       throw new Error("PROJECT_NOT_FOUND")
     }

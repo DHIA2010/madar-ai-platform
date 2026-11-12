@@ -291,6 +291,62 @@ describe("google analytics oauth: authorization URL + state generation", () => {
     expect(stateRows.rows[0]?.status).toBe("pending")
   })
 
+  // Found live: a workspace that never had a project (nothing creates one on sign-up) failed
+  // with PROJECT_NOT_FOUND -- both the connection status and the connect button.
+  it("works in a workspace with no project yet: no connection, then start creates its project", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "ga-no-project@madar.test",
+      "GA No Project Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000000720"
+    await database.query(
+      `insert into workspaces (id, organization_id, name, status)
+       values ($1, $2, 'No Project Workspace', 'active') on conflict (id) do nothing`,
+      [workspaceId, actor.organizationId]
+    )
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${login.session.accessToken}`,
+      "x-workspace-id": workspaceId,
+    }
+
+    const before = await database.query(
+      `select id from projects where organization_id = $1 and workspace_id = $2`,
+      [actor.organizationId, workspaceId]
+    )
+    expect(before.rows).toHaveLength(0)
+
+    const status = await fetch(`${baseUrl}/v1/integrations/google-analytics/connection`, {
+      headers,
+    })
+    expect(status.status).toBe(200)
+    expect(await status.json()).toMatchObject({ connection: null })
+
+    const start = await fetch(`${baseUrl}/v1/integrations/google-analytics/oauth/start`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceId }),
+    })
+    expect(start.status).toBe(200)
+    const projects = await database.query<{ id: string }>(
+      `select id from projects where organization_id = $1 and workspace_id = $2`,
+      [actor.organizationId, workspaceId]
+    )
+    expect(projects.rows).toHaveLength(1)
+
+    // Starting again reuses it.
+    await fetch(`${baseUrl}/v1/integrations/google-analytics/oauth/start`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceId }),
+    })
+    const again = await database.query(
+      `select id from projects where organization_id = $1 and workspace_id = $2`,
+      [actor.organizationId, workspaceId]
+    )
+    expect(again.rows).toHaveLength(1)
+  })
+
   it("rejects start from a non-owner/admin actor", async () => {
     const { actor } = await registerAndProvisionOrg("ga-forbidden@madar.test", "GA Forbidden Org")
     const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000000712"

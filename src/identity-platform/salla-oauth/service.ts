@@ -458,6 +458,7 @@ export class SallaOAuthService {
       organizationId: actor.organizationId,
       workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
       projectId: input.projectId ?? null,
+      createForUserId: actor.userId,
     })
 
     const existingConnection = await this.repository.findConnectionByProject(
@@ -1006,11 +1007,18 @@ export class SallaOAuthService {
   async getActiveConnection(actor: AuthenticatedActor) {
     await this.loadResolvedConfig()
 
-    const resolvedProject = await this.repository.resolveProject({
-      organizationId: actor.organizationId,
-      workspaceId: actor.workspaceId ?? null,
-      projectId: null,
-    })
+    // A workspace with no project yet simply has nothing connected.
+    const resolvedProject = await this.repository
+      .resolveProject({
+        organizationId: actor.organizationId,
+        workspaceId: actor.workspaceId ?? null,
+        projectId: null,
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") return null
+        throw error
+      })
+    if (!resolvedProject) return { connection: null }
 
     const connection = await this.repository.findConnectionByProject(
       actor.organizationId,
