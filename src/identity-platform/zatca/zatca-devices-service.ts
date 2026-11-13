@@ -32,6 +32,13 @@ import { generateZatcaPhase2QrCode } from "../pos/zatca-qr-code"
 const ZATCA_DEVICE_ERRORS = {
   notFound: () =>
     new IdentityError("ZATCA_DEVICE_NOT_FOUND", 404, "business", "ZATCA device not found."),
+  environmentNotAllowed: () =>
+    new IdentityError(
+      "ZATCA_ENVIRONMENT_NOT_ALLOWED",
+      403,
+      "security",
+      "This account can onboard production devices only."
+    ),
   wrongStatus: (expected: string, actual: string) =>
     new IdentityError(
       "ZATCA_DEVICE_WRONG_STATUS",
@@ -288,6 +295,28 @@ export class ZatcaDevicesService {
     )
     const counts = await this.signedDocumentCounts(organizationId)
     return result.rows.map((row) => mapDevice(row, counts.get(row.id) ?? 0))
+  }
+
+  // The environments this user may onboard a device for: production for everyone, the sandbox and
+  // the simulation only for Madar's own testing accounts (zatcaTestEnvironmentEmails).
+  async allowedEnvironments(userId: string, testEmails: string[]): Promise<ZatcaCsrEnvironment[]> {
+    const result = await this.database.query<{ email: string }>(
+      `SELECT email FROM users WHERE id = $1`,
+      [userId]
+    )
+    const email = result.rows[0]?.email?.toLowerCase()
+    return email && testEmails.includes(email)
+      ? ["sandbox", "simulation", "production"]
+      : ["production"]
+  }
+
+  async requireAllowedEnvironment(
+    userId: string,
+    testEmails: string[],
+    environment: ZatcaCsrEnvironment
+  ): Promise<void> {
+    if (!(await this.allowedEnvironments(userId, testEmails)).includes(environment))
+      throw ZATCA_DEVICE_ERRORS.environmentNotAllowed()
   }
 
   // Sales and returns each device of this organization signed.

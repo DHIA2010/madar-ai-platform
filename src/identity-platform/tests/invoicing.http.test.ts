@@ -422,4 +422,30 @@ describe("invoicing: quotations and B2B invoices", () => {
     expect(refused.status).toBe(403)
     expect(refused.body.code).toBe("APPLICATION_NOT_SUBSCRIBED")
   })
+
+  it("offers the ZATCA sandbox and simulation to Madar's testing account only", async () => {
+    const tester = await signIn("admin@madar.local", "Madar")
+    const testerDevices = await call("GET", "/v1/zatca/devices", tester.token)
+    expect(testerDevices.body.allowedEnvironments).toEqual(["sandbox", "simulation", "production"])
+
+    const merchant = await signIn("h@shop.test", "Merchant")
+    const merchantDevices = await call("GET", "/v1/zatca/devices", merchant.token)
+    expect(merchantDevices.body.allowedEnvironments).toEqual(["production"])
+
+    for (const environment of ["sandbox", "simulation"]) {
+      const refused = await call("POST", "/v1/zatca/devices", merchant.token, {
+        commonName: "Branch 1",
+        environment,
+        vatNumber: "311111111100003",
+        organizationName: "Merchant",
+        organizationUnit: "Riyadh",
+        egsSerialNumber: "1-Madar|2-B2B|3-0001",
+        location: "Riyadh",
+        industry: "Services",
+      })
+      expect(refused.status).toBe(403)
+      expect(refused.body.code).toBe("ZATCA_ENVIRONMENT_NOT_ALLOWED")
+    }
+    expect((await call("GET", "/v1/zatca/devices", merchant.token)).body.items).toHaveLength(0)
+  })
 })

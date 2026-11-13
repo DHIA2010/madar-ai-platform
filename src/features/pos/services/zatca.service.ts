@@ -122,9 +122,20 @@ const client = createHttpDataClient({
 })
 
 export const zatcaService = {
-  async listDevices(): Promise<ZatcaDevice[]> {
-    const response = await client.get<{ items: ZatcaDevice[] }>(DEVICES_ENDPOINT)
-    return response.items
+  // The devices, and the environments this user may onboard a new one for (production only,
+  // except for Madar's own testing accounts).
+  async listDevices(): Promise<{
+    devices: ZatcaDevice[]
+    allowedEnvironments: ZatcaCsrEnvironment[]
+  }> {
+    const response = await client.get<{
+      items: ZatcaDevice[]
+      allowedEnvironments?: ZatcaCsrEnvironment[]
+    }>(DEVICES_ENDPOINT)
+    return {
+      devices: response.items,
+      allowedEnvironments: response.allowedEnvironments ?? ["production"],
+    }
   },
 
   // Step 1 -- generates a real key pair + CSR locally, no OTP or live ZATCA call involved.

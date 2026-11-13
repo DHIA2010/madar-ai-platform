@@ -38,6 +38,9 @@ export interface IdentityPlatformConfig {
   // resolveActorFromAccessToken and cached on the resolved actor as isPlatformAdmin. No
   // per-user DB flag or admin UI yet; add/remove staff by redeploying with a new value.
   platformAdminEmails: string[]
+  // Who may onboard a ZATCA device against the sandbox or the simulation gateway -- Madar's own
+  // testing. Every other account gets production only.
+  zatcaTestEnvironmentEmails: string[]
   // Bare env var name (no IDENTITY_PLATFORM_ prefix) on purpose -- matches the Anthropic SDK's
   // own zero-arg client convention (`new Anthropic()` reads ANTHROPIC_API_KEY itself), so this
   // one value stays usable by any ad-hoc script too, not just this config loader. Optional: the
@@ -81,6 +84,7 @@ const configSchema = z.object({
   objectStorageSecretAccessKey: z.string().optional(),
   objectStorageRegion: z.string().optional(),
   platformAdminEmails: z.array(z.string().email()),
+  zatcaTestEnvironmentEmails: z.array(z.string().email()),
   anthropicApiKey: z.string().optional(),
   aiChatModel: z.string().min(1),
   invoiceReaderModel: z.string().min(1),
@@ -186,6 +190,12 @@ export function loadIdentityPlatformConfig(
             .map((email) => email.trim().toLowerCase())
             .filter(Boolean)
         : []),
+    zatcaTestEnvironmentEmails:
+      overrides.zatcaTestEnvironmentEmails ??
+      (process.env.ZATCA_TEST_ENVIRONMENT_EMAILS ?? "admin@madar.local")
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean),
     anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
     aiChatModel:
       overrides.aiChatModel ?? process.env.IDENTITY_PLATFORM_AI_CHAT_MODEL ?? "claude-sonnet-5",

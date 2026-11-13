@@ -65,8 +65,6 @@ const FIELD_CLASS =
 
 type ZatcaTranslator = ReturnType<typeof useTranslations<"settings.zatca">>
 
-const ZATCA_ENVIRONMENTS: ZatcaCsrEnvironment[] = ["sandbox", "simulation", "production"]
-
 function environmentLabel(environment: ZatcaCsrEnvironment, t: ZatcaTranslator): string {
   return t(`environments.${environment}` as "environments.sandbox")
 }
@@ -110,13 +108,14 @@ interface Draft {
 }
 
 function emptyDraft(defaults: {
+  environment: ZatcaCsrEnvironment
   organizationName: string
   vatNumber: string
   location: string
 }): Draft {
   return {
     commonName: "",
-    environment: "sandbox",
+    environment: defaults.environment,
     vatNumber: defaults.vatNumber,
     organizationName: defaults.organizationName,
     organizationUnit: "",
@@ -141,6 +140,8 @@ export default function ZatcaSettings() {
   const { currentOrganization, currentWorkspace } = useWorkspace()
 
   const [devices, setDevices] = useState<ZatcaDevice[]>([])
+  // The sandbox and the simulation are offered to Madar's own testing accounts only.
+  const [environments, setEnvironments] = useState<ZatcaCsrEnvironment[]>(["production"])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -149,7 +150,7 @@ export default function ZatcaSettings() {
   const [detailsDevice, setDetailsDevice] = useState<ZatcaDevice | null>(null)
   const [removingDevice, setRemovingDevice] = useState<ZatcaDevice | null>(null)
   const [draft, setDraft] = useState<Draft>(
-    emptyDraft({ organizationName: "", vatNumber: "", location: "" })
+    emptyDraft({ environment: "production", organizationName: "", vatNumber: "", location: "" })
   )
 
   const [otpByDevice, setOtpByDevice] = useState<Record<string, string>>({})
@@ -162,7 +163,9 @@ export default function ZatcaSettings() {
     setLoading(true)
     setLoadError(null)
     try {
-      setDevices(await zatcaService.listDevices())
+      const loaded = await zatcaService.listDevices()
+      setDevices(loaded.devices)
+      setEnvironments(loaded.allowedEnvironments)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
       setLoadError(status === 403 ? t("loadError.forbidden") : t("loadError.generic"))
@@ -201,6 +204,7 @@ export default function ZatcaSettings() {
   const openCreate = () => {
     setDraft(
       emptyDraft({
+        environment: environments[0] ?? "production",
         organizationName: currentOrganization?.name ?? "",
         vatNumber: currentOrganization?.settings.taxNumber ?? "",
         location: currentOrganization?.settings.addressShort ?? "",
@@ -642,7 +646,7 @@ export default function ZatcaSettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper" className="rounded-[12px]">
-                  {ZATCA_ENVIRONMENTS.map((environment) => (
+                  {environments.map((environment) => (
                     <SelectItem
                       key={environment}
                       value={environment}

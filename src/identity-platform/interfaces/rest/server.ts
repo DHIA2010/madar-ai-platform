@@ -5624,11 +5624,23 @@ export function createIdentityApiServer(
         }
         if (!canManageZatcaDevices(actor.modulePermissions)) throw ERRORS.forbidden()
 
+        const testEmails = container.config.zatcaTestEnvironmentEmails
         if (method === "GET") {
-          return send(200, { items: await zatcaDevicesService.list(actor.organizationId) })
+          return send(200, {
+            items: await zatcaDevicesService.list(actor.organizationId),
+            allowedEnvironments: await zatcaDevicesService.allowedEnvironments(
+              actor.userId,
+              testEmails
+            ),
+          })
         }
         if (method === "POST") {
           const payload = createZatcaDeviceSchema.parse(await readJsonBody(request))
+          await zatcaDevicesService.requireAllowedEnvironment(
+            actor.userId,
+            testEmails,
+            payload.environment
+          )
           return send(
             201,
             await zatcaDevicesService.createDevice(actor.organizationId, {
