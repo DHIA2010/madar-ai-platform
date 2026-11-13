@@ -204,6 +204,24 @@ function buildStatsWindows(
   return windows
 }
 
+// Today in the ad account's own timezone, local midnight to local midnight. buildStatsWindows
+// stops at the start of today; this is the one extra window that brings in the numbers of the
+// day still running, so a campaign that started today doesn't show zeros until tomorrow.
+function todayStatsWindow(timeZone: string): { start: Date; end: Date } {
+  const todayParts = currentLocalDateParts(timeZone, new Date())
+  const start = localMidnightUtc(timeZone, todayParts.year, todayParts.month, todayParts.day)
+  // Noon tomorrow by the calendar, re-aligned to local midnight, so a DST change today can't
+  // push the end off the day boundary.
+  const tomorrowParts = currentLocalDateParts(
+    timeZone,
+    new Date(start.getTime() + 36 * 60 * 60 * 1000)
+  )
+  return {
+    start,
+    end: localMidnightUtc(timeZone, tomorrowParts.year, tomorrowParts.month, tomorrowParts.day),
+  }
+}
+
 // Confirmed live against a real account with real spend (earlier this session, the
 // documented TOTAL-granularity example was extrapolated to DAY+breakdown and turned out to be
 // inverted): breakdown_stats sits directly on timeseries_stat, keyed by breakdown type, as an
@@ -382,6 +400,29 @@ async function fetchDailyStatsAllWindows(input: {
   await Promise.all(
     Array.from({ length: Math.min(STATS_WINDOW_CONCURRENCY, windows.length) }, () => worker())
   )
+
+  // Today's running numbers, asked for on their own: they are re-read on every sync (the row
+  // of a day is replaced, not added to), and if Snapchat refuses the still-open day the
+  // finished days above are kept instead of failing the whole sync.
+  try {
+    const today = await fetchStatsWindow({
+      apiBaseUrl: input.apiBaseUrl,
+      accountId: input.accountId,
+      accessToken: input.accessToken,
+      fields: input.fields,
+      breakdown: input.breakdown,
+      window: todayStatsWindow(input.timeZone),
+    })
+    results.push(...today)
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "snapchat_stats_today_unavailable",
+        breakdown: input.breakdown,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    )
+  }
 
   return results
 }
@@ -647,18 +688,20 @@ export class SnapchatSyncService {
         totalRecords: totalWritten,
       }
 
-      // buildStatsWindows always walks up to (but excludes) today's local midnight -- today's
-      // own stats are still accumulating in Snapchat's system and would be incomplete if
-      // fetched now, so the cursor advances only through yesterday. The next incremental sync
-      // then starts at today, picking up whatever wasn't complete yet at this run's time.
+      // Today's numbers are still moving and yesterday's can still settle for a while after
+      // its midnight (a sync right after midnight would otherwise freeze them short of what
+      // Snapchat shows), so the cursor stops at the day before yesterday: every incremental
+      // sync reads yesterday again and then today (see todayStatsWindow).
       const todayParts = currentLocalDateParts(timeZone, new Date())
-      const yesterday = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day))
-      yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+      const settledThrough = new Date(
+        Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day)
+      )
+      settledThrough.setUTCDate(settledThrough.getUTCDate() - 2)
       await this.syncRepository.saveSyncCursor({
         connectionId: connection.id,
         customerId: accountId,
         entityType: "stats",
-        lastRecordDate: yesterday.toISOString().slice(0, 10),
+        lastRecordDate: settledThrough.toISOString().slice(0, 10),
       })
 
       await this.syncRepository.markSyncRunCompleted(syncRun.id, actor.userId, metrics)

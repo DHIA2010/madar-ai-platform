@@ -35,6 +35,8 @@ interface MockSnapchatDataConfig {
   campaignDailyStats?: MockBreakdownDailyStat[]
   adDailyStats?: MockBreakdownDailyStat[]
   campaignsShouldFail?: boolean
+  // Snapchat refuses the still-open day only; finished days answer as usual.
+  todayStatsShouldFail?: boolean
 }
 
 // Simulates Snapchat's wrapped list shape ({ campaigns: [{ sub_request_status, campaign: {...} }] })
@@ -192,6 +194,9 @@ function mockSnapchatResponses(input: {
       const parsed = new URL(url)
       const windowStart = new Date(parsed.searchParams.get("start_time") ?? 0).getTime()
       const windowEnd = new Date(parsed.searchParams.get("end_time") ?? 0).getTime()
+      if (input.data?.todayStatsShouldFail && windowEnd > Date.now()) {
+        return new Response("{}", { status: 400 })
+      }
       const breakdown = parsed.searchParams.get("breakdown") ?? "campaign"
       const source = breakdown === "ad" ? adDailyStats : campaignDailyStats
       const windowStats = source.filter((stat) => {
@@ -707,10 +712,10 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     })
     expect(second.status).toBe(200)
 
-    // The cursor now covers everything through yesterday, and nothing has "happened" between
-    // the two syncs in test time -- so the second sync's stats range (cursor+1 to today) is
-    // empty and makes zero further stats calls, where the first sync made many.
-    expect(externalStatsCallCount()).toBe(statsCallsAfterFirst)
+    // The cursor stops at the day before yesterday, so the second sync reads only yesterday
+    // (one window) and today (one window) for each of the two breakdowns -- four stats calls,
+    // where the first sync made many.
+    expect(externalStatsCallCount()).toBe(statsCallsAfterFirst + 4)
 
     const cursorAfterSecond = await database.query<{ last_record_date: string }>(
       "select last_record_date from snapchat_sync_cursors where connection_id = $1 and customer_id = $2 and entity_type = 'stats'",
@@ -719,6 +724,158 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     expect(cursorAfterSecond.rows[0]?.last_record_date).toEqual(
       cursorAfterFirst.rows[0]?.last_record_date
     )
+  })
+
+  it("brings in today's running numbers and replaces them on the next sync", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "snapchat-sync-today@madar.test",
+      "Snapchat Sync Today Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001170"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000001171",
+      label: "Snapchat Sync Today",
+    })
+
+    // The mocked ad account reports in UTC, so its "today" starts at UTC midnight.
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    const todayStart = today.toISOString()
+    const accountId = "acc-today-1"
+    const campaignDailyStats: MockBreakdownDailyStat[] = [
+      {
+        entityId: "camp-1",
+        startTime: todayStart,
+        stats: { impressions: 7530, spend: 91_550_000 },
+      },
+    ]
+    const adDailyStats: MockBreakdownDailyStat[] = [
+      { entityId: "ad-1", startTime: todayStart, stats: { impressions: 7530, spend: 91_550_000 } },
+    ]
+    mockSnapchatResponses({
+      baseUrl,
+      accessToken: "snap-access-today",
+      refreshToken: "snap-refresh-today",
+      organizationId: "org-today",
+      organizationName: "Today Org",
+      accountId,
+      accountName: "Today Account",
+      data: {
+        campaigns: [{ id: "camp-1", updated_at: "2026-01-01T00:00:00Z" }],
+        adSquads: [{ id: "sq-1", campaign_id: "camp-1", updated_at: "2026-01-01T00:00:00Z" }],
+        ads: [{ id: "ad-1", ad_squad_id: "sq-1", updated_at: "2026-01-01T00:00:00Z" }],
+        campaignDailyStats,
+        adDailyStats,
+      },
+    })
+
+    const started = await connectSnapchat({ login, workspaceId })
+    const sync = (idempotencyKey: string) =>
+      fetch(`${baseUrl}/v1/integrations/snapchat-ads/sync`, {
+        method: "POST",
+        headers: syncHeaders(login, workspaceId),
+        body: JSON.stringify({
+          connectionId: started.connectionId,
+          customerId: accountId,
+          startDate: "2026-01-01",
+          endDate: "2026-01-08",
+          idempotencyKey,
+          mode: "incremental" as const,
+          trigger: "manual" as const,
+        }),
+      })
+    const todayRows = () =>
+      database.query<{ entity_id: string; payload: Record<string, unknown> }>(
+        `select entity_id, payload from snapchat_records
+          where connection_id = $1 and entity_type = 'stats' order by entity_id`,
+        [started.connectionId]
+      )
+
+    expect((await sync("sync-today-1")).status).toBe(200)
+    const first = await todayRows()
+    // Campaign, ad squad (derived from the ad) and ad: one row each for today.
+    expect(first.rows.map((row) => row.entity_id)).toEqual([
+      `ad-1:${todayStart}`,
+      `camp-1:${todayStart}`,
+      `sq-1:${todayStart}`,
+    ])
+    expect(first.rows.every((row) => row.payload.impressions === 7530)).toBe(true)
+
+    // Later the same day Snapchat reports more: the same rows are replaced, not added to.
+    campaignDailyStats[0].stats = { impressions: 9000, spend: 110_000_000 }
+    adDailyStats[0].stats = { impressions: 9000, spend: 110_000_000 }
+    expect((await sync("sync-today-2")).status).toBe(200)
+    const second = await todayRows()
+    expect(second.rows).toHaveLength(3)
+    expect(second.rows.every((row) => row.payload.impressions === 9000)).toBe(true)
+  })
+
+  it("keeps the finished days when Snapchat refuses the still-open day", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "snapchat-sync-today-refused@madar.test",
+      "Snapchat Sync Today Refused Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001180"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000001181",
+      label: "Snapchat Sync Today Refused",
+    })
+
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    const yesterdayStart = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString()
+    const accountId = "acc-today-2"
+    mockSnapchatResponses({
+      baseUrl,
+      accessToken: "snap-access-today-refused",
+      refreshToken: "snap-refresh-today-refused",
+      organizationId: "org-today-refused",
+      organizationName: "Today Refused Org",
+      accountId,
+      accountName: "Today Refused Account",
+      data: {
+        campaigns: [{ id: "camp-1", updated_at: "2026-01-01T00:00:00Z" }],
+        campaignDailyStats: [
+          {
+            entityId: "camp-1",
+            startTime: yesterdayStart,
+            stats: { impressions: 100, spend: 500 },
+          },
+          { entityId: "camp-1", startTime: today.toISOString(), stats: { impressions: 5 } },
+        ],
+        adDailyStats: [],
+        todayStatsShouldFail: true,
+      },
+    })
+
+    const started = await connectSnapchat({ login, workspaceId })
+    const response = await fetch(`${baseUrl}/v1/integrations/snapchat-ads/sync`, {
+      method: "POST",
+      headers: syncHeaders(login, workspaceId),
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: accountId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-today-refused-1",
+        mode: "incremental" as const,
+        trigger: "manual" as const,
+      }),
+    })
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { status: string }).status).toBe("completed")
+
+    const rows = await database.query<{ entity_id: string }>(
+      `select entity_id from snapchat_records where connection_id = $1 and entity_type = 'stats'`,
+      [started.connectionId]
+    )
+    expect(rows.rows.map((row) => row.entity_id)).toEqual([`camp-1:${yesterdayStart}`])
   })
 
   it("deletes the connection cleanly after a sync has written records (no FK violation)", async () => {
