@@ -26,7 +26,12 @@ export interface GoogleSignInDeps {
   // Signs the round-trip state, so a callback can't be forged or replayed after it expires.
   stateSecret: string
   // A short-lived, single-use sign-in link for the account (see LoginLinkService).
-  createSignInLink: (input: { userId: string; organizationId: string }) => Promise<string>
+  // `created` says the account is brand new.
+  createSignInLink: (input: {
+    userId: string
+    organizationId: string
+    created: boolean
+  }) => Promise<string>
   // A brand-new account was just created (e.g. it becomes a CRM lead). Must not throw.
   onAccountCreated?: (input: {
     organizationId: string
@@ -38,6 +43,13 @@ export interface GoogleSignInDeps {
 interface GoogleProfile {
   email: string
   name: string
+}
+
+// Where the sign-in link sends the browser. A brand-new account lands on the welcome screen, like
+// an e-mail sign-up does; the parameter lets that page report the sign-up to the ad platforms
+// (welcome-screen.tsx).
+export function googleSignInRedirectPath(created: boolean): string {
+  return created ? "/welcome/?signup=google" : "/"
 }
 
 export type GoogleSignInResult =
@@ -175,6 +187,7 @@ export class GoogleSignInService {
         signInUrl: await this.deps.createSignInLink({
           userId: existing.id,
           organizationId: membership.organizationId,
+          created: false,
         }),
       }
     }
@@ -184,7 +197,7 @@ export class GoogleSignInService {
     return {
       status: "ok",
       created: true,
-      signInUrl: await this.deps.createSignInLink({ userId, organizationId }),
+      signInUrl: await this.deps.createSignInLink({ userId, organizationId, created: true }),
     }
   }
 

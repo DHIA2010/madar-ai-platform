@@ -1,10 +1,12 @@
 "use client"
 
+import { useEffect } from "react"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
 import { ArrowLeft, ArrowRight, Check } from "lucide-react"
 
+import { pushDataLayerEvent } from "@/lib/data-layer"
 import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 
@@ -13,6 +15,10 @@ import { AppButton } from "@/components/app"
 import { useAuth } from "../hooks"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
+
+// Per page load, not per mount: ProtectedRoute can mount this screen more than once while the
+// session settles.
+let googleSignUpReported = false
 
 // Shown once, right after a fresh (non-invitation) registration -- see signup-form.tsx's
 // onSubmit. By the time this renders the user is already fully authenticated (register() chains
@@ -25,6 +31,19 @@ export function WelcomeScreen() {
   const locale = useLocale() as Locale
   const dir = localeDirection(locale)
   const ArrowIcon = dir === "rtl" ? ArrowLeft : ArrowRight
+
+  // An account just created with "Continue with Google" arrives as /welcome/?signup=google (the
+  // e-mail form reports its own sign-up, see signup-form.tsx). Report it once, then drop the
+  // parameter so a refresh doesn't count it again.
+  const signupMethod = useSearchParams().get("signup")
+  useEffect(() => {
+    if (signupMethod !== "google") return
+    if (!googleSignUpReported) {
+      googleSignUpReported = true
+      pushDataLayerEvent("sign_up", { method: "google" })
+    }
+    router.replace(ROUTES.welcome)
+  }, [signupMethod, router])
 
   return (
     <div className="relative flex min-h-svh w-full items-center justify-center overflow-hidden bg-gradient-to-br from-blue-50 via-sky-50 to-white p-6 md:p-10">

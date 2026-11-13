@@ -42,6 +42,13 @@ const CLICK_IDS = [
   ["twclid", "x"],
 ] as const
 
+// True for a query parameter that only says where a visitor came from (UTM tags, an ad click id,
+// the site's hand-over). The app loads its ad pixels only on URLs made of these -- anything else
+// (an invitation or install token) must never reach an ad platform.
+export function isAttributionParam(key: string): boolean {
+  return key === ATTRIBUTION_PARAM || key.startsWith("utm_") || CLICK_IDS.some(([id]) => id === key)
+}
+
 const clip = (value: string | null, max = 200) =>
   value ? value.trim().slice(0, max) || null : null
 

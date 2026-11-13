@@ -9,7 +9,8 @@ export const MADAR_REGISTER_URL = `${MADAR_APP_URL}${ROUTES.register}`
 export const MADAR_LOGIN_URL = `${MADAR_APP_URL}${ROUTES.login}`
 // Madar's demo meeting on Cal.com, booked right after the "talk to sales" form.
 export const MADAR_DEMO_CAL_LINK = "madar/30min"
-// The marketing site's Google Tag Manager container (ad pixels and form-submission tracking).
+// Madar's Google Tag Manager container (ad pixels and conversion tracking): on the whole marketing
+// site, and in the app on the sign-up pages only (see SignUpFunnelTagManager).
 export const MARKETING_GTM_CONTAINER_ID = "GTM-TWXLZT69"
 
 // madar.my and www.madar.my resolve to the same frontend service as app.madar.my (same ALB,
@@ -21,6 +22,12 @@ const MARKETING_HOSTNAMES = new Set(["madar.my", "www.madar.my"])
 export function isMarketingHostname(rawHost: string): boolean {
   const host = rawHost.split(":")[0]?.toLowerCase() ?? ""
   return MARKETING_HOSTNAMES.has(host)
+}
+
+// The product's own host (app.madar.my), where sign-up happens.
+export function isMadarAppHostname(rawHost: string): boolean {
+  const host = rawHost.split(":")[0]?.toLowerCase() ?? ""
+  return host === new URL(MADAR_APP_URL).hostname
 }
 
 // Homepage-relative (not bare "#...") so these still resolve from /privacy and /terms too.

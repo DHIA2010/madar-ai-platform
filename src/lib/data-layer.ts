@@ -1,4 +1,5 @@
-// Events for Google Tag Manager (loaded on the marketing site -- see components/google-tag-manager.tsx).
+// Events for Google Tag Manager (loaded on the marketing site and on the app's sign-up pages -- see
+// components/google-tag-manager.tsx).
 // GTM reacts to them through "Custom Event" triggers named after `event`, and fires whatever tags
 // (Meta, Snapchat, TikTok, Google Ads, GA4...) are attached there. Never put personal data (phone,
 // email, names) in here: it ends up with every ad platform.

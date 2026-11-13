@@ -116,7 +116,8 @@ export default async function RootLayout({
   return (
     <html lang={htmlLang} dir={htmlDir} className={cairo.variable} suppressHydrationWarning>
       <body className={`${cairo.className} antialiased`} suppressHydrationWarning>
-        {/* Google Tag Manager -- only on the public marketing site (madar.my), not in the app. */}
+        {/* Google Tag Manager -- on the public marketing site (madar.my). The app loads it on its
+            sign-up pages only (SignUpFunnelTagManager). */}
         {isMarketingSite ? (
           <>
             <GoogleTagManagerNoScript containerId={MARKETING_GTM_CONTAINER_ID} />

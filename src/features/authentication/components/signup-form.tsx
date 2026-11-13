@@ -10,6 +10,7 @@ import { Briefcase, Building2, Check, Lock, Mail, User, Users } from "lucide-rea
 import { Controller, type Resolver, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
+import { pushDataLayerEvent } from "@/lib/data-layer"
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
@@ -256,6 +257,10 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
       setFormError(error instanceof Error ? error.message : t("genericError"))
       return
     }
+
+    // A new Madar account, for the ad platforms (see lib/data-layer.ts). Joining someone else's
+    // organization through an invitation is not one.
+    if (!isInvitationMode) pushDataLayerEvent("sign_up", { method: "email" })
 
     if (zidInstallToken) {
       // GuestRoute skips its own post-auth redirect whenever ?zidInstall is present (see

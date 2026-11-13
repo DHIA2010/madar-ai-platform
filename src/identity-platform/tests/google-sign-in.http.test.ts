@@ -6,7 +6,7 @@ import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
-import { GoogleSignInService } from "../google-sign-in/service"
+import { googleSignInRedirectPath, GoogleSignInService } from "../google-sign-in/service"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createIdentityApiServer } from "../interfaces/rest/server"
@@ -68,8 +68,13 @@ beforeEach(async () => {
       }),
     },
     stateSecret: "state-secret-for-tests",
-    createSignInLink: (input) =>
-      links.create({ ...input, redirectPath: "/", singleUse: true, ttlMs: 5 * 60 * 1000 }),
+    createSignInLink: ({ created, ...account }) =>
+      links.create({
+        ...account,
+        redirectPath: googleSignInRedirectPath(created),
+        singleUse: true,
+        ttlMs: 5 * 60 * 1000,
+      }),
   })
   server = createIdentityApiServer(container)
   await new Promise<void>((resolve) => server.listen(0, resolve))
@@ -117,7 +122,8 @@ describe("continue with Google", () => {
       redirectUrl: string
     }
     expect(body.user).toMatchObject({ email: "new.owner@gmail.com", fullName: "Sara Ahmed" })
-    expect(body.redirectUrl).toBe("/")
+    // A new account goes to the welcome screen, which reports the sign-up to the ad platforms.
+    expect(body.redirectUrl).toBe("/welcome/?signup=google")
     const organization = await container.zidAutoProvisionDeps!.organizations.findById(
       body.session.organizationId
     )
@@ -149,9 +155,11 @@ describe("continue with Google", () => {
     const body = (await (await consume(result.signInUrl)).json()) as {
       user: { id: string }
       session: { organizationId: string }
+      redirectUrl: string
     }
     expect(body.user.id).toBe(account.userId)
     expect(body.session.organizationId).toBe(account.organizationId)
+    expect(body.redirectUrl).toBe("/")
   })
 
   it("refuses a forged state, an unverified email, and a token issued to someone else", async () => {

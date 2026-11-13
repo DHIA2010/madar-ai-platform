@@ -5,6 +5,7 @@ import {
   ATTRIBUTION_PARAM,
   captureAttribution,
   encodeAttribution,
+  isAttributionParam,
   readAttribution,
 } from "./attribution"
 
@@ -46,5 +47,14 @@ describe("attribution", () => {
     window.localStorage.clear()
     visit(`/auth/basic/register?${ATTRIBUTION_PARAM}=${handed}`)
     expect(readAttribution()!.first).toMatchObject({ source: "snapchat", campaign: "Ramadan" })
+  })
+
+  it("tells campaign parameters from anything else in a URL", () => {
+    for (const key of ["utm_source", "utm_campaign", "ScCid", "gclid", ATTRIBUTION_PARAM]) {
+      expect(isAttributionParam(key)).toBe(true)
+    }
+    for (const key of ["invitation", "zidInstall", "next", "token"]) {
+      expect(isAttributionParam(key)).toBe(false)
+    }
   })
 })

@@ -37,7 +37,7 @@ import { SallaSyncRepository } from "../../salla-oauth/sync-repository"
 import { verifySallaWebhookSignature } from "../../salla-oauth/webhook-verification"
 import { SallaWebhookService, type SallaWebhookPayload } from "../../salla-oauth/webhook-service"
 import { SallaMarketplaceAutoProvisionService } from "../../salla-oauth/auto-provision-service"
-import { GoogleSignInService } from "../../google-sign-in/service"
+import { googleSignInRedirectPath, GoogleSignInService } from "../../google-sign-in/service"
 import { LoginLinkService } from "../../login-links/service"
 import { mapSallaAppEvent, type SallaAppEventBody } from "../../tracking/salla-app-events"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
@@ -1286,10 +1286,10 @@ export function createIdentityApiServer(
           ...container.zidAutoProvisionDeps,
           credentials: container.infrastructure.googleIdentityCredentialsProvider,
           stateSecret: container.config.tokenHashSecret,
-          createSignInLink: (input) =>
+          createSignInLink: ({ created, ...account }) =>
             loginLinkService.create({
-              ...input,
-              redirectPath: "/",
+              ...account,
+              redirectPath: googleSignInRedirectPath(created),
               singleUse: true,
               ttlMs: 5 * 60 * 1000,
             }),
