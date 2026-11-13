@@ -11,7 +11,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 // Several screens serve more than one app (invoices for POS and E-commerce, products for POS,
 // E-commerce and Supplies), so a rule lists every app that may use it -- any one is enough.
 
-type GatedApplication = "pos" | "ecommerce" | "advertising" | "procurement"
+type GatedApplication = "pos" | "ecommerce" | "advertising" | "procurement" | "invoicing"
 
 interface AccessRule {
   prefix: string
@@ -25,11 +25,15 @@ const RULES: AccessRule[] = [
   { prefix: "/v1/pos/payment-methods", applications: ["pos", "ecommerce"] },
   { prefix: "/v1/pos/settings", applications: ["pos", "ecommerce"] },
   { prefix: "/v1/pos/", applications: ["pos"] },
-  { prefix: "/v1/zatca/", applications: ["pos", "ecommerce"] },
-  { prefix: "/v1/customers", applications: ["pos", "ecommerce"] },
-  // Purchases need the product list and stock too.
-  { prefix: "/v1/products", applications: ["pos", "ecommerce", "procurement"] },
-  { prefix: "/v1/product-categories", applications: ["pos", "ecommerce", "procurement"] },
+  { prefix: "/v1/zatca/", applications: ["pos", "ecommerce", "invoicing"] },
+  { prefix: "/v1/customers", applications: ["pos", "ecommerce", "invoicing"] },
+  // Purchases need the product list and stock too; quotations and invoices pick products.
+  { prefix: "/v1/products", applications: ["pos", "ecommerce", "procurement", "invoicing"] },
+  {
+    prefix: "/v1/product-categories",
+    applications: ["pos", "ecommerce", "procurement", "invoicing"],
+  },
+  { prefix: "/v1/invoicing/", applications: ["invoicing"] },
   { prefix: "/v1/inventory/", applications: ["pos", "ecommerce", "procurement"] },
   { prefix: "/v1/orders", applications: ["ecommerce"] },
   { prefix: "/v1/stores", applications: ["ecommerce"] },

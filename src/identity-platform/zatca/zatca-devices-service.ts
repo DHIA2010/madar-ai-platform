@@ -26,6 +26,7 @@ import {
   type ZatcaUblAddress,
 } from "./zatca-ubl-invoice"
 import { certificateBase64FromToken, embedZatcaQrCode, signZatcaInvoice } from "./zatca-signing"
+import { buildZatcaDocumentXml, type ZatcaBuyer, zatcaDocumentTotals } from "./zatca-ubl-standard"
 import { generateZatcaPhase2QrCode } from "../pos/zatca-qr-code"
 
 const ZATCA_DEVICE_ERRORS = {
@@ -62,6 +63,9 @@ export interface ZatcaDeviceView {
   details: ZatcaCsrDetails
   // Sales and returns this device signed.
   signedDocuments: number
+  // Whether it may issue standard (B2B) tax invoices -- registered as "1100" or "1000".
+  supportsStandard: boolean
+  supportsSimplified: boolean
   // Set once the device was stopped (removed while it had signed invoices) -- it signs nothing new.
   deactivatedAt: string | null
   createdAt: string
@@ -147,6 +151,29 @@ function sellerVatNumber(row: ZatcaDeviceRow): string {
   return der.toString("latin1").match(/3\d{13}3/)?.[0] ?? ""
 }
 
+// Which invoices the device's CSR registered it for ("TSCZ": standard, simplified). Devices from
+// before the B2B invoices were all simplified-only ("0100").
+function deviceInvoiceTypes(row: ZatcaDeviceRow): { standard: boolean; simplified: boolean } {
+  const types = readZatcaCsr(row.csr).invoiceTypes ?? "0100"
+  return { standard: types[0] === "1", simplified: types[1] === "1" }
+}
+
+// The business buyer on the standard compliance samples.
+const COMPLIANCE_BUYER: ZatcaBuyer = {
+  name: "Compliance Test Buyer",
+  vatNumber: "300000000000003",
+  otherId: null,
+  address: {
+    streetName: "King Fahd Road",
+    buildingNumber: "1234",
+    plotIdentification: "5678",
+    citySubdivisionName: "Al Olaya",
+    cityName: "Riyadh",
+    postalZone: "12345",
+    countryCode: "SA",
+  },
+}
+
 function deviceCertificate(row: ZatcaDeviceRow): ZatcaDeviceView["certificate"] {
   const source = row.production_csid_encrypted ?? row.compliance_csid_encrypted
   const key = resolveZatcaEncryptionKey()
@@ -182,6 +209,8 @@ function mapDevice(row: ZatcaDeviceRow, signedDocuments = 0): ZatcaDeviceView {
     certificate,
     details: readZatcaCsr(row.csr),
     signedDocuments,
+    supportsStandard: deviceInvoiceTypes(row).standard,
+    supportsSimplified: deviceInvoiceTypes(row).simplified,
     deactivatedAt: row.deactivated_at ? toIso(row.deactivated_at) : null,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
@@ -213,8 +242,7 @@ export interface CreateZatcaDeviceInput {
   organizationName: string
   organizationUnit: string
   egsSerialNumber: string
-  // "TSCZ" bitmask -- always "0100" (Simplified only) for this app today, kept as an input rather
-  // than hardcoded so a future Standard/Clearance device isn't a schema change.
+  // "TSCZ" bitmask: "1100" (standard and simplified) for new devices; older ones were "0100".
   invoiceTypeBitmask: string
   location: string
   industry: string
@@ -265,7 +293,7 @@ export class ZatcaDevicesService {
   // Sales and returns each device of this organization signed.
   private async signedDocumentCounts(organizationId: string): Promise<Map<string, number>> {
     const counts = new Map<string, number>()
-    for (const table of ["pos_invoices", "pos_invoice_returns"]) {
+    for (const table of ["pos_invoices", "pos_invoice_returns", "sales_invoices"]) {
       const result = await this.database.query<{ zatca_device_id: string; count: string | number }>(
         `SELECT zatca_device_id, COUNT(*) AS count FROM ${table}
           WHERE organization_id = $1 AND zatca_device_id IS NOT NULL
@@ -425,6 +453,60 @@ export class ZatcaDevicesService {
       advanceChain: boolean
     }
   ): Promise<ZatcaSignedInvoicePackage> {
+    return this.signDocument(organizationId, deviceId, {
+      issuedAt: input.issuedAt,
+      sellerName: input.sellerName,
+      sellerVatNumber: input.sellerVatNumber,
+      totalAmount: input.totalAmount,
+      taxAmount: input.taxAmount,
+      advanceChain: input.advanceChain,
+      build: (chain) =>
+        buildZatcaUblInvoiceXml({
+          invoiceNumber: input.invoiceNumber,
+          uuid: chain.uuid,
+          issuedAt: input.issuedAt,
+          invoiceTypeName: "0200000",
+          icv: chain.icv,
+          previousInvoiceHashBase64: chain.previousInvoiceHashBase64,
+          sellerName: chain.sellerName,
+          sellerVatNumber: chain.sellerVatNumber,
+          sellerAddress: input.sellerAddress,
+          customerName: input.customerName,
+          customerVatNumber: input.customerVatNumber,
+          subtotalAmount: input.subtotalAmount,
+          discountAmount: input.discountAmount,
+          taxAmount: input.taxAmount,
+          totalAmount: input.totalAmount,
+          taxRatePercent: input.taxRatePercent,
+          lines: input.lines,
+          notes: input.notes,
+          adjustment: input.adjustment ?? null,
+        }),
+    })
+  }
+
+  // Signs any document on this device's chain: `build` gets the chain position (ICV, the previous
+  // hash, a fresh UUID) and the seller identity the certificate carries, and returns the unsigned
+  // XML. The QR (tags 1-8) is embedded from the totals given. See signInvoice for advanceChain.
+  async signDocument(
+    organizationId: string,
+    deviceId: string,
+    input: {
+      issuedAt: Date
+      sellerName: string
+      sellerVatNumber: string
+      totalAmount: number
+      taxAmount: number
+      advanceChain: boolean
+      build: (chain: {
+        icv: number
+        previousInvoiceHashBase64: string
+        uuid: string
+        sellerName: string
+        sellerVatNumber: string
+      }) => string
+    }
+  ): Promise<ZatcaSignedInvoicePackage> {
     const row = await this.getRow(organizationId, deviceId)
     const key = this.encryptionKey()
     const privateKeyPem = decryptZatcaSecret(row.private_key_encrypted, key)
@@ -437,26 +519,12 @@ export class ZatcaDevicesService {
     const previousInvoiceHashBase64 = row.last_invoice_hash ?? ZATCA_GENESIS_PIH_BASE64
     const uuid = randomUUID()
 
-    const unsignedXml = buildZatcaUblInvoiceXml({
-      invoiceNumber: input.invoiceNumber,
-      uuid,
-      issuedAt: input.issuedAt,
-      invoiceTypeName: "0200000",
+    const unsignedXml = input.build({
       icv,
       previousInvoiceHashBase64,
+      uuid,
       sellerName,
       sellerVatNumber: vatNumber,
-      sellerAddress: input.sellerAddress,
-      customerName: input.customerName,
-      customerVatNumber: input.customerVatNumber,
-      subtotalAmount: input.subtotalAmount,
-      discountAmount: input.discountAmount,
-      taxAmount: input.taxAmount,
-      totalAmount: input.totalAmount,
-      taxRatePercent: input.taxRatePercent,
-      lines: input.lines,
-      notes: input.notes,
-      adjustment: input.adjustment ?? null,
     })
 
     // The device's own certificate -- ZATCA returns it as the binarySecurityToken from the
@@ -572,40 +640,135 @@ export class ZatcaDevicesService {
 
     const sellerName = await this.sellerName(row)
     const sellerAddress = await this.organizationAddress(organizationId)
+    const sellerCommercialRegistration = await this.organizationSetting(
+      organizationId,
+      "commercialRegistration"
+    )
     const environment = requireEnvironment(row)
+    const types = deviceInvoiceTypes(row)
+
+    // What each sample signs: the simplified ones above, then -- for a device that may issue
+    // standard (B2B) invoices -- a standard invoice, credit note and debit note to a business buyer.
+    const samples: Array<{ name: string; sign: () => Promise<ZatcaSignedInvoicePackage> }> = []
+    if (types.simplified) {
+      for (const scenario of scenarios) {
+        const taxAmount = Math.round((scenario.subtotal - scenario.discount) * 0.15 * 100) / 100
+        const totalAmount = scenario.subtotal - scenario.discount + taxAmount
+        samples.push({
+          name: scenario.name,
+          sign: () =>
+            this.signInvoice(organizationId, deviceId, {
+              invoiceNumber: `COMPLIANCE-${scenario.name}`,
+              issuedAt: new Date(),
+              sellerName,
+              sellerVatNumber: sellerVatNumber(row),
+              sellerAddress,
+              customerName: null,
+              customerVatNumber: null,
+              subtotalAmount: scenario.subtotal,
+              discountAmount: scenario.discount,
+              taxAmount,
+              totalAmount,
+              taxRatePercent: 15,
+              lines: [
+                {
+                  id: "1",
+                  productName: "Compliance test item",
+                  quantity: 1,
+                  unitPrice: scenario.subtotal,
+                  netAmount: scenario.subtotal - scenario.discount,
+                  taxAmount,
+                  taxRatePercent: 15,
+                },
+              ],
+              notes: null,
+              adjustment: scenario.adjustment ?? null,
+              advanceChain: false,
+            }),
+        })
+      }
+    }
+    if (types.standard) {
+      const standardScenarios: Array<{ name: string; adjustment: ZatcaInvoiceAdjustment | null }> =
+        [
+          { name: "standard-invoice", adjustment: null },
+          {
+            name: "standard-credit-note",
+            adjustment: {
+              type: "credit",
+              originalInvoiceNumber: "COMPLIANCE-standard-invoice",
+              reason: "Goods returned",
+            },
+          },
+          {
+            name: "standard-debit-note",
+            adjustment: {
+              type: "debit",
+              originalInvoiceNumber: "COMPLIANCE-standard-invoice",
+              reason: "Price adjustment",
+            },
+          },
+        ]
+      for (const scenario of standardScenarios) {
+        const issuedAt = new Date()
+        const document = {
+          lines: [
+            {
+              id: "1",
+              name: "Compliance test service",
+              quantity: 2,
+              netAmount: 200,
+              taxAmount: 30,
+              taxCategory: "S" as const,
+              taxRatePercent: 15,
+              exemptionCode: null,
+              exemptionReason: null,
+            },
+          ],
+          allowances: [],
+          prepayments: [],
+        }
+        const totals = zatcaDocumentTotals(document)
+        samples.push({
+          name: scenario.name,
+          sign: () =>
+            this.signDocument(organizationId, deviceId, {
+              issuedAt,
+              sellerName,
+              sellerVatNumber: sellerVatNumber(row),
+              totalAmount: totals.payableAmount,
+              taxAmount: totals.taxAmount,
+              advanceChain: false,
+              build: (chain) =>
+                buildZatcaDocumentXml({
+                  ...document,
+                  invoiceNumber: `COMPLIANCE-${scenario.name}`,
+                  uuid: chain.uuid,
+                  issuedAt,
+                  invoiceTypeName: "0100000",
+                  isPrepayment: false,
+                  icv: chain.icv,
+                  previousInvoiceHashBase64: chain.previousInvoiceHashBase64,
+                  sellerName: chain.sellerName,
+                  sellerVatNumber: chain.sellerVatNumber,
+                  sellerCommercialRegistration,
+                  sellerAddress,
+                  buyer: COMPLIANCE_BUYER,
+                  supplyDate: issuedAt,
+                  supplyEndDate: null,
+                  paymentMeansCode: "30",
+                  notes: null,
+                  adjustment: scenario.adjustment,
+                }),
+            }),
+        })
+      }
+    }
+
     // Every sample is sent even when one is refused, so ZATCA's reasons for all of them show at once.
     const results: ZatcaComplianceCheckView[] = []
-    for (const scenario of scenarios) {
-      const taxAmount = Math.round((scenario.subtotal - scenario.discount) * 0.15 * 100) / 100
-      const totalAmount = scenario.subtotal - scenario.discount + taxAmount
-      const signed = await this.signInvoice(organizationId, deviceId, {
-        invoiceNumber: `COMPLIANCE-${scenario.name}`,
-        issuedAt: new Date(),
-        sellerName,
-        sellerVatNumber: sellerVatNumber(row),
-        sellerAddress,
-        customerName: null,
-        customerVatNumber: null,
-        subtotalAmount: scenario.subtotal,
-        discountAmount: scenario.discount,
-        taxAmount,
-        totalAmount,
-        taxRatePercent: 15,
-        lines: [
-          {
-            id: "1",
-            productName: "Compliance test item",
-            quantity: 1,
-            unitPrice: scenario.subtotal,
-            netAmount: scenario.subtotal - scenario.discount,
-            taxAmount,
-            taxRatePercent: 15,
-          },
-        ],
-        notes: null,
-        adjustment: scenario.adjustment ?? null,
-        advanceChain: false,
-      })
+    for (const sample of samples) {
+      const signed = await sample.sign()
       const submit = (language: "en" | "ar") =>
         submitZatcaComplianceCheck(
           environment,
@@ -618,7 +781,7 @@ export class ZatcaDevicesService {
       try {
         const checkResult = await submit("en")
         results.push({
-          scenario: scenario.name,
+          scenario: sample.name,
           status: checkResult.status,
           reason: null,
           reasonAr: null,
@@ -628,7 +791,7 @@ export class ZatcaDevicesService {
         // simplified-invoice sample, or a re-run) answers 406 "Submitted before" -- passed.
         if (isSubmittedBefore(error)) {
           results.push({
-            scenario: scenario.name,
+            scenario: sample.name,
             status: "PASSED_BEFORE",
             reason: null,
             reasonAr: null,
@@ -643,7 +806,7 @@ export class ZatcaDevicesService {
             arabic instanceof ZatcaApiError ? zatcaErrorMessage(arabic.body, "ar") : null
         )
         results.push({
-          scenario: scenario.name,
+          scenario: sample.name,
           status: "NOT_REPORTED",
           reason: zatcaErrorMessage(error.body) ?? `ZATCA refused it (${error.status}).`,
           reasonAr,
@@ -651,6 +814,15 @@ export class ZatcaDevicesService {
       }
     }
     return results
+  }
+
+  private async organizationSetting(organizationId: string, key: string): Promise<string | null> {
+    const result = await this.database.query<{ settings: Record<string, unknown> | null }>(
+      "SELECT settings FROM organizations WHERE id = $1",
+      [organizationId]
+    )
+    const value = result.rows[0]?.settings?.[key]
+    return typeof value === "string" && value.trim() ? value.trim() : null
   }
 
   // The organization's national address (Settings -> الإعدادات العامة), for the compliance samples
@@ -722,6 +894,25 @@ export class ZatcaDevicesService {
     )
     const row = result.rows[0]
     return row ? mapDevice(row) : null
+  }
+
+  // The production device to sign an Invoicing-app document with: the newest one registered for
+  // that kind of invoice. `anyProduction` tells "no device at all" (the document goes out without
+  // ZATCA) apart from "only simplified-only devices" (a new device has to be registered first).
+  async findDeviceFor(
+    organizationId: string,
+    workspaceId: string | null,
+    taxType: "standard" | "simplified"
+  ): Promise<{ device: ZatcaDeviceView | null; anyProduction: boolean }> {
+    const result = await this.database.query<ZatcaDeviceRow>(
+      `${DEVICE_SELECT} WHERE organization_id = $1 AND status = 'production'
+         AND deactivated_at IS NULL
+         AND (workspace_id IS NULL OR workspace_id = $2)
+        ORDER BY workspace_id NULLS LAST, created_at DESC`,
+      [organizationId, workspaceId]
+    )
+    const row = result.rows.find((candidate) => deviceInvoiceTypes(candidate)[taxType])
+    return { device: row ? mapDevice(row) : null, anyProduction: result.rows.length > 0 }
   }
 
   // Production credentials for the Reporting API -- decrypted only at the point of use.

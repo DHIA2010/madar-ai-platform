@@ -48,6 +48,7 @@ export const INTEREST_APPS: { id: string; label: string }[] = [
   { id: "procurement", label: "الموردون والمشتريات" },
   { id: "expenses", label: "المصروفات" },
   { id: "promotions", label: "العروض الترويجية" },
+  { id: "invoicing", label: "الفواتير وعروض الأسعار" },
   { id: "ai", label: "الذكاء الاصطناعي" },
 ]
 export const interestLabel = (id: string) => INTEREST_APPS.find((app) => app.id === id)?.label ?? id

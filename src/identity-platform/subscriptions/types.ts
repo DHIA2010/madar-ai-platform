@@ -11,6 +11,7 @@ export const SUBSCRIPTION_APPLICATIONS = [
   "ai",
   "customReports",
   "promotions",
+  "invoicing",
 ] as const
 export type SubscriptionApplication = (typeof SUBSCRIPTION_APPLICATIONS)[number]
 

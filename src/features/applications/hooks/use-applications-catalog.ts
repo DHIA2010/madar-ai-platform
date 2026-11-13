@@ -44,6 +44,7 @@ const CATEGORY_ORDER: ApplicationCategoryId[] = [
   "ai",
   "customReports",
   "promotions",
+  "invoicing",
 ]
 
 // Drives the marketplace's own category tabs/pills -- "procurement" is deliberately absent here:

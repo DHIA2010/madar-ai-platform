@@ -32,6 +32,8 @@ import {
   ChartNoAxesCombined,
   CircleUserRound,
   ClipboardList,
+  FileSignature,
+  ReceiptText,
   BadgePercent,
   Clock,
   CreditCard,
@@ -75,6 +77,7 @@ const ANY_APPLICATION: ApplicationCategoryId[] = [
   "madarApps",
   "procurement",
   "expenses",
+  "invoicing",
 ]
 
 // The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
@@ -254,6 +257,20 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       permission: "pos:view",
       applications: ["ecommerce", "pos"],
     },
+    // Invoicing & Quotations -- its own subscription (invoicingEnabled), enforced server-side by
+    // subscriptions/app-access.ts on every /v1/invoicing/ route.
+    {
+      title: t("invoicing"),
+      url: ROUTES.quotations,
+      icon: <FileSignature className="text-indigo-600" />,
+      permission: "invoicing:view",
+      applications: ["invoicing"],
+      items: [
+        { title: t("quotations"), url: ROUTES.quotations, icon: <FileText /> },
+        { title: t("salesInvoices"), url: ROUTES.salesInvoices, icon: <ReceiptText /> },
+        { title: t("salesNotes"), url: ROUTES.salesNotes, icon: <RotateCcw /> },
+      ],
+    },
     {
       title: t("shifts"),
       url: ROUTES.shifts,
@@ -273,7 +290,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       url: "/customers",
       icon: <CircleUserRound className="text-pink-500" />,
       permission: "customers:view",
-      applications: ["ecommerce", "pos"],
+      applications: ["ecommerce", "pos", "invoicing"],
     },
     {
       title: t("reports"),
@@ -358,7 +375,9 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent className="overflow-hidden">
-          <ScrollArea className="h-full">
+          {/* Radix sizes the viewport's wrapper as a table, which grows to the widest label and
+              lets the rail scroll sideways; as a block it stays the rail's width. */}
+          <ScrollArea className="h-full [&_[data-slot=scroll-area-viewport]>div]:block!">
             <div className="flex min-h-full flex-col">
               <NavMain items={navMain} />
             </div>

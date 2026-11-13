@@ -27,6 +27,7 @@ const APPLICATION_LABEL_AR: Record<PurchasableApplication, string> = {
   ai: "الذكاء الاصطناعي",
   customReports: "التقارير المخصصة",
   promotions: "العروض الترويجية",
+  invoicing: "الفواتير وعروض الأسعار",
   madarComplete: "مدار الكامل",
 }
 

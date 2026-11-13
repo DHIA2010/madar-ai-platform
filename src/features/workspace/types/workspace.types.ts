@@ -67,6 +67,7 @@ export interface OrganizationSettings {
   aiEnabled?: boolean
   customReportsEnabled?: boolean
   promotionsEnabled?: boolean
+  invoicingEnabled?: boolean
   // Set on approval of a subscription activation request -- the account-wide tier chosen at
   // request time.
   currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
@@ -89,8 +90,10 @@ export interface OrganizationSettings {
   aiTrialUsed?: boolean
   customReportsTrialEndsAt?: string
   promotionsTrialEndsAt?: string
+  invoicingTrialEndsAt?: string
   customReportsTrialUsed?: boolean
   promotionsTrialUsed?: boolean
+  invoicingTrialUsed?: boolean
 }
 
 export interface Organization {

@@ -27,6 +27,9 @@ import { ReceiptService } from "../../billing/receipts"
 import { runBillingMaintenance } from "../../subscriptions/maintenance"
 import { toPublicPlatformSettings } from "../../platform-settings/types"
 import { handlePlatformAdminRoute } from "./platform-admin-routes"
+import { handleInvoicingRoute, handlePublicInvoicingRoute } from "./invoicing-routes"
+import { SalesInvoicesService } from "../../invoicing/invoices-service"
+import { QuotationsService } from "../../invoicing/quotations-service"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
 import { SallaOAuthService } from "../../salla-oauth/service"
 import { resolveSallaWebhookCredentials } from "../../salla-oauth/salla-credentials"
@@ -616,6 +619,12 @@ const PUBLIC_CAPTURE_CORS_HEADERS: Record<string, string> = {
 // every registered provider in turn without bespoke per-connector wiring here, so a
 // new connector gets pause/resume/disconnect/reconnect/events automatically once it
 // implements the IntegrationProvider methods.
+// ZATCA devices sign the cashier's invoices and the Invoicing app's alike, so whoever manages
+// either may onboard one.
+function canManageZatcaDevices(modulePermissions: readonly string[]): boolean {
+  return modulePermissions.includes("pos:manage") || modulePermissions.includes("invoicing:manage")
+}
+
 function isConnectionNotFoundError(error: unknown) {
   return error instanceof Error && /_CONNECTION_NOT_FOUND$/.test(error.message)
 }
@@ -883,6 +892,16 @@ export function createIdentityApiServer(
   const posSettingsService = container.infrastructure.database
     ? new PosSettingsService(container.infrastructure.database)
     : null
+  const invoicingServices = {
+    database: container.infrastructure.database ?? null,
+    devices: zatcaDevicesService,
+    quotations: container.infrastructure.database
+      ? new QuotationsService(container.infrastructure.database)
+      : null,
+    invoices: container.infrastructure.database
+      ? new SalesInvoicesService(container.infrastructure.database, zatcaDevicesService)
+      : null,
+  }
   const connectionSyncScheduleService =
     container.infrastructure.database && container.infrastructure.integrations
       ? new ConnectionSyncScheduleService(
@@ -2011,6 +2030,27 @@ export function createIdentityApiServer(
         }
       }
 
+      // Public: the Invoicing app's customer links -- a quotation to accept or decline, an issued
+      // invoice (and its ZATCA XML).
+      const sendRaw = (status: number, body: string, headers: Record<string, string>) => {
+        response.writeHead(status, { ...corsHeaders, ...headers })
+        response.end(body)
+      }
+      if (
+        url.pathname.startsWith("/v1/public/quotations/") ||
+        url.pathname.startsWith("/v1/public/sales-invoices/")
+      ) {
+        const handled = await handlePublicInvoicingRoute({
+          method,
+          url,
+          services: invoicingServices,
+          send,
+          sendRaw,
+          readJsonBody: () => readJsonBody(request),
+        })
+        if (handled) return
+      }
+
       // Public: the prices madar.my shows -- the same catalog the marketplace shows signed-in
       // customers, limited to what's on sale.
       // Public: a POS invoice's PDF behind the signed link shared on WhatsApp
@@ -2679,6 +2719,21 @@ export function createIdentityApiServer(
       // POS, Ads and E-commerce answer only for an organization subscribed to them
       // (subscriptions/app-access.ts).
       await applicationAccess?.requireForPath(actor.organizationId, url.pathname)
+
+      // Invoicing & Quotations (invoicing/): quotations, tax invoices, notes, payments.
+      if (
+        await handleInvoicingRoute({
+          method,
+          url,
+          actor,
+          services: invoicingServices,
+          send,
+          sendRaw,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
 
       // The feature flags Madar Admin has switched on for this customer (override, else the global
       // switch narrowed by its rollout percentage).
@@ -5567,7 +5622,7 @@ export function createIdentityApiServer(
             message: "ZATCA device management is unavailable in memory mode.",
           })
         }
-        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        if (!canManageZatcaDevices(actor.modulePermissions)) throw ERRORS.forbidden()
 
         if (method === "GET") {
           return send(200, { items: await zatcaDevicesService.list(actor.organizationId) })
@@ -5584,8 +5639,8 @@ export function createIdentityApiServer(
               organizationName: payload.organizationName,
               organizationUnit: payload.organizationUnit,
               egsSerialNumber: payload.egsSerialNumber,
-              // Simplified-only for this app today -- see the plan doc.
-              invoiceTypeBitmask: "0100",
+              // Standard (B2B, cleared) and simplified (B2C, reported) invoices.
+              invoiceTypeBitmask: "1100",
               location: payload.location,
               industry: payload.industry,
             })
@@ -5603,7 +5658,7 @@ export function createIdentityApiServer(
             message: "ZATCA device management is unavailable in memory mode.",
           })
         }
-        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        if (!canManageZatcaDevices(actor.modulePermissions)) throw ERRORS.forbidden()
         return send(
           200,
           await zatcaDevicesService.removeDevice(actor.organizationId, zatcaDeviceMatch[1])
@@ -5620,7 +5675,7 @@ export function createIdentityApiServer(
             message: "ZATCA device management is unavailable in memory mode.",
           })
         }
-        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        if (!canManageZatcaDevices(actor.modulePermissions)) throw ERRORS.forbidden()
 
         const [, deviceId, action] = zatcaDeviceActionMatch
         if (action === "compliance") {

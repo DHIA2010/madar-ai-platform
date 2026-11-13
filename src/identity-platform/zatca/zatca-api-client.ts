@@ -243,3 +243,48 @@ export async function submitZatcaReporting(
     stampSignatureBase64: typed.validationResults?.warningMessages?.[0]?.stampSignature ?? null,
   }
 }
+
+export interface ZatcaClearanceResult {
+  // CLEARED (200, or 202 with warnings) -- a refusal throws ZatcaApiError (400 NOT_CLEARED).
+  status: string
+  // ZATCA's stamped copy of the invoice with its QR: the legal invoice to keep and hand over.
+  clearedInvoiceBase64: string | null
+  warnings: string[]
+  raw: unknown
+}
+
+// The Clearance call for standard (B2B) invoices -- POST .../invoices/clearance/single. Unlike
+// reporting it must succeed before the invoice reaches the buyer.
+export async function submitZatcaClearance(
+  environment: ZatcaCsrEnvironment,
+  invoiceHashBase64: string,
+  uuid: string,
+  signedInvoiceBase64: string,
+  credentials: { binarySecurityToken: string; secret: string },
+  language: "en" | "ar" = "en"
+): Promise<ZatcaClearanceResult> {
+  const result = await postJson(
+    environment,
+    "/invoices/clearance/single",
+    { invoiceHash: invoiceHashBase64, uuid, invoice: signedInvoiceBase64 },
+    {
+      Authorization: basicAuthHeader(credentials.binarySecurityToken, credentials.secret),
+      "Accept-Version": "V2",
+      "Accept-Language": language,
+      "Clearance-Status": "1",
+    }
+  )
+  const typed = (result ?? {}) as {
+    clearanceStatus?: string
+    clearedInvoice?: string | null
+    validationResults?: { warningMessages?: Array<{ message?: string; code?: string }> }
+  }
+  return {
+    status: typed.clearanceStatus ?? "UNKNOWN",
+    clearedInvoiceBase64: typed.clearedInvoice ?? null,
+    warnings: (typed.validationResults?.warningMessages ?? [])
+      .map((entry) => entry.message ?? entry.code ?? "")
+      .filter(Boolean),
+    raw: result,
+  }
+}

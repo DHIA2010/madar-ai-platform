@@ -5,6 +5,7 @@ import { createIdentityApiServer } from "./api"
 import { createIdentityPlatform } from "./bootstrap/create-identity-platform"
 import { validateAwsCredentialIsolationForSecretsManager } from "./configuration/aws-credential-guard"
 import { validateProductionIntegrationConfiguration } from "./configuration/production-integration-validation"
+import { SalesInvoicesService } from "./invoicing/invoices-service"
 import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
@@ -76,6 +77,18 @@ if (database && zatcaReportingMinutes > 0) {
       .catch((error: unknown) => console.error("zatca.reporting_pass_failed", error))
   setTimeout(runZatcaReporting, 90_000).unref()
   setInterval(runZatcaReporting, zatcaReportingMinutes * 60_000).unref()
+
+  // The Invoicing app's documents still waiting for ZATCA (clearance or reporting).
+  const salesInvoices = new SalesInvoicesService(database, new ZatcaDevicesService(database))
+  const runSalesZatca = () =>
+    salesInvoices
+      .submitPending()
+      .then((sent) => {
+        if (sent > 0) console.log("invoicing.zatca_pass", { sent })
+      })
+      .catch((error: unknown) => console.error("invoicing.zatca_pass_failed", error))
+  setTimeout(runSalesZatca, 100_000).unref()
+  setInterval(runSalesZatca, zatcaReportingMinutes * 60_000).unref()
 }
 
 // The daily store report on WhatsApp: every few minutes, sends it to each organization whose chosen

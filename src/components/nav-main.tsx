@@ -126,7 +126,8 @@ function ParentMenuItem({ item, pathname }: { item: NavWithChildren; pathname: s
         </SidebarMenuButton>
 
         <CollapsibleContent>
-          <SidebarMenuSub>
+          {/* Less inset on the trailing side than the default, so the longest sub-labels fit. */}
+          <SidebarMenuSub className="me-1.5 pe-1">
             {item.items.map((subItem) => {
               const subActive = subItem.url === activeSubUrl
 

@@ -5,6 +5,7 @@ import {
   Bot,
   CreditCard,
   FileBarChart,
+  FileSignature,
   Radio,
   ShoppingBag,
   Truck,
@@ -37,6 +38,7 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   ai: "aiEnabled",
   customReports: "customReportsEnabled",
   promotions: "promotionsEnabled",
+  invoicing: "invoicingEnabled",
 }
 
 // Which application categories this organization currently has activated -- the single shared
@@ -75,6 +77,7 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   ai: "aiTrialEndsAt",
   customReports: "customReportsTrialEndsAt",
   promotions: "promotionsTrialEndsAt",
+  invoicing: "invoicingTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -88,6 +91,7 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     ai: "aiTrialUsed",
     customReports: "customReportsTrialUsed",
     promotions: "promotionsTrialUsed",
+    invoicing: "invoicingTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -259,6 +263,24 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPriceLabel: true,
     featuresDisplay: "checklist",
     featureCount: 4,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Quotations and ZATCA-cleared tax invoices for businesses (contracting, services, trading) --
+  // its own subscription (invoicingEnabled), enforced by subscriptions/app-access.ts.
+  {
+    id: "invoicing",
+    category: "invoicing",
+    tabCategory: "madarApps",
+    icon: FileSignature,
+    accent: {
+      iconWrapperClassName: "bg-[#eef2ff] text-[#4f46e5]",
+      primaryButtonClassName: "bg-[#4f46e5] text-white hover:bg-[#4338ca]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 5,
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },

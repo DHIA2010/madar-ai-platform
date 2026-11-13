@@ -288,6 +288,7 @@ export const requestApplicationActivationSchema = z.object({
     "ai",
     "customReports",
     "promotions",
+    "invoicing",
     "madarComplete",
   ]),
   // The package and period chosen -- priced server-side against current Madar Admin pricing.
@@ -1231,6 +1232,7 @@ export const activateFreeApplicationSchema = z.object({
     "ai",
     "customReports",
     "promotions",
+    "invoicing",
     "madarComplete",
   ]),
 })
@@ -1248,6 +1250,7 @@ export const startApplicationTrialSchema = z.object({
     "ai",
     "customReports",
     "promotions",
+    "invoicing",
   ]),
 })
 

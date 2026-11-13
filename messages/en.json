@@ -75,7 +75,11 @@
       "inventory": "Inventory",
       "stockTransfers": "Stock transfers",
       "stockCounts": "Stock take",
-      "promotions": "Promotions"
+      "promotions": "Promotions",
+      "invoicing": "B2B invoicing",
+      "quotations": "Quotations",
+      "salesInvoices": "Tax invoices",
+      "salesNotes": "Credit & debit"
     }
   },
   "auth": {
@@ -864,6 +868,19 @@
           "On all products or chosen products and categories",
           "Scheduled by dates, weekdays and hours per branch",
           "Shown on the invoice and included in VAT"
+        ]
+      },
+      "invoicing": {
+        "name": "Invoicing & Quotations",
+        "shortDescription": "Quotations and ZATCA-cleared tax invoices for businesses.",
+        "detailDescription": "Create quotations and send the customer a link to accept them, then convert them into tax invoices cleared by ZATCA (Phase 2). Built for contracting, services and trading: advance payments, progress claims, retention, credit and debit notes, and payment tracking.",
+        "priceLabel": "Starting from SAR 79 / month",
+        "features": [
+          "Quotations with revisions and online customer acceptance",
+          "B2B tax invoices cleared by ZATCA",
+          "Convert a quotation to a full or partial invoice in one click",
+          "Advance payments, progress claims and retention for contracting",
+          "Credit and debit notes with payment tracking"
         ]
       }
     },
@@ -4485,7 +4502,10 @@
           "sale-no-discount": "Simplified invoice",
           "sale-with-discount": "Simplified invoice with discount",
           "credit-note": "Credit note",
-          "debit-note": "Debit note"
+          "debit-note": "Debit note",
+          "standard-invoice": "Tax invoice (B2B)",
+          "standard-credit-note": "Credit note for a tax invoice",
+          "standard-debit-note": "Debit note for a tax invoice"
         },
         "checkRefused": "Refused by ZATCA",
         "checkPassedBefore": "Passed before",
@@ -4494,11 +4514,17 @@
         "viewDetails": "Details",
         "remove": "Remove",
         "stopped": "Stopped",
-        "stoppedBanner": "This device is stopped -- it signs no new sales. It's kept because it signed {count} invoices that must be retained."
+        "stoppedBanner": "This device is stopped -- it signs no new sales. It's kept because it signed {count} invoices that must be retained.",
+        "invoiceTypes": {
+          "both": "Standard & simplified",
+          "standard": "Standard only",
+          "simplified": "Simplified only"
+        },
+        "simplifiedOnlyHint": "This device is registered with ZATCA for simplified invoices only. To issue tax invoices to businesses (B2B), add a new device — new devices issue both types."
       },
       "validation": {
         "deviceNameRequired": "Enter a name for this device.",
-        "vatNumberInvalid": "The VAT number must be 15 digits.",
+        "vatNumberInvalid": "The VAT number must be 15 digits, starting and ending with 3.",
         "organizationNameRequired": "Enter the registered organization name.",
         "organizationUnitRequired": "Enter the workspace or unit name.",
         "locationRequired": "Enter the device/workspace address.",
@@ -6364,7 +6390,9 @@
         "customReports": "Custom Reports",
         "madarApps": "Madar Apps",
         "madarComplete": "Madar Complete",
-        "salesInvoice": "Sales invoice"
+        "salesInvoice": "Sales invoice",
+        "promotions": "Promotions",
+        "invoicing": "Invoicing & Quotations"
       }
     }
   },
@@ -6563,7 +6591,9 @@
           "ai": "AI",
           "customReports": "Custom Reports",
           "madarApps": "Madar Apps",
-          "madarComplete": "Madar Complete"
+          "madarComplete": "Madar Complete",
+          "promotions": "Promotions",
+          "invoicing": "Invoicing & Quotations"
         }
       },
       "types": {
@@ -9624,6 +9654,911 @@
       "searchBranches": "Search branches...",
       "allBranchesHint": "Runs in every branch",
       "noBranches": "No matching branches."
+    }
+  },
+  "invoicing": {
+    "common": {
+      "sar": "SAR",
+      "back": "Back",
+      "cancel": "Cancel",
+      "loading": "Loading...",
+      "retry": "Try again",
+      "actions": "Actions",
+      "view": "View",
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "share": "Share",
+      "print": "Print"
+    },
+    "locked": {
+      "title": "Invoicing & Quotations is not active",
+      "description": "Subscribe to Invoicing & Quotations to issue quotations and ZATCA-cleared tax invoices for businesses.",
+      "cta": "View the app"
+    },
+    "sectors": {
+      "general": {
+        "name": "General trade",
+        "hint": "Products and goods sold by quantity and price"
+      },
+      "services": {
+        "name": "Services",
+        "hint": "Consulting, maintenance, subscriptions, hourly or per-project work"
+      },
+      "contracting": {
+        "name": "Contracting",
+        "hint": "Bills of quantities, advance payment, progress claims and retention"
+      }
+    },
+    "units": {
+      "piece": "Piece",
+      "box": "Box",
+      "carton": "Carton",
+      "kg": "kg",
+      "ton": "Ton",
+      "liter": "Liter",
+      "meter": "Meter",
+      "set": "Set",
+      "service": "Service",
+      "hour": "Hour",
+      "day": "Day",
+      "month": "Month",
+      "visit": "Visit",
+      "project": "Project",
+      "user": "User",
+      "sqm": "m²",
+      "cbm": "m³",
+      "lm": "Linear m",
+      "lumpsum": "Lump sum",
+      "trip": "Trip"
+    },
+    "taxCategories": {
+      "S": "15%",
+      "Z": "Zero-rated",
+      "E": "Exempt",
+      "O": "Out of scope"
+    },
+    "exemptions": {
+      "VATEX-SA-32": "Export of goods",
+      "VATEX-SA-33": "Export of services",
+      "VATEX-SA-34-1": "International transport of goods",
+      "VATEX-SA-34-2": "International transport of passengers",
+      "VATEX-SA-34-3": "Services directly connected to passenger transport",
+      "VATEX-SA-34-4": "Supply of a qualifying means of transport",
+      "VATEX-SA-34-5": "Services related to transport of goods or passengers",
+      "VATEX-SA-35": "Medicines and medical equipment",
+      "VATEX-SA-36": "Qualifying metals",
+      "VATEX-SA-EDU": "Private education for citizens",
+      "VATEX-SA-HEA": "Private healthcare for citizens",
+      "VATEX-SA-MLTRY": "Supply of qualifying military goods",
+      "VATEX-SA-29": "Financial services",
+      "VATEX-SA-29-7": "Life insurance contract",
+      "VATEX-SA-30": "Exempt real estate transactions",
+      "VATEX-SA-OOS": "Supply outside the scope of VAT"
+    },
+    "paymentMeans": {
+      "30": "Bank transfer / credit",
+      "42": "Deposit to bank account",
+      "10": "Cash",
+      "48": "Bank card",
+      "1": "Not specified"
+    },
+    "idSchemes": {
+      "CRN": "Commercial registration",
+      "MOM": "Municipal licence (MOMRAH)",
+      "MLS": "Labour licence (MHRSD)",
+      "700": "Unified number (700)",
+      "SAG": "Investment licence (MISA)",
+      "NAT": "National ID",
+      "GCC": "GCC ID",
+      "IQA": "Iqama",
+      "PAS": "Passport",
+      "OTH": "Other ID",
+      "TIN": "Tax identification number"
+    },
+    "adjustmentReasons": {
+      "price_amendment": "Amendment of the supply value",
+      "refund": "Full or partial refund",
+      "cancellation": "Cancellation or suspension of the supply",
+      "essential_change": "Essential change to the supply",
+      "party_change": "Correction of seller or buyer details"
+    },
+    "paymentMethods": {
+      "bank_transfer": "Bank transfer",
+      "cash": "Cash",
+      "card": "Card",
+      "cheque": "Cheque",
+      "other": "Other"
+    },
+    "buyerFields": {
+      "name": "Customer name",
+      "vatNumber": "VAT number",
+      "vatNumberOrId": "VAT number or another ID",
+      "street": "Street",
+      "city": "City",
+      "buildingNumber": "Building number",
+      "district": "District",
+      "postalCode": "Postal code"
+    },
+    "sellerFields": {
+      "vatNumber": "VAT number",
+      "commercialRegistration": "Commercial registration",
+      "street": "Street",
+      "buildingNumber": "Building number",
+      "district": "District",
+      "city": "City",
+      "postalCode": "Postal code"
+    },
+    "status": {
+      "quotation": {
+        "draft": "Draft",
+        "sent": "Sent",
+        "accepted": "Accepted",
+        "declined": "Declined",
+        "expired": "Expired",
+        "superseded": "Superseded"
+      },
+      "billing": {
+        "full": "Fully invoiced",
+        "partial": "{percent}% invoiced"
+      },
+      "invoice": {
+        "draft": "Draft",
+        "rejected": "Rejected by ZATCA",
+        "pendingClearance": "Awaiting clearance",
+        "void": "Void",
+        "issued": "Issued",
+        "paid": "Paid",
+        "overdue": "Overdue",
+        "partial": "Partially paid",
+        "unpaid": "Unpaid"
+      },
+      "zatca": {
+        "cleared": "Cleared by ZATCA",
+        "reported": "Reported to ZATCA",
+        "pending": "Sending",
+        "rejected": "Rejected by ZATCA",
+        "notLinked": "Not linked to ZATCA"
+      }
+    },
+    "docTypes": {
+      "creditNote": "Credit note",
+      "debitNote": "Debit note",
+      "advance": "Advance payment invoice",
+      "progress": "Progress claim no. {number}",
+      "standard": "Tax invoice",
+      "simplified": "Simplified tax invoice",
+      "invoice": "Invoice"
+    },
+    "errors": {
+      "INVOICING_ADVANCE_EXCEEDED": "The deducted amount is more than what is left on the advance payment invoice.",
+      "INVOICING_ADVANCE_LINES": "An advance payment invoice has a single line for the advance amount.",
+      "INVOICING_ADVANCE_ON_ADVANCE": "An advance payment cannot be deducted from another advance payment invoice.",
+      "INVOICING_ADVANCE_UNAVAILABLE": "That advance payment invoice cannot be deducted: it must be issued and belong to the same customer.",
+      "INVOICING_EXEMPTION_REASON_REQUIRED": "Choose an exemption reason for every line that is not taxed at 15%.",
+      "INVOICING_NO_ITEMS": "Add at least one line.",
+      "INVOICING_PREPAID_EXCEEDS_TOTAL": "The deducted advance payments are more than the invoice value.",
+      "INVOICING_QUOTATION_LINE_MISMATCH": "The invoice lines do not match the quotation. Create the invoice from the quotation again.",
+      "INVOICING_QUOTATION_REQUIRED": "A progress claim is created from an accepted quotation.",
+      "QUOTATION_CANNOT_RESPOND": "This quotation is no longer open for a response.",
+      "QUOTATION_HAS_INVOICES": "Invoices were issued against this quotation, so it cannot be deleted or returned to draft.",
+      "QUOTATION_LOCKED": "A sent quotation cannot be edited. Create a new revision.",
+      "QUOTATION_NOT_BILLABLE": "A declined or superseded quotation cannot be invoiced.",
+      "QUOTATION_NOT_FOUND": "Quotation not found.",
+      "QUOTATION_OVERBILLED": "The quantity is more than what remains on the quotation.",
+      "QUOTATION_SUPERSEDED": "A newer revision of this quotation exists.",
+      "SALES_CREDIT_EXCEEDS_INVOICE": "The credit note is more than what remains on the original invoice.",
+      "SALES_INVOICE_BUYER_INCOMPLETE": "Customer details are incomplete for a tax invoice.",
+      "SALES_INVOICE_EMPTY": "An invoice with no lines cannot be issued.",
+      "SALES_INVOICE_LOCKED": "An invoice sent to ZATCA cannot be edited or deleted.",
+      "SALES_INVOICE_NOT_DRAFT": "This action is available for drafts only.",
+      "SALES_INVOICE_NOT_FOUND": "Invoice not found.",
+      "SALES_INVOICE_NOT_ISSUED": "Issue the invoice first.",
+      "SALES_INVOICE_NOT_PAYABLE": "A payment cannot be recorded on this document.",
+      "SALES_INVOICE_NO_XML": "This invoice has no XML file yet.",
+      "SALES_INVOICE_SELLER_INCOMPLETE": "Your business details are incomplete for a tax invoice.",
+      "SALES_PAYMENT_EXCEEDS_BALANCE": "The amount is more than the invoice balance.",
+      "ZATCA_DEVICE_STANDARD_UNSUPPORTED": "The device linked to ZATCA does not support tax invoices for businesses. Register a new device.",
+      "ZATCA_NOTHING_TO_SEND": "There is nothing to send to ZATCA.",
+      "INVOICING_UNAVAILABLE": "Invoicing is unavailable right now. Try again shortly.",
+      "APPLICATION_NOT_SUBSCRIBED": "The Invoicing & Quotations subscription is not active.",
+      "generic": "Something went wrong. Please try again."
+    },
+    "editor": {
+      "customer": {
+        "title": "Customer",
+        "incomplete": "Details missing",
+        "ready": "Ready for a tax invoice",
+        "pick": "Choose a customer or type a new name",
+        "search": "Search by name, mobile or VAT number",
+        "empty": "No customer with that name",
+        "create": "Add “{name}” as a new customer",
+        "clear": "Change customer",
+        "noDetails": "No tax details or address added yet",
+        "hideDetails": "Hide details",
+        "showDetails": "Tax details and address",
+        "hint": "A tax invoice for a business needs the customer's VAT number and full national address.",
+        "missingTitle": "Missing for a tax invoice:",
+        "vatHint": "15 digits, starting and ending with 3",
+        "otherId": "Other ID",
+        "noId": "None",
+        "contactName": "Contact person",
+        "phone": "Mobile",
+        "email": "Email",
+        "address": "National address",
+        "secondaryNumber": "Secondary number",
+        "country": "Country",
+        "saveRecord": "Save to my customers",
+        "saveRecordHint": "So it is ready for future quotations and invoices.",
+        "updateRecord": "Update the saved customer",
+        "updateRecordHint": "The customer record is updated with these details when you save.",
+        "syncFailed": "The document was saved, but the customer record could not be updated."
+      },
+      "lines": {
+        "title": "Line items",
+        "titleProgress": "Progress claim lines",
+        "pricesExcludeVat": "Prices exclude VAT",
+        "description": "Item",
+        "unit": "Unit",
+        "contractQuantity": "Contract qty",
+        "previous": "Previous",
+        "current": "To date",
+        "quantity": "Qty",
+        "price": "Price",
+        "discount": "Disc. %",
+        "vat": "VAT",
+        "total": "Total",
+        "rowActions": "Line actions",
+        "duplicate": "Duplicate line",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
+        "remove": "Remove",
+        "sectionPlaceholder": "Section title, e.g. Concrete works",
+        "notePlaceholder": "A note shown between the lines",
+        "descriptionPlaceholder": "Product or service name",
+        "addDetails": "Add description",
+        "detailsPlaceholder": "Detailed description (optional)",
+        "thisClaim": "This claim: {quantity}",
+        "plusVat": "+ VAT {amount}",
+        "exemptionCode": "Exemption reason",
+        "exemptionReason": "Exemption reason text as shown on the invoice",
+        "empty": "No lines yet. Add a line or pick a product from your list.",
+        "addItem": "Add line",
+        "addProduct": "From products",
+        "searchProducts": "Search products by name or SKU",
+        "noProducts": "No matching products",
+        "productsHint": "Type to search your products",
+        "addSection": "Section title",
+        "addNote": "Note"
+      },
+      "totals": {
+        "title": "Summary",
+        "subtotal": "Subtotal",
+        "discount": "Document discount",
+        "taxable": "Taxable amount",
+        "vatRate": "VAT {rate}%",
+        "total": "Total incl. VAT",
+        "advance": "Advance payment %",
+        "advanceHint": "Invoiced on signing and deducted from later invoices.",
+        "retention": "Retention %",
+        "retentionHint": "Held back from each invoice and due after handover.",
+        "prepayments": "Deduct advance payments",
+        "advanceRemaining": "{amount} left · {date}",
+        "deductNet": "Amount deducted (before VAT)",
+        "prepaid": "Advance payments deducted",
+        "amountDue": "Amount due"
+      },
+      "basics": {
+        "title": "Document details",
+        "fromQuotation": "From quotation {number}",
+        "taxType": "Invoice type",
+        "standardHint": "For VAT-registered businesses: cleared by ZATCA before it goes to the customer.",
+        "simplifiedHint": "For individuals: reported to ZATCA within 24 hours of issue.",
+        "standard": "Tax invoice (B2B)",
+        "simplified": "Simplified (B2C)",
+        "kind": "Invoice kind",
+        "kindLocked": "Set when the invoice was created from the quotation.",
+        "kindHint": "A progress claim is created from an accepted quotation.",
+        "regular": "Regular",
+        "advance": "Advance payment",
+        "progress": "Progress claim",
+        "sector": "Sector",
+        "subject": "Subject",
+        "subjectPlaceholder": {
+          "general": "e.g. Supply of office equipment",
+          "services": "e.g. Annual maintenance contract",
+          "contracting": "e.g. Finishing works for a residential villa"
+        },
+        "reference": "Customer reference",
+        "referencePlaceholder": "PO or contract number",
+        "issueDate": "Issue date",
+        "validUntil": "Valid until",
+        "noExpiry": "No expiry date",
+        "days": "{count, plural, one {# day} other {# days}}",
+        "supplyDate": "Supply date",
+        "supplyFrom": "Supply period start",
+        "supplyHint": "Leave empty if it is the issue date.",
+        "sameAsIssue": "Same as issue date",
+        "supplyTo": "Supply period end",
+        "paymentMeans": "Payment method",
+        "dueDate": "Due date",
+        "noDueDate": "No due date",
+        "dueNow": "On receipt"
+      },
+      "terms": {
+        "title": "Terms and notes",
+        "paymentTerms": "Payment terms",
+        "paymentTermsPlaceholder": {
+          "general": "e.g. Payment within 30 days of the invoice date",
+          "services": "e.g. 50% on signing and 50% on delivery",
+          "contracting": "e.g. 20% advance, the rest in monthly progress claims by completion"
+        },
+        "terms": "Terms and conditions",
+        "termsHint": "Shown to the customer at the bottom of the document.",
+        "termsPlaceholder": {
+          "general": "e.g. Prices hold for the validity period; delivery within 7 working days",
+          "services": "e.g. Includes two visits a month; extra visits are billed hourly",
+          "contracting": "e.g. 90 days to complete from site handover; one-year warranty on works"
+        },
+        "notes": "Internal notes",
+        "notesHint": "Not shown to the customer."
+      },
+      "validation": {
+        "customer": "Choose a customer or type a name.",
+        "items": "Add at least one line.",
+        "description": "Describe every line.",
+        "exemption": "Choose an exemption reason for lines that are not taxed at 15%.",
+        "prepaid": "The deducted advance payments are more than the invoice value."
+      },
+      "save": "Save",
+      "saveHintInvoice": "Saved as a draft. Nothing is sent to ZATCA until you issue it.",
+      "saveHintQuotation": "Saved as a draft. Send it to the customer whenever you are ready."
+    },
+    "quotations": {
+      "title": "Quotations",
+      "subtitle": "Create quotations, track the customer's response, and turn accepted ones into invoices.",
+      "new": "New quotation",
+      "duplicated": "Quotation copied as a new draft.",
+      "deleted": "Quotation deleted.",
+      "kpi": {
+        "open": "Open quotations",
+        "openHint": "{count} awaiting a response",
+        "accepted": "Accepted this month",
+        "acceptedHint": "Value of accepted quotations",
+        "acceptance": "Acceptance rate",
+        "acceptanceHint": "Of quotations customers responded to",
+        "expiring": "Expiring soon",
+        "expiringHint": "Within 7 days"
+      },
+      "empty": {
+        "title": "No quotations yet",
+        "description": "Create your first quotation and send the customer a link to accept it directly."
+      },
+      "tabs": {
+        "all": "All",
+        "draft": "Drafts",
+        "sent": "Sent",
+        "accepted": "Accepted",
+        "invoiced": "Invoiced",
+        "expired": "Expired",
+        "declined": "Declined"
+      },
+      "search": "Search number or customer",
+      "table": {
+        "number": "Quotation no.",
+        "customer": "Customer",
+        "issueDate": "Date",
+        "validUntil": "Valid until",
+        "total": "Total",
+        "status": "Status"
+      },
+      "noMatches": "No matching quotations.",
+      "deleteTitle": "Delete quotation {number}?",
+      "deleteDescription": "The quotation is deleted for good and the link sent to the customer stops working."
+    },
+    "quotation": {
+      "noPermission": "You do not have permission to manage quotations.",
+      "notFound": "Quotation not found.",
+      "revised": "Revision {revision} created.",
+      "locked": {
+        "title": "This quotation cannot be edited",
+        "superseded": "A newer revision of this quotation exists. Open it to edit.",
+        "description": "The quotation was sent to the customer. To change it, create a new revision that replaces it and keeps the previous version.",
+        "revise": "Create revision"
+      },
+      "editTitle": "Edit quotation {number}",
+      "newTitle": "New quotation",
+      "newSubtitle": "Choose the customer and add the lines, then save and send it.",
+      "saved": "Quotation saved.",
+      "sent": "The quotation is ready to send. Share the link with the customer.",
+      "accepted": "Acceptance recorded.",
+      "backToDraft": "Quotation returned to draft.",
+      "deleted": "Quotation deleted.",
+      "duplicated": "Quotation copied as a new draft.",
+      "declined": "Decline recorded.",
+      "revision": "Revision {revision}",
+      "actions": {
+        "convert": "Convert to invoice",
+        "send": "Send to customer",
+        "revise": "New revision",
+        "accept": "Mark accepted",
+        "decline": "Mark declined",
+        "backToDraft": "Return to draft"
+      },
+      "supersededBanner": "This is an earlier version. Revision {revision} is the latest.",
+      "openLatest": "Open latest revision",
+      "summary": {
+        "total": "Quotation total",
+        "customer": "Customer",
+        "sector": "Sector",
+        "issueDate": "Date",
+        "validUntil": "Valid until",
+        "noExpiry": "No expiry",
+        "beforeVat": "Before VAT",
+        "vat": "VAT",
+        "advance": "Advance payment {percent}%",
+        "retention": "Retention {percent}%"
+      },
+      "response": {
+        "title": "Customer response",
+        "by": "By",
+        "at": "On"
+      },
+      "billing": {
+        "title": "Invoicing",
+        "billed": "{amount} of {total} invoiced",
+        "none": "No invoices issued against this quotation yet.",
+        "next": "New invoice"
+      },
+      "revisions": {
+        "title": "Revisions"
+      },
+      "confirm": {
+        "accept": {
+          "title": "Mark the quotation as accepted?",
+          "description": "Use this when the customer agreed outside the link, by phone or with a purchase order. You can then convert the quotation to an invoice.",
+          "cta": "Mark accepted"
+        },
+        "draft": {
+          "title": "Return the quotation to draft?",
+          "description": "The link stops showing the quotation to the customer until you send it again.",
+          "cta": "Return to draft"
+        },
+        "delete": {
+          "title": "Delete the quotation?",
+          "description": "The quotation is deleted for good and the link sent to the customer stops working.",
+          "cta": "Delete quotation"
+        },
+        "revise": {
+          "title": "Create a new revision?",
+          "description": "A new editable version is created under the same number, and the current version is kept for reference.",
+          "cta": "Create revision"
+        }
+      },
+      "decline": {
+        "title": "Mark the quotation as declined",
+        "description": "Record the reason so you know later why the quotation was lost.",
+        "cta": "Mark declined",
+        "placeholder": "Reason (optional)"
+      },
+      "share": {
+        "title": "Share the quotation",
+        "description": "The customer opens the link to view the quotation and accept or decline it, no account needed.",
+        "message": "Hello, please find quotation {number} from {seller}. You can view and accept it at this link:",
+        "subject": "Quotation {number} from {seller}"
+      }
+    },
+    "convert": {
+      "title": "Convert to invoice",
+      "description": "Create an invoice from quotation {number}. It is saved as a draft for you to review before issuing.",
+      "advanceLabel": "Advance payment {percent}% for quotation {number}",
+      "created": "Draft invoice created.",
+      "create": "Create invoice",
+      "summary": {
+        "net": "Before VAT",
+        "vat": "VAT",
+        "retention": "Retention",
+        "total": "Invoice total",
+        "prepaid": "Advance",
+        "due": "Amount due"
+      },
+      "modes": {
+        "remaining": {
+          "title": "Everything remaining",
+          "description": "One invoice for all that has not been invoiced yet."
+        },
+        "progress": {
+          "title": "Progress claim",
+          "description": "Invoice the work completed to date on each line."
+        },
+        "lines": {
+          "title": "Selected lines",
+          "description": "Choose the quantities to invoice now."
+        },
+        "advance": {
+          "title": "Advance payment",
+          "description": "A percentage of the quotation, deducted from later invoices."
+        }
+      },
+      "taxType": {
+        "label": "Invoice type",
+        "standardHint": "The customer is a business: the invoice is cleared by ZATCA when issued.",
+        "simplifiedHint": "The customer is an individual: the invoice is reported to ZATCA after issue.",
+        "standard": "Tax invoice (B2B)",
+        "simplified": "Simplified (B2C)"
+      },
+      "advance": {
+        "percent": "Advance payment %",
+        "hint": "Calculated on the quotation value before VAT: {amount}"
+      },
+      "remaining": {
+        "full": "All quotation lines ({count}) will be invoiced.",
+        "partial": "{percent}% of the quotation is already invoiced. This invoice covers the rest."
+      },
+      "progress": {
+        "hint": "Enter the quantity completed to date for each line. The difference from earlier claims is invoiced.",
+        "setAll": "Complete all lines"
+      },
+      "table": {
+        "item": "Item",
+        "contract": "Contract",
+        "remaining": "Remaining",
+        "previous": "Previous",
+        "cumulative": "To date",
+        "quantity": "Qty",
+        "amount": "Amount"
+      },
+      "prepayment": {
+        "title": "Deduct the advance payment",
+        "hint": "{amount} before VAT is taken off {numbers}, in proportion to what this invoice bills. You can change the amount in the draft.",
+        "hintFinal": "The rest of the advance, {amount} before VAT, is taken off {numbers} because this invoice completes the quotation. You can change the amount in the draft."
+      }
+    },
+    "invoices": {
+      "title": "Tax invoices",
+      "subtitle": "Issue invoices to businesses and individuals, clear them with ZATCA, and track collection.",
+      "new": "New invoice",
+      "kpi": {
+        "outstanding": "Outstanding",
+        "outstandingHint": "Balance on issued invoices",
+        "overdue": "Overdue",
+        "overdueHint": "{count, plural, one {# invoice} other {# invoices}}",
+        "paid": "Collected this month",
+        "paidHint": "{amount} invoiced this month",
+        "zatca": "Waiting on ZATCA",
+        "zatcaHint": "{count, plural, one {# draft} other {# drafts}} not issued"
+      },
+      "empty": {
+        "title": "No invoices yet",
+        "description": "Create a new invoice, or convert an accepted quotation to an invoice in one click.",
+        "cta": "New invoice"
+      },
+      "tabs": {
+        "all": "All",
+        "draft": "Drafts",
+        "unpaid": "Unpaid",
+        "overdue": "Overdue",
+        "paid": "Paid",
+        "zatca": "Needs ZATCA follow-up"
+      },
+      "search": "Search number or customer",
+      "table": {
+        "number": "Invoice no.",
+        "customer": "Customer",
+        "issueDate": "Issue date",
+        "dueDate": "Due",
+        "original": "Original invoice",
+        "total": "Total",
+        "balance": "Balance",
+        "status": "Status",
+        "zatca": "ZATCA"
+      },
+      "noMatches": "No matching invoices."
+    },
+    "notes": {
+      "title": "Credit and debit notes",
+      "subtitle": "Adjustments to issued invoices: a credit note for a refund or reduction, a debit note for an increase.",
+      "new": "New invoice",
+      "kpi": {
+        "outstanding": "Outstanding",
+        "outstandingHint": "Balance on issued invoices",
+        "overdue": "Overdue",
+        "overdueHint": "{count, plural, one {# invoice} other {# invoices}}",
+        "paid": "Collected this month",
+        "paidHint": "{amount} invoiced this month",
+        "zatca": "Waiting on ZATCA",
+        "zatcaHint": "{count, plural, one {# draft} other {# drafts}} not issued"
+      },
+      "empty": {
+        "title": "No notes yet",
+        "description": "An issued invoice is never edited or deleted. To correct one, open it and create a credit or debit note.",
+        "cta": "View invoices"
+      },
+      "tabs": {
+        "all": "All",
+        "credit_note": "Credit notes",
+        "debit_note": "Debit notes",
+        "draft": "Drafts"
+      },
+      "search": "Search number or customer",
+      "table": {
+        "number": "Note no.",
+        "customer": "Customer",
+        "issueDate": "Issue date",
+        "dueDate": "Due",
+        "original": "Original invoice",
+        "total": "Total",
+        "balance": "Balance",
+        "status": "Status",
+        "zatca": "ZATCA"
+      },
+      "noMatches": "No matching notes."
+    },
+    "invoice": {
+      "noPermission": "You do not have permission to manage invoices.",
+      "notFound": "Invoice not found.",
+      "editTitle": "Edit {type}",
+      "draftTitle": "{type} (draft)",
+      "newTitle": "New invoice",
+      "newSubtitle": "Choose the customer and add the lines. It stays a draft until you issue it.",
+      "saved": "Invoice saved.",
+      "deleted": "Draft deleted.",
+      "actions": {
+        "issue": "Issue invoice",
+        "reissue": "Issue again",
+        "recordPayment": "Record payment",
+        "creditNote": "Credit note",
+        "debitNote": "Debit note",
+        "issueNote": "Issue note"
+      },
+      "issue": {
+        "refused": "ZATCA rejected the invoice. Review the reason, fix it and issue again.",
+        "waiting": "Invoice issued. It will be sent to ZATCA automatically.",
+        "cleared": "ZATCA cleared the invoice.",
+        "reported": "Invoice issued and reported to ZATCA.",
+        "done": "Invoice issued."
+      },
+      "problem": {
+        "buyer": {
+          "title": "Customer details are incomplete",
+          "description": "Complete before issuing: {fields}.",
+          "cta": "Edit invoice"
+        },
+        "seller": {
+          "title": "Your business details are incomplete",
+          "description": "Complete in business settings: {fields}.",
+          "cta": "Business settings"
+        },
+        "device": {
+          "title": "The device does not support B2B tax invoices",
+          "description": "The device linked to ZATCA is registered for simplified invoices only. Register a new device that supports both types.",
+          "cta": "E-invoicing settings"
+        }
+      },
+      "amounts": {
+        "balance": "Balance to collect",
+        "total": "Invoice total",
+        "collected": "{paid} of {total} collected",
+        "customer": "Customer",
+        "issueDate": "Issue date",
+        "dueDate": "Due date",
+        "beforeVat": "Before VAT",
+        "vat": "VAT",
+        "prepaid": "Advance payments deducted",
+        "retention": "Retention {percent}%",
+        "amountDue": "Amount due",
+        "paid": "Paid",
+        "credited": "Credit notes",
+        "debited": "Debit notes",
+        "noteTotal": "Note total"
+      },
+      "related": {
+        "title": "Related documents",
+        "quotation": "Quotation",
+        "original": "Original invoice",
+        "prepayment": "Advance payment deducted",
+        "advanceRemaining": "Left to deduct from the advance: {amount}",
+        "advanceUsed": "The advance payment is fully deducted."
+      },
+      "confirm": {
+        "issueStandard": {
+          "title": "Issue the tax invoice?",
+          "description": "The invoice is sent to ZATCA for clearance. Once cleared it cannot be edited or deleted; corrections are made with a credit or debit note.",
+          "cta": "Issue and clear"
+        },
+        "issueSimplified": {
+          "title": "Issue the simplified invoice?",
+          "description": "The invoice is signed and reported to ZATCA. Once issued it cannot be edited or deleted; corrections are made with a credit or debit note.",
+          "cta": "Issue invoice"
+        },
+        "delete": {
+          "title": "Delete the draft?",
+          "description": "The draft is deleted for good. It was never sent to ZATCA.",
+          "cta": "Delete draft"
+        },
+        "payment": {
+          "title": "Delete the payment?",
+          "description": "The payment is deleted and its amount returns to the invoice balance.",
+          "cta": "Delete payment"
+        },
+        "issueNoteStandard": {
+          "title": "Issue the note?",
+          "description": "The note is sent to ZATCA for clearance. Once cleared it cannot be edited or deleted.",
+          "cta": "Issue and clear"
+        },
+        "issueNoteSimplified": {
+          "title": "Issue the note?",
+          "description": "The note is signed and reported to ZATCA. Once issued it cannot be edited or deleted.",
+          "cta": "Issue note"
+        }
+      },
+      "share": {
+        "title": "Share the invoice",
+        "description": "The customer opens the link to view the invoice, print it or download the XML file.",
+        "message": "Hello, please find invoice {number} from {seller}. You can view it at this link:",
+        "subject": "Invoice {number} from {seller}"
+      },
+      "issueNote": {
+        "refused": "ZATCA rejected the note. Review the reason, fix it and issue again.",
+        "waiting": "Note issued. It will be sent to ZATCA automatically.",
+        "cleared": "ZATCA cleared the note.",
+        "reported": "Note issued and reported to ZATCA.",
+        "done": "Note issued."
+      }
+    },
+    "payments": {
+      "title": "Payments",
+      "add": "Record payment",
+      "none": "No payments recorded yet.",
+      "remove": "Delete payment",
+      "removed": "Payment deleted.",
+      "saved": "Payment recorded.",
+      "amountRequired": "Enter an amount greater than zero.",
+      "dialog": {
+        "title": "Record a payment",
+        "description": "Payment received for invoice {number}.",
+        "balance": "Invoice balance",
+        "amount": "Amount",
+        "paidOn": "Payment date",
+        "method": "Payment method",
+        "reference": "Reference",
+        "referencePlaceholder": "Transfer or cheque number (optional)",
+        "save": "Record payment"
+      }
+    },
+    "note": {
+      "creditTitle": "Credit note",
+      "debitTitle": "Debit note",
+      "creditDescription": "Reduces invoice {number}. Keep only the lines and quantities you are crediting.",
+      "debitDescription": "Increases invoice {number}. Add the lines or differences that are due.",
+      "reasonCode": "Reason for the note",
+      "reason": "Reason details",
+      "reasonPlaceholder": "e.g. Part of the quantity returned as non-conforming",
+      "table": {
+        "item": "Item",
+        "itemPlaceholder": "Line description",
+        "quantity": "Qty",
+        "price": "Price",
+        "total": "Total"
+      },
+      "addLine": "Add line",
+      "vatIncluded": "Includes VAT {amount}",
+      "hint": "The note is saved as a draft and sent to ZATCA when you issue it.",
+      "total": "Note total",
+      "creditable": "Maximum for this note: {amount}",
+      "create": "Create note",
+      "created": "Note created as a draft. Review it, then issue it.",
+      "linesRequired": "Add at least one line with a description, quantity and price.",
+      "exceeds": "The note is more than what remains on the invoice ({amount}).",
+      "debitReasonPlaceholder": "e.g. extra work the customer asked for after the invoice"
+    },
+    "zatca": {
+      "title": "ZATCA",
+      "icv": "Invoice counter (ICV)",
+      "hash": "Invoice hash",
+      "submittedAt": "Submitted",
+      "attempts": "Send attempts",
+      "warnings": "Warnings from ZATCA",
+      "retry": "Send to ZATCA again",
+      "downloadXml": "Download XML",
+      "xmlFailed": "The XML file could not be downloaded.",
+      "draftStandard": "Sent to ZATCA for clearance when issued.",
+      "draftSimplified": "Signed and reported to ZATCA when issued.",
+      "notLinked": "Issued without a ZATCA link. Link a device in e-invoicing settings.",
+      "waitingHint": "ZATCA could not be reached. We retry automatically, or you can retry now.",
+      "refusedTitle": "ZATCA rejected the invoice",
+      "refusedHint": "Fix the invoice, then issue it again."
+    },
+    "readiness": {
+      "ready": "Ready to issue: the ZATCA link is active.",
+      "readyTest": "The ZATCA link is in a test environment: issued invoices are for testing only.",
+      "noDevice": {
+        "title": "Your business is not linked to ZATCA yet",
+        "description": "You can prepare the invoice as a draft, but ZATCA clearance needs a registered device.",
+        "cta": "Link ZATCA"
+      },
+      "noStandard": {
+        "title": "Your device does not support B2B tax invoices",
+        "description": "The current device is registered for simplified invoices only. Register a new device that supports both types to clear B2B invoices.",
+        "cta": "Register a new device"
+      },
+      "noSimplified": {
+        "title": "Your device does not support simplified invoices",
+        "description": "Register a device that supports simplified invoices, or issue it as a B2B tax invoice.",
+        "cta": "E-invoicing settings"
+      },
+      "seller": {
+        "title": "Your business details are incomplete",
+        "description": "Complete before issuing: {fields}.",
+        "cta": "Business settings"
+      }
+    },
+    "share": {
+      "copied": "Link copied.",
+      "copyFailed": "The link could not be copied.",
+      "copiedShort": "Copied",
+      "copy": "Copy link",
+      "whatsapp": "WhatsApp",
+      "email": "Email",
+      "open": "Open link",
+      "hint": "Anyone with the link can open the document."
+    },
+    "public": {
+      "poweredBy": "Issued with Madar",
+      "print": "Print / PDF",
+      "missing": {
+        "title": "Document unavailable",
+        "description": "The link may be wrong or the document is no longer available. Contact the sender."
+      },
+      "quotation": {
+        "caption": "Quotation",
+        "total": "Quotation total",
+        "heading": "Quotation from {seller}",
+        "validUntil": "Valid until {date}",
+        "prompt": "Review the quotation, then let us know your decision.",
+        "accept": "Accept quotation",
+        "decline": "Decline",
+        "accepted": "Quotation accepted",
+        "acceptedBy": "Accepted by {name} on {date}",
+        "acceptedHint": "The {seller} team will contact you to complete the next steps.",
+        "thanksAccepted": "Thank you. Your acceptance is recorded.",
+        "thanksDeclined": "Your response is recorded. Thank you for your time.",
+        "declined": "Quotation declined",
+        "declinedHint": "If you change your mind, contact {seller} for a new quotation.",
+        "expired": "This quotation has expired",
+        "expiredHint": "Contact {seller} for an updated quotation.",
+        "superseded": "A newer version of this quotation exists",
+        "supersededHint": "Ask {seller} for the link to the latest version.",
+        "dialog": {
+          "acceptTitle": "Confirm acceptance",
+          "declineTitle": "Decline the quotation",
+          "acceptDescription": "By accepting, you agree to the quotation of {amount} and to the terms of {seller}.",
+          "declineDescription": "Tell us why, so we can offer something that fits better.",
+          "name": "Name",
+          "namePlaceholder": "Your full name",
+          "nameRequired": "Enter your name.",
+          "reason": "Reason",
+          "reasonPlaceholder": "Optional",
+          "confirmAccept": "I accept the quotation",
+          "confirmDecline": "Confirm decline"
+        }
+      },
+      "invoice": {
+        "invoice": "Tax invoice",
+        "creditNote": "Credit note",
+        "debitNote": "Debit note",
+        "heading": "{kind} from {seller}",
+        "paid": "Paid in full",
+        "overdue": "Overdue since {date}",
+        "dueOn": "Due on {date}",
+        "total": "Total",
+        "balance": "Balance due",
+        "xml": "Download XML",
+        "cleared": "Invoice cleared by ZATCA",
+        "reported": "Invoice reported to ZATCA",
+        "clearedNote": "Note cleared by ZATCA",
+        "reportedNote": "Note reported to ZATCA"
+      }
     }
   }
 }

@@ -53,11 +53,18 @@ describe("applicationsForPath", () => {
   it("maps each route to the apps that may use it", () => {
     expect(applicationsForPath("/v1/pos/shifts")).toEqual(["pos"])
     expect(applicationsForPath("/v1/pos/invoices/abc/returns")).toEqual(["pos", "ecommerce"])
-    expect(applicationsForPath("/v1/products")).toEqual(["pos", "ecommerce", "procurement"])
+    expect(applicationsForPath("/v1/products")).toEqual([
+      "pos",
+      "ecommerce",
+      "procurement",
+      "invoicing",
+    ])
+    expect(applicationsForPath("/v1/invoicing/quotations")).toEqual(["invoicing"])
     expect(applicationsForPath("/v1/products/lookup-by-sku")).toEqual([
       "pos",
       "ecommerce",
       "procurement",
+      "invoicing",
     ])
     expect(applicationsForPath("/v1/orders/by-store")).toEqual(["ecommerce"])
     expect(applicationsForPath("/v1/tracking/live-visitors")).toEqual(["ecommerce"])

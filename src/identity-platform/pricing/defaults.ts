@@ -234,6 +234,18 @@ export function defaultPricingFor(application: PurchasableApplication): {
           ]),
         ],
       }
+    case "invoicing":
+      return {
+        mode: "fixed",
+        packages: [
+          single("الفواتير وعروض الأسعار", 79, [
+            "عروض أسعار بمراجعات وقبول إلكتروني من العميل",
+            "فواتير ضريبية للمنشآت معتمدة من هيئة الزكاة (الربط والاعتماد)",
+            "مستخلصات المقاولات والدفعات المقدمة والمحتجزات",
+            "إشعارات دائنة ومدينة وتحصيل الدفعات",
+          ]),
+        ],
+      }
     case "customReports":
       return {
         mode: "fixed",

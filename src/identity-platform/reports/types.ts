@@ -13,6 +13,7 @@ export type CatalogApplication =
   | "ai"
   | "customReports"
   | "promotions"
+  | "invoicing"
 
 export type ReportAggregation = "sum" | "avg" | "count" | "min" | "max"
 export type ReportTimeGrouping = "day" | "week" | "month" | "quarter" | "year" | "none"

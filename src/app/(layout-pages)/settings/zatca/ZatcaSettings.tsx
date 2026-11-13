@@ -81,6 +81,14 @@ function statusLabel(status: ZatcaDevice["status"], t: ZatcaTranslator): string 
   return t(`statuses.${status}` as "statuses.draft")
 }
 
+// Which invoices the device's CSR registered it for ("TSCZ": standard, simplified). Devices from
+// before the B2B invoices were all simplified-only.
+function invoiceTypesOf(device: ZatcaDevice): "both" | "standard" | "simplified" {
+  const types = device.details.invoiceTypes ?? "0100"
+  if (types[0] !== "1") return "simplified"
+  return types[1] === "1" ? "both" : "standard"
+}
+
 function dateFormatter(locale: Locale): Intl.DateTimeFormat {
   return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
     year: "numeric",
@@ -203,7 +211,8 @@ export default function ZatcaSettings() {
 
   const submitCreate = async () => {
     if (!draft.commonName.trim()) return toast.error(t("validation.deviceNameRequired"))
-    if (!/^\d{15}$/.test(draft.vatNumber.trim()))
+    // ZATCA refuses any other shape when the device is onboarded.
+    if (!/^3\d{13}3$/.test(draft.vatNumber.trim()))
       return toast.error(t("validation.vatNumberInvalid"))
     if (!draft.organizationName.trim()) return toast.error(t("validation.organizationNameRequired"))
     if (!draft.organizationUnit.trim()) return toast.error(t("validation.organizationUnitRequired"))
@@ -285,6 +294,14 @@ export default function ZatcaSettings() {
     }
   }
 
+  // Whether any working device may already issue tax invoices to businesses.
+  const standardReady = devices.some(
+    (device) =>
+      device.status === "production" &&
+      !device.deactivatedAt &&
+      invoiceTypesOf(device) !== "simplified"
+  )
+
   if (loading) {
     return (
       <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
@@ -340,6 +357,7 @@ export default function ZatcaSettings() {
         <div className="flex flex-col gap-4">
           {devices.map((device) => {
             const tint = STATUS_TINT[device.status]
+            const invoiceTypes = invoiceTypesOf(device)
             const busy = busyId === device.id
             const results = complianceResults[device.id] ?? []
             return (
@@ -370,6 +388,16 @@ export default function ZatcaSettings() {
                         {environmentLabel(device.environment, t)}
                       </span>
                     ) : null}
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                        invoiceTypes === "simplified"
+                          ? "bg-[#f2f4f8] text-[#667085]"
+                          : "bg-[#eef0ff] text-[#4f46e5]"
+                      )}
+                    >
+                      {t(`device.invoiceTypes.${invoiceTypes}`)}
+                    </span>
                     {device.deactivatedAt ? (
                       <span className="rounded-full bg-[#f2f4f8] px-2.5 py-1 text-[11px] font-bold text-[#667085]">
                         {t("device.stopped")}
@@ -538,6 +566,26 @@ export default function ZatcaSettings() {
                   <div className="flex items-center gap-2 rounded-[10px] bg-[#e9f8ef] px-3.5 py-3 text-[12.5px] font-semibold text-[#1f9d55]">
                     <ShieldCheck className="size-4" />
                     {t("device.productionBanner")}
+                  </div>
+                ) : null}
+
+                {device.status === "production" &&
+                !device.deactivatedAt &&
+                invoiceTypes === "simplified" &&
+                !standardReady ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#fde3b0] bg-[#fffaf0] px-3.5 py-3">
+                    <p className="flex min-w-0 flex-1 items-start gap-2 text-[12px] leading-6 text-[#92400e]">
+                      <Info className="mt-1 size-4 shrink-0" />
+                      {t("device.simplifiedOnlyHint")}
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="h-9 gap-1.5 rounded-[10px] border-[#f5d48f] bg-white text-[12px] font-bold text-[#92400e] hover:bg-[#fff4dc]"
+                      onClick={openCreate}
+                    >
+                      <Plus className="size-3.5" />
+                      {t("addDevice")}
+                    </Button>
                   </div>
                 ) : null}
               </section>

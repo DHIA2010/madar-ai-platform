@@ -14,7 +14,7 @@ alter table subscription_activation_requests
   add constraint subscription_activation_requests_application_check
     check (application in (
       'advertising', 'ecommerce', 'pos', 'madarApps', 'procurement', 'expenses', 'ai',
-      'customReports', 'promotions', 'madarComplete'
+      'customReports', 'promotions', 'invoicing', 'madarComplete'
     ));
 
 alter table chat_sessions
@@ -31,5 +31,5 @@ alter table billing_moyasar_payments
   add constraint billing_moyasar_payments_application_check
     check (application in (
       'advertising', 'ecommerce', 'pos', 'madarApps', 'procurement', 'expenses', 'ai',
-      'customReports', 'promotions', 'madarComplete'
+      'customReports', 'promotions', 'invoicing', 'madarComplete'
     ));

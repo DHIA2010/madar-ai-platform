@@ -90,6 +90,7 @@ const MARKETPLACE_ID: Record<string, string> = {
   ai: "ai",
   customReports: "custom-reports",
   promotions: "promotions",
+  invoicing: "invoicing",
   expenses: "madar-apps-expenses",
   madarComplete: "madar-complete",
 }
