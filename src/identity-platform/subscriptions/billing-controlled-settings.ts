@@ -1,4 +1,4 @@
-import { SUBSCRIPTION_APPLICATIONS } from "./types"
+import { MADAR_COMPLETE, SUBSCRIPTION_APPLICATIONS } from "./types"
 
 // The organizations.settings keys that grant paid access. Only billing paths (trial, payment,
 // bank-transfer approval, Madar Admin) may turn them on -- a customer's own settings update may
@@ -14,6 +14,11 @@ export function findBillingSettingsViolations(
   for (const key of Object.keys(settings)) {
     if (key === "currentPlanTier") {
       violations.push({ key, reason: "The plan is set by billing, not by settings." })
+      continue
+    }
+    // The bundle has no flags of its own, only the marker that its one trial has been taken.
+    if (key === `${MADAR_COMPLETE}TrialUsed`) {
+      violations.push({ key, reason: "Trial usage is set by billing, not by settings." })
       continue
     }
     const application = SUBSCRIPTION_APPLICATIONS.find(

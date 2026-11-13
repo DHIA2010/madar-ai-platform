@@ -24,6 +24,20 @@ import {
 // same mock session. Never persisted beyond the page's lifetime, same as the rest of this file.
 let mockSubscriptionRequests: SubscriptionActivationRequestDto[] = []
 
+// Every application a Madar Complete trial opens.
+const MOCK_APPLICATIONS = [
+  "advertising",
+  "ecommerce",
+  "pos",
+  "madarApps",
+  "procurement",
+  "expenses",
+  "ai",
+  "customReports",
+  "promotions",
+  "invoicing",
+] as const
+
 export class MockWorkspaceGateway implements WorkspaceGateway {
   async getOrganizations(): Promise<OrganizationDto[]> {
     await waitForMock()
@@ -215,7 +229,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   // this method, so the mock has to actually remember it happened.
   async startApplicationTrial(
     organizationId: string,
-    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
+    application: PurchasableApplication
   ): Promise<OrganizationDto> {
     await waitForMock()
     const organization = mockOrganizations.find((entry) => entry.id === organizationId)
@@ -226,10 +240,23 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     if (settings[`${application}TrialUsed`]) {
       throw new Error("A free trial has already been used for this application.")
     }
+    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    // The bundle opens every application the organization doesn't already have.
+    if (application === "madarComplete") {
+      for (const app of MOCK_APPLICATIONS) {
+        if (settings[`${app}Enabled`]) continue
+        Object.assign(settings, {
+          [`${app}Enabled`]: true,
+          [`${app}TrialEndsAt`]: trialEndsAt,
+          [`${app}TrialUsed`]: true,
+        })
+      }
+      settings.madarCompleteTrialUsed = true
+      return organization
+    }
     if (settings[`${application}Enabled`]) {
       throw new Error("This application is already active.")
     }
-    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     Object.assign(settings, {
       [`${application}Enabled`]: true,
       [`${application}TrialEndsAt`]: trialEndsAt,

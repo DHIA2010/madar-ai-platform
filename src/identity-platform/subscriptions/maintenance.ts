@@ -161,17 +161,29 @@ async function expire(
       updatedAt: nowIso,
     })
     // Keep any app the customer still has through another running subscription.
+    const running = all
+      .filter((other) => other.organizationId === subscription.organizationId)
+      .filter((other) => other.id !== subscription.id)
+      .filter((other) => {
+        const status = effectiveSubscriptionStatus(other, nowIso)
+        return status === "active" || status === "trial" || status === "overdue"
+      })
     const stillCovered = new Set(
-      all
-        .filter((other) => other.organizationId === subscription.organizationId)
-        .filter((other) => other.id !== subscription.id)
-        .filter((other) => {
-          const status = effectiveSubscriptionStatus(other, nowIso)
-          return status === "active" || status === "trial" || status === "overdue"
-        })
-        .flatMap((other) => applicationsCoveredBy(other.application))
+      running.flatMap((other) => applicationsCoveredBy(other.application))
     )
     const patch = deactivationSettingsPatch(subscription.application, stillCovered)
+    // An app kept on only by a trial (a Madar Complete trial started while this subscription was
+    // lapsing) runs to that trial's end, not forever.
+    for (const app of applicationsCoveredBy(subscription.application)) {
+      const covering = running.filter((other) =>
+        applicationsCoveredBy(other.application).includes(app)
+      )
+      const trialEnds = covering.map((other) =>
+        other.status === "trial" ? other.trialEndsAt : null
+      )
+      if (trialEnds.length === 0 || trialEnds.some((endsAt) => !endsAt)) continue
+      patch[`${app}TrialEndsAt`] = (trialEnds as string[]).sort().at(-1)
+    }
     const existing = await db.query<{ settings: Record<string, unknown> | null }>(
       "SELECT settings FROM organizations WHERE id = $1 FOR UPDATE",
       [subscription.organizationId]

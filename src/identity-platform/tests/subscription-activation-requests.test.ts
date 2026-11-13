@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
+import { bundleTrialSettingsPatch } from "../subscriptions/activation"
+import { findBillingSettingsViolations } from "../subscriptions/billing-controlled-settings"
+import { SUBSCRIPTION_APPLICATIONS } from "../subscriptions/types"
 import type { RequestContext } from "../types"
 
 const context: RequestContext = {
@@ -294,5 +297,95 @@ describe("free application trials", () => {
     expect(organization.settings.madarAppsEnabled).toBe(true)
     expect(organization.settings.currentPlanTier).toBe("pro")
     expect(organization.settings.madarAppsTrialEndsAt).toBe("")
+  })
+
+  it("opens every application at once with a Madar Complete trial, once", async () => {
+    const container = createContainer()
+    const customer = await registerAndLogin(container, "trial-customer-5@madar.test")
+    const organizationId = customer.actor.organizationId
+
+    const result = await container.commands.startApplicationTrial(
+      customer.actor,
+      organizationId,
+      { application: "madarComplete" },
+      context
+    )
+    const endsAt = result.settings.posTrialEndsAt as string
+    expect(new Date(endsAt).getTime()).toBeGreaterThan(Date.now())
+    for (const application of SUBSCRIPTION_APPLICATIONS) {
+      expect(result.settings[`${application}Enabled`]).toBe(true)
+      expect(result.settings[`${application}TrialEndsAt`]).toBe(endsAt)
+      expect(result.settings[`${application}TrialUsed`]).toBe(true)
+    }
+    expect(result.settings.madarCompleteTrialUsed).toBe(true)
+
+    await expect(
+      container.commands.startApplicationTrial(
+        customer.actor,
+        organizationId,
+        { application: "madarComplete" },
+        context
+      )
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+  })
+
+  it("leaves a paid application alone when a Madar Complete trial starts", async () => {
+    const container = createContainer()
+    const customer = await registerAndLogin(container, "trial-customer-6@madar.test")
+    const staff = await registerAndLogin(container, PLATFORM_ADMIN_EMAIL)
+    const organizationId = customer.actor.organizationId
+
+    const request = await container.commands.requestApplicationActivation(
+      customer.actor,
+      organizationId,
+      {
+        application: "advertising",
+        planTier: "starter",
+        package: { id: "00000000-0000-4000-8000-000000000001", name: "Starter" },
+        billingInterval: "monthly",
+        priceHalalas: 29900,
+        attachmentUrl: "https://storage.test/subscription-receipts/receipt-bundle-trial.png",
+        attachmentContentType: "image/png",
+      },
+      context
+    )
+    await container.commands.approveSubscriptionActivationRequest(staff.actor, request.id, context)
+
+    const result = await container.commands.startApplicationTrial(
+      customer.actor,
+      organizationId,
+      { application: "madarComplete" },
+      context
+    )
+    // Still a paid application: no trial end date that would switch it off with the trial.
+    expect(result.settings.advertisingEnabled).toBe(true)
+    expect(result.settings.advertisingTrialEndsAt).toBe("")
+    expect(typeof result.settings.posTrialEndsAt).toBe("string")
+    expect(result.settings.posTrialEndsAt).not.toBe("")
+  })
+
+  it("never cuts an application's own longer trial short, and has nothing to offer a customer who has every application", () => {
+    const bundleEnd = "2026-12-01T00:00:00.000Z"
+    const longer = bundleTrialSettingsPatch(
+      { posEnabled: true, posTrialEndsAt: "2026-12-10T00:00:00.000Z" },
+      bundleEnd
+    )
+    expect(longer.opened).not.toContain("pos")
+    expect(longer.patch.posTrialEndsAt).toBeUndefined()
+
+    const shorter = bundleTrialSettingsPatch(
+      { posEnabled: true, posTrialEndsAt: "2026-11-20T00:00:00.000Z" },
+      bundleEnd
+    )
+    expect(shorter.patch.posTrialEndsAt).toBe(bundleEnd)
+
+    const everything = Object.fromEntries(
+      SUBSCRIPTION_APPLICATIONS.map((application) => [`${application}Enabled`, true])
+    )
+    expect(bundleTrialSettingsPatch(everything, bundleEnd).opened).toEqual([])
+  })
+
+  it("doesn't let a customer's own settings update reset the Madar Complete trial", () => {
+    expect(findBillingSettingsViolations({ madarCompleteTrialUsed: false })).toHaveLength(1)
   })
 })

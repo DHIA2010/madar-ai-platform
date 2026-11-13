@@ -15,6 +15,9 @@ import { runIdentityMigrations } from "../infrastructure/postgres/migration-runn
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { InMemoryEmailGateway } from "../infrastructure/email/in-memory-email-gateway"
 import { createIdentityApiServer } from "../interfaces/rest/server"
+import { bundleTrialSettingsPatch } from "../subscriptions/activation"
+import { startTrial } from "../subscriptions/lifecycle"
+import { PostgresOrganizationSubscriptionRepository } from "../subscriptions/repository"
 
 const STAFF_EMAIL = "staff@madar.test"
 const PASSWORD = "VeryStrongPassword123!"
@@ -313,6 +316,82 @@ describe("platform billing: maintenance", () => {
       [lapsed.body.id]: "expired",
       [running.body.id]: "active",
     })
+  })
+
+  // A Madar Complete trial as startApplicationTrial leaves it: every application the customer
+  // didn't have opened until the trial ends, and one subscription -- the bundle's.
+  async function startBundleTrial(organizationId: string, trialEndsAt: string) {
+    const organization = await database.query<{ settings: Record<string, unknown> }>(
+      "select settings from organizations where id = $1",
+      [organizationId]
+    )
+    const settings = organization.rows[0].settings
+    const { patch } = bundleTrialSettingsPatch(settings, trialEndsAt)
+    await database.query("update organizations set settings = $2::jsonb where id = $1", [
+      organizationId,
+      JSON.stringify({ ...settings, ...patch }),
+    ])
+    await new PostgresOrganizationSubscriptionRepository(database).save(
+      startTrial(null, {
+        id: randomUUID(),
+        organizationId,
+        application: "madarComplete",
+        trialEndsAt,
+        now: new Date().toISOString(),
+      })
+    )
+  }
+
+  it("treats a Madar Complete trial as one subscription with one reminder", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const shop = await signIn("owner@shop.test", "Shop")
+    const organizationId = shop.actor.organizationId
+    await startBundleTrial(organizationId, new Date(Date.now() + 2 * 86_400_000).toISOString())
+
+    const result = await call<{ remindersSent: number }>(
+      "POST",
+      "/v1/platform-admin/billing/maintenance",
+      staff.token
+    )
+    expect(result.body.remindersSent).toBe(1)
+    const subscriptions = await database.query<{ application: string }>(
+      "select application from organization_subscriptions where organization_id = $1",
+      [organizationId]
+    )
+    expect(subscriptions.rows.map((row) => row.application)).toEqual(["madarComplete"])
+    const sent = (container.emailGateway as InMemoryEmailGateway).sent.filter(
+      (email) => email.kind === "renewal_reminder"
+    )
+    expect(sent).toEqual([
+      expect.objectContaining({ applicationLabel: "مدار الكامل", reminderKind: "trial" }),
+    ])
+  })
+
+  it("keeps a lapsed paid app on only until the Madar Complete trial ends", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const shop = await signIn("owner@shop.test", "Shop")
+    const organizationId = shop.actor.organizationId
+    const lapsed = await grant(staff.token, organizationId, "pos")
+    const trialEndsAt = new Date(Date.now() + 10 * 86_400_000).toISOString()
+    await startBundleTrial(organizationId, trialEndsAt)
+    await database.query(
+      "update organization_subscriptions set current_period_end = $2 where id = $1",
+      [lapsed.body.id, new Date(Date.now() - 8 * 86_400_000).toISOString()]
+    )
+
+    const result = await call<{ expired: number }>(
+      "POST",
+      "/v1/platform-admin/billing/maintenance",
+      staff.token
+    )
+    expect(result.body.expired).toBe(1)
+    const settings = (
+      await database.query<{ settings: Record<string, unknown> }>(
+        "select settings from organizations where id = $1",
+        [organizationId]
+      )
+    ).rows[0].settings
+    expect(settings).toMatchObject({ posEnabled: true, posTrialEndsAt: trialEndsAt })
   })
 
   it("is staff-only", async () => {

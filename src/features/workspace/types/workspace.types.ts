@@ -94,6 +94,7 @@ export interface OrganizationSettings {
   customReportsTrialUsed?: boolean
   promotionsTrialUsed?: boolean
   invoicingTrialUsed?: boolean
+  madarCompleteTrialUsed?: boolean
 }
 
 export interface Organization {

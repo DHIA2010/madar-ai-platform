@@ -88,6 +88,8 @@ export interface OrganizationSettingsDto {
   customReportsTrialUsed?: boolean
   promotionsTrialUsed?: boolean
   invoicingTrialUsed?: boolean
+  // The Madar Complete bundle's one trial has been taken (it opens every application at once).
+  madarCompleteTrialUsed?: boolean
 }
 
 export type SubscriptionApplication =
@@ -223,7 +225,7 @@ export interface WorkspaceRepository {
   // application is active immediately.
   startApplicationTrial(
     organizationId: string,
-    application: SubscriptionApplication
+    application: PurchasableApplication
   ): Promise<OrganizationDto>
   // An application Madar Admin sells as free -- switched on without paying.
   activateFreeApplication(

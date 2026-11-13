@@ -102,7 +102,7 @@ export class WorkspaceApplicationService {
 
   startApplicationTrial(
     organizationId: string,
-    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
+    application: PurchasableApplication
   ): Promise<OrganizationDto> {
     return this.gateway.startApplicationTrial(organizationId, application)
   }

@@ -424,10 +424,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // this syncs currentOrganization/availableOrganizations right away -- same pattern as
   // updateOrganization/uploadOrganizationLogo, not the fire-and-forget pending-request methods.
   const startApplicationTrial = useCallback(
-    async (
-      organizationId: string,
-      application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
-    ) => {
+    async (organizationId: string, application: PurchasableApplication) => {
       const organization = await workspaceApplicationService.startApplicationTrial(
         organizationId,
         application

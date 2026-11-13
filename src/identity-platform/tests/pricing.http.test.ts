@@ -791,6 +791,26 @@ describe("platform settings", () => {
     expect(publicSettings.body.trialDays).toBe(14)
   })
 
+  it("starts a Madar Complete trial that opens every application, once", async () => {
+    const customer = await signIn("owner@shop.test", "Shop")
+    const path = `/v1/organizations/${customer.actor.organizationId}/application-trials`
+
+    const trial = await call<{ settings: Record<string, unknown> }>("POST", path, customer.token, {
+      application: "madarComplete",
+    })
+    expect(trial.status).toBe(201)
+    expect(trial.body.settings).toMatchObject({
+      posEnabled: true,
+      invoicingEnabled: true,
+      promotionsEnabled: true,
+      madarCompleteTrialUsed: true,
+    })
+    expect(trial.body.settings.invoicingTrialEndsAt).toBe(trial.body.settings.posTrialEndsAt)
+
+    const again = await call("POST", path, customer.token, { application: "madarComplete" })
+    expect(again.status).toBe(400)
+  })
+
   it("closes new sign-ups and keeps everyone but staff out during maintenance", async () => {
     const staff = await signIn(STAFF_EMAIL, "Madar HQ")
     const customer = await signIn("owner@shop.test", "Shop")

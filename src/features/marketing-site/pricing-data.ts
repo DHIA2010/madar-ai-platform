@@ -210,6 +210,25 @@ const FALLBACK_PRICING: PublicApplicationPricing[] = [
     ],
   },
   {
+    application: "invoicing",
+    mode: "fixed",
+    freeDays: null,
+    packages: [
+      pkg(
+        "الفواتير وعروض الأسعار",
+        79,
+        790,
+        [
+          "عروض أسعار بمراجعات وقبول إلكتروني من العميل",
+          "فواتير ضريبية للمنشآت معتمدة من هيئة الزكاة (الربط والاعتماد)",
+          "مستخلصات المقاولات والدفعات المقدمة والمحتجزات",
+          "إشعارات دائنة ومدينة وتحصيل الدفعات",
+        ],
+        true
+      ),
+    ],
+  },
+  {
     application: "ai",
     mode: "fixed",
     freeDays: null,

@@ -98,9 +98,10 @@ import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-rol
 import { issueSessionForMember } from "../session-issuer"
 import { permissionsForRole, type PlatformRole } from "../../platform-admin/staff-roles"
 import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../../billing/moyasar/plan-pricing"
-import { activationSettingsPatch } from "../../subscriptions/activation"
+import { activationSettingsPatch, bundleTrialSettingsPatch } from "../../subscriptions/activation"
 import { activateFree, activatePaid, startTrial } from "../../subscriptions/lifecycle"
 import { findBillingSettingsViolations } from "../../subscriptions/billing-controlled-settings"
+import { MADAR_COMPLETE, type SubscriptionApplication } from "../../subscriptions/types"
 
 // Approving/rejecting a request someone already reviewed (two staff at once, or a double click)
 // is a 409, not the 500 the entity's own plain Error used to surface as.
@@ -1344,10 +1345,7 @@ export class IdentityCommandHandlers {
   // APPLICATION_SETTINGS_KEY (src/features/applications/services/applications-catalog.service.ts)
   // but kept as its own backend-local constant since command-handlers.ts must not import
   // frontend feature code.
-  private static readonly APPLICATION_SETTINGS_KEY: Record<
-    StartApplicationTrialCommand["application"],
-    string
-  > = {
+  private static readonly APPLICATION_SETTINGS_KEY: Record<SubscriptionApplication, string> = {
     advertising: "advertisingEnabled",
     ecommerce: "ecommerceEnabled",
     pos: "posEnabled",
@@ -1572,17 +1570,11 @@ export class IdentityCommandHandlers {
       throw ERRORS.notFound("Organization")
     }
 
-    const enabledKey = IdentityCommandHandlers.APPLICATION_SETTINGS_KEY[command.application]
-    const trialEndsAtKey = `${command.application}TrialEndsAt`
     const trialUsedKey = `${command.application}TrialUsed`
-
     if (organizationState.settings[trialUsedKey] === true) {
       throw ERRORS.validation({
         application: "A free trial has already been used for this application.",
       })
-    }
-    if (organizationState.settings[enabledKey] === true) {
-      throw ERRORS.validation({ application: "This application is already active." })
     }
 
     const now = this.now
@@ -1591,17 +1583,29 @@ export class IdentityCommandHandlers {
       new Date(now).getTime() + trialDays * 24 * 60 * 60 * 1000
     ).toISOString()
 
+    // Madar Complete tries every application at once: it opens the ones the customer doesn't
+    // already have and is recorded as one subscription (the bundle's), not one per application.
+    let settingsPatch: Record<string, string | boolean>
+    if (command.application === MADAR_COMPLETE) {
+      const bundle = bundleTrialSettingsPatch(organizationState.settings, trialEndsAt)
+      if (bundle.opened.length === 0) {
+        throw ERRORS.validation({ application: "This application is already active." })
+      }
+      settingsPatch = bundle.patch
+    } else {
+      const enabledKey = IdentityCommandHandlers.APPLICATION_SETTINGS_KEY[command.application]
+      if (organizationState.settings[enabledKey] === true) {
+        throw ERRORS.validation({ application: "This application is already active." })
+      }
+      settingsPatch = {
+        [enabledKey]: true,
+        [`${command.application}TrialEndsAt`]: trialEndsAt,
+        [trialUsedKey]: true,
+      }
+    }
+
     const organization = OrganizationEntity.rehydrate(organizationState)
-    organization.update(
-      {
-        settings: {
-          [enabledKey]: true,
-          [trialEndsAtKey]: trialEndsAt,
-          [trialUsedKey]: true,
-        },
-      },
-      now
-    )
+    organization.update({ settings: settingsPatch }, now)
     await this.deps.repositories.organizations.save(organization.toState())
 
     const subscriptions = this.deps.repositories.organizationSubscriptions

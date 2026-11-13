@@ -34,6 +34,7 @@ export function ApplicationsMarketplace() {
     submitActivationRequest,
     activatingId,
     trialAvailableByCategory,
+    bundleTrialAvailable,
     startTrial,
     activateFreeApplication,
   } = useApplicationsCatalog()
@@ -53,7 +54,8 @@ export function ApplicationsMarketplace() {
     })
   }
 
-  // The bundle is bought like any application -- its own packages, card or bank transfer.
+  // The bundle is bought like any application -- its own packages, card or bank transfer -- and
+  // can be tried once for free.
   function requestBundleActivation() {
     setPendingRequest({
       applicationId: bundle.id,
@@ -61,7 +63,7 @@ export function ApplicationsMarketplace() {
       name: bundle.name,
       icon: Crown,
       iconWrapperClassName: "bg-[#fff3d6] text-[#c2900c]",
-      trialAvailable: false,
+      trialAvailable: bundleTrialAvailable,
     })
   }
 

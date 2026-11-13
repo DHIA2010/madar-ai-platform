@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { PostgresOrganizationSubscriptionRepository } from "./repository"
-import { SUBSCRIPTION_APPLICATIONS, type SubscriptionPlanTier } from "./types"
+import { MADAR_COMPLETE, SUBSCRIPTION_APPLICATIONS, type SubscriptionPlanTier } from "./types"
 
 const PLAN_TIERS = new Set(["starter", "growth", "pro", "enterprise"])
 // Every trial started before subscriptions were recorded ran for exactly this long (the fixed
@@ -19,10 +19,20 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
   const organizations = await db.query<{ id: string; settings: Record<string, unknown> | null }>(
     "SELECT id, settings FROM organizations WHERE deleted_at IS NULL"
   )
-  const existing = await db.query<{ organization_id: string; application: string }>(
-    "SELECT organization_id, application FROM organization_subscriptions"
-  )
+  const existing = await db.query<{
+    organization_id: string
+    application: string
+    trial_ends_at: unknown
+  }>("SELECT organization_id, application, trial_ends_at FROM organization_subscriptions")
   const have = new Set(existing.rows.map((row) => `${row.organization_id}:${row.application}`))
+  // When each organization's Madar Complete trial ends (or ended): the applications that trial
+  // opened carry the same date and are already recorded by the bundle's own row.
+  const bundleTrialEnd = new Map<string, number>()
+  for (const row of existing.rows) {
+    if (row.application !== MADAR_COMPLETE || !row.trial_ends_at) continue
+    const endsAt = row.trial_ends_at instanceof Date ? row.trial_ends_at : String(row.trial_ends_at)
+    bundleTrialEnd.set(row.organization_id, new Date(endsAt).getTime())
+  }
   const repository = new PostgresOrganizationSubscriptionRepository(db)
   const now = new Date().toISOString()
   let created = 0
@@ -35,6 +45,9 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
 
       const trialEndsAt = settings[`${application}TrialEndsAt`]
       const isTrial = typeof trialEndsAt === "string" && trialEndsAt.length > 0
+      if (isTrial && new Date(trialEndsAt).getTime() === bundleTrialEnd.get(organization.id)) {
+        continue
+      }
       const tier = settings.currentPlanTier
       await repository.save({
         id: randomUUID(),

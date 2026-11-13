@@ -1237,8 +1237,9 @@ export const activateFreeApplicationSchema = z.object({
   ]),
 })
 
-// Free 7-day trial -- instant self-service activation (no payment receipt, no staff review),
-// one-time per organization+application. See command-handlers.ts's startApplicationTrial.
+// Free trial -- instant self-service activation (no payment receipt, no staff review), one-time
+// per organization+application; "madarComplete" tries every application at once. See
+// command-handlers.ts's startApplicationTrial.
 export const startApplicationTrialSchema = z.object({
   application: z.enum([
     "advertising",
@@ -1251,6 +1252,7 @@ export const startApplicationTrialSchema = z.object({
     "customReports",
     "promotions",
     "invoicing",
+    "madarComplete",
   ]),
 })
 

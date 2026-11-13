@@ -57,7 +57,7 @@ export interface WorkspaceContextValue {
   ) => Promise<SubscriptionActivationRequestDto[]>
   startApplicationTrial: (
     organizationId: string,
-    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
+    application: PurchasableApplication
   ) => Promise<Organization>
   activateFreeApplication: (
     organizationId: string,

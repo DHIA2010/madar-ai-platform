@@ -116,7 +116,7 @@ export function ApplicationDetailScreen({
                     name: entry.name,
                     icon: Crown,
                     iconWrapperClassName: "bg-[#fff3d6] text-[#c2900c]",
-                    trialAvailable: false,
+                    trialAvailable,
                   })
                 }
               >

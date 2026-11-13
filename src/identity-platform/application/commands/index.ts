@@ -244,18 +244,9 @@ export interface ActivateFreeApplicationCommand {
   freeDays: number
 }
 
+// One application, or the Madar Complete bundle (a trial of every application at once).
 export interface StartApplicationTrialCommand {
-  application:
-    | "advertising"
-    | "ecommerce"
-    | "pos"
-    | "madarApps"
-    | "procurement"
-    | "expenses"
-    | "ai"
-    | "customReports"
-    | "promotions"
-    | "invoicing"
+  application: PurchasableApplication
 }
 
 export interface RemoveMemberCommand {

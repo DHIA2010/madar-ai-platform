@@ -18,6 +18,8 @@ const APP_LABEL: Record<string, string> = {
   ai: "الذكاء الاصطناعي",
   procurement: "الموردون والمشتريات",
   expenses: "المصروفات",
+  promotions: "العروض الترويجية",
+  invoicing: "الفواتير وعروض الأسعار",
   madarApps: "تطبيقات مدار",
   madarComplete: "مدار الكامل",
 }
@@ -445,9 +447,12 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
                   href={MADAR_REGISTER_URL}
                   className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-[15px] font-extrabold text-[#0b1738] transition-transform hover:-translate-y-px"
                 >
-                  ابدأ الآن
+                  ابدأ التجربة المجانية
                   <ArrowLeft className="size-4" />
                 </a>
+                <p className="mt-3 text-[13px] font-semibold text-slate-200">
+                  جرّب كل التطبيقات مجاناً ١٤ يوماً
+                </p>
               </div>
             </div>
           </div>

@@ -178,6 +178,15 @@ export function useApplicationsCatalog() {
     ) as Record<ApplicationCategoryId, boolean>
   }, [currentOrganization?.settings, pendingApplications, pricingByApplication])
 
+  // The bundle's one trial opens every application at once: on offer until it's been taken, unless
+  // a bundle request is waiting for approval or the customer already has every application.
+  const bundleTrialAvailable = useMemo(() => {
+    if (currentOrganization?.settings?.madarCompleteTrialUsed) return false
+    if (pricingByApplication.get("madarComplete")?.mode === "free") return false
+    if (pendingRequests.some((request) => request.application === "madarComplete")) return false
+    return catalog.some((application) => statusById[application.id] !== "subscribed")
+  }, [currentOrganization?.settings, pricingByApplication, pendingRequests, catalog, statusById])
+
   const searchMatchedApplications = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     const withCurrentStatus = catalog
@@ -228,12 +237,15 @@ export function useApplicationsCatalog() {
 
   async function startTrial(id: string) {
     if (!currentOrganization) return
-    const application = catalog.find((entry) => entry.id === id)
+    const application =
+      id === bundle.id
+        ? ("madarComplete" as const)
+        : catalog.find((entry) => entry.id === id)?.category
     if (!application) return
 
     setActivatingId(id)
     try {
-      await startApplicationTrial(currentOrganization.id, application.category)
+      await startApplicationTrial(currentOrganization.id, application)
     } finally {
       setActivatingId(null)
     }
@@ -300,6 +312,7 @@ export function useApplicationsCatalog() {
     catalog,
     statusById,
     trialAvailableByCategory,
+    bundleTrialAvailable,
     bundle,
     bundleVisible: pricingByApplication.get("madarComplete")?.visible !== false,
     submitActivationRequest,

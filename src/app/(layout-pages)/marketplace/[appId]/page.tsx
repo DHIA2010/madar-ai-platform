@@ -16,6 +16,7 @@ export default function Page() {
     bundle,
     statusById,
     trialAvailableByCategory,
+    bundleTrialAvailable,
     submitActivationRequest,
     startTrial,
     activateFreeApplication,
@@ -34,7 +35,9 @@ export default function Page() {
     <ApplicationDetailScreen
       entry={liveEntry}
       trialAvailable={
-        isMadarCompleteBundle(entry) ? false : trialAvailableByCategory[entry.category]
+        isMadarCompleteBundle(entry)
+          ? bundleTrialAvailable
+          : trialAvailableByCategory[entry.category]
       }
       onSubmitActivationRequest={submitActivationRequest}
       onStartTrial={startTrial}

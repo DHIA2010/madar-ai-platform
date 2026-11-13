@@ -269,7 +269,7 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
 
   async startApplicationTrial(
     organizationId: string,
-    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
+    application: PurchasableApplication
   ): Promise<OrganizationDto> {
     try {
       if (this.resolveBackend() === "mock") {

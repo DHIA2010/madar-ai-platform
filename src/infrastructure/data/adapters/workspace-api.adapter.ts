@@ -330,7 +330,7 @@ export class WorkspaceApiAdapter {
   // request methods use.
   startApplicationTrial(
     organizationId: string,
-    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
+    application: PurchasableApplication
   ): Promise<OrganizationDto> {
     return this.client
       .post<

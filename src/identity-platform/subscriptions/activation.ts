@@ -29,6 +29,32 @@ export function activationSettingsPatch(
   return patch
 }
 
+// organizations.settings changes for a trial of the Madar Complete bundle: every application the
+// customer doesn't already have opens until the trial ends. An application they pay for (or have
+// free) is left alone, and one on its own trial is only ever extended, never cut short. `opened`
+// lists the applications the trial actually gives them -- none means there's nothing to try.
+export function bundleTrialSettingsPatch(
+  settings: Record<string, unknown>,
+  trialEndsAt: string
+): { patch: Record<string, string | boolean>; opened: SubscriptionApplication[] } {
+  const patch: Record<string, string | boolean> = {}
+  const opened: SubscriptionApplication[] = []
+  const endsAtMs = new Date(trialEndsAt).getTime()
+  for (const app of SUBSCRIPTION_APPLICATIONS) {
+    if (settings[`${app}Enabled`] === true) {
+      const marker = settings[`${app}TrialEndsAt`]
+      const onTrial = typeof marker === "string" && marker !== ""
+      if (!onTrial || new Date(marker).getTime() >= endsAtMs) continue
+    }
+    patch[`${app}Enabled`] = true
+    patch[`${app}TrialEndsAt`] = trialEndsAt
+    patch[`${app}TrialUsed`] = true
+    opened.push(app)
+  }
+  patch[`${MADAR_COMPLETE}TrialUsed`] = true
+  return { patch, opened }
+}
+
 // organizations.settings changes when a subscription ends: switch its applications off, except
 // any the customer still has through another running subscription (e.g. ending the bundle keeps
 // an app they also pay for on its own).
