@@ -73,7 +73,14 @@ const configSchema = z.object({
   resendFromEmail: z.string().optional(),
   resendFromName: z.string().optional(),
   resendReplyTo: z.string().optional(),
-  salesLeadsEmail: z.string().email(),
+  // One address, or several separated by commas.
+  salesLeadsEmail: z
+    .string()
+    .refine(
+      (value) =>
+        value.split(",").every((address) => z.string().email().safeParse(address.trim()).success),
+      "Invalid email address"
+    ),
   appUrl: z.string().min(1),
   shortLinkBaseUrl: z.string().min(1),
   featureFlags: z.record(z.string(), z.boolean()),
@@ -162,7 +169,7 @@ export function loadIdentityPlatformConfig(
     salesLeadsEmail:
       overrides.salesLeadsEmail ??
       process.env.IDENTITY_PLATFORM_SALES_LEADS_EMAIL ??
-      "support@madar.my",
+      "support@madar.my,madarintelligence@gmail.com",
     appUrl: resolvedAppUrl,
     // Falls back to appUrl only when it's already https:// (a real deployed domain, e.g.
     // https://app.madar.my) -- local dev's appUrl defaults to plain http://, which would

@@ -49,7 +49,16 @@ export class InMemoryEmailGateway implements EmailGateway {
   }
 
   async sendSalesLeadEmail(input: SalesLeadEmail) {
-    this.sent.push({ kind: "sales_lead", ...input, email: input.email ?? "" })
+    this.sent.push({
+      kind: "sales_lead",
+      to: input.to,
+      leadKind: input.leadKind ?? "website",
+      companyName: input.companyName,
+      phone: input.phone ?? "",
+      email: input.email ?? "",
+      source: input.source ?? "",
+      submittedAt: input.submittedAt,
+    })
   }
 
   async sendAccountActivatedEmail(input: AccountActivatedEmail) {

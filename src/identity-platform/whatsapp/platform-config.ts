@@ -23,6 +23,7 @@ import {
   type WhatsAppPhoneNumber,
 } from "./cloud-api"
 import type { WhatsAppCredentialsSource } from "./credentials"
+import { toWhatsAppNumber } from "./phone"
 
 // Madar's own WhatsApp Business Platform setup (Madar Admin -> settings -> WhatsApp): the Meta
 // app, the Embedded Signup configuration merchants connect their numbers through, Madar's own
@@ -52,6 +53,8 @@ export interface WhatsAppPlatformConfigView {
   fromAws: WhatsAppConfigField[]
   // What to paste as "Verify token" in the app's WhatsApp webhook settings.
   webhookVerifyToken: string
+  // Madar's own team numbers alerted on every new lead (whatsapp/lead-alerts.ts).
+  leadAlertPhones: string[]
   updatedAt: string | null
 }
 
@@ -63,7 +66,11 @@ export interface WhatsAppPlatformConfigPatch {
   // Empty string clears it.
   appSecret?: string
   systemUserToken?: string
+  // Replaces the whole list; kept in WhatsApp's international form (9665XXXXXXXX).
+  leadAlertPhones?: string[]
 }
+
+export const MAX_LEAD_ALERT_PHONES = 5
 
 export interface WhatsAppConnectionCheck {
   key: "token" | "tokenExpiry" | "permissions" | "account" | "phoneNumbers" | "configuredNumber"
@@ -79,6 +86,7 @@ interface ConfigRow {
   app_secret_encrypted: string | null
   system_user_token_encrypted: string | null
   webhook_verify_token: string
+  lead_alert_phones: unknown
   updated_at: Date | string | null
   [key: string]: unknown
 }
@@ -156,6 +164,14 @@ export function verifyWhatsAppSignature(
   return expected.length === received.length && timingSafeEqual(expected, received)
 }
 
+// The stored list, whatever shape the driver hands the jsonb back in.
+function storedPhones(value: unknown): string[] {
+  const parsed = typeof value === "string" ? (JSON.parse(value) as unknown) : value
+  return Array.isArray(parsed)
+    ? parsed.filter((entry): entry is string => typeof entry === "string")
+    : []
+}
+
 const errorText = (error: unknown) =>
   error instanceof WhatsAppApiError || error instanceof Error ? error.message : String(error)
 
@@ -225,6 +241,7 @@ export class WhatsAppPlatformService {
       systemUserTokenHint: config.token ? config.token.slice(-4) : null,
       fromAws: config.fromAws,
       webhookVerifyToken: row.webhook_verify_token,
+      leadAlertPhones: storedPhones(row.lead_alert_phones),
       updatedAt: row.updated_at
         ? (row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at)).toISOString()
         : null,
@@ -238,11 +255,26 @@ export class WhatsAppPlatformService {
     const current = await this.row()
     const secret = (value: string | undefined, existing: string | null) =>
       value === undefined ? existing : value.trim() ? encryptSecret(value.trim()) : null
+    let leadAlertPhones = storedPhones(current.lead_alert_phones)
+    if (patch.leadAlertPhones) {
+      const numbers = patch.leadAlertPhones.map((raw) => ({ raw, phone: toWhatsAppNumber(raw) }))
+      const invalid = numbers.find((entry) => !entry.phone)
+      if (invalid) {
+        throw new IdentityError(
+          "WHATSAPP_INVALID_PHONE",
+          400,
+          "validation",
+          `"${invalid.raw}" isn't a valid WhatsApp number.`
+        )
+      }
+      leadAlertPhones = [...new Set(numbers.map((entry) => entry.phone as string))]
+    }
     await this.database.query(
       `UPDATE whatsapp_platform_config
           SET app_id = $1, embedded_signup_config_id = $2, madar_waba_id = $3,
               madar_phone_number_id = $4, app_secret_encrypted = $5,
-              system_user_token_encrypted = $6, updated_at = now(), updated_by = $7
+              system_user_token_encrypted = $6, updated_at = now(), updated_by = $7,
+              lead_alert_phones = $8::jsonb
         WHERE id = 1`,
       [
         patch.appId?.trim() ?? current.app_id,
@@ -252,6 +284,7 @@ export class WhatsAppPlatformService {
         secret(patch.appSecret, current.app_secret_encrypted),
         secret(patch.systemUserToken, current.system_user_token_encrypted),
         actorUserId,
+        JSON.stringify(leadAlertPhones),
       ]
     )
     return this.get()
@@ -269,6 +302,10 @@ export class WhatsAppPlatformService {
       wabaId: config.wabaId,
       appId: config.appId,
     }
+  }
+
+  async leadAlertPhones(): Promise<string[]> {
+    return storedPhones((await this.row()).lead_alert_phones)
   }
 
   // What a merchant's browser needs to open Meta's Embedded Signup (both are public values), and

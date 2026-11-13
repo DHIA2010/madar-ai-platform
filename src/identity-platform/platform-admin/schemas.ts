@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { PURCHASABLE_APPLICATIONS } from "../subscriptions/types"
+import { MAX_LEAD_ALERT_PHONES } from "../whatsapp/platform-config"
 import { PLATFORM_ROLES } from "./staff-roles"
 
 const planTier = z.enum(["starter", "growth", "pro", "enterprise"])
@@ -133,6 +134,7 @@ export const whatsAppPlatformConfigPatchSchema = z
     madarPhoneNumberId: z.string().trim().max(40).regex(/^\d*$/, "Digits only"),
     appSecret: z.string().trim().max(200),
     systemUserToken: z.string().trim().max(1000),
+    leadAlertPhones: z.array(z.string().trim().min(1).max(30)).max(MAX_LEAD_ALERT_PHONES),
   })
   .partial()
 

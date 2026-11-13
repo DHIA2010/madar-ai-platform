@@ -1,11 +1,12 @@
 // @vitest-environment node
 //
-// madar.my's "talk to sales" form: the lead is stored and emailed to the sales inbox.
+// madar.my's "talk to sales" form: the lead is stored and emailed to the sales inboxes. A new
+// account is emailed to them too.
 
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
@@ -80,6 +81,42 @@ describe("sales leads", () => {
     )
     expect(sent).toMatchObject([
       { to: "support@madar.my", companyName: "مؤسسة الريم", phone: "0551234567" },
+      { to: "madarintelligence@gmail.com", companyName: "مؤسسة الريم", phone: "0551234567" },
+    ])
+    expect(sent[0]).toMatchObject({ leadKind: "website", source: "مباشر" })
+  })
+
+  it("emails the sales inboxes when a new account is created", async () => {
+    const response = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "owner@reem.sa",
+        password: "a-long-password-123",
+        fullName: "Reem Owner",
+        organizationName: "Reem Trading",
+        attribution: {
+          first: { source: "snapchat", campaign: "sales_leads", at: "2026-11-13T10:00:00+03:00" },
+          last: { source: "snapchat", campaign: "sales_leads", at: "2026-11-13T10:00:00+03:00" },
+        },
+      }),
+    })
+    expect(response.status).toBe(201)
+
+    const signups = () =>
+      (container.emailGateway as InMemoryEmailGateway).sent.filter(
+        (mail) => mail.kind === "sales_lead"
+      )
+    await vi.waitFor(() => expect(signups()).toHaveLength(2))
+    expect(signups()).toMatchObject([
+      {
+        to: "support@madar.my",
+        leadKind: "signup",
+        companyName: "Reem Trading",
+        email: "owner@reem.sa",
+        source: "snapchat / sales_leads",
+      },
+      { to: "madarintelligence@gmail.com", leadKind: "signup" },
     ])
   })
 

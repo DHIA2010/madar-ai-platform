@@ -6,7 +6,7 @@ import type {
   StoreWelcomeEmail,
 } from "../../application/ports"
 import { accountActivatedSubject, accountActivatedText } from "./account-activated-copy"
-import { salesLeadSubject, salesLeadText } from "./sales-lead-copy"
+import { salesLeadHeading, salesLeadRows, salesLeadSubject, salesLeadText } from "./sales-lead-copy"
 import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
 
@@ -247,17 +247,13 @@ export class ResendEmailGateway implements EmailGateway {
   }
 
   async sendSalesLeadEmail(input: SalesLeadEmail) {
-    const rows: [string, string][] = [
-      ["اسم الشركة", input.companyName],
-      ["رقم الجوال", input.phone],
-      ["البريد الإلكتروني", input.email ?? "—"],
-    ]
+    const rows = salesLeadRows(input)
     await this.send({
       to: input.to,
       subject: salesLeadSubject(input),
       text: salesLeadText(input),
       html: `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px;color:#111827">
-  <p style="font-size:17px;font-weight:700">طلب جديد للتواصل مع فريق المبيعات</p>
+  <p style="font-size:17px;font-weight:700">${salesLeadHeading(input)}</p>
   <table cellpadding="8" style="border-collapse:collapse">
     ${rows
       .map(
@@ -266,7 +262,7 @@ export class ResendEmailGateway implements EmailGateway {
       )
       .join("")}
   </table>
-  <p style="color:#6b7280;font-size:13px">من موقع madar.my — ${escapeHtml(input.submittedAt)}</p>
+  <p style="color:#6b7280;font-size:13px">${input.leadKind === "signup" ? "من تطبيق مدار" : "من موقع madar.my"} — ${escapeHtml(input.submittedAt)}</p>
 </div>`,
     })
   }

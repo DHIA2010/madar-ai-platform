@@ -97,7 +97,38 @@ export const DAILY_REPORT_TEMPLATE: TemplateDefinition = {
   ],
 }
 
-export const MADAR_TEMPLATES: TemplateDefinition[] = [POS_INVOICE_TEMPLATE, DAILY_REPORT_TEMPLATE]
+// The alert Madar's own team gets when a new lead arrives (whatsapp/lead-alerts.ts): {{1}} what
+// happened (a "talk to sales" request or a new account), {{2}} name, {{3}} mobile, {{4}} email,
+// {{5}} where they came from. Utility -- an update on Madar's own account.
+export const NEW_LEAD_TEMPLATE: TemplateDefinition = {
+  name: "madar_new_lead",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "🔔 *عميل محتمل جديد في مدار*",
+    "النوع: {{1}}",
+    "",
+    "• الاسم: {{2}}",
+    "• الجوال: {{3}}",
+    "• البريد: {{4}}",
+    "• المصدر: {{5}}",
+    "",
+    "افتح لوحة إدارة مدار لمتابعة العميل.",
+  ].join("\n"),
+  bodyExamples: [
+    "طلب تواصل مع المبيعات",
+    "مؤسسة الريم التجارية",
+    "0551234567",
+    "info@example.com",
+    "snapchat",
+  ],
+}
+
+export const MADAR_TEMPLATES: TemplateDefinition[] = [
+  POS_INVOICE_TEMPLATE,
+  DAILY_REPORT_TEMPLATE,
+  NEW_LEAD_TEMPLATE,
+]
 
 // The sample document Meta reviews with a document-header template.
 export function sampleDocument(template: TemplateDefinition) {

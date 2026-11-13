@@ -86,9 +86,13 @@ export interface AccountActivatedEmail {
 export interface SalesLeadEmail {
   // Madar's own inbox, not the lead's.
   to: string
+  // A "talk to sales" request from madar.my (the default), or a brand-new account.
+  leadKind?: "website" | "signup"
   companyName: string
-  phone: string
+  phone: string | null
   email: string | null
+  // Where the lead came from, already in words (e.g. "snapchat / sales_leads").
+  source?: string | null
   submittedAt: string
 }
 

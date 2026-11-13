@@ -205,6 +205,10 @@ export const platformAdminService = {
     return client.post(`${ENDPOINT}/settings/whatsapp/templates/submit`, { name })
   },
 
+  sendWhatsAppLeadAlertTest(): Promise<{ sent: number; failed: number }> {
+    return client.post(`${ENDPOINT}/settings/whatsapp/lead-alerts/test`, {})
+  },
+
   activateWhatsAppWebhook(
     callbackUrl: string
   ): Promise<{ appSubscribed: boolean; accountSubscribed: boolean }> {

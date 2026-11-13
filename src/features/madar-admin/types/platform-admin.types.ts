@@ -461,6 +461,8 @@ export interface AdminWhatsAppConfig {
     "appId" | "appSecret" | "systemUserToken" | "madarWabaId" | "madarPhoneNumberId" | "apiVersion"
   >
   webhookVerifyToken: string
+  // Madar's own team numbers alerted on WhatsApp when a new lead arrives (9665XXXXXXXX).
+  leadAlertPhones: string[]
   updatedAt: string | null
 }
 
@@ -471,6 +473,7 @@ export interface AdminWhatsAppConfigPatch {
   madarPhoneNumberId?: string
   appSecret?: string
   systemUserToken?: string
+  leadAlertPhones?: string[]
 }
 
 export interface AdminWhatsAppCheck {

@@ -117,6 +117,7 @@ import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { AwsSecretsWhatsAppCredentialsSource } from "../../whatsapp/credentials"
 import { applyWhatsAppStatuses, WhatsAppInvoiceSender } from "../../whatsapp/invoice-sender"
 import { WhatsAppTemplatesService } from "../../whatsapp/templates"
+import { WhatsAppLeadAlertsService } from "../../whatsapp/lead-alerts"
 import { verifyWhatsAppSignature, WhatsAppPlatformService } from "../../whatsapp/platform-config"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
@@ -1015,6 +1016,15 @@ export function createIdentityApiServer(
   const whatsAppTemplatesService = whatsAppPlatformService
     ? new WhatsAppTemplatesService(whatsAppPlatformService)
     : null
+  // Alerts Madar's own team on WhatsApp when a new lead arrives (sales form or a new account).
+  const whatsAppLeadAlerts =
+    container.infrastructure.database && whatsAppPlatformService && whatsAppTemplatesService
+      ? new WhatsAppLeadAlertsService(
+          container.infrastructure.database,
+          whatsAppPlatformService,
+          whatsAppTemplatesService
+        )
+      : null
   const whatsAppMerchantConnections =
     container.infrastructure.database && whatsAppPlatformService
       ? new WhatsAppMerchantConnectionService(
@@ -1063,7 +1073,8 @@ export function createIdentityApiServer(
     ? new SalesLeadService(
         container.infrastructure.database,
         container.emailGateway,
-        container.config.salesLeadsEmail
+        container.config.salesLeadsEmail,
+        whatsAppLeadAlerts
       )
     : null
   const billingOverviewService = container.infrastructure.database
@@ -1301,6 +1312,7 @@ export function createIdentityApiServer(
               contactName: account.name,
               email: account.email,
             })
+            void salesLeadService?.notifySignup({ name: account.name, email: account.email })
             if (leadId) await activatePendingInvoices(container.infrastructure.database, leadId)
           },
         })
@@ -1479,6 +1491,11 @@ export function createIdentityApiServer(
             organizationId: registered.organizationId,
             companyName: command.organizationName ?? command.fullName,
             contactName: command.fullName,
+            email: command.email,
+            attribution: command.attribution ?? null,
+          })
+          void salesLeadService?.notifySignup({
+            name: command.organizationName ?? command.fullName,
             email: command.email,
             attribution: command.attribution ?? null,
           })
@@ -2711,6 +2728,7 @@ export function createIdentityApiServer(
         salesDocuments: salesDocumentsService,
         whatsapp: whatsAppPlatformService,
         whatsappTemplates: whatsAppTemplatesService,
+        whatsappLeadAlerts: whatsAppLeadAlerts,
         send,
         readJsonBody: () => readJsonBody(request),
       })

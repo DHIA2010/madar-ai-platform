@@ -65,6 +65,7 @@ import {
   type PlatformPermission,
 } from "../../platform-admin/staff-roles"
 import type { PlatformAdminService } from "../../platform-admin/service"
+import type { WhatsAppLeadAlertsService } from "../../whatsapp/lead-alerts"
 import type { WhatsAppPlatformService } from "../../whatsapp/platform-config"
 import type { WhatsAppTemplatesService } from "../../whatsapp/templates"
 
@@ -119,6 +120,7 @@ export async function handlePlatformAdminRoute(input: {
   salesDocuments: SalesDocumentsService | null
   whatsapp: WhatsAppPlatformService | null
   whatsappTemplates: WhatsAppTemplatesService | null
+  whatsappLeadAlerts: WhatsAppLeadAlertsService | null
   send: Send
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
@@ -133,6 +135,7 @@ export async function handlePlatformAdminRoute(input: {
     salesDocuments,
     whatsapp,
     whatsappTemplates,
+    whatsappLeadAlerts,
     readJsonBody,
   } = input
   const send = (status: number, body: unknown) => {
@@ -375,6 +378,9 @@ export async function handlePlatformAdminRoute(input: {
     if (path === "/settings/whatsapp/templates/submit" && method === "POST" && whatsappTemplates) {
       const { name } = whatsAppTemplateSubmitSchema.parse(await readJsonBody())
       return send(200, await whatsappTemplates.submit(name))
+    }
+    if (path === "/settings/whatsapp/lead-alerts/test" && method === "POST" && whatsappLeadAlerts) {
+      return send(200, await whatsappLeadAlerts.sendTest())
     }
     if (method === "POST" && path === "/settings/whatsapp/webhook") {
       const { callbackUrl } = whatsAppWebhookActivationSchema.parse(await readJsonBody())

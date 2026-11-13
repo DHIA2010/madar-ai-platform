@@ -17,6 +17,7 @@ import type {
   AdminWhatsAppConfig,
   AdminWhatsAppConfigPatch,
 } from "../types/platform-admin.types"
+import { MadarAdminWhatsAppLeadAlerts } from "./madar-admin-whatsapp-lead-alerts"
 import { MadarAdminWhatsAppTemplates } from "./madar-admin-whatsapp-templates"
 
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
@@ -264,6 +265,9 @@ export function MadarAdminWhatsAppSettings() {
         </div>
 
         {config?.hasSystemUserToken ? <MadarAdminWhatsAppTemplates /> : null}
+        {config?.hasSystemUserToken ? (
+          <MadarAdminWhatsAppLeadAlerts phones={config.leadAlertPhones} onSaved={apply} />
+        ) : null}
 
         {checks ? (
           <div className="flex flex-col gap-2">
