@@ -6,15 +6,15 @@ import type { LeadAttribution } from "../schemas"
 import { sendTemplateMessage, type TemplateDefinition } from "./messaging"
 import type { WhatsAppPlatformService } from "./platform-config"
 import {
-  FIRST_LEAD_ALERT_TEMPLATE,
   LEAD_ALERT_TEMPLATE,
+  SIGNUP_ALERT_TEMPLATE,
   type WhatsAppTemplatesService,
 } from "./templates"
 
 // A WhatsApp alert to Madar's own team whenever a new lead arrives: a "talk to sales" request
-// from madar.my, or a brand-new account. Sent from Madar's number with the approved
-// "madar_account_alert" template to the numbers set in Madar Admin -> settings -> WhatsApp.
-// Nothing is sent while no number is set or Meta hasn't approved a template yet.
+// from madar.my ("madar_new_lead"), or a brand-new account ("madar_account_alert"). Sent from
+// Madar's number to the numbers set in Madar Admin -> settings -> WhatsApp. Nothing is sent while
+// no number is set or Meta hasn't approved the template yet.
 
 export interface LeadAlert {
   kind: "website" | "signup"
@@ -66,7 +66,7 @@ export class WhatsAppLeadAlertsService {
   async notify(lead: LeadAlert): Promise<void> {
     try {
       const phones = await this.platform.leadAlertPhones()
-      if (phones.length > 0) await this.send(phones, leadAlertParameters(lead))
+      if (phones.length > 0) await this.send(phones, leadAlertParameters(lead), lead.kind)
     } catch (error) {
       console.error("whatsapp.lead_alert_failed", {
         message: error instanceof Error ? error.message : String(error),
@@ -85,40 +85,41 @@ export class WhatsAppLeadAlertsService {
         "Save at least one number to alert first."
       )
     }
-    return this.send(phones, [
-      "رسالة تجريبية",
-      "مؤسسة تجريبية",
-      "0500000000",
-      "test@example.com",
-      "تجربة",
-    ])
+    return this.send(
+      phones,
+      ["رسالة تجريبية", "مؤسسة تجريبية", "0500000000", "test@example.com", "تجربة"],
+      "website"
+    )
   }
 
-  // The template to send with: the current one once Meta has approved it, and until then the
-  // first version (which Meta caps per recipient), so the alerts don't stop in between.
-  private async template(): Promise<TemplateDefinition> {
-    try {
-      await this.templates.requireApproved(LEAD_ALERT_TEMPLATE)
-      return LEAD_ALERT_TEMPLATE
-    } catch (notReady) {
-      if (!(notReady instanceof IdentityError) || notReady.code !== "WHATSAPP_TEMPLATE_NOT_READY") {
-        throw notReady
-      }
+  // The template to send with. A sales request always goes out with the lead alert. A new account
+  // has its own message; until Meta approves that one it goes out with the lead alert, as it did
+  // before it had one, so the alerts don't stop in between.
+  private async template(kind: LeadAlert["kind"]): Promise<TemplateDefinition> {
+    if (kind === "signup") {
       try {
-        await this.templates.requireApproved(FIRST_LEAD_ALERT_TEMPLATE)
-      } catch {
-        throw notReady
+        await this.templates.requireApproved(SIGNUP_ALERT_TEMPLATE)
+        return SIGNUP_ALERT_TEMPLATE
+      } catch (notReady) {
+        if (
+          !(notReady instanceof IdentityError) ||
+          notReady.code !== "WHATSAPP_TEMPLATE_NOT_READY"
+        ) {
+          throw notReady
+        }
       }
-      return FIRST_LEAD_ALERT_TEMPLATE
     }
+    await this.templates.requireApproved(LEAD_ALERT_TEMPLATE)
+    return LEAD_ALERT_TEMPLATE
   }
 
   // Each send is kept in whatsapp_messages (no organization: it's Madar's own message).
   private async send(
     phones: string[],
-    parameters: string[]
+    parameters: string[],
+    kind: LeadAlert["kind"]
   ): Promise<{ sent: number; failed: number }> {
-    const template = await this.template()
+    const template = await this.template(kind)
     const context = await this.platform.sendingContext()
     let sent = 0
     let failed = 0

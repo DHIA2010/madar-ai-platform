@@ -13,8 +13,8 @@ import { SalesLeadService } from "../sales-leads/service"
 import { leadAlertParameters, WhatsAppLeadAlertsService } from "../whatsapp/lead-alerts"
 import { WhatsAppPlatformService } from "../whatsapp/platform-config"
 import {
-  FIRST_LEAD_ALERT_TEMPLATE,
   LEAD_ALERT_TEMPLATE,
+  SIGNUP_ALERT_TEMPLATE,
   WhatsAppTemplatesService,
 } from "../whatsapp/templates"
 
@@ -28,17 +28,17 @@ type SentMessage = {
   template: { name: string; components: Array<{ parameters: Array<{ text: string }> }> }
 }
 
-// Meta, stubbed: each template's review status (the first version of the alert was never
-// submitted unless `firstVersion` says otherwise) and the sends.
-function stubMeta(status = "APPROVED", firstVersion?: { status: string; category: string }) {
+// Meta, stubbed: each template's review status (the new-account alert can stand apart from the
+// rest through `signupAlert`) and the sends.
+function stubMeta(status = "APPROVED", signupAlert?: { status: string; category: string }) {
   const sent: SentMessage[] = []
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input))
     const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
     if (url.pathname.endsWith("/message_templates")) {
       const name = url.searchParams.get("name")
-      if (name === FIRST_LEAD_ALERT_TEMPLATE.name) {
-        return json({ data: firstVersion ? [{ name, language: "ar", ...firstVersion }] : [] })
+      if (name === SIGNUP_ALERT_TEMPLATE.name && signupAlert) {
+        return json({ data: [{ name, language: "ar", ...signupAlert }] })
       }
       return json({ data: [{ name, language: "ar", status, category: "UTILITY" }] })
     }
@@ -149,6 +149,7 @@ describe("leadAlertParameters", () => {
       "owner@reem.sa",
       "snapchat / sales_leads",
     ])
+    expect(signup).toHaveLength(SIGNUP_ALERT_TEMPLATE.bodyExamples.length)
     expect(signup).toHaveLength(LEAD_ALERT_TEMPLATE.bodyExamples.length)
   })
 })
@@ -161,7 +162,7 @@ describe("WhatsAppLeadAlertsService", () => {
     await alerts.notify({ kind: "website", name: "مؤسسة الريم", phone: "0551112222", email: null })
 
     expect(sent.map((message) => message.to)).toEqual(["966551234567", "966509876543"])
-    expect(sent[0].template.name).toBe("madar_account_alert")
+    expect(sent[0].template.name).toBe("madar_new_lead")
     expect(sent[0].template.components[0].parameters.map((parameter) => parameter.text)).toEqual([
       "طلب تواصل مع المبيعات",
       "مؤسسة الريم",
@@ -192,8 +193,24 @@ describe("WhatsAppLeadAlertsService", () => {
     await expect(alerts.sendTest()).rejects.toMatchObject({ code: "WHATSAPP_TEMPLATE_NOT_READY" })
   })
 
-  it("keeps sending with the first version until Meta approves the new wording", async () => {
-    const sent = stubMeta("PENDING", { status: "APPROVED", category: "MARKETING" })
+  it("sends a new account its own message, and a sales request the lead alert", async () => {
+    const sent = stubMeta()
+    await platform.update({ leadAlertPhones: ["0551234567"] }, USER)
+
+    await alerts.notify({ kind: "signup", name: "Reem", email: "owner@reem.sa" })
+    await alerts.notify({ kind: "website", name: "مؤسسة الريم", phone: "0551112222" })
+    await alerts.sendTest()
+
+    expect(sent.map((message) => message.template.name)).toEqual([
+      "madar_account_alert",
+      "madar_new_lead",
+      "madar_new_lead",
+    ])
+    expect(sent[0].template.components[0].parameters[0].text).toBe("تسجيل حساب جديد")
+  })
+
+  it("sends a new account with the lead alert until Meta approves its own message", async () => {
+    const sent = stubMeta("APPROVED", { status: "PENDING", category: "UTILITY" })
     await platform.update({ leadAlertPhones: ["0551234567"] }, USER)
 
     await alerts.notify({ kind: "signup", name: "Reem", email: "owner@reem.sa" })
@@ -202,15 +219,25 @@ describe("WhatsAppLeadAlertsService", () => {
     expect(sent[0].template.components[0].parameters[0].text).toBe("تسجيل حساب جديد")
   })
 
-  it("shows how Meta itself filed each template", async () => {
-    stubMeta("APPROVED")
+  it("lists both alerts, with how Meta itself filed each", async () => {
+    stubMeta("APPROVED", { status: "PENDING", category: "MARKETING" })
     const statuses = await new WhatsAppTemplatesService(platform).statuses()
-    expect(statuses.find((entry) => entry.name === "madar_account_alert")).toMatchObject({
+    expect(statuses.map((entry) => entry.name)).toEqual([
+      "madar_pos_invoice",
+      "madar_daily_report",
+      "madar_new_lead",
+      "madar_account_alert",
+    ])
+    expect(statuses.find((entry) => entry.name === "madar_new_lead")).toMatchObject({
       status: "APPROVED",
       category: "UTILITY",
       metaCategory: "UTILITY",
     })
-    expect(statuses.map((entry) => entry.name)).not.toContain("madar_new_lead")
+    expect(statuses.find((entry) => entry.name === "madar_account_alert")).toMatchObject({
+      status: "PENDING",
+      category: "UTILITY",
+      metaCategory: "MARKETING",
+    })
   })
 
   it("keeps a failed send on record and still reaches the other numbers", async () => {

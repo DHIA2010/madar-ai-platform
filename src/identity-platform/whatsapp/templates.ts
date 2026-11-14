@@ -98,11 +98,37 @@ export const DAILY_REPORT_TEMPLATE: TemplateDefinition = {
 }
 
 // The alert Madar's own team gets when a new lead arrives (whatsapp/lead-alerts.ts): {{1}} what
-// happened (a "talk to sales" request or a new account), {{2}} name, {{3}} mobile, {{4}} email,
-// {{5}} where they came from. Worded as a plain account notice -- no emoji, no "lead", no call to
-// action -- because Meta filed the first version (below) under marketing, and marketing messages
-// are capped per recipient: after three alerts in one night the rest were dropped (error 131049).
+// happened, {{2}} name, {{3}} mobile, {{4}} email, {{5}} where they came from.
 export const LEAD_ALERT_TEMPLATE: TemplateDefinition = {
+  name: "madar_new_lead",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "🔔 *عميل محتمل جديد في مدار*",
+    "النوع: {{1}}",
+    "",
+    "• الاسم: {{2}}",
+    "• الجوال: {{3}}",
+    "• البريد: {{4}}",
+    "• المصدر: {{5}}",
+    "",
+    "افتح لوحة إدارة مدار لمتابعة العميل.",
+  ].join("\n"),
+  bodyExamples: [
+    "طلب تواصل مع المبيعات",
+    "مؤسسة الريم التجارية",
+    "0551234567",
+    "info@example.com",
+    "snapchat",
+  ],
+}
+
+// The team's alert for a brand-new account (the app's sign-up form or Google sign-up), with the
+// same five values. A message of its own, worded as a plain account notice -- no emoji, no call to
+// action -- because Meta filed the lead alert above under marketing, and marketing messages are
+// capped per recipient: after three alerts in one night the sign-up ones were dropped (error
+// 131049).
+export const SIGNUP_ALERT_TEMPLATE: TemplateDefinition = {
   name: "madar_account_alert",
   language: "ar",
   category: "UTILITY",
@@ -127,36 +153,11 @@ export const LEAD_ALERT_TEMPLATE: TemplateDefinition = {
   ],
 }
 
-// The first version of that alert, with the same five values. Meta filed it under marketing; it
-// is only sent while Meta hasn't approved the one above, and isn't offered for submission.
-export const FIRST_LEAD_ALERT_TEMPLATE: TemplateDefinition = {
-  name: "madar_new_lead",
-  language: "ar",
-  category: "UTILITY",
-  body: [
-    "🔔 *عميل محتمل جديد في مدار*",
-    "النوع: {{1}}",
-    "",
-    "• الاسم: {{2}}",
-    "• الجوال: {{3}}",
-    "• البريد: {{4}}",
-    "• المصدر: {{5}}",
-    "",
-    "افتح لوحة إدارة مدار لمتابعة العميل.",
-  ].join("\n"),
-  bodyExamples: [
-    "طلب تواصل مع المبيعات",
-    "مؤسسة الريم التجارية",
-    "0551234567",
-    "info@example.com",
-    "snapchat",
-  ],
-}
-
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
   LEAD_ALERT_TEMPLATE,
+  SIGNUP_ALERT_TEMPLATE,
 ]
 
 // The sample document Meta reviews with a document-header template.

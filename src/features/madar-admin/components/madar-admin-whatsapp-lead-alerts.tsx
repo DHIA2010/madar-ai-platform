@@ -1,8 +1,9 @@
 "use client"
 
 // Madar Admin -> settings -> WhatsApp: the numbers of Madar's own team that get a WhatsApp alert
-// when a new lead arrives (a "talk to sales" request or a new account). The alert goes out with
-// the "madar_account_alert" template, so it only works once Meta has approved it (templates above).
+// when a new lead arrives (a "talk to sales" request or a new account). A sales request goes out
+// with the "madar_new_lead" template and a new account with "madar_account_alert", so each only
+// works once Meta has approved it (templates above).
 
 import { useState } from "react"
 import { toast } from "sonner"
