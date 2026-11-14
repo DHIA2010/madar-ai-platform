@@ -117,7 +117,7 @@ import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { AwsSecretsWhatsAppCredentialsSource } from "../../whatsapp/credentials"
 import { applyWhatsAppStatuses, WhatsAppInvoiceSender } from "../../whatsapp/invoice-sender"
 import { WhatsAppTemplatesService } from "../../whatsapp/templates"
-import { WhatsAppLeadAlertsService } from "../../whatsapp/lead-alerts"
+import { registerLeadAlertsService, WhatsAppLeadAlertsService } from "../../whatsapp/lead-alerts"
 import { verifyWhatsAppSignature, WhatsAppPlatformService } from "../../whatsapp/platform-config"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
@@ -1025,6 +1025,7 @@ export function createIdentityApiServer(
           whatsAppTemplatesService
         )
       : null
+  registerLeadAlertsService(whatsAppLeadAlerts)
   const whatsAppMerchantConnections =
     container.infrastructure.database && whatsAppPlatformService
       ? new WhatsAppMerchantConnectionService(
@@ -1902,6 +1903,8 @@ export function createIdentityApiServer(
         if (container.infrastructure.database) {
           await applyWhatsAppStatuses(container.infrastructure.database, payload)
         }
+        // A team number writing to Madar's number opens its 24 hours of direct lead alerts.
+        await whatsAppLeadAlerts?.recordReplies(payload)
         return send(200, { ok: true })
       }
 

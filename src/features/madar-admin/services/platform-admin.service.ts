@@ -32,6 +32,7 @@ import type {
   AdminWhatsAppCheck,
   AdminWhatsAppConfig,
   AdminWhatsAppConfigPatch,
+  AdminWhatsAppLeadAlertStatus,
   AdminWhatsAppTemplate,
   BillingInterval,
   GrantSubscriptionInput,
@@ -205,8 +206,12 @@ export const platformAdminService = {
     return client.post(`${ENDPOINT}/settings/whatsapp/templates/submit`, { name })
   },
 
-  sendWhatsAppLeadAlertTest(): Promise<{ sent: number; failed: number }> {
+  sendWhatsAppLeadAlertTest(): Promise<{ sent: number; failed: number; direct: number }> {
     return client.post(`${ENDPOINT}/settings/whatsapp/lead-alerts/test`, {})
+  },
+
+  getWhatsAppLeadAlertStatus(): Promise<AdminWhatsAppLeadAlertStatus> {
+    return client.get(`${ENDPOINT}/settings/whatsapp/lead-alerts`)
   },
 
   activateWhatsAppWebhook(

@@ -9,6 +9,7 @@ import { SalesInvoicesService } from "./invoicing/invoices-service"
 import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
+import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
 
 function loadRuntimeEnvironment() {
@@ -106,4 +107,25 @@ if (dailyReports && dailyReportMinutes > 0) {
       .catch((error: unknown) => console.error("whatsapp.daily_report_pass_failed", error))
   setTimeout(runDailyReports, 120_000).unref()
   setInterval(runDailyReports, dailyReportMinutes * 60_000).unref()
+}
+
+// The team's lead alerts on WhatsApp go out directly (no template, so Meta doesn't cap them) for 24
+// hours after a number last wrote to Madar's number. Every few minutes, each number whose 24 hours
+// are running out is asked to tap a button (whatsapp/lead-alerts.ts). Safe from several tasks at
+// once -- a reminder is claimed before it is sent. WHATSAPP_LEAD_ALERT_REMINDER_INTERVAL_MINUTES=0
+// turns it off.
+const leadAlertReminderMinutes = Number(
+  process.env.WHATSAPP_LEAD_ALERT_REMINDER_INTERVAL_MINUTES ?? "5"
+)
+const leadAlerts = registeredLeadAlertsService()
+if (leadAlerts && leadAlertReminderMinutes > 0) {
+  const runLeadAlertReminders = () =>
+    leadAlerts
+      .remindDue()
+      .then((reminded) => {
+        if (reminded > 0) console.log("whatsapp.lead_alert_reminder_pass", { reminded })
+      })
+      .catch((error: unknown) => console.error("whatsapp.lead_alert_reminder_pass_failed", error))
+  setTimeout(runLeadAlertReminders, 130_000).unref()
+  setInterval(runLeadAlertReminders, leadAlertReminderMinutes * 60_000).unref()
 }

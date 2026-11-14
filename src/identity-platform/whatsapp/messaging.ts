@@ -106,6 +106,52 @@ export async function sendTemplateMessage(
   return id
 }
 
+export interface DirectMessage {
+  to: string
+  body: string
+  // One reply button under the text. A tap comes back on the webhook as a message from the
+  // recipient, like anything they type.
+  button?: { id: string; title: string }
+}
+
+// A plain message, no template. Meta only delivers it within 24 hours of the recipient's last
+// message to this number; in return it isn't reviewed, categorised or capped.
+export async function sendDirectMessage(
+  auth: GraphAuth,
+  phoneNumberId: string,
+  message: DirectMessage
+): Promise<string> {
+  const content = message.button
+    ? {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: message.body },
+          action: {
+            buttons: [
+              { type: "reply", reply: { id: message.button.id, title: message.button.title } },
+            ],
+          },
+        },
+      }
+    : { type: "text", text: { body: message.body } }
+  const path = `/${encodeURIComponent(phoneNumberId)}/messages`
+  const response = await fetch(`${baseUrl(auth.version)}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: message.to,
+      ...content,
+    }),
+  })
+  const result = await readResponse<{ messages?: Array<{ id: string }> }>(response, path)
+  const id = result.messages?.[0]?.id
+  if (!id) throw new WhatsAppApiError("Meta returned no message id.", 502, result)
+  return id
+}
+
 export interface TemplateStatus {
   name: string
   language: string

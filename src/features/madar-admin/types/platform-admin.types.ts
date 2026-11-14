@@ -483,6 +483,13 @@ export interface AdminWhatsAppCheck {
   detail: string
 }
 
+// For each of the team's alert numbers: until when its lead alerts go out as a direct message,
+// which Meta always delivers (null: with a template, which Meta may hold back). A number gets 24
+// hours of direct alerts each time it writes to Madar's number or taps a button on a message.
+export interface AdminWhatsAppLeadAlertStatus {
+  numbers: Array<{ phone: string; directUntil: string | null }>
+}
+
 // A WhatsApp message template Madar sends with, and where Meta's review of it stands.
 export interface AdminWhatsAppTemplate {
   name: string

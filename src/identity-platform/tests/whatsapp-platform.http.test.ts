@@ -240,4 +240,62 @@ describe("WhatsApp webhook", () => {
     expect(events.rows.map((row) => row.payload.entry[0].id)).toEqual(["555"])
     expect(verifyWhatsAppSignature(Buffer.from(body), signature, "other-secret")).toBe(false)
   })
+
+  it("notes when one of the team's alert numbers writes to Madar's number", async () => {
+    await service.update(
+      {
+        appSecret: "the-app-secret",
+        systemUserToken: "EAAGtoken",
+        madarWabaId: "555",
+        madarPhoneNumberId: "1390",
+        leadAlertPhones: ["0551234567"],
+      },
+      actorId
+    )
+    // Only the calls to Meta are stubbed; the request to the webhook itself goes through.
+    const realFetch = globalThis.fetch
+    const toMeta: Array<{ to: string; type: string }> = []
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (!String(input).startsWith("https://graph.facebook.com/")) return realFetch(input, init)
+      toMeta.push(JSON.parse(String(init?.body)))
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.1" }] }))
+    })
+    const body = JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          changes: [
+            {
+              field: "messages",
+              value: {
+                metadata: { phone_number_id: "1390" },
+                messages: [
+                  {
+                    from: "966551234567",
+                    timestamp: String(Math.floor(Date.now() / 1000)),
+                    type: "text",
+                    text: { body: "مرحبا" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+    const signature = `sha256=${createHmac("sha256", "the-app-secret").update(body).digest("hex")}`
+
+    const answered = await fetch(`${baseUrl}/v1/public/webhooks/whatsapp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hub-signature-256": signature },
+      body,
+    })
+    expect(answered.status).toBe(200)
+    const replies = await database.query<{ phone: string }>(
+      "select phone from whatsapp_lead_alert_replies"
+    )
+    expect(replies.rows.map((row) => row.phone)).toEqual(["966551234567"])
+    // The number is told its alerts now arrive directly.
+    expect(toMeta).toMatchObject([{ to: "966551234567", type: "text" }])
+  })
 })

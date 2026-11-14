@@ -379,6 +379,9 @@ export async function handlePlatformAdminRoute(input: {
       const { name } = whatsAppTemplateSubmitSchema.parse(await readJsonBody())
       return send(200, await whatsappTemplates.submit(name))
     }
+    if (path === "/settings/whatsapp/lead-alerts" && method === "GET" && whatsappLeadAlerts) {
+      return send(200, await whatsappLeadAlerts.status())
+    }
     if (path === "/settings/whatsapp/lead-alerts/test" && method === "POST" && whatsappLeadAlerts) {
       return send(200, await whatsappLeadAlerts.sendTest())
     }
