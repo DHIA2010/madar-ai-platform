@@ -3,14 +3,18 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { LeadAttribution } from "../schemas"
-import { sendTemplateMessage } from "./messaging"
+import { sendTemplateMessage, type TemplateDefinition } from "./messaging"
 import type { WhatsAppPlatformService } from "./platform-config"
-import { NEW_LEAD_TEMPLATE, type WhatsAppTemplatesService } from "./templates"
+import {
+  FIRST_LEAD_ALERT_TEMPLATE,
+  LEAD_ALERT_TEMPLATE,
+  type WhatsAppTemplatesService,
+} from "./templates"
 
 // A WhatsApp alert to Madar's own team whenever a new lead arrives: a "talk to sales" request
 // from madar.my, or a brand-new account. Sent from Madar's number with the approved
-// "madar_new_lead" template to the numbers set in Madar Admin -> settings -> WhatsApp. Nothing is
-// sent while no number is set or Meta hasn't approved the template yet.
+// "madar_account_alert" template to the numbers set in Madar Admin -> settings -> WhatsApp.
+// Nothing is sent while no number is set or Meta hasn't approved a template yet.
 
 export interface LeadAlert {
   kind: "website" | "signup"
@@ -90,12 +94,31 @@ export class WhatsAppLeadAlertsService {
     ])
   }
 
+  // The template to send with: the current one once Meta has approved it, and until then the
+  // first version (which Meta caps per recipient), so the alerts don't stop in between.
+  private async template(): Promise<TemplateDefinition> {
+    try {
+      await this.templates.requireApproved(LEAD_ALERT_TEMPLATE)
+      return LEAD_ALERT_TEMPLATE
+    } catch (notReady) {
+      if (!(notReady instanceof IdentityError) || notReady.code !== "WHATSAPP_TEMPLATE_NOT_READY") {
+        throw notReady
+      }
+      try {
+        await this.templates.requireApproved(FIRST_LEAD_ALERT_TEMPLATE)
+      } catch {
+        throw notReady
+      }
+      return FIRST_LEAD_ALERT_TEMPLATE
+    }
+  }
+
   // Each send is kept in whatsapp_messages (no organization: it's Madar's own message).
   private async send(
     phones: string[],
     parameters: string[]
   ): Promise<{ sent: number; failed: number }> {
-    await this.templates.requireApproved(NEW_LEAD_TEMPLATE)
+    const template = await this.template()
     const context = await this.platform.sendingContext()
     let sent = 0
     let failed = 0
@@ -105,8 +128,8 @@ export class WhatsAppLeadAlertsService {
       try {
         waMessageId = await sendTemplateMessage(context.auth, context.phoneNumberId, {
           to: phone,
-          templateName: NEW_LEAD_TEMPLATE.name,
-          language: NEW_LEAD_TEMPLATE.language,
+          templateName: template.name,
+          language: template.language,
           bodyParameters: parameters,
         })
         sent += 1
@@ -119,14 +142,7 @@ export class WhatsAppLeadAlertsService {
            (id, organization_id, kind, reference_id, to_phone, template_name, wa_message_id, status,
             error)
          VALUES ($1, NULL, 'lead_alert', NULL, $2, $3, $4, $5, $6)`,
-        [
-          randomUUID(),
-          phone,
-          NEW_LEAD_TEMPLATE.name,
-          waMessageId,
-          waMessageId ? "sent" : "failed",
-          error,
-        ]
+        [randomUUID(), phone, template.name, waMessageId, waMessageId ? "sent" : "failed", error]
       )
     }
     return { sent, failed }

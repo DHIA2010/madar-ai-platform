@@ -491,4 +491,7 @@ export interface AdminWhatsAppTemplate {
   // APPROVED, PENDING, REJECTED, PAUSED, DISABLED -- or MISSING when never submitted.
   status: string
   rejectedReason: string | null
+  // How Meta itself filed it, null when never submitted. MARKETING messages are capped per
+  // recipient, so some never arrive.
+  metaCategory?: string | null
 }

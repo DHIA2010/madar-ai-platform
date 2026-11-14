@@ -99,8 +99,37 @@ export const DAILY_REPORT_TEMPLATE: TemplateDefinition = {
 
 // The alert Madar's own team gets when a new lead arrives (whatsapp/lead-alerts.ts): {{1}} what
 // happened (a "talk to sales" request or a new account), {{2}} name, {{3}} mobile, {{4}} email,
-// {{5}} where they came from. Utility -- an update on Madar's own account.
-export const NEW_LEAD_TEMPLATE: TemplateDefinition = {
+// {{5}} where they came from. Worded as a plain account notice -- no emoji, no "lead", no call to
+// action -- because Meta filed the first version (below) under marketing, and marketing messages
+// are capped per recipient: after three alerts in one night the rest were dropped (error 131049).
+export const LEAD_ALERT_TEMPLATE: TemplateDefinition = {
+  name: "madar_account_alert",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "تنبيه من حسابك في مدار",
+    "تم استلام طلب جديد في حسابك.",
+    "",
+    "• النوع: {{1}}",
+    "• الاسم: {{2}}",
+    "• الجوال: {{3}}",
+    "• البريد: {{4}}",
+    "• المصدر: {{5}}",
+    "",
+    "هذه رسالة تلقائية من نظام مدار.",
+  ].join("\n"),
+  bodyExamples: [
+    "تسجيل حساب جديد",
+    "مؤسسة الريم التجارية",
+    "0551234567",
+    "info@example.com",
+    "الموقع",
+  ],
+}
+
+// The first version of that alert, with the same five values. Meta filed it under marketing; it
+// is only sent while Meta hasn't approved the one above, and isn't offered for submission.
+export const FIRST_LEAD_ALERT_TEMPLATE: TemplateDefinition = {
   name: "madar_new_lead",
   language: "ar",
   category: "UTILITY",
@@ -127,7 +156,7 @@ export const NEW_LEAD_TEMPLATE: TemplateDefinition = {
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
-  NEW_LEAD_TEMPLATE,
+  LEAD_ALERT_TEMPLATE,
 ]
 
 // The sample document Meta reviews with a document-header template.

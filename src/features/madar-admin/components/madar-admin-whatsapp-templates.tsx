@@ -16,7 +16,7 @@ import type { AdminWhatsAppTemplate } from "../types/platform-admin.types"
 const TEMPLATE_LABEL: Record<string, string> = {
   madar_pos_invoice: "فاتورة نقاط البيع (مع ملف PDF)",
   madar_daily_report: "التقرير اليومي للمتجر",
-  madar_new_lead: "تنبيه عميل محتمل جديد (لفريق مدار)",
+  madar_account_alert: "تنبيه عميل محتمل جديد (لفريق مدار)",
 }
 
 const STATUS: Record<string, { label: string; tint: string }> = {
@@ -98,8 +98,14 @@ export function MadarAdminWhatsAppTemplates() {
                     {TEMPLATE_LABEL[template.name] ?? template.name}
                   </p>
                   <p dir="ltr" className="text-right text-xs text-muted-foreground">
-                    {template.name} · {template.language} · {template.category}
+                    {template.name} · {template.language} ·{" "}
+                    {template.metaCategory ?? template.category}
                   </p>
+                  {template.metaCategory === "MARKETING" && template.category !== "MARKETING" ? (
+                    <p className="mt-1 text-xs text-amber-700">
+                      صنّفت Meta هذا القالب رسالة تسويقية، لذلك قد لا تصل بعض رسائله.
+                    </p>
+                  ) : null}
                   {template.rejectedReason ? (
                     <p className="mt-1 text-xs text-red-600">
                       سبب الرفض: {template.rejectedReason}

@@ -12,7 +12,11 @@ import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { SalesLeadService } from "../sales-leads/service"
 import { leadAlertParameters, WhatsAppLeadAlertsService } from "../whatsapp/lead-alerts"
 import { WhatsAppPlatformService } from "../whatsapp/platform-config"
-import { NEW_LEAD_TEMPLATE, WhatsAppTemplatesService } from "../whatsapp/templates"
+import {
+  FIRST_LEAD_ALERT_TEMPLATE,
+  LEAD_ALERT_TEMPLATE,
+  WhatsAppTemplatesService,
+} from "../whatsapp/templates"
 
 const USER = "10000000-0000-0000-0000-000000000001"
 let database: PostgresDatabase
@@ -24,14 +28,19 @@ type SentMessage = {
   template: { name: string; components: Array<{ parameters: Array<{ text: string }> }> }
 }
 
-// Meta, stubbed: the template's review status and the sends.
-function stubMeta(status = "APPROVED") {
+// Meta, stubbed: each template's review status (the first version of the alert was never
+// submitted unless `firstVersion` says otherwise) and the sends.
+function stubMeta(status = "APPROVED", firstVersion?: { status: string; category: string }) {
   const sent: SentMessage[] = []
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input))
     const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
     if (url.pathname.endsWith("/message_templates")) {
-      return json({ data: [{ name: NEW_LEAD_TEMPLATE.name, language: "ar", status }] })
+      const name = url.searchParams.get("name")
+      if (name === FIRST_LEAD_ALERT_TEMPLATE.name) {
+        return json({ data: firstVersion ? [{ name, language: "ar", ...firstVersion }] : [] })
+      }
+      return json({ data: [{ name, language: "ar", status, category: "UTILITY" }] })
     }
     if (url.pathname.endsWith("/messages")) {
       sent.push(JSON.parse(String(init?.body)))
@@ -140,7 +149,7 @@ describe("leadAlertParameters", () => {
       "owner@reem.sa",
       "snapchat / sales_leads",
     ])
-    expect(signup).toHaveLength(NEW_LEAD_TEMPLATE.bodyExamples.length)
+    expect(signup).toHaveLength(LEAD_ALERT_TEMPLATE.bodyExamples.length)
   })
 })
 
@@ -152,7 +161,7 @@ describe("WhatsAppLeadAlertsService", () => {
     await alerts.notify({ kind: "website", name: "مؤسسة الريم", phone: "0551112222", email: null })
 
     expect(sent.map((message) => message.to)).toEqual(["966551234567", "966509876543"])
-    expect(sent[0].template.name).toBe("madar_new_lead")
+    expect(sent[0].template.name).toBe("madar_account_alert")
     expect(sent[0].template.components[0].parameters.map((parameter) => parameter.text)).toEqual([
       "طلب تواصل مع المبيعات",
       "مؤسسة الريم",
@@ -183,13 +192,34 @@ describe("WhatsAppLeadAlertsService", () => {
     await expect(alerts.sendTest()).rejects.toMatchObject({ code: "WHATSAPP_TEMPLATE_NOT_READY" })
   })
 
+  it("keeps sending with the first version until Meta approves the new wording", async () => {
+    const sent = stubMeta("PENDING", { status: "APPROVED", category: "MARKETING" })
+    await platform.update({ leadAlertPhones: ["0551234567"] }, USER)
+
+    await alerts.notify({ kind: "signup", name: "Reem", email: "owner@reem.sa" })
+
+    expect(sent.map((message) => message.template.name)).toEqual(["madar_new_lead"])
+    expect(sent[0].template.components[0].parameters[0].text).toBe("تسجيل حساب جديد")
+  })
+
+  it("shows how Meta itself filed each template", async () => {
+    stubMeta("APPROVED")
+    const statuses = await new WhatsAppTemplatesService(platform).statuses()
+    expect(statuses.find((entry) => entry.name === "madar_account_alert")).toMatchObject({
+      status: "APPROVED",
+      category: "UTILITY",
+      metaCategory: "UTILITY",
+    })
+    expect(statuses.map((entry) => entry.name)).not.toContain("madar_new_lead")
+  })
+
   it("keeps a failed send on record and still reaches the other numbers", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = new URL(String(input))
       if (url.pathname.endsWith("/message_templates")) {
         return new Response(
           JSON.stringify({
-            data: [{ name: NEW_LEAD_TEMPLATE.name, language: "ar", status: "APPROVED" }],
+            data: [{ name: LEAD_ALERT_TEMPLATE.name, language: "ar", status: "APPROVED" }],
           })
         )
       }

@@ -112,6 +112,10 @@ export interface TemplateStatus {
   // APPROVED, PENDING, REJECTED, PAUSED, DISABLED -- or MISSING when never submitted.
   status: string
   rejectedReason: string | null
+  // How Meta itself filed it (UTILITY, MARKETING...), null when never submitted. Meta files a
+  // template sent in as utility under marketing when it reads as one, and marketing messages are
+  // capped per recipient (error 131049), so some of them never arrive.
+  metaCategory: string | null
 }
 
 export async function getTemplateStatus(
@@ -121,10 +125,16 @@ export async function getTemplateStatus(
   language: string
 ): Promise<TemplateStatus> {
   const result = await graphRequest<{
-    data: Array<{ name: string; language: string; status: string; rejected_reason?: string }>
+    data: Array<{
+      name: string
+      language: string
+      status: string
+      rejected_reason?: string
+      category?: string
+    }>
   }>("GET", `/${encodeURIComponent(wabaId)}/message_templates`, auth, {
     name,
-    fields: "name,language,status,rejected_reason",
+    fields: "name,language,status,rejected_reason,category",
   })
   const match = result.data.find((entry) => entry.name === name && entry.language === language)
   return {
@@ -133,6 +143,7 @@ export async function getTemplateStatus(
     status: match?.status ?? "MISSING",
     rejectedReason:
       match?.rejected_reason && match.rejected_reason !== "NONE" ? match.rejected_reason : null,
+    metaCategory: match?.category ?? null,
   }
 }
 
