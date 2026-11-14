@@ -22,6 +22,8 @@ import {
   reorderPackagesSchema,
   storeListQuerySchema,
   subscriptionListQuerySchema,
+  utilizationQuerySchema,
+  utilizationRangeQuerySchema,
   whatsAppPlatformConfigPatchSchema,
   whatsAppTemplateSubmitSchema,
   whatsAppWebhookActivationSchema,
@@ -80,7 +82,7 @@ const PRICING_SETTINGS_KEYS = new Set(["trialDays", "renewalReminderDays", "grac
 function requiredPermission(method: string, path: string): PlatformPermission | "settings" {
   const read = method === "GET"
   if (path.startsWith("/crm")) return "crm:manage"
-  if (path.startsWith("/overview")) return "customers:view"
+  if (path.startsWith("/overview") || path.startsWith("/utilization")) return "customers:view"
   if (path.startsWith("/customers") || path.startsWith("/subscriptions")) {
     return read ? "customers:view" : "subscriptions:manage"
   }
@@ -258,6 +260,16 @@ export async function handlePlatformAdminRoute(input: {
   if (packageMatch && method === "DELETE") {
     await service.deletePackage(actor, packageMatch[1])
     return send(200, { ok: true })
+  }
+
+  if (method === "GET" && path === "/utilization") {
+    const { page, pageSize, ...filters } = utilizationQuerySchema.parse(query)
+    return send(200, await service.getUtilization(actor, filters, { page, pageSize }))
+  }
+  const utilizationMatch = path.match(/^\/utilization\/([^/]+)$/)
+  if (method === "GET" && utilizationMatch) {
+    const range = utilizationRangeQuerySchema.parse(query)
+    return send(200, await service.getCustomerUtilization(actor, utilizationMatch[1], range))
   }
 
   if (method === "GET" && path === "/overview") {

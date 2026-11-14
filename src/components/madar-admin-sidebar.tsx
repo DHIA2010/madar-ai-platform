@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import {
   Activity,
+  BarChart3,
   CalendarClock,
   FileText,
   Flag,
@@ -84,6 +85,12 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       title: "العملاء",
       url: ROUTES.madarAdminCustomers,
       icon: <Users />,
+      permission: "customers:view",
+    },
+    {
+      title: "استخدام العملاء",
+      url: ROUTES.madarAdminUtilization,
+      icon: <BarChart3 />,
       permission: "customers:view",
     },
     {

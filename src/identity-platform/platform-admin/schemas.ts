@@ -3,6 +3,7 @@ import { z } from "zod"
 import { PURCHASABLE_APPLICATIONS } from "../subscriptions/types"
 import { MAX_LEAD_ALERT_PHONES } from "../whatsapp/platform-config"
 import { PLATFORM_ROLES } from "./staff-roles"
+import { UTILIZATION_SORTS } from "./utilization"
 
 const planTier = z.enum(["starter", "growth", "pro", "enterprise"])
 const billingInterval = z.enum(["monthly", "yearly"])
@@ -185,6 +186,23 @@ export const paymentListQuerySchema = pageQuerySchema.extend({
   application: optional(application),
   from: optional(day),
   to: optional(day),
+})
+
+export const utilizationRangeQuerySchema = z.object({
+  from: optional(day),
+  to: optional(day),
+})
+
+export const utilizationQuerySchema = pageQuerySchema.merge(utilizationRangeQuerySchema).extend({
+  search: optional(z.string().max(200)),
+  status: optional(subscriptionStatus.or(z.literal("none"))),
+  application: optional(application),
+  platform: optional(z.enum(["salla", "zid", "shopify"])),
+  usage: optional(z.enum(["active", "idle", "never"])),
+  createdFrom: optional(day),
+  createdTo: optional(day),
+  sort: optional(z.enum(UTILIZATION_SORTS)),
+  direction: optional(z.enum(["asc", "desc"])),
 })
 
 export const receiptListQuerySchema = pageQuerySchema.extend({

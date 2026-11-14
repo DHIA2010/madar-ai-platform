@@ -108,6 +108,9 @@ export const ROUTES = {
   madarAdminCustomers: "/madar-admin/customers",
   madarAdminCustomer: (organizationId: string) =>
     `/madar-admin/customers?customer=${organizationId}`,
+  madarAdminUtilization: "/madar-admin/utilization",
+  madarAdminCustomerUtilization: (organizationId: string) =>
+    `/madar-admin/utilization/customer?id=${organizationId}`,
   madarAdminSubscriptions: "/madar-admin/subscriptions",
   madarAdminPackages: "/madar-admin/packages",
   madarAdminCoupons: "/madar-admin/coupons",

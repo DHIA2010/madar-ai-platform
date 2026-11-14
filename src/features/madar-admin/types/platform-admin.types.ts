@@ -502,3 +502,83 @@ export interface AdminWhatsAppTemplate {
   // recipient, so some never arrive.
   metaCategory?: string | null
 }
+
+// ---- Utilization: how much each customer actually uses Madar ----
+
+export type AdminUtilizationMetric =
+  | "products"
+  | "posInvoices"
+  | "salesInvoices"
+  | "quotations"
+  | "orders"
+  | "customers"
+  | "purchases"
+  | "expenses"
+export type AdminUtilizationCounts = Record<AdminUtilizationMetric, number>
+// active: created something inside the range. idle: has data, but nothing inside the range.
+// never: has not created anything at all.
+export type AdminUsageLevel = "active" | "idle" | "never"
+export type AdminUtilizationSort =
+  | AdminUtilizationMetric
+  | "activity"
+  | "createdAt"
+  | "lastUsedAt"
+  | "name"
+
+export interface AdminUtilizationFilters {
+  search?: string
+  status?: AdminCustomerStatus | "all"
+  application?: PurchasableApplication | "all"
+  platform?: AdminStorePlatform | "all"
+  usage?: AdminUsageLevel | "all"
+  // When the customer signed up (yyyy-mm-dd, inclusive).
+  createdFrom?: string
+  createdTo?: string
+}
+
+export interface AdminUtilizationRow {
+  id: string
+  name: string
+  createdAt: string
+  owner: { userId: string; name: string; email: string } | null
+  status: AdminCustomerStatus
+  platforms: AdminStorePlatform[]
+  storeCount: number
+  applications: PurchasableApplication[]
+  members: number
+  branches: number
+  totals: AdminUtilizationCounts
+  inRange: AdminUtilizationCounts
+  activityInRange: number
+  usage: AdminUsageLevel
+  lastAt: Record<AdminUtilizationMetric, string | null>
+  lastUsedAt: string | null
+}
+
+export type AdminUtilizationDailyPoint = {
+  date: string
+  activeCustomers: number
+} & AdminUtilizationCounts
+
+export interface AdminUtilization {
+  from: string
+  to: string
+  summary: {
+    customers: number
+    active: number
+    idle: number
+    never: number
+    totals: AdminUtilizationCounts
+    inRange: AdminUtilizationCounts
+  }
+  daily: AdminUtilizationDailyPoint[]
+  page: AdminPage<AdminUtilizationRow>
+}
+
+export interface AdminCustomerUtilization {
+  from: string
+  to: string
+  customer: AdminUtilizationRow
+  subscriptions: AdminSubscriptionView[]
+  daily: AdminUtilizationDailyPoint[]
+}

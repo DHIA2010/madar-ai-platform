@@ -7,6 +7,7 @@ import type {
   AdminCustomerDetail,
   AdminCustomerFilters,
   AdminCustomerSummary,
+  AdminCustomerUtilization,
   AdminFeatureFlag,
   AdminIntegrations,
   AdminOverview,
@@ -29,6 +30,9 @@ import type {
   AdminSubscriptionView,
   AdminSystemHealth,
   AdminTracking,
+  AdminUtilization,
+  AdminUtilizationFilters,
+  AdminUtilizationSort,
   AdminWhatsAppCheck,
   AdminWhatsAppConfig,
   AdminWhatsAppConfigPatch,
@@ -80,6 +84,30 @@ export const platformAdminService = {
 
   getCustomerSummary(): Promise<AdminCustomerSummary> {
     return client.get(`${ENDPOINT}/customers/summary`)
+  },
+
+  // Usage numbers for every customer matching the filters: `range` is what "in range" covers.
+  getUtilization(
+    filters: AdminUtilizationFilters,
+    options: {
+      from: string
+      to: string
+      sort: AdminUtilizationSort
+      direction: "asc" | "desc"
+      page: number
+      pageSize: number
+    }
+  ): Promise<AdminUtilization> {
+    return client.get(`${ENDPOINT}/utilization${toQuery({ ...filters, ...options })}`)
+  },
+
+  getCustomerUtilization(
+    organizationId: string,
+    range: { from: string; to: string }
+  ): Promise<AdminCustomerUtilization> {
+    return client.get(
+      `${ENDPOINT}/utilization/${encodeURIComponent(organizationId)}${toQuery(range)}`
+    )
   },
 
   getCustomer(organizationId: string): Promise<AdminCustomerDetail> {

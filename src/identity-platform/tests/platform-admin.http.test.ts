@@ -4,6 +4,7 @@
 // subscriptions, and the grant/renew/cancel actions that keep organization_subscriptions and the
 // organizations.settings access flags in step.
 
+import { randomUUID } from "node:crypto"
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
@@ -282,5 +283,153 @@ describe("platform admin: overview", () => {
 
     const snapshots = await database.query("select * from platform_daily_metrics")
     expect(snapshots.rows).toHaveLength(1)
+  })
+})
+
+interface UtilizationRow {
+  id: string
+  name: string
+  usage: string
+  members: number
+  branches: number
+  activityInRange: number
+  totals: Record<string, number>
+  inRange: Record<string, number>
+  lastUsedAt: string | null
+}
+interface UtilizationBody {
+  from: string
+  to: string
+  summary: {
+    customers: number
+    active: number
+    idle: number
+    never: number
+    totals: Record<string, number>
+    inRange: Record<string, number>
+  }
+  daily: Array<{ date: string; activeCustomers: number; products: number; customers: number }>
+  page: { items: UtilizationRow[]; total: number }
+}
+
+describe("platform admin: utilization", () => {
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000)
+
+  async function addProducts(organizationId: string, count: number, createdAt: Date) {
+    for (let index = 0; index < count; index += 1) {
+      await database.query(
+        `insert into products (id, organization_id, product_type, name, created_at)
+         values ($1, $2, 'simple', 'Product', $3)`,
+        [randomUUID(), organizationId, createdAt]
+      )
+    }
+  }
+
+  async function addShopCustomer(organizationId: string, createdAt: Date, deleted = false) {
+    await database.query(
+      `insert into customers (id, organization_id, name, created_at, deleted_at)
+       values ($1, $2, 'Buyer', $3, $4)`,
+      [randomUUID(), organizationId, createdAt, deleted ? new Date() : null]
+    )
+  }
+
+  it("counts what each customer created, in total and inside the range, day by day", async () => {
+    const busy = await signIn("busy@shop.test", "Busy Shop", {
+      posEnabled: true,
+      posTrialEndsAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+    })
+    const quiet = await signIn("quiet@shop.test", "Quiet Shop")
+    await signIn("empty@shop.test", "Empty Shop")
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const busyId = busy.actor.organizationId
+    const quietId = quiet.actor.organizationId
+
+    await addProducts(busyId, 3, daysAgo(2))
+    await addProducts(busyId, 2, daysAgo(60))
+    await addShopCustomer(busyId, daysAgo(2))
+    await addShopCustomer(busyId, daysAgo(1), true)
+    await addProducts(quietId, 4, daysAgo(90))
+    await database.query(
+      "insert into workspaces (id, organization_id, name, status) values ($1, $2, 'Main', 'active')",
+      [randomUUID(), busyId]
+    )
+
+    const all = await get<UtilizationBody>(staff.token, "/utilization")
+    expect(all.status).toBe(200)
+    const byName = Object.fromEntries(all.body.page.items.map((row) => [row.name, row]))
+    // Deleted records don't count; older ones count in the total but not inside the range.
+    expect(byName["Busy Shop"]).toMatchObject({ usage: "active", activityInRange: 4, branches: 1 })
+    expect(byName["Busy Shop"].totals).toMatchObject({ products: 5, customers: 1 })
+    expect(byName["Busy Shop"].inRange).toMatchObject({ products: 3, customers: 1 })
+    expect(byName["Busy Shop"].lastUsedAt).not.toBeNull()
+    expect(byName["Quiet Shop"]).toMatchObject({ usage: "idle", activityInRange: 0 })
+    expect(byName["Quiet Shop"].totals.products).toBe(4)
+    expect(byName["Empty Shop"]).toMatchObject({ usage: "never", lastUsedAt: null })
+    // Most active first by default.
+    expect(all.body.page.items[0].name).toBe("Busy Shop")
+
+    expect(all.body.summary).toMatchObject({ customers: 4, active: 1, idle: 1, never: 2 })
+    expect(all.body.summary.totals.products).toBe(9)
+    expect(all.body.summary.inRange.products).toBe(3)
+
+    // 30 days by default, one point per day, and the points add up to the range's numbers.
+    expect(all.body.daily).toHaveLength(30)
+    expect(all.body.daily.at(-1)?.date).toBe(all.body.to)
+    expect(all.body.daily.reduce((sum, point) => sum + point.products, 0)).toBe(3)
+    expect(all.body.daily.reduce((sum, point) => sum + point.activeCustomers, 0)).toBe(1)
+
+    const trials = await get<UtilizationBody>(staff.token, "/utilization?status=trial")
+    expect(trials.body.page.items.map((row) => row.id)).toEqual([busyId])
+    expect(trials.body.summary.totals.products).toBe(5)
+
+    const idle = await get<UtilizationBody>(staff.token, "/utilization?usage=idle")
+    expect(idle.body.page.items.map((row) => row.id)).toEqual([quietId])
+
+    const sorted = await get<UtilizationBody>(
+      staff.token,
+      "/utilization?sort=products&direction=asc&usage=idle&search=quiet"
+    )
+    expect(sorted.body.page.total).toBe(1)
+
+    // A wider range picks up the older records.
+    const day = (date: Date) => date.toISOString().slice(0, 10)
+    const wide = await get<UtilizationBody>(
+      staff.token,
+      `/utilization?from=${day(daysAgo(120))}&to=${day(new Date())}`
+    )
+    expect(wide.body.summary).toMatchObject({ active: 2, idle: 0 })
+    expect(wide.body.summary.inRange.products).toBe(9)
+
+    // Signed up today, so a sign-up window that ended yesterday leaves nobody.
+    const signedUpEarlier = await get<UtilizationBody>(
+      staff.token,
+      `/utilization?createdTo=${day(daysAgo(2))}`
+    )
+    expect(signedUpEarlier.body.page.total).toBe(0)
+  })
+
+  it("shows one customer's usage over time", async () => {
+    const shop = await signIn("timeline@shop.test", "Timeline Shop")
+    const other = await signIn("other@shop.test", "Other Shop")
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    await addProducts(shop.actor.organizationId, 2, daysAgo(3))
+    await addProducts(shop.actor.organizationId, 1, daysAgo(10))
+    await addProducts(other.actor.organizationId, 7, daysAgo(3))
+
+    const detail = await get<{
+      customer: UtilizationRow
+      daily: Array<{ date: string; products: number }>
+    }>(staff.token, `/utilization/${shop.actor.organizationId}`)
+    expect(detail.status).toBe(200)
+    expect(detail.body.customer).toMatchObject({ name: "Timeline Shop", usage: "active" })
+    expect(detail.body.customer.totals.products).toBe(3)
+    expect(detail.body.daily).toHaveLength(30)
+    expect(detail.body.daily.filter((point) => point.products > 0).map((p) => p.products)).toEqual([
+      1, 2,
+    ])
+
+    expect((await get(staff.token, `/utilization/${randomUUID()}`)).status).toBe(404)
+    expect((await get(staff.token, "/utilization?from=2020-01-01&to=2026-01-01")).status).toBe(400)
+    expect((await get(shop.token, "/utilization")).status).toBe(403)
   })
 })

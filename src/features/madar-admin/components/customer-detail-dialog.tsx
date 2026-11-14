@@ -1,7 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { toast } from "sonner"
+
+import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
@@ -96,6 +99,11 @@ export function CustomerDetailDialog({
           <AppButton variant="outline" className="h-11 rounded-[10px] px-5" onClick={onClose}>
             إغلاق
           </AppButton>
+          {loaded ? (
+            <AppButton asChild variant="outline" className="h-11 rounded-[10px] px-5">
+              <Link href={ROUTES.madarAdminCustomerUtilization(loaded.id)}>عرض الاستخدام</Link>
+            </AppButton>
+          ) : null}
           {loaded ? (
             <AppButton
               className="h-11 rounded-[10px] px-5 font-semibold"

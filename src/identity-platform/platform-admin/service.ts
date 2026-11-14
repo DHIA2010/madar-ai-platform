@@ -34,6 +34,13 @@ import type {
   SubscriptionStatus,
 } from "../subscriptions/types"
 import { requirePlatformAdmin } from "./guard"
+import {
+  buildCustomerUtilization,
+  buildUtilization,
+  type PlatformAdminCustomerUtilization,
+  type PlatformAdminUtilization,
+  type PlatformAdminUtilizationFilters,
+} from "./utilization"
 import { ADDON_CODES, ADDON_ERRORS, type AddonCode, AddonsService } from "../subscriptions/addons"
 import type {
   CustomerStatus,
@@ -350,6 +357,31 @@ export class PlatformAdminService {
         createdAt: toIso(row.created_at) ?? "",
       })),
     }
+  }
+
+  // ---- Utilization: how much each customer actually uses Madar (see utilization.ts) ----
+
+  async getUtilization(
+    actor: AuthenticatedActor,
+    filters: PlatformAdminUtilizationFilters,
+    page: PageRequest
+  ): Promise<PlatformAdminUtilization> {
+    requirePlatformAdmin(actor)
+    const customers = await this.loadCustomers(new Date().toISOString())
+    return buildUtilization(this.db, customers, filters, page)
+  }
+
+  async getCustomerUtilization(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    filters: { from?: string; to?: string }
+  ): Promise<PlatformAdminCustomerUtilization> {
+    requirePlatformAdmin(actor)
+    const customer = (await this.loadCustomers(new Date().toISOString())).find(
+      (entry) => entry.id === organizationId
+    )
+    if (!customer) throw ERRORS.notFound("Customer")
+    return buildCustomerUtilization(this.db, customer, filters)
   }
 
   private async loadSubscriptionRows(now: string): Promise<PlatformAdminSubscriptionRow[]> {
