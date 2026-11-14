@@ -25,6 +25,8 @@ export interface PackageEntitlements {
   procurement?: boolean
   // The custom report builder, without its own subscription.
   customReports?: boolean
+  // Invoicing & Quotations (B2B tax invoices), without its own subscription.
+  invoicing?: boolean
   // How many ad platforms (Meta, Google Ads, TikTok, Snapchat) can be connected.
   maxAdPlatforms?: number
   // How many stores (Salla, Zid, Shopify) can be connected.

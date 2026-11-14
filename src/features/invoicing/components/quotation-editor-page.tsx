@@ -31,7 +31,7 @@ const locked = (quotation: QuotationDetail) =>
 export function QuotationEditorPage({ quotationId }: { quotationId?: string }) {
   const t = useTranslations("invoicing.quotation")
   const router = useRouter()
-  const { enabled, canManage } = useInvoicingAccess()
+  const { enabled, checking, canManage } = useInvoicingAccess()
   const describeError = useInvoicingError()
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [failed, setFailed] = useState(false)
@@ -49,7 +49,7 @@ export function QuotationEditorPage({ quotationId }: { quotationId?: string }) {
     }
   }, [enabled, quotationId])
 
-  if (!enabled) return <InvoicingLocked />
+  if (!enabled) return checking ? null : <InvoicingLocked />
   if (!canManage) return <PageError message={t("noPermission")} />
   if (failed) return <PageError message={t("notFound")} />
   if (quotationId && !quotation) return <PageLoading />

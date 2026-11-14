@@ -89,7 +89,7 @@ export function InvoicesListPage({ variant = "invoices" }: { variant?: "invoices
   const t = useTranslations(notes ? "invoicing.notes" : "invoicing.invoices")
   const locale = useLocale() as Locale
   const router = useRouter()
-  const { enabled, canManage } = useInvoicingAccess()
+  const { enabled, checking, canManage } = useInvoicingAccess()
   const { money, date } = useFormatters()
   const describeError = useInvoicingError()
   const documentLabel = useDocumentLabel()
@@ -138,7 +138,7 @@ export function InvoicesListPage({ variant = "invoices" }: { variant?: "invoices
   }, [items, search])
   const rows = useMemo(() => searched.filter((invoice) => inTab(invoice, tab)), [searched, tab])
 
-  if (!enabled) return <InvoicingLocked />
+  if (!enabled) return checking ? null : <InvoicingLocked />
 
   const newButton =
     canManage && !notes ? (

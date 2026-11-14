@@ -1,10 +1,12 @@
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { loadOrganizationEntitlements } from "./entitlements"
 
 // Server-side app access for POS, Ads and E-commerce: their routes answer only for an
 // organization subscribed to the app they belong to (organizations.settings `{app}Enabled`, with
 // a lapsed trial counting as off) -- the same flags the app's sidebar shows them by, so the two
-// always agree. Apps with their own guards (Supplies, Expenses, Promotions, Custom reports, AI)
+// always agree. Invoicing also opens through a plan that includes it (POS احترافي, Madar Complete --
+// see entitlements.ts), without a subscription of its own. Apps with their own guards (Supplies, Expenses, Promotions, Custom reports, AI)
 // keep them; everything not listed here (auth, settings, administration, reports, billing) is
 // open to any organization.
 //
@@ -87,6 +89,12 @@ export class ApplicationAccessService {
     )
     const settings = result.rows[0]?.settings ?? {}
     if (applications.some((application) => isOn(settings, application))) return
+    if (
+      applications.includes("invoicing") &&
+      (await loadOrganizationEntitlements(this.db, organizationId)).invoicing
+    ) {
+      return
+    }
     throw new IdentityError(
       "APPLICATION_NOT_SUBSCRIBED",
       403,

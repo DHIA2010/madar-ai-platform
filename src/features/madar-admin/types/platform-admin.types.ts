@@ -129,6 +129,7 @@ export interface PackageEntitlements {
   customRoles?: boolean
   procurement?: boolean
   customReports?: boolean
+  invoicing?: boolean
   maxAdPlatforms?: number
   maxStores?: number
 }

@@ -6797,6 +6797,7 @@ export function createIdentityApiServer(
             customRoles: true,
             procurement: true,
             customReports: true,
+            invoicing: true,
             maxAdPlatforms: null,
             maxStores: null,
           })

@@ -712,7 +712,8 @@
       "pendingReview": "قيد المراجعة",
       "deactivate": "إلغاء التفعيل",
       "activateNow": "تفعيل الآن",
-      "subscribeNow": "اشتراك الآن"
+      "subscribeNow": "اشتراك الآن",
+      "includedInPlan": "مشمول في باقتك الحالية"
     },
     "backToApplications": "العودة إلى التطبيقات",
     "confirmDialog": {

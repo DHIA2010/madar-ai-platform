@@ -77,6 +77,7 @@ export const packageInputSchema = z.object({
       customRoles: z.boolean().optional(),
       procurement: z.boolean().optional(),
       customReports: z.boolean().optional(),
+      invoicing: z.boolean().optional(),
       // Absent = no limit.
       maxAdPlatforms: z.number().int().min(0).max(100).optional(),
       maxStores: z.number().int().min(0).max(1000).optional(),

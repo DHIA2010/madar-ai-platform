@@ -22,6 +22,7 @@ export type EntitlementSwitch =
   | "customRoles"
   | "procurement"
   | "customReports"
+  | "invoicing"
 
 export interface OrganizationEntitlements {
   invoiceReader: boolean
@@ -29,6 +30,7 @@ export interface OrganizationEntitlements {
   customRoles: boolean
   procurement: boolean
   customReports: boolean
+  invoicing: boolean
   // null = no limit.
   maxAdPlatforms: number | null
   maxStores: number | null
@@ -40,12 +42,20 @@ const SWITCHES: EntitlementSwitch[] = [
   "customRoles",
   "procurement",
   "customReports",
+  "invoicing",
 ]
 const LIVE = new Set(["active", "trial", "overdue"])
 // What a trial of each app unlocks: everything its own plans can include.
 const TRIAL_GRANTS: Record<string, EntitlementSwitch[]> = {
-  pos: ["invoiceReader", "shiftCash", "customRoles", "procurement", "customReports"],
-  madarComplete: ["invoiceReader", "shiftCash", "customRoles", "procurement", "customReports"],
+  pos: ["invoiceReader", "shiftCash", "customRoles", "procurement", "customReports", "invoicing"],
+  madarComplete: [
+    "invoiceReader",
+    "shiftCash",
+    "customRoles",
+    "procurement",
+    "customReports",
+    "invoicing",
+  ],
   advertising: ["customRoles", "customReports"],
   ecommerce: ["customRoles", "customReports"],
 }
@@ -86,6 +96,7 @@ export async function loadOrganizationEntitlements(
     customRoles: false,
     procurement: false,
     customReports: false,
+    invoicing: false,
     maxAdPlatforms: null,
     maxStores: null,
   }
@@ -129,6 +140,7 @@ const SWITCH_LABEL: Record<EntitlementSwitch, string> = {
   customRoles: "custom roles and permissions",
   procurement: "suppliers, purchases and expenses",
   customReports: "custom reports",
+  invoicing: "invoicing and quotations",
 }
 
 export function planFeatureNotIncluded(feature: string, message: string): IdentityError {

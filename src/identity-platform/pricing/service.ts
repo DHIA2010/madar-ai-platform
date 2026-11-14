@@ -37,6 +37,7 @@ export function parseEntitlements(value: unknown): PackageEntitlements {
     "customRoles",
     "procurement",
     "customReports",
+    "invoicing",
   ] as const) {
     if (raw[key] === true) entitlements[key] = true
   }

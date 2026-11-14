@@ -67,7 +67,7 @@ export function QuotationDetailsPage({ quotationId }: { quotationId: string }) {
   const tDocs = useTranslations("invoicing.docTypes")
   const locale = useLocale() as Locale
   const router = useRouter()
-  const { enabled, canManage } = useInvoicingAccess()
+  const { enabled, checking, canManage } = useInvoicingAccess()
   const { money, date } = useFormatters()
   const describeError = useInvoicingError()
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
@@ -94,7 +94,7 @@ export function QuotationDetailsPage({ quotationId }: { quotationId: string }) {
 
   const paper = useMemo(() => (quotation ? quotationPaper(quotation) : null), [quotation])
 
-  if (!enabled) return <InvoicingLocked />
+  if (!enabled) return checking ? null : <InvoicingLocked />
   if (failed) return <PageError message={t("notFound")} onRetry={load} />
   if (!quotation || !paper) return <PageLoading />
 

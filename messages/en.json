@@ -712,7 +712,8 @@
       "pendingReview": "Under review",
       "deactivate": "Deactivate",
       "activateNow": "Activate now",
-      "subscribeNow": "Subscribe now"
+      "subscribeNow": "Subscribe now",
+      "includedInPlan": "Included in your current plan"
     },
     "backToApplications": "Back to Applications",
     "confirmDialog": {

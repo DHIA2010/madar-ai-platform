@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useTranslations } from "next-intl"
-import { Check, Clock, Sparkles } from "lucide-react"
+import { BadgeCheck, Check, Clock, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -110,6 +110,13 @@ export function ApplicationCard({
       <div className="mt-auto pt-4">
         {application.priceLabel ? (
           <p className={cn("text-[12.5px] font-bold", PAGE_TEXT)}>{application.priceLabel}</p>
+        ) : null}
+
+        {application.includedInPlan && !isActive ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-[#15803d]">
+            <BadgeCheck className="size-3.5 shrink-0" />
+            {t("includedInPlan")}
+          </p>
         ) : null}
 
         {isActive ? (

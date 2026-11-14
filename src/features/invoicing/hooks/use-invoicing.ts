@@ -3,18 +3,23 @@
 import { useCallback } from "react"
 import { useLocale, useTranslations } from "next-intl"
 
-import { getActiveApplications } from "@/features/applications"
+import { getActiveApplications, useEntitlementsState } from "@/features/applications"
 import { usePermissions } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
 import type { Locale } from "@/i18n/locales"
 
-// Whether this organization subscribed to the app, and whether this user may change documents.
+// Whether this organization has the app -- its own subscription, or a plan that includes it (POS
+// احترافي, Madar Complete) -- and whether this user may change documents. `checking` is true
+// while the plan is still being asked about, so the locked screen waits for the answer.
 export function useInvoicingAccess() {
   const { currentOrganization } = useWorkspace()
   const { can } = usePermissions()
+  const { entitlements, loaded } = useEntitlementsState()
+  const subscribed = getActiveApplications(currentOrganization?.settings).includes("invoicing")
   return {
-    enabled: getActiveApplications(currentOrganization?.settings).includes("invoicing"),
+    enabled: subscribed || entitlements?.invoicing === true,
+    checking: !subscribed && !loaded,
     canManage: can("invoicing:manage"),
   }
 }

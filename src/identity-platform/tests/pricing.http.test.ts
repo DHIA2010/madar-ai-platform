@@ -498,10 +498,17 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     expect((await cashMovement()).body.code).not.toBe("PLAN_FEATURE_NOT_INCLUDED")
     expect((await suppliers()).status).toBe(200)
     expect((await call("GET", "/v1/reports/custom", customer.token)).status).toBe(403)
+    expect((await entitlements()).invoicing).toBe(false)
+    expect(await call("GET", "/v1/invoicing/quotations", customer.token)).toMatchObject({
+      status: 403,
+      body: { code: "APPLICATION_NOT_SUBSCRIBED" },
+    })
 
-    // POS احترافي adds custom reports.
+    // POS احترافي adds custom reports, and opens the invoicing app without its own subscription.
     await grant("pos", "pro")
     expect((await call("GET", "/v1/reports/custom", customer.token)).status).toBe(200)
+    expect((await entitlements()).invoicing).toBe(true)
+    expect((await call("GET", "/v1/invoicing/quotations", customer.token)).status).toBe(200)
 
     // Ads أساسي: two ad platforms. Meta and Snapchat are connected; a third is refused, while
     // reconnecting one already connected is fine.

@@ -24,7 +24,7 @@ import { useZatcaReadiness, ZatcaReadinessBanner } from "./zatca-readiness"
 export function InvoiceEditorPage({ invoiceId }: { invoiceId?: string }) {
   const t = useTranslations("invoicing.invoice")
   const router = useRouter()
-  const { enabled, canManage } = useInvoicingAccess()
+  const { enabled, checking, canManage } = useInvoicingAccess()
   const documentLabel = useDocumentLabel()
   const readiness = useZatcaReadiness(enabled)
   const [invoice, setInvoice] = useState<SalesInvoiceDetail | null>(null)
@@ -59,7 +59,7 @@ export function InvoiceEditorPage({ invoiceId }: { invoiceId?: string }) {
     }
   }, [enabled, invoiceId, router])
 
-  if (!enabled) return <InvoicingLocked />
+  if (!enabled) return checking ? null : <InvoicingLocked />
   if (!canManage) return <PageError message={t("noPermission")} />
   if (failed) return <PageError message={t("notFound")} />
   if (!ready) return <PageLoading />

@@ -78,7 +78,7 @@ export function InvoiceDetailsPage({ invoiceId }: { invoiceId: string }) {
   const tCommon = useTranslations("invoicing.common")
   const locale = useLocale() as Locale
   const router = useRouter()
-  const { enabled, canManage } = useInvoicingAccess()
+  const { enabled, checking, canManage } = useInvoicingAccess()
   const { money, date } = useFormatters()
   const describeError = useInvoicingError()
   const documentLabel = useDocumentLabel()
@@ -107,7 +107,7 @@ export function InvoiceDetailsPage({ invoiceId }: { invoiceId: string }) {
 
   const paper = useMemo(() => (invoice ? invoicePaper(invoice) : null), [invoice])
 
-  if (!enabled) return <InvoicingLocked />
+  if (!enabled) return checking ? null : <InvoicingLocked />
   if (failed) return <PageError message={t("notFound")} onRetry={load} />
   if (!invoice || !paper) return <PageLoading />
 

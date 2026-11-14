@@ -12,7 +12,7 @@ import { CELL_INPUT, FIELD, FIELD_LABEL, HEADING, MUTED, PANEL } from "./styles"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
-// Shown in place of every invoicing screen until the organization subscribes to the app.
+// Shown in place of every invoicing screen until the organization has the app.
 export function InvoicingLocked() {
   const t = useTranslations("invoicing.locked")
   const locale = useLocale() as Locale

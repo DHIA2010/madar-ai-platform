@@ -103,6 +103,7 @@ const POS_PACKAGES: DefaultPackage[] = [
       "3 فروع (فروع إضافية بـ 99 ر.س/شهر)",
       "أجهزة كاشير غير محدودة في كل فرع",
       "التقارير المخصصة",
+      "تطبيق الفواتير وعروض الأسعار",
       "دعم بأولوية",
     ],
     {
@@ -113,6 +114,7 @@ const POS_PACKAGES: DefaultPackage[] = [
         customRoles: true,
         procurement: true,
         customReports: true,
+        invoicing: true,
       },
     }
   ),
@@ -295,6 +297,7 @@ export function defaultPricingFor(application: PurchasableApplication): {
               customRoles: true,
               procurement: true,
               customReports: true,
+              invoicing: true,
             },
             isRecommended: true,
             legacyPlanTier: null,

@@ -61,6 +61,9 @@ export interface ApplicationDefinition {
   // enforces "never a direct Subscribe button" as a data fact, not a per-component special case.
   primaryCta: { label: string | null }
   subscriptionStatus: ApplicationSubscriptionStatus
+  // The organization's plan already opens this app without a subscription of its own (POS
+  // احترافي brings invoicing, for one) -- the card says so.
+  includedInPlan?: boolean
 }
 
 export interface MadarCompleteBundle {

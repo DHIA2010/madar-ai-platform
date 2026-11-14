@@ -9,6 +9,7 @@ export interface OrganizationEntitlements {
   customRoles: boolean
   procurement: boolean
   customReports: boolean
+  invoicing: boolean
   // null = no limit.
   maxAdPlatforms: number | null
   maxStores: number | null

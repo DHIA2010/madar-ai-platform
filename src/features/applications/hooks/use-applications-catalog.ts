@@ -21,6 +21,7 @@ import type {
   ApplicationDefinition,
   ApplicationSubscriptionStatus,
 } from "../types"
+import { applicationsFromEntitlements, useEntitlements } from "./use-entitlements"
 import { usePricingCatalog } from "./use-pricing"
 
 import type { BillingInterval, SubscriptionActivationRequestDto } from "@/application/contracts"
@@ -93,6 +94,11 @@ export function useApplicationsCatalog() {
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [pendingRequests, setPendingRequests] = useState<SubscriptionActivationRequestDto[]>([])
 
+  const entitlements = useEntitlements()
+  const includedInPlan = useMemo(
+    () => new Set(applicationsFromEntitlements(entitlements)),
+    [entitlements]
+  )
   const pricing = usePricingCatalog()
   const pricingByApplication = useMemo(
     () => new Map((pricing ?? []).map((entry) => [entry.application, entry])),
@@ -193,6 +199,7 @@ export function useApplicationsCatalog() {
       .map((application) => ({
         ...application,
         subscriptionStatus: statusById[application.id] ?? application.subscriptionStatus,
+        includedInPlan: includedInPlan.has(application.category),
       }))
       // Apps Madar Admin hid stay listed only for customers who already have (or requested) them.
       .filter(
@@ -208,7 +215,7 @@ export function useApplicationsCatalog() {
         application.name.toLowerCase().includes(query) ||
         application.shortDescription.toLowerCase().includes(query)
     )
-  }, [catalog, searchQuery, statusById, pricingByApplication])
+  }, [catalog, searchQuery, statusById, pricingByApplication, includedInPlan])
 
   const categoryTabs = useMemo<ApplicationCategoryTab[]>(() => {
     const all: ApplicationCategoryTab = {

@@ -15,6 +15,7 @@ type EntitlementSwitch =
   | "customRoles"
   | "procurement"
   | "customReports"
+  | "invoicing"
 
 // The switches a package can turn on (see the backend's subscriptions/entitlements.ts).
 const ENTITLEMENT_SWITCHES: Array<{ key: EntitlementSwitch; label: string; hint: string }> = [
@@ -42,6 +43,11 @@ const ENTITLEMENT_SWITCHES: Array<{ key: EntitlementSwitch; label: string; hint:
     key: "customReports",
     label: "التقارير المخصصة",
     hint: "منشئ التقارير بدون اشتراك منفصل فيه.",
+  },
+  {
+    key: "invoicing",
+    label: "الفواتير وعروض الأسعار",
+    hint: "تطبيق فواتير المنشآت وعروض الأسعار بدون اشتراك منفصل فيه.",
   },
 ]
 

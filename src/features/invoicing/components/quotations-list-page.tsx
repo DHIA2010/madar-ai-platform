@@ -68,7 +68,7 @@ export function QuotationsListPage() {
   const tSectors = useTranslations("invoicing.sectors")
   const locale = useLocale() as Locale
   const router = useRouter()
-  const { enabled, canManage } = useInvoicingAccess()
+  const { enabled, checking, canManage } = useInvoicingAccess()
   const { money, date } = useFormatters()
   const describeError = useInvoicingError()
   const [items, setItems] = useState<Quotation[] | null>(null)
@@ -107,7 +107,7 @@ export function QuotationsListPage() {
   }, [items, search])
   const rows = useMemo(() => searched.filter((quotation) => inTab(quotation, tab)), [searched, tab])
 
-  if (!enabled) return <InvoicingLocked />
+  if (!enabled) return checking ? null : <InvoicingLocked />
 
   const duplicate = async (quotation: Quotation) => {
     try {
