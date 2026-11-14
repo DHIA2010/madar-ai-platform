@@ -49,6 +49,7 @@ import {
   ShoppingBag,
   Sparkles,
   Radio,
+  Globe,
   Truck,
   List,
   Tags,
@@ -127,6 +128,15 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       // nav entry from someone the API would reject anyway.
       permission: "liveVisitors:view",
       applications: ["ecommerce"],
+    },
+    // What Google Analytics says about the site: visits, pages, sources. Open to the same apps
+    // that can connect Google Analytics.
+    {
+      title: t("websiteAnalytics"),
+      url: ROUTES.websiteAnalytics,
+      icon: <Globe className="text-amber-500" />,
+      permission: "dashboard:view",
+      applications: ["ecommerce", "advertising"],
     },
     {
       title: t("channels"),

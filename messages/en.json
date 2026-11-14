@@ -49,6 +49,7 @@
       "campaigns": "Campaigns",
       "linkBuilder": "Link Builder",
       "liveVisitors": "Live Visitors",
+      "websiteAnalytics": "Website Analytics",
       "stores": "Stores",
       "products": "Products",
       "suppliers": "Suppliers",
@@ -6649,6 +6650,128 @@
           "title": "{application} activation rejected",
           "description": "Contact support for details."
         }
+      }
+    }
+  },
+  "websiteAnalytics": {
+    "title": "Website Analytics",
+    "subtitle": "Your site's visits, pages and traffic sources from Google Analytics",
+    "subtitleProperty": "Google Analytics data for: {property}",
+    "loading": "Loading website data...",
+    "loadError": "Couldn't load Google Analytics data. Try again in a moment.",
+    "empty": "No data in this period",
+    "notSet": "Not set",
+    "sourceNote": "Numbers come straight from Google Analytics; today's data can lag by a few hours.",
+    "connect": {
+      "title": "Connect Google Analytics to see your site's visits",
+      "description": "Once connected, visitors, page views, traffic sources, countries and devices show up here.",
+      "action": "Connect Google Analytics"
+    },
+    "reconnect": {
+      "message": "The Google Analytics connection has expired. Reconnect to see the data.",
+      "action": "Open integrations"
+    },
+    "dateRange": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "last7Days": "Last 7 days",
+      "last28Days": "Last 28 days",
+      "last90Days": "Last 90 days",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "last12Months": "Last 12 months"
+    },
+    "kpis": {
+      "users": "Users",
+      "sessions": "Sessions",
+      "pageViews": "Page views",
+      "engagementRate": "Engagement rate",
+      "averageSessionDuration": "Avg. session duration",
+      "minutes": "min",
+      "keyEvents": "Key events",
+      "changeVsPreviousPeriod": "vs previous period",
+      "notEnoughDataToCompare": "No earlier data to compare"
+    },
+    "trend": {
+      "title": "Visits day by day",
+      "subtitle": "How the numbers moved over the selected period",
+      "users": "Users",
+      "sessions": "Sessions",
+      "pageViews": "Views"
+    },
+    "pages": {
+      "title": "Top pages",
+      "subtitle": "The 10 most viewed pages",
+      "page": "Page",
+      "views": "Views",
+      "users": "Users"
+    },
+    "sources": {
+      "title": "Traffic sources",
+      "subtitle": "Where visitors came from (source / medium)",
+      "source": "Source",
+      "sessions": "Sessions",
+      "users": "Users"
+    },
+    "channels": {
+      "title": "Traffic channels",
+      "subtitle": "Sessions by channel type",
+      "direct": "Direct",
+      "organicSearch": "Organic search",
+      "paidSearch": "Paid search",
+      "organicSocial": "Organic social",
+      "paidSocial": "Paid social",
+      "organicVideo": "Organic video",
+      "paidVideo": "Paid video",
+      "organicShopping": "Organic shopping",
+      "paidShopping": "Paid shopping",
+      "paidOther": "Other paid",
+      "crossNetwork": "Cross-network",
+      "email": "Email",
+      "referral": "Referral",
+      "display": "Display",
+      "affiliates": "Affiliates",
+      "sms": "SMS",
+      "audio": "Audio",
+      "push": "Mobile push notifications",
+      "unassigned": "Unassigned"
+    },
+    "countries": {
+      "title": "Countries",
+      "subtitle": "Users by country"
+    },
+    "devices": {
+      "title": "Devices",
+      "subtitle": "Users by device type",
+      "desktop": "Desktop",
+      "mobile": "Mobile",
+      "tablet": "Tablet",
+      "smartTv": "Smart TV"
+    },
+    "events": {
+      "title": "Top events",
+      "subtitle": "What visitors do on the site",
+      "event": "Event",
+      "count": "Count",
+      "names": {
+        "pageView": "Page view",
+        "sessionStart": "Session start",
+        "firstVisit": "First visit",
+        "userEngagement": "User engagement",
+        "scroll": "Scroll",
+        "click": "Outbound click",
+        "formStart": "Form start",
+        "formSubmit": "Form submit",
+        "fileDownload": "File download",
+        "viewSearchResults": "Site search",
+        "videoStart": "Video start",
+        "generateLead": "Lead",
+        "signUp": "Sign-up",
+        "login": "Login",
+        "viewItem": "Product view",
+        "addToCart": "Add to cart",
+        "beginCheckout": "Begin checkout",
+        "purchase": "Purchase"
       }
     }
   },

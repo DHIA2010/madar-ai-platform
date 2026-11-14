@@ -56,20 +56,46 @@ const CATEGORY_OPTIONS = ["All", "Marketing Platforms", "Ecommerce", "CRM", "Ana
 
 const CATEGORY_PLATFORM_MAP: Record<string, string[]> = {
   All: [],
-  "Marketing Platforms": ["Google Ads", "Meta Ads", "TikTok Ads", "Snapchat Ads"],
+  "Marketing Platforms": [
+    "Google Ads",
+    "Meta Ads",
+    "TikTok Ads",
+    "Snapchat Ads",
+    "Google Analytics 4",
+  ],
   Ecommerce: ["Salla", "Zid", "Shopify", "WooCommerce"],
   CRM: ["HubSpot", "Salesforce", "Pipedrive"],
-  Analytics: ["Google Analytics 4", "PostHog", "Mixpanel"],
+  Analytics: ["PostHog", "Mixpanel"],
 }
 
-// Which activated application each category belongs to -- a category (and its connections) only
-// shows once its application is active. Analytics (store traffic, e.g. GA4 feeding Live Visitors)
-// rides with ecommerce; CRM has no application and no real connectors, so it never shows.
-const CATEGORY_APPLICATION: Record<string, ApplicationCategoryId | null> = {
-  "Marketing Platforms": "advertising",
-  Ecommerce: "ecommerce",
-  CRM: null,
-  Analytics: "ecommerce",
+// Which activated applications each category belongs to -- a category (and its connections) only
+// shows once one of them is active. CRM and Analytics have no application and no real connectors,
+// so they never show.
+const CATEGORY_APPLICATIONS: Record<string, ApplicationCategoryId[]> = {
+  "Marketing Platforms": ["advertising"],
+  Ecommerce: ["ecommerce"],
+  CRM: [],
+  Analytics: [],
+}
+
+// Google Analytics is listed with the ad platforms, but it measures website visits, so an account
+// with only e-commerce gets it too (the other ad platforms stay hidden there).
+const PLATFORM_APPLICATIONS: Record<string, ApplicationCategoryId[]> = {
+  "Google Analytics 4": ["advertising", "ecommerce"],
+}
+
+// Each category's platforms the account's active applications open up.
+function getVisiblePlatformsByCategory(activeApplications: string[]) {
+  const visible: Record<string, string[]> = {}
+  for (const category of CATEGORY_OPTIONS) {
+    const platforms = (CATEGORY_PLATFORM_MAP[category] ?? []).filter((platform) =>
+      (PLATFORM_APPLICATIONS[platform] ?? CATEGORY_APPLICATIONS[category] ?? []).some(
+        (application) => activeApplications.includes(application)
+      )
+    )
+    if (platforms.length > 0) visible[category] = platforms
+  }
+  return visible
 }
 
 // Display label only -- the keys above (used for the AppSelect value, CATEGORY_PLATFORM_MAP
@@ -141,11 +167,11 @@ function connectionStatusMeta(status: string, t: IntegrationsTranslator) {
 function getCategoryPlatformOptions(
   category: string,
   platforms: string[],
-  visibleCategories: string[]
+  visiblePlatformsByCategory: Record<string, string[]>
 ) {
-  const allowedPlatforms = (category === "All" ? visibleCategories : [category]).flatMap(
-    (key) => CATEGORY_PLATFORM_MAP[key] ?? []
-  )
+  const allowedPlatforms = (
+    category === "All" ? Object.keys(visiblePlatformsByCategory) : [category]
+  ).flatMap((key) => visiblePlatformsByCategory[key] ?? [])
   return platforms.filter((platform) => allowedPlatforms.includes(platform))
 }
 
@@ -247,23 +273,20 @@ export function ConnectionsOverview() {
   // Joined into a string so the memos below don't re-run on every render --
   // getActiveApplications returns a fresh array each call.
   const activeApplicationsKey = getActiveApplications(currentOrganization?.settings).join(",")
-  const visibleCategories = useMemo(() => {
-    const active = activeApplicationsKey.split(",")
-    return CATEGORY_OPTIONS.filter((option) => {
-      if (option === "All") return false
-      const application = CATEGORY_APPLICATION[option]
-      return application !== null && application !== undefined && active.includes(application)
-    })
-  }, [activeApplicationsKey])
+  const visiblePlatformsByCategory = useMemo(
+    () => getVisiblePlatformsByCategory(activeApplicationsKey.split(",")),
+    [activeApplicationsKey]
+  )
+  const visibleCategories = Object.keys(visiblePlatformsByCategory)
   const categoryOptions = ["All", ...visibleCategories]
   // A category hidden because its application was deactivated falls back to "All".
   const effectiveCategory = categoryOptions.includes(activeCategory) ? activeCategory : "All"
   const categoryFilteredRecords = useMemo(() => {
     const allowedPlatforms = (
-      effectiveCategory === "All" ? visibleCategories : [effectiveCategory]
-    ).flatMap((key) => CATEGORY_PLATFORM_MAP[key] ?? [])
+      effectiveCategory === "All" ? Object.keys(visiblePlatformsByCategory) : [effectiveCategory]
+    ).flatMap((key) => visiblePlatformsByCategory[key] ?? [])
     return filteredRecords.filter((record) => allowedPlatforms.includes(record.platformName))
-  }, [effectiveCategory, visibleCategories, filteredRecords])
+  }, [effectiveCategory, visiblePlatformsByCategory, filteredRecords])
 
   const emptyState = getEmptyState(
     categoryFilteredRecords.length,
@@ -595,7 +618,7 @@ export function ConnectionsOverview() {
                 const nextPlatforms = getCategoryPlatformOptions(
                   value,
                   availableFilters.platforms,
-                  visibleCategories
+                  visiblePlatformsByCategory
                 )
                 if (filters.platform !== "all" && !nextPlatforms.includes(filters.platform)) {
                   updateFilters({ platform: "all" })

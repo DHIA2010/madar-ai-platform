@@ -187,6 +187,7 @@ import { OrderAttributionService } from "../../attribution/service"
 import { ORDER_PROVIDERS, type OrderProvider } from "../../attribution/types"
 import { AggregationRepository } from "../../aggregation/repository"
 import { AggregationService } from "../../aggregation/service"
+import { GoogleAnalyticsIntegrationProvider } from "../../integrations/google-analytics/provider"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -2949,6 +2950,22 @@ export function createIdentityApiServer(
           })
         }
         return send(200, await loadSyncComponents(database, provider, connectionId))
+      }
+
+      // The Website analytics page. Open to the same apps as the rest of /v1/integrations/
+      // (advertising or e-commerce -- see subscriptions/app-access.ts).
+      if (method === "GET" && url.pathname === "/v1/integrations/google-analytics/insights") {
+        const provider = container.infrastructure.integrations?.find("google-analytics")
+        if (!(provider instanceof GoogleAnalyticsIntegrationProvider)) {
+          return send(503, {
+            code: "GOOGLE_ANALYTICS_OAUTH_UNAVAILABLE",
+            message: "Google Analytics insights are unavailable.",
+          })
+        }
+        if (!actor.modulePermissions.includes("dashboard:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, await provider.getInsights(actor, parseChannelsQuery(url)))
       }
 
       if (method === "GET" && url.pathname === "/v1/integrations/meta-ads/diagnostics") {

@@ -19,6 +19,10 @@ const mockRunSync = vi.fn()
 const mockSelectAccount = vi.fn()
 const mockValidateConnection = vi.fn()
 const mockRouterPush = vi.fn()
+// The organization's activated applications; a test may swap them before rendering.
+const organizationSettings = vi.hoisted(() => ({
+  current: { advertisingEnabled: true, ecommerceEnabled: true } as Record<string, boolean>,
+}))
 
 vi.mock("../hooks", () => ({
   useConnectionsCenter: () => ({
@@ -65,7 +69,7 @@ vi.mock("@/features/workspace", () => ({
     // regardless of the new application-activation gating in new-connection-wizard.tsx.
     currentOrganization: {
       id: "org_1",
-      settings: { advertisingEnabled: true, ecommerceEnabled: true },
+      settings: organizationSettings.current,
     },
   }),
   WorkspaceSelector: () => null,
@@ -81,7 +85,57 @@ describe("NewConnectionWizard", () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+    organizationSettings.current = { advertisingEnabled: true, ecommerceEnabled: true }
     window.history.pushState({}, "", ROUTES.integrationsNew)
+  })
+
+  // Google Analytics is listed with the ad platforms; there is no separate tab for it.
+  it("lists Google Analytics under the ad platforms tab", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    expect(screen.queryByRole("button", { name: "منصات أخرى" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "منصات إعلانية" }))
+    expect(screen.getByText("Google Analytics 4")).toBeTruthy()
+    expect(screen.getByText("Google Ads")).toBeTruthy()
+    expect(screen.queryByText("Salla")).toBeNull()
+  })
+
+  // Website visits matter to a store too, so an account without the ads app still gets Google
+  // Analytics -- and only it -- from that tab.
+  it("offers an e-commerce-only account Google Analytics but no ad platform", () => {
+    organizationSettings.current = { ecommerceEnabled: true }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByText("Salla")).toBeTruthy()
+    expect(screen.getByText("Google Analytics 4")).toBeTruthy()
+    expect(screen.queryByText("Google Ads")).toBeNull()
+
+    fireEvent.click(screen.getByRole("button", { name: "منصات إعلانية" }))
+    expect(screen.getByText("Google Analytics 4")).toBeTruthy()
+    expect(screen.queryByText("Salla")).toBeNull()
+    expect(screen.queryByText("Google Ads")).toBeNull()
+  })
+
+  it("offers an ads-only account Google Analytics with the ad platforms", () => {
+    organizationSettings.current = { advertisingEnabled: true }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    expect(screen.queryByRole("button", { name: "متاجر إلكترونية" })).toBeNull()
+    expect(screen.getByText("Google Analytics 4")).toBeTruthy()
+    expect(screen.getByText("Google Ads")).toBeTruthy()
+    expect(screen.queryByText("Salla")).toBeNull()
   })
 
   // The platform step is the screen the Figma export describes: Arabic category chips, a

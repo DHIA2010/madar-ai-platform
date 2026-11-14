@@ -210,7 +210,9 @@ function heroCopy(t: NewConnectionWizardTranslator): Array<{ title: string; subt
   ]
 }
 
-const PLATFORM_CATEGORIES: PlatformCategory[] = ["All", "Ecommerce", "Marketing", "Analytics"]
+// The tabs above the platform list. "Analytics" has no tab of its own: Google Analytics is listed
+// with the ad platforms (see getTabForConnector).
+const PLATFORM_CATEGORIES: PlatformCategory[] = ["All", "Ecommerce", "Marketing"]
 
 function categoryLabels(t: NewConnectionWizardTranslator): Record<PlatformCategory, string> {
   return {
@@ -534,6 +536,13 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
 
 function getCategoryForConnector(displayName: string): PlatformCategory {
   return PLATFORM_DETAILS[displayName]?.category ?? "Marketing"
+}
+
+// The tab a connector is listed under: Google Analytics sits with the ad platforms, keeping its
+// own "analytics" tag on the card.
+function getTabForConnector(displayName: string): PlatformCategory {
+  const category = getCategoryForConnector(displayName)
+  return category === "Analytics" ? "Marketing" : category
 }
 
 // Shopify is the only connector whose OAuth authorize URL is store-specific
@@ -975,21 +984,34 @@ export function NewConnectionWizard() {
     ? PLATFORM_DETAILS[selectedConnector.displayName]
     : undefined
 
-  // Each category only shows once its application is active: "Marketing" (ad platforms) with
-  // advertising, "Ecommerce" and "Analytics" (store traffic, e.g. GA4 feeding Live Visitors) with
-  // ecommerce. "All" always shows, but only ever lists the visible categories' connectors.
-  // Mirrors connections-overview.tsx's own CATEGORY_APPLICATION and the sidebar's gating.
+  // Each connector only shows once its application is active: ad platforms with advertising,
+  // stores with ecommerce, Google Analytics (website visits) with either. A tab shows when it has
+  // a connector to list -- so an e-commerce-only account's "Marketing" tab holds Google Analytics
+  // alone -- and "All" always shows. Mirrors connections-overview.tsx's own gating and the
+  // sidebar's.
   const activeApplicationsKey = getActiveApplications(currentOrganization?.settings).join(",")
-  const visibleCategories = useMemo(() => {
+  const visibleConnectors = useMemo(() => {
     const active = activeApplicationsKey.split(",")
     const advertisingActive = active.includes("advertising")
     const ecommerceActive = active.includes("ecommerce")
-    return PLATFORM_CATEGORIES.filter((category) => {
-      if (category === "Ecommerce" || category === "Analytics") return ecommerceActive
-      if (category === "Marketing") return advertisingActive
-      return true
+    return CONNECTOR_CATALOG.filter((connector) => {
+      const category = getCategoryForConnector(connector.displayName)
+      if (category === "Ecommerce") return ecommerceActive
+      if (category === "Analytics") return advertisingActive || ecommerceActive
+      return advertisingActive
     })
   }, [activeApplicationsKey])
+  const visibleCategories = useMemo(
+    () =>
+      PLATFORM_CATEGORIES.filter(
+        (category) =>
+          category === "All" ||
+          visibleConnectors.some(
+            (connector) => getTabForConnector(connector.displayName) === category
+          )
+      ),
+    [visibleConnectors]
+  )
 
   // If the active application backing the currently-selected category gets deactivated while the
   // wizard is open, fall back to "All" rather than leaving the pill row on a hidden category.
@@ -1002,12 +1024,9 @@ export function NewConnectionWizard() {
   const filteredConnectors = useMemo(() => {
     const query = platformSearch.trim().toLowerCase()
 
-    return CONNECTOR_CATALOG.filter((connector) => {
-      const connectorCategory = getCategoryForConnector(connector.displayName)
+    return visibleConnectors.filter((connector) => {
       const matchesCategory =
-        selectedCategory === "All"
-          ? visibleCategories.includes(connectorCategory)
-          : connectorCategory === selectedCategory
+        selectedCategory === "All" || getTabForConnector(connector.displayName) === selectedCategory
 
       if (!matchesCategory) {
         return false
@@ -1025,7 +1044,7 @@ export function NewConnectionWizard() {
         localizedDescription.toLowerCase().includes(query)
       )
     })
-  }, [platformSearch, selectedCategory, visibleCategories, t])
+  }, [platformSearch, selectedCategory, visibleConnectors, t])
 
   const availableAccounts = useMemo(() => {
     if (!selectedConnector) {
@@ -1965,7 +1984,8 @@ export function NewConnectionWizard() {
         <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredConnectors.map((connector) => {
             const details = PLATFORM_DETAILS[connector.displayName]
-            const category = getCategoryForConnector(connector.displayName)
+            // The card's tag follows the tab the connector is listed under.
+            const category = getTabForConnector(connector.displayName)
             const selected = connector.connectorDefinitionId === selectedConnectorDefinitionId
             const description = platformDescription(
               connector.displayName,

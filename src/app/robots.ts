@@ -16,6 +16,7 @@ export default function robots(): MetadataRoute.Robots {
         "/stores",
         "/products",
         "/channels",
+        "/website-analytics",
         "/ai",
         "/account",
         "/workspace",

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 // next/font is a build-time transform with no runtime implementation, so it has to be stubbed
 // for anything importing the design system's typeface.
@@ -15,6 +15,10 @@ const mockRouterReplace = vi.fn()
 const { toastSuccess, toastError } = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+}))
+// The organization's activated applications; a test may swap them before rendering.
+const organizationSettings = vi.hoisted(() => ({
+  current: { advertisingEnabled: true, ecommerceEnabled: true } as Record<string, boolean>,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -39,7 +43,7 @@ vi.mock("@/features/workspace", () => ({
   useWorkspace: () => ({
     availableWorkspaces: [],
     currentWorkspace: null,
-    currentOrganization: { settings: { advertisingEnabled: true, ecommerceEnabled: true } },
+    currentOrganization: { settings: organizationSettings.current },
   }),
 }))
 
@@ -86,7 +90,80 @@ const mockRecord = {
   nextSyncAt: "2026-06-19T01:00:00.000Z",
 }
 
+const mockAnalyticsRecord = {
+  ...mockRecord,
+  connectorDefinitionId: "connector_def_google_analytics",
+  connectorId: "google_analytics",
+  platformName: "Google Analytics 4",
+  connectedAccount: "madar.my",
+  connectedAccounts: ["madar.my"],
+  connection: { ...mockRecord.connection, connectionId: "conn_2" },
+}
+
+function connectionsCenter(records: Array<typeof mockRecord>) {
+  return {
+    isLoading: false,
+    error: null,
+    records,
+    filteredRecords: records,
+    filters: {
+      search: "",
+      status: "all",
+      health: "all",
+      platform: "all",
+      workspace: "all",
+      capability: "all",
+    },
+    availableFilters: {
+      platforms: records.map((record) => record.platformName),
+      workspaces: ["Madar Advertising"],
+      capabilities: ["campaigns", "ads", "traffic"],
+    },
+    updateFilters: vi.fn(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    pauseSync: vi.fn(),
+    resumeSync: vi.fn(),
+    refreshToken: vi.fn(),
+    retrySync: vi.fn(),
+    runSync: vi.fn(),
+    deleteConnection: vi.fn(),
+  }
+}
+
+function renderOverview() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ConnectionsOverview />
+    </QueryClientProvider>
+  )
+}
+
 describe("ConnectionsOverview", () => {
+  afterEach(() => {
+    organizationSettings.current = { advertisingEnabled: true, ecommerceEnabled: true }
+  })
+
+  // Google Analytics is grouped with the ad platforms, but an account with only e-commerce still
+  // sees its Google Analytics connection -- and none of the ad platforms'.
+  it("shows an e-commerce-only account its Google Analytics connection but no ad platform", () => {
+    organizationSettings.current = { ecommerceEnabled: true }
+    mockUseConnectionsCenter.mockReturnValue(connectionsCenter([mockRecord, mockAnalyticsRecord]))
+    renderOverview()
+
+    expect(screen.getAllByText("Google Analytics 4").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Google Ads")).toBeNull()
+  })
+
+  it("shows an ads account Google Analytics next to its ad platforms", () => {
+    organizationSettings.current = { advertisingEnabled: true }
+    mockUseConnectionsCenter.mockReturnValue(connectionsCenter([mockRecord, mockAnalyticsRecord]))
+    renderOverview()
+
+    expect(screen.getAllByText("Google Analytics 4").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Google Ads").length).toBeGreaterThan(0)
+  })
+
   it("renders connection cards and supports search/filter interactions", async () => {
     const updateFilters = vi.fn()
     const connect = vi.fn()

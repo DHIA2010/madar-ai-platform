@@ -49,6 +49,7 @@
       "campaigns": "الحملات",
       "linkBuilder": "منشئ الروابط",
       "liveVisitors": "الزوار المباشرون",
+      "websiteAnalytics": "تحليلات الموقع",
       "stores": "المتاجر",
       "products": "المنتجات",
       "suppliers": "الموردون",
@@ -6645,6 +6646,128 @@
           "title": "رُفض طلب تفعيل {application}",
           "description": "تواصل مع الدعم لمعرفة التفاصيل."
         }
+      }
+    }
+  },
+  "websiteAnalytics": {
+    "title": "تحليلات الموقع",
+    "subtitle": "زيارات موقعك وصفحاته ومصادر زواره من Google Analytics",
+    "subtitleProperty": "بيانات Google Analytics للموقع: {property}",
+    "loading": "جارٍ تحميل بيانات الموقع...",
+    "loadError": "تعذّر تحميل بيانات Google Analytics. حاول مرة أخرى بعد قليل.",
+    "empty": "لا توجد بيانات في هذه الفترة",
+    "notSet": "غير محدد",
+    "sourceNote": "الأرقام مأخوذة مباشرة من Google Analytics، وقد تتأخر بيانات اليوم بضع ساعات.",
+    "connect": {
+      "title": "اربط Google Analytics لترى زيارات موقعك",
+      "description": "بعد الربط ستظهر هنا أعداد الزوار ومشاهدات الصفحات ومصادر الزيارات والدول والأجهزة.",
+      "action": "ربط Google Analytics"
+    },
+    "reconnect": {
+      "message": "انتهت صلاحية ربط Google Analytics. أعد الربط لتظهر البيانات.",
+      "action": "فتح صفحة الربط"
+    },
+    "dateRange": {
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "last7Days": "آخر 7 أيام",
+      "last28Days": "آخر 28 يوماً",
+      "last90Days": "آخر 90 يوماً",
+      "thisMonth": "هذا الشهر",
+      "lastMonth": "الشهر الماضي",
+      "last12Months": "آخر 12 شهراً"
+    },
+    "kpis": {
+      "users": "الزوار",
+      "sessions": "الجلسات",
+      "pageViews": "مشاهدات الصفحات",
+      "engagementRate": "معدل التفاعل",
+      "averageSessionDuration": "متوسط مدة الجلسة",
+      "minutes": "دقيقة",
+      "keyEvents": "الأحداث الرئيسية",
+      "changeVsPreviousPeriod": "عن الفترة السابقة",
+      "notEnoughDataToCompare": "لا توجد بيانات سابقة للمقارنة"
+    },
+    "trend": {
+      "title": "الزيارات يوماً بيوم",
+      "subtitle": "تغيّر الأرقام خلال الفترة المختارة",
+      "users": "الزوار",
+      "sessions": "الجلسات",
+      "pageViews": "المشاهدات"
+    },
+    "pages": {
+      "title": "أكثر الصفحات زيارة",
+      "subtitle": "أعلى 10 صفحات حسب المشاهدات",
+      "page": "الصفحة",
+      "views": "المشاهدات",
+      "users": "الزوار"
+    },
+    "sources": {
+      "title": "مصادر الزيارات",
+      "subtitle": "من أين جاء الزوار (المصدر / الوسيط)",
+      "source": "المصدر",
+      "sessions": "الجلسات",
+      "users": "الزوار"
+    },
+    "channels": {
+      "title": "قنوات الزيارات",
+      "subtitle": "الجلسات حسب نوع القناة",
+      "direct": "زيارات مباشرة",
+      "organicSearch": "بحث مجاني",
+      "paidSearch": "بحث مدفوع",
+      "organicSocial": "تواصل اجتماعي مجاني",
+      "paidSocial": "تواصل اجتماعي مدفوع",
+      "organicVideo": "فيديو مجاني",
+      "paidVideo": "فيديو مدفوع",
+      "organicShopping": "تسوّق مجاني",
+      "paidShopping": "تسوّق مدفوع",
+      "paidOther": "إعلانات مدفوعة أخرى",
+      "crossNetwork": "عبر عدة شبكات",
+      "email": "البريد الإلكتروني",
+      "referral": "إحالات من مواقع أخرى",
+      "display": "إعلانات مصوّرة",
+      "affiliates": "التسويق بالعمولة",
+      "sms": "رسائل نصية",
+      "audio": "إعلانات صوتية",
+      "push": "إشعارات الجوال",
+      "unassigned": "غير مصنّف"
+    },
+    "countries": {
+      "title": "الدول",
+      "subtitle": "الزوار حسب الدولة"
+    },
+    "devices": {
+      "title": "الأجهزة",
+      "subtitle": "الزوار حسب نوع الجهاز",
+      "desktop": "كمبيوتر",
+      "mobile": "جوال",
+      "tablet": "جهاز لوحي",
+      "smartTv": "تلفزيون ذكي"
+    },
+    "events": {
+      "title": "أكثر الأحداث",
+      "subtitle": "ما يفعله الزوار في الموقع",
+      "event": "الحدث",
+      "count": "العدد",
+      "names": {
+        "pageView": "مشاهدة صفحة",
+        "sessionStart": "بدء جلسة",
+        "firstVisit": "أول زيارة",
+        "userEngagement": "تفاعل الزائر",
+        "scroll": "تمرير الصفحة",
+        "click": "نقر على رابط خارجي",
+        "formStart": "بدء تعبئة نموذج",
+        "formSubmit": "إرسال نموذج",
+        "fileDownload": "تنزيل ملف",
+        "viewSearchResults": "بحث داخل الموقع",
+        "videoStart": "تشغيل فيديو",
+        "generateLead": "عميل محتمل",
+        "signUp": "تسجيل حساب",
+        "login": "تسجيل دخول",
+        "viewItem": "مشاهدة منتج",
+        "addToCart": "إضافة إلى السلة",
+        "beginCheckout": "بدء الدفع",
+        "purchase": "شراء"
       }
     }
   },

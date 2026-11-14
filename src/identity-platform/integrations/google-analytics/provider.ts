@@ -2,6 +2,10 @@ import type { IncomingMessage } from "node:http"
 
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { GoogleAnalyticsOAuthController } from "../../google-analytics-oauth/controller"
+import {
+  GoogleAnalyticsInsightsService,
+  type GoogleAnalyticsInsightsQuery,
+} from "../../google-analytics-oauth/insights-service"
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import { GoogleAnalyticsOAuthService } from "../../google-analytics-oauth/service"
 import { GoogleAnalyticsSyncRepository } from "../../google-analytics-oauth/sync-repository"
@@ -27,6 +31,7 @@ export class GoogleAnalyticsIntegrationProvider {
   private readonly service?: GoogleAnalyticsOAuthService
   private readonly controller?: GoogleAnalyticsOAuthController
   private readonly syncService?: GoogleAnalyticsSyncService
+  private readonly insightsService?: GoogleAnalyticsInsightsService
 
   constructor(database?: PostgresDatabase) {
     if (database) {
@@ -38,6 +43,7 @@ export class GoogleAnalyticsIntegrationProvider {
         new GoogleAnalyticsSyncRepository(database),
         this.service
       )
+      this.insightsService = new GoogleAnalyticsInsightsService(this.service)
     }
   }
 
@@ -160,6 +166,20 @@ export class GoogleAnalyticsIntegrationProvider {
 
   async listRecords(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery) {
     return this.requireSyncService().listRecords(actor, query)
+  }
+
+  // The Website analytics page: visits, pages, sources... of the connected property.
+  async getInsights(actor: AuthenticatedActor, query: GoogleAnalyticsInsightsQuery) {
+    if (!this.insightsService) {
+      throw new IntegrationProviderError(
+        "Google Analytics insights are unavailable.",
+        "GOOGLE_ANALYTICS_OAUTH_UNAVAILABLE",
+        false,
+        503
+      )
+    }
+
+    return this.insightsService.getInsights(actor, query)
   }
 
   async getSelectedAccount(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
