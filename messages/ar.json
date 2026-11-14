@@ -6529,8 +6529,7 @@
   "shared": {
     "settingsHelpCard": {
       "title": "تحتاج مساعدة؟",
-      "description": "تواصل مع فريق الدعم للمساعدة في الإعدادات.",
-      "contactUs": "تواصل معنا"
+      "contactUs": "تواصل معنا عبر واتساب"
     },
     "globalSearch": {
       "triggerPlaceholder": "ابحث...",

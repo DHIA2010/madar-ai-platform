@@ -6533,8 +6533,7 @@
   "shared": {
     "settingsHelpCard": {
       "title": "Need help?",
-      "description": "Contact the support team for help with settings.",
-      "contactUs": "Contact us"
+      "contactUs": "Chat with us on WhatsApp"
     },
     "globalSearch": {
       "triggerPlaceholder": "Search...",

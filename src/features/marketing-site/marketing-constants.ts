@@ -4,6 +4,8 @@ import { ROUTES } from "@/constants/routes"
 export const MARKETING_SITE_URL = "https://madar.my"
 export const MADAR_APP_URL = "https://app.madar.my"
 export const MADAR_CONTACT_EMAIL = "support@madar.my"
+// Madar's support WhatsApp number, in the form wa.me links take (country code, no + or zeros).
+export const MADAR_SUPPORT_WHATSAPP = "966535033146"
 
 export const MADAR_REGISTER_URL = `${MADAR_APP_URL}${ROUTES.register}`
 export const MADAR_LOGIN_URL = `${MADAR_APP_URL}${ROUTES.login}`
