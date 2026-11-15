@@ -41,6 +41,10 @@ export const ERRORS = {
     }),
   notFound: (entity: string) =>
     new IdentityError("RESOURCE_NOT_FOUND", 404, "business", `${entity} not found.`),
+  payloadTooLarge: () =>
+    new IdentityError("PAYLOAD_TOO_LARGE", 413, "validation", "The request is too large."),
+  invalidJson: () =>
+    new IdentityError("INVALID_JSON", 400, "validation", "The request body is not valid JSON."),
   validation: (details: Record<string, unknown>) =>
     new IdentityError("VALIDATION_ERROR", 400, "validation", "Request validation failed.", details),
   // The request is well-formed but the resource is no longer in a state that allows it (e.g.

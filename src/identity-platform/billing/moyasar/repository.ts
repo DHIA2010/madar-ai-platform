@@ -101,20 +101,24 @@ export class MoyasarBillingRepository {
     return result.rows[0] ? mapPayment(result.rows[0]) : null
   }
 
+  // Claims the payment for whoever resolves it first: null when it was already marked paid. The
+  // browser's confirm call and Moyasar's webhook routinely arrive together, and without the claim
+  // both would go on to apply the purchase (two periods, or the extra branches twice, for one
+  // payment).
   async markResolved(input: {
     id: string
     moyasarPaymentId: string
     status: "paid" | "failed"
     rawPayload: unknown
-  }): Promise<MoyasarPaymentRecord> {
+  }): Promise<MoyasarPaymentRecord | null> {
     const result = await this.db.query(
       `UPDATE billing_moyasar_payments
        SET moyasar_payment_id = $2, status = $3, raw_payload = $4, updated_at = now()
-       WHERE id = $1
+       WHERE id = $1 AND status <> 'paid'
        RETURNING *`,
       [input.id, input.moyasarPaymentId, input.status, JSON.stringify(input.rawPayload)]
     )
-    return mapPayment(result.rows[0])
+    return result.rows[0] ? mapPayment(result.rows[0]) : null
   }
 
   // Read-then-write top-level merge -- the SQL equivalent of OrganizationEntity.update's

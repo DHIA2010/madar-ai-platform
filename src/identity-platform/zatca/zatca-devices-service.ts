@@ -536,6 +536,13 @@ export class ZatcaDevicesService {
       }) => string
     }
   ): Promise<ZatcaSignedInvoicePackage> {
+    // Every document a device signs takes the next counter (ICV) and the previous document's
+    // hash, so two being signed at once -- a sale and a return, or two branches sharing a device
+    // -- must not both read the same "last" values: that forks the chain ZATCA validates. The row
+    // lock makes the second wait for the first's transaction to commit its new counter and hash.
+    if (input.advanceChain) {
+      await this.database.query("SELECT id FROM zatca_devices WHERE id = $1 FOR UPDATE", [deviceId])
+    }
     const row = await this.getRow(organizationId, deviceId)
     const key = this.encryptionKey()
     const privateKeyPem = decryptZatcaSecret(row.private_key_encrypted, key)

@@ -132,6 +132,8 @@ export interface IdentityCommandHandlerDependencies {
   objectStorage?: ObjectStorageGateway
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export class IdentityCommandHandlers {
   constructor(private readonly deps: IdentityCommandHandlerDependencies) {}
 
@@ -3357,7 +3359,17 @@ export class IdentityCommandHandlers {
     return { success: true, activeWorkspaceId: command.workspaceId }
   }
 
-  async resolveActorFromAccessToken(accessToken: string): Promise<AuthenticatedActor> {
+  // `requestedWorkspaceId` is the workspace the caller says it is working in (the app sends it on
+  // every request as x-workspace-id). The account also remembers one "active" workspace, but that
+  // is a single value shared by every tab and device the person has open: following it alone let
+  // a tab that had sat open drift from it (another tab or device switched), so its requests named
+  // one workspace while being answered for another organization -- "Workspace not found" until a
+  // refresh. So the request's own workspace wins whenever the person really is a member of it;
+  // anything else falls back to the remembered one.
+  async resolveActorFromAccessToken(
+    accessToken: string,
+    requestedWorkspaceId?: string | null
+  ): Promise<AuthenticatedActor> {
     const payload = this.deps.tokenService.verifyAccessToken(accessToken)
     if (!payload || payload.typ !== "access") {
       throw ERRORS.tokenInvalid()
@@ -3379,7 +3391,27 @@ export class IdentityCommandHandlers {
     let organizationId = session.organizationId
     let workspaceId = session.workspaceId
 
-    if (userState.activeWorkspaceId) {
+    const requestedMembership =
+      requestedWorkspaceId && UUID_PATTERN.test(requestedWorkspaceId)
+        ? await this.deps.repositories.memberships.findByUserAndWorkspace(
+            payload.sub,
+            requestedWorkspaceId
+          )
+        : null
+    // Followed only when the person is an active member of that workspace's organization too --
+    // otherwise a stale workspace remembered by the browser (a company they have since been
+    // removed from) would fail the membership check below on every request and lock them out.
+    const requestedOrganizationMembership =
+      requestedMembership?.status === "active"
+        ? await this.deps.repositories.memberships.findByUserAndOrganization(
+            payload.sub,
+            requestedMembership.organizationId
+          )
+        : null
+    if (requestedMembership && requestedOrganizationMembership?.status === "active") {
+      organizationId = requestedMembership.organizationId
+      workspaceId = requestedWorkspaceId as string
+    } else if (userState.activeWorkspaceId) {
       const activeMembership = await this.deps.repositories.memberships.findByUserAndWorkspace(
         payload.sub,
         userState.activeWorkspaceId

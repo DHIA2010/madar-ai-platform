@@ -149,4 +149,45 @@ describe("workspace platform", () => {
     )
     expect(switched.activeWorkspaceId).toBe(workspace.id)
   })
+
+  it("answers each request for the workspace it names, not only the one remembered on the account", async () => {
+    const container = createContainer()
+    const owner = await registerAndLogin(container, "owner-per-request-workspace@madar.test")
+    const token = owner.login.session.accessToken
+    const first = {
+      organizationId: owner.actor.organizationId,
+      workspaceId: owner.actor.workspaceId,
+    }
+
+    const otherOrganization = await container.commands.createOrganization(
+      owner.actor,
+      { name: "Second Company" },
+      context
+    )
+    const other = await container.commands.createWorkspace(
+      owner.actor,
+      { organizationId: otherOrganization.id, name: "Second Company Branch" },
+      context
+    )
+
+    // Another tab (or device) switches the account to the second company...
+    await container.commands.switchWorkspace(owner.actor, { workspaceId: other.id }, context)
+    const followsAccount = await container.commands.resolveActorFromAccessToken(token)
+    expect(followsAccount).toMatchObject({
+      organizationId: otherOrganization.id,
+      workspaceId: other.id,
+    })
+
+    // ...while a tab still open on the first one keeps being answered for the first one, instead
+    // of having its workspace checked against the other company ("Workspace not found").
+    const staleTab = await container.commands.resolveActorFromAccessToken(token, first.workspaceId)
+    expect(staleTab).toMatchObject(first)
+
+    // A workspace the person isn't a member of, or a malformed id, changes nothing.
+    const stranger = await registerAndLogin(container, "stranger-workspace@madar.test")
+    for (const requested of [stranger.actor.workspaceId, "not-a-workspace-id", null]) {
+      const actor = await container.commands.resolveActorFromAccessToken(token, requested)
+      expect(actor).toMatchObject({ organizationId: otherOrganization.id, workspaceId: other.id })
+    }
+  })
 })

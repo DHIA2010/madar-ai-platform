@@ -383,29 +383,46 @@ function parseChannelsQuery(url: URL): { startDate?: string; endDate?: string } 
   }
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-  if (chunks.length === 0) {
-    return {}
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"))
-}
+// A ceiling on what one request may send, so a few oversized requests can't exhaust the task's
+// memory. Set well above the largest legitimate body: a voucher with five 5MB attachments is about
+// 34MB once base64-encoded (createBalanceVoucherSchema), a scanned supplier invoice about 11MB.
+const MAX_BODY_BYTES = 64 * 1024 * 1024
 
-// Same buffering loop as readJsonBody, minus the JSON.parse -- an HMAC-signature-verified webhook
-// (Salla's) needs the exact raw bytes the sender signed, not a round-tripped re-serialization of
-// the parsed object, which can differ in key order/whitespace and would make a correct signature
-// fail to verify. Only used by the Salla webhook route; readJsonBody is untouched for every other
-// caller (including Moyasar's webhook, whose secret is a plain field inside the JSON body, not a
-// signature over the raw bytes).
-async function readRawBody(request: IncomingMessage): Promise<Buffer> {
+async function readBody(request: IncomingMessage): Promise<Buffer> {
+  const declared = Number(request.headers["content-length"] ?? 0)
+  if (declared > MAX_BODY_BYTES) throw ERRORS.payloadTooLarge()
   const chunks: Buffer[] = []
+  let size = 0
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    size += buffer.length
+    if (size > MAX_BODY_BYTES) throw ERRORS.payloadTooLarge()
+    chunks.push(buffer)
   }
   return Buffer.concat(chunks)
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const body = await readBody(request)
+  if (body.length === 0) {
+    return {}
+  }
+  try {
+    return JSON.parse(body.toString("utf8"))
+  } catch {
+    // The caller's mistake, not a server fault.
+    throw ERRORS.invalidJson()
+  }
+}
+
+// The exact raw bytes, with no JSON.parse -- an HMAC-signature-verified webhook (Salla's) needs
+// what the sender signed, not a round-tripped re-serialization of the parsed object, which can
+// differ in key order/whitespace and would make a correct signature fail to verify. Only used by
+// the Salla webhook route; readJsonBody is used for every other caller (including Moyasar's
+// webhook, whose secret is a plain field inside the JSON body, not a signature over the raw
+// bytes).
+function readRawBody(request: IncomingMessage): Promise<Buffer> {
+  return readBody(request)
 }
 
 function mapZodError(error: z.ZodError) {
@@ -2721,7 +2738,12 @@ export function createIdentityApiServer(
         return send(401, { code: "AUTH_TOKEN_MISSING", message: "Authentication required." })
       }
 
-      const actor = await container.commands.resolveActorFromAccessToken(token)
+      // The workspace this tab/device is working in, when it says so (see resolveActor...).
+      const requestedWorkspace = request.headers["x-workspace-id"]
+      const actor = await container.commands.resolveActorFromAccessToken(
+        token,
+        typeof requestedWorkspace === "string" ? requestedWorkspace : null
+      )
 
       const handledByPlatformAdmin = await handlePlatformAdminRoute({
         method,

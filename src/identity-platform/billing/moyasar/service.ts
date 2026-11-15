@@ -232,12 +232,16 @@ export class MoyasarBillingService {
       moyasarPayment.currency === payment.currency
 
     return this.db.withTransaction(async () => {
-      const resolved = await this.repository.markResolved({
+      const claimed = await this.repository.markResolved({
         id: payment.id,
         moyasarPaymentId: moyasarPayment.id,
         status: isGenuinelyPaid ? "paid" : "failed",
         rawPayload: moyasarPayment,
       })
+      // Already applied by the other caller (the webhook and the browser's confirm racing): what
+      // was bought is on the account once, and is not applied again.
+      if (!claimed) return (await this.repository.findById(payment.id)) ?? payment
+      const resolved = claimed
 
       if (isGenuinelyPaid && payment.purpose === "addon" && payment.addonCode) {
         const addon = await new AddonsService(this.db).extend(

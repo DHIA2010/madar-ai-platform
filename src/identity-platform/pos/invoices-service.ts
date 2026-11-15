@@ -1903,11 +1903,16 @@ export class PosInvoicesService {
             line.taxAmount,
           ]
         )
-        await this.database.query(
+        // Guarded: the quantity left was checked above, before this transaction, so a second
+        // copy of the same return (a double tap, a retried request) passed that check too. Only
+        // one of them can still fit here; the other is refused and its whole return rolls back,
+        // instead of refunding and restocking the same items twice.
+        const marked = await this.database.query(
           `UPDATE pos_invoice_items SET returned_quantity = returned_quantity + $2
-            WHERE id = $1`,
+            WHERE id = $1 AND returned_quantity + $2 <= quantity + 0.000001`,
           [line.invoiceItemId, line.quantity]
         )
+        if ((marked.rowCount ?? 0) === 0) throw INVOICE_ERRORS.returnQuantityExceedsRemaining()
       }
 
       // A returned unit goes back on the shelf -- directly for a real, still-tracked native

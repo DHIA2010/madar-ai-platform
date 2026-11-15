@@ -578,32 +578,36 @@ export class NativeCustomersService {
     }
 
     const balanceDelta = type === "receipt" ? amount : -amount
-    await this.database.query(
-      `UPDATE customers SET account_balance = account_balance + $2, updated_at = now() WHERE id = $1`,
-      [customerId, balanceDelta]
-    )
-    await this.database.query(
-      `INSERT INTO customer_account_transactions
+    // The balance and its ledger entry change together or not at all: a balance that moved with
+    // no entry to explain it can't be reconciled afterwards.
+    await this.database.withTransaction(async () => {
+      await this.database.query(
+        `UPDATE customers SET account_balance = account_balance + $2, updated_at = now() WHERE id = $1`,
+        [customerId, balanceDelta]
+      )
+      await this.database.query(
+        `INSERT INTO customer_account_transactions
          (id, organization_id, workspace_id, customer_id, type, reference, amount, tax_inclusive,
           tax_amount, payment_method_code, notes, attachment_urls, created_by, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [
-        randomUUID(),
-        organizationId,
-        workspaceId,
-        customerId,
-        type,
-        reference,
-        amount,
-        taxInclusive,
-        taxAmount,
-        paymentMethodCode,
-        notes,
-        attachmentUrls,
-        createdBy,
-        recordedAt,
-      ]
-    )
+        [
+          randomUUID(),
+          organizationId,
+          workspaceId,
+          customerId,
+          type,
+          reference,
+          amount,
+          taxInclusive,
+          taxAmount,
+          paymentMethodCode,
+          notes,
+          attachmentUrls,
+          createdBy,
+          recordedAt,
+        ]
+      )
+    })
 
     const updated = await this.getById(organizationId, customerId)
     if (!updated) throw CUSTOMER_ERRORS.notFound()

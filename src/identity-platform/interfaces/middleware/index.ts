@@ -7,15 +7,15 @@ import { mapProviderStatusToErrorCategory } from "../../integrations/provider-ma
 import { IntegrationProviderError } from "../../integrations/provider-error"
 
 // Behind the ALB, request.socket.remoteAddress is the load balancer's own address, not the
-// visitor's -- the ALB appends the real client IP as the first hop of X-Forwarded-For. Trusting
-// that header is safe here specifically because the ALB is the sole entry point in front of this
-// service (confirmed in terraform/modules/alb), so the first hop is always ALB-supplied, never
-// forgeable by the client directly.
+// visitor's. The ALB APPENDS the address it saw to X-Forwarded-For, so the real client is the LAST
+// entry; anything before it is whatever the client chose to send. Reading the first entry let a
+// caller pick its own "address" and so slip past every per-address rate limit (login, register,
+// password reset, the public forms) by changing the header on each request.
 function getClientIp(request: IncomingMessage): string {
   const forwardedFor = request.headers["x-forwarded-for"]
-  const raw = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor
-  const firstHop = raw?.split(",")[0]?.trim()
-  return firstHop || request.socket.remoteAddress || "unknown"
+  const raw = Array.isArray(forwardedFor) ? forwardedFor.join(",") : forwardedFor
+  const lastHop = raw?.split(",").at(-1)?.trim()
+  return lastHop || request.socket.remoteAddress || "unknown"
 }
 
 export function createRequestContext(request: IncomingMessage): RequestContext {

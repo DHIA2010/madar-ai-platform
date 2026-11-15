@@ -36,6 +36,28 @@ const server = createIdentityApiServer(platform)
 
 server.listen(platform.config.port, () => {})
 
+// A promise nobody awaited that then fails must not take the service down for every customer:
+// record it and carry on. (Node's default is to exit.)
+process.on("unhandledRejection", (reason) => {
+  console.error("process.unhandled_rejection", reason)
+})
+
+// A deploy (or a scale-in) stops the task with SIGTERM. Stop taking new requests and let the ones
+// in flight -- a checkout, a payment confirmation -- finish, instead of cutting them off; ECS
+// force-stops the task after its own grace period if this never completes.
+let shuttingDown = false
+function shutDown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log("process.shutting_down", { signal })
+  server.close(() => process.exit(0))
+  // Idle keep-alive connections would otherwise hold the server open.
+  server.closeIdleConnections()
+  setTimeout(() => process.exit(0), 25_000).unref()
+}
+process.on("SIGTERM", () => shutDown("SIGTERM"))
+process.on("SIGINT", () => shutDown("SIGINT"))
+
 // Billing maintenance (renewal reminders, lapsing unpaid subscriptions) runs in-process on a
 // timer -- every pass is safe to run from several tasks at once (see subscriptions/maintenance.ts).
 // BILLING_MAINTENANCE_INTERVAL_MINUTES=0 turns it off.

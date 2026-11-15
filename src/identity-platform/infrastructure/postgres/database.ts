@@ -41,12 +41,20 @@ export class PostgresDatabase {
   constructor(private readonly pool: PgPoolLike) {}
 
   static fromConfig(config: IdentityPlatformConfig) {
-    return new PostgresDatabase(
-      new Pool({
-        connectionString: config.postgresUrl,
-        max: config.postgresMaxConnections,
-      })
-    )
+    const pool = new Pool({
+      connectionString: config.postgresUrl,
+      max: config.postgresMaxConnections,
+      // A request waits this long for a free connection, then fails -- instead of hanging forever
+      // when the pool is exhausted.
+      connectionTimeoutMillis: 30_000,
+    })
+    // An idle connection the database closed (a restart, a failover) is reported here; with no
+    // listener it would be an unhandled "error" event and take the whole process down. The pool
+    // drops that connection and opens a new one on the next query.
+    pool.on("error", (error) => {
+      console.error("postgres.idle_connection_error", { message: error.message })
+    })
+    return new PostgresDatabase(pool)
   }
 
   private getExecutor() {

@@ -14,6 +14,13 @@ export class NodeRedisClient implements RedisLikeClient {
         reconnectStrategy: (retries) => Math.min(retries * 100, 3_000),
       },
     })
+    // Without a listener, node-redis's "error" event (a dropped connection, a maintenance blip)
+    // is an unhandled event and takes the whole process down. The client reconnects by itself.
+    this.client.on("error", (error: unknown) => {
+      console.error("redis.connection_error", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
   }
 
   private async ensureConnected() {

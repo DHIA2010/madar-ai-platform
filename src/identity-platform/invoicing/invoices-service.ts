@@ -1421,39 +1421,48 @@ export class SalesInvoicesService {
     invoiceId: string,
     input: PaymentInput
   ): Promise<InvoiceDetailView> {
-    const invoice = await this.get(organizationId, invoiceId)
-    if (invoice.status !== "issued" || invoice.documentType === "credit_note") {
-      throw INVOICING_ERRORS.conflict(
-        "SALES_INVOICE_NOT_PAYABLE",
-        "Payments are recorded on issued invoices."
+    // One payment at a time per invoice: the balance check below and the insert after it would
+    // otherwise both pass for two copies of the same submission, recording it twice and
+    // overpaying the invoice.
+    return this.database.withTransaction(async () => {
+      await this.database.query(
+        "SELECT id FROM sales_invoices WHERE id = $1 AND organization_id = $2 FOR UPDATE",
+        [invoiceId, organizationId]
       )
-    }
-    if (input.amount > invoice.balance + 0.004) {
-      throw INVOICING_ERRORS.invalid(
-        "SALES_PAYMENT_EXCEEDS_BALANCE",
-        "That's more than the balance.",
-        {
-          balance: invoice.balance,
-        }
-      )
-    }
-    await this.database.query(
-      `INSERT INTO sales_invoice_payments
+      const invoice = await this.get(organizationId, invoiceId)
+      if (invoice.status !== "issued" || invoice.documentType === "credit_note") {
+        throw INVOICING_ERRORS.conflict(
+          "SALES_INVOICE_NOT_PAYABLE",
+          "Payments are recorded on issued invoices."
+        )
+      }
+      if (input.amount > invoice.balance + 0.004) {
+        throw INVOICING_ERRORS.invalid(
+          "SALES_PAYMENT_EXCEEDS_BALANCE",
+          "That's more than the balance.",
+          {
+            balance: invoice.balance,
+          }
+        )
+      }
+      await this.database.query(
+        `INSERT INTO sales_invoice_payments
          (id, organization_id, invoice_id, amount, paid_on, method, reference, notes, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        randomUUID(),
-        organizationId,
-        invoiceId,
-        round2(input.amount),
-        input.paidOn,
-        input.method,
-        input.reference,
-        input.notes,
-        userId,
-      ]
-    )
-    return this.get(organizationId, invoiceId)
+        [
+          randomUUID(),
+          organizationId,
+          invoiceId,
+          round2(input.amount),
+          input.paidOn,
+          input.method,
+          input.reference,
+          input.notes,
+          userId,
+        ]
+      )
+      return this.get(organizationId, invoiceId)
+    })
   }
 
   async removePayment(
