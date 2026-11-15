@@ -254,7 +254,7 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
             ادفع على قد احتياجك
           </h2>
           <p className="mt-5 text-lg leading-8 text-slate-600">
-            كل تطبيق باشتراكه، شهري أو سنوي، مع تجربة مجانية ١٤ يوماً للتطبيقات المدفوعة. الأسعار
+            كل تطبيق باشتراكه، شهري أو سنوي، مع تجربة مجانية ٧ أيام للتطبيقات المدفوعة. الأسعار
             بالريال السعودي.
           </p>
         </div>
@@ -451,7 +451,7 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
                   <ArrowLeft className="size-4" />
                 </a>
                 <p className="mt-3 text-[13px] font-semibold text-slate-200">
-                  جرّب كل التطبيقات مجاناً ١٤ يوماً
+                  جرّب كل التطبيقات مجاناً ٧ أيام
                 </p>
               </div>
             </div>

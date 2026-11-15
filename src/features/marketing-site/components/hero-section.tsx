@@ -7,7 +7,7 @@ import { MADAR_REGISTER_URL, MARKETING_INTEGRATIONS } from "../marketing-constan
 import { DashboardMockup, ReceiptCard } from "./mockups"
 
 const HIGHLIGHTS = [
-  "تجربة مجانية ١٤ يوماً",
+  "تجربة مجانية ٧ أيام",
   "متوافق مع الفوترة الإلكترونية",
   "يدعم العربية والإنجليزية",
 ]
