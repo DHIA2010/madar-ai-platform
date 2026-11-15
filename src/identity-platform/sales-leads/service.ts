@@ -127,6 +127,41 @@ export class SalesLeadService {
     // Only the first booking counts (see above) -- don't log it on the CRM lead twice.
     if (updated.rowCount) {
       await crmMeetingBooked(this.db, { salesLeadId: leadId, startTime: meeting.startTime })
+      void this.alertAppointment(leadId, { type: "meeting", at: meeting.startTime })
+    }
+  }
+
+  // The team is told the time on WhatsApp too, so nobody has to open Madar Admin to find it.
+  // Never throws, and isn't waited for.
+  private async alertAppointment(
+    leadId: string,
+    appointment: { type: "call" | "meeting"; at: string }
+  ): Promise<void> {
+    try {
+      const found = await this.db.query<{
+        company_name: string
+        phone: string | null
+        email: string | null
+        attribution: LeadAttribution | string | null
+      }>("SELECT company_name, phone, email, attribution FROM sales_leads WHERE id = $1", [leadId])
+      const lead = found.rows[0]
+      if (!lead) return
+      const attribution =
+        typeof lead.attribution === "string"
+          ? (JSON.parse(lead.attribution) as LeadAttribution)
+          : lead.attribution
+      await this.leadAlerts?.notify({
+        kind: "website",
+        name: lead.company_name,
+        phone: lead.phone,
+        email: lead.email,
+        attribution,
+        appointment,
+      })
+    } catch (error) {
+      console.error("sales_leads.appointment_alert_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -142,6 +177,9 @@ export class SalesLeadService {
         WHERE id = $1 AND call_at IS NULL`,
       [leadId, callAt]
     )
-    if (updated.rowCount) await crmCallRequested(this.db, { salesLeadId: leadId, callAt })
+    if (updated.rowCount) {
+      await crmCallRequested(this.db, { salesLeadId: leadId, callAt })
+      void this.alertAppointment(leadId, { type: "call", at: callAt })
+    }
   }
 }

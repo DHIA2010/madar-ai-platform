@@ -197,6 +197,30 @@ describe("leadAlertParameters", () => {
   })
 })
 
+describe("an alert about the time a lead picked", () => {
+  it("puts the call or meeting time, in Riyadh's clock, where the type goes", () => {
+    const call = leadAlertParameters({
+      kind: "website",
+      name: "مؤسسة الريم",
+      phone: "0551234567",
+      appointment: { type: "call", at: "2026-11-16T09:00:00.000Z" },
+    })
+    expect(call[0]).toContain("موعد مكالمة")
+    expect(call[0]).toContain("16 نوفمبر")
+    expect(call[0]).toContain("12:00")
+    expect(call[0].length).toBeLessThanOrEqual(60)
+    expect(call[1]).toBe("مؤسسة الريم")
+
+    const meeting = leadAlertParameters({
+      kind: "website",
+      name: "مؤسسة الريم",
+      appointment: { type: "meeting", at: "2026-12-01T20:30:00.000Z" },
+    })
+    expect(meeting[0]).toContain("موعد اجتماع")
+    expect(meeting[0]).toContain("11:30")
+  })
+})
+
 describe("WhatsAppLeadAlertsService", () => {
   it("sends the alert to every saved number and keeps a record of each", async () => {
     const sent = stubMeta()
