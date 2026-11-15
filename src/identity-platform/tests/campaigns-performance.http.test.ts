@@ -171,11 +171,13 @@ async function insertGoogleCampaign(input: {
   name: string
   status: string
   channelType: string
+  // What the sync stores next to the on/off status (see google-ads/services.ts).
+  servingStatus?: string
 }) {
   await database.query(
     `insert into google_ads_campaigns (
        id, connection_id, customer_id, campaign_id, name, status, channel_type, payload, created_at, updated_at
-     ) values ($1,$2,$3,$4,$5,$6,$7,'{}'::jsonb,now(),now())`,
+     ) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,now(),now())`,
     [
       randomUUID(),
       input.connectionId,
@@ -184,6 +186,7 @@ async function insertGoogleCampaign(input: {
       input.name,
       input.status,
       input.channelType,
+      JSON.stringify(input.servingStatus ? { servingStatus: input.servingStatus } : {}),
     ]
   )
 }
@@ -1120,6 +1123,59 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
     // campaign, it doesn't backdate its numbers.
     expect(pausedRow?.spend).toBe(0)
     expect(pausedRow?.impressions).toBe(0)
+  })
+
+  it("shows Google's serving status for a campaign that is switched on but not running yet", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "campaigns-perf-serving-status@madar.test",
+      "Campaigns Perf Serving Status Org"
+    )
+    const { connectionId } = await insertConnectedGoogleAdsConnection({
+      organizationId: actor.organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      customerId: "serving-customer",
+    })
+    const campaign = (campaignId: string, status: string, servingStatus?: string) =>
+      insertGoogleCampaign({
+        connectionId,
+        customerId: "serving-customer",
+        campaignId,
+        name: campaignId,
+        status,
+        channelType: "SEARCH",
+        servingStatus,
+      })
+    await campaign("in-review", "ENABLED", "UNDER_REVIEW")
+    await campaign("running", "ENABLED", "ELIGIBLE")
+    await campaign("limited", "ENABLED", "LIMITED")
+    await campaign("switched-off", "PAUSED", "PAUSED")
+    // Synced before the serving status was stored: stays as it was.
+    await campaign("older-sync", "ENABLED")
+
+    const response = await fetch(`${baseUrl}/v1/campaigns/performance/campaigns`, {
+      headers: authHeaders(login),
+    })
+    const body = (await response.json()) as { items: Array<{ name: string; status: string }> }
+    const statusOf = Object.fromEntries(body.items.map((row) => [row.name, row.status]))
+    expect(statusOf).toMatchObject({
+      "in-review": "under_review",
+      running: "ENABLED",
+      limited: "limited",
+      "switched-off": "PAUSED",
+      "older-sync": "ENABLED",
+    })
+
+    // A campaign still in review doesn't count as active; a limited one is running, so it does.
+    const active = await fetch(`${baseUrl}/v1/campaigns/performance/campaigns?status=Active`, {
+      headers: authHeaders(login),
+    })
+    const activeBody = (await active.json()) as { items: Array<{ name: string }> }
+    expect(activeBody.items.map((row) => row.name).sort()).toEqual([
+      "limited",
+      "older-sync",
+      "running",
+    ])
   })
 
   it("rejects unauthenticated requests", async () => {

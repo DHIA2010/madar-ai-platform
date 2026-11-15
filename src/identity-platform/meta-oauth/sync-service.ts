@@ -220,14 +220,15 @@ export class MetaSyncService {
         adInsightsResult,
       ] = await Promise.all([
         client.getAllPages<MetaCampaignApiRow>(`/${accountId}/campaigns`, {
-          fields: "id,name,status,objective,daily_budget,lifetime_budget,created_time,updated_time",
+          fields:
+            "id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,updated_time",
         }),
         client.getAllPages<MetaAdsetApiRow>(`/${accountId}/adsets`, {
           fields:
-            "id,name,status,campaign_id,daily_budget,lifetime_budget,created_time,updated_time",
+            "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,created_time,updated_time",
         }),
         client.getAllPages<MetaAdApiRow>(`/${accountId}/ads`, {
-          fields: "id,name,status,campaign_id,adset_id,created_time,updated_time",
+          fields: "id,name,status,effective_status,campaign_id,adset_id,created_time,updated_time",
         }),
         client.getAllPages<MetaInsightsApiRow>(`/${accountId}/insights`, {
           level: "campaign",

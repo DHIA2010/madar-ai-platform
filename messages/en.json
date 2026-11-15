@@ -8101,7 +8101,15 @@
         "active": "Active",
         "paused": "Paused",
         "removed": "Removed",
-        "ended": "Ended"
+        "ended": "Ended",
+        "underReview": "Under review",
+        "learning": "Learning",
+        "limited": "Limited",
+        "pending": "Pending start",
+        "notEligible": "Not eligible",
+        "misconfigured": "Misconfigured",
+        "rejected": "Rejected",
+        "notDelivering": "Not delivering"
       },
       "entityDescription": {
         "withActivity": "{status} · Last activity {date}",

@@ -1,3 +1,9 @@
+import {
+  googleDisplayStatus,
+  metaDisplayStatus,
+  snapchatDisplayStatus,
+  tiktokDisplayStatus,
+} from "./delivery-status"
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { convertToOrgCurrency, type SupportedOrgCurrency } from "../shared/currency"
@@ -196,7 +202,13 @@ function finalizeRow(row: CampaignPerformanceRow): CampaignPerformanceRow {
 // shared "Active"/"Paused"/"Other" filter work across all three without guessing exact enums.
 function bucketCampaignStatus(rawStatus: string): "Active" | "Paused" | "Other" {
   const text = rawStatus.toLowerCase()
-  if (text.includes("enable") || text.includes("active")) {
+  // "limited" and "learning" are Google campaigns that are running, just not at full strength.
+  if (
+    text.includes("enable") ||
+    text.includes("active") ||
+    text === "limited" ||
+    text === "learning"
+  ) {
     return "Active"
   }
   if (text.includes("pause") || text.includes("disable")) {
@@ -294,6 +306,7 @@ interface GoogleMetricRow {
   customer_id: string
   name: string
   status: string
+  serving_status?: string | null
   channel_type: string | null
   campaign_id: string | null
   ad_group_id: string | null
@@ -338,7 +351,7 @@ function mapGoogleRow(
     platform,
     level,
     name: row.name,
-    status: row.status,
+    status: googleDisplayStatus(row.status, row.serving_status),
     objective: row.objective,
     activityDate: toActivityDateString(row.activity_date),
     currency: row.currency_code ?? null,
@@ -386,7 +399,8 @@ async function fetchGoogleCampaignRows(
     `
     SELECT
       c.campaign_id as entity_id, c.connection_id, c.customer_id,
-      c.name, c.status, c.channel_type, null as campaign_id, null as ad_group_id,
+      c.name, c.status, c.payload->>'servingStatus' as serving_status, c.channel_type,
+      null as campaign_id, null as ad_group_id,
       null as objective, null as quality_score,
       COALESCE(SUM(m.impressions), 0) as impressions, COALESCE(SUM(m.clicks), 0) as clicks,
       COALESCE(SUM(m.cost_micros), 0) as cost_micros,
@@ -419,7 +433,8 @@ async function fetchGoogleCampaignRows(
       ON gaca.connection_id = c.connection_id AND gaca.customer_id = c.customer_id
     WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
-    GROUP BY c.campaign_id, c.connection_id, c.customer_id, c.name, c.status, c.channel_type, gaca.currency_code
+    GROUP BY c.campaign_id, c.connection_id, c.customer_id, c.name, c.status,
+             c.payload->>'servingStatus', c.channel_type, gaca.currency_code
     LIMIT $5
     `,
     [
@@ -545,7 +560,8 @@ async function fetchGoogleLeafRows(
     `
     SELECT
       a.ad_id as entity_id, a.connection_id, a.customer_id,
-      coalesce(a.headline, a.ad_id) as name, a.status, c.channel_type, a.campaign_id, a.ad_group_id,
+      coalesce(a.headline, a.ad_id) as name, a.status,
+      a.payload->>'servingStatus' as serving_status, c.channel_type, a.campaign_id, a.ad_group_id,
       null as objective, null as quality_score,
       COALESCE(SUM(m.impressions), 0) as impressions, COALESCE(SUM(m.clicks), 0) as clicks,
       COALESCE(SUM(m.cost_micros), 0) as cost_micros,
@@ -571,7 +587,8 @@ async function fetchGoogleLeafRows(
     WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
       AND a.connection_id = $3 AND a.customer_id = $4 AND a.ad_group_id = $5
-    GROUP BY a.ad_id, a.connection_id, a.customer_id, a.headline, a.status, c.channel_type,
+    GROUP BY a.ad_id, a.connection_id, a.customer_id, a.headline, a.status,
+             a.payload->>'servingStatus', c.channel_type,
              a.campaign_id, a.ad_group_id
     LIMIT $8
     `,
@@ -759,7 +776,7 @@ async function fetchMetaCampaignRows(
   return campaignRows.map((meta) => {
     const key = `${meta.connection_id}:${meta.entity_id}`
     const name = String(meta.payload.name ?? meta.entity_id)
-    const status = String(meta.payload.status ?? "UNKNOWN")
+    const status = metaDisplayStatus(meta.payload)
     const objective = (meta.payload.objective as string | undefined) ?? null
     const reduced = reduceMetaInsights(insightsByKey.get(key) ?? [])
 
@@ -827,7 +844,7 @@ async function fetchMetaAdGroupRows(
     .map((meta) => {
       const adsetId = meta.entity_id
       const name = String(meta.payload.name ?? adsetId)
-      const status = String(meta.payload.status ?? "UNKNOWN")
+      const status = metaDisplayStatus(meta.payload)
       const reduced = reduceMetaInsights(insightsByAdsetId.get(adsetId) ?? [])
 
       return finalizeRow({
@@ -889,7 +906,7 @@ async function fetchMetaAdRows(
     .map((meta) => {
       const adId = meta.entity_id
       const name = String(meta.payload.name ?? adId)
-      const status = String(meta.payload.status ?? "UNKNOWN")
+      const status = metaDisplayStatus(meta.payload)
       const reduced = reduceMetaInsights(insightsByAdId.get(adId) ?? [])
 
       return finalizeRow({
@@ -1035,7 +1052,7 @@ async function fetchTikTokCampaignRows(
     const campaignId = meta.entity_id
     const key = `${connectionId}:${campaignId}`
     const name = String(meta.payload.campaign_name ?? campaignId)
-    const status = String(meta.payload.operation_status ?? "UNKNOWN")
+    const status = tiktokDisplayStatus(meta.payload)
     const objective = (meta.payload.objective_type as string | undefined) ?? null
     const reduced = reduceTikTokInsights(insightsByKey.get(key) ?? [])
     const customerId = meta.customer_id
@@ -1095,7 +1112,7 @@ async function fetchTikTokAdGroupRows(
     .map((meta) => {
       const adgroupId = meta.entity_id
       const name = String(meta.payload.adgroup_name ?? adgroupId)
-      const status = String(meta.payload.operation_status ?? "UNKNOWN")
+      const status = tiktokDisplayStatus(meta.payload)
       const reduced = reduceTikTokInsights(insightsByAdgroupId.get(adgroupId) ?? [])
 
       return finalizeRow({
@@ -1148,7 +1165,7 @@ async function fetchTikTokAdRows(
     .map((meta) => {
       const adId = meta.entity_id
       const name = String(meta.payload.ad_name ?? adId)
-      const status = String(meta.payload.operation_status ?? "UNKNOWN")
+      const status = tiktokDisplayStatus(meta.payload)
       const reduced = reduceTikTokInsights(insightsByAdId.get(adId) ?? [])
 
       return finalizeRow({
@@ -1296,7 +1313,7 @@ async function fetchSnapchatCampaignRows(
     const campaignId = meta.entity_id
     const key = `${connectionId}:${campaignId}`
     const name = String(meta.payload.name ?? campaignId)
-    const status = String(meta.payload.status ?? "UNKNOWN")
+    const status = snapchatDisplayStatus(meta.payload)
     const objective = (meta.payload.objective as string | undefined) ?? null
     const reduced = reduceSnapchatStats(statsByKey.get(key) ?? [])
     const customerId = meta.customer_id
@@ -1355,7 +1372,7 @@ async function fetchSnapchatAdGroupRows(
     .map((meta) => {
       const adSquadId = meta.entity_id
       const name = String(meta.payload.name ?? adSquadId)
-      const status = String(meta.payload.status ?? "UNKNOWN")
+      const status = snapchatDisplayStatus(meta.payload)
       const reduced = reduceSnapchatStats(statsByAdSquadId.get(adSquadId) ?? [])
 
       return finalizeRow({
@@ -1407,7 +1424,7 @@ async function fetchSnapchatAdRows(
     .map((meta) => {
       const adId = meta.entity_id
       const name = String(meta.payload.name ?? adId)
-      const status = String(meta.payload.status ?? "UNKNOWN")
+      const status = snapchatDisplayStatus(meta.payload)
       const reduced = reduceSnapchatStats(statsByAdId.get(adId) ?? [])
 
       return finalizeRow({

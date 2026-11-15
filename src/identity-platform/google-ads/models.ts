@@ -28,6 +28,9 @@ export interface Campaign {
   customerId: string
   name: string
   status: string
+  // Whether it can actually run (ELIGIBLE, UNDER_REVIEW, LIMITED, NOT_ELIGIBLE, ...), next to the
+  // on/off switch above; null when Google didn't say.
+  servingStatus?: string | null
   budgetMicros: number | null
   biddingStrategyType: string | null
   channelType?: string | null
@@ -91,6 +94,7 @@ export interface Ad {
   campaignId: string
   customerId: string
   status: string
+  servingStatus?: string | null
   type: string
   headline: string | null
 }

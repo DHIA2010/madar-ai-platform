@@ -8097,7 +8097,15 @@
         "active": "نشطة",
         "paused": "متوقفة",
         "removed": "محذوفة",
-        "ended": "منتهية"
+        "ended": "منتهية",
+        "underReview": "قيد المراجعة",
+        "learning": "في مرحلة التعلّم",
+        "limited": "محدودة",
+        "pending": "بانتظار البدء",
+        "notEligible": "غير مؤهلة",
+        "misconfigured": "إعداد غير مكتمل",
+        "rejected": "مرفوضة",
+        "notDelivering": "لا تعمل"
       },
       "entityDescription": {
         "withActivity": "{status} · آخر نشاط {date}",

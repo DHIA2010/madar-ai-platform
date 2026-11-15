@@ -49,6 +49,65 @@ function rowValue(row: Record<string, unknown>, path: string) {
   }, row)
 }
 
+type QueryClient = {
+  queryAllRows(input: {
+    connectionId: string
+    customerId: string
+    query: string
+  }): Promise<Record<string, unknown>[]>
+}
+
+const SERVING_STATUSES = new Set([
+  "ELIGIBLE",
+  "PENDING",
+  "LIMITED",
+  "LEARNING",
+  "NOT_ELIGIBLE",
+  "MISCONFIGURED",
+  "ENDED",
+  "PAUSED",
+  "REMOVED",
+])
+
+// What Google Ads itself shows as the status: not just the on/off switch (`status`), but whether
+// the thing is actually able to run. An enabled campaign whose ads are still in policy review is
+// "UNDER_REVIEW" here, not running.
+export function servingStatusOf(primaryStatus: unknown, reasons: unknown): string | null {
+  const reasonList = Array.isArray(reasons) ? reasons.map(String) : []
+  if (reasonList.some((reason) => reason.includes("UNDER_REVIEW"))) return "UNDER_REVIEW"
+  const status = typeof primaryStatus === "string" ? primaryStatus : ""
+  return SERVING_STATUSES.has(status) ? status : null
+}
+
+// Asked for on its own, and never allowed to fail the sync: the serving status is an extra on top
+// of the campaign/ad list, so an account or API version that refuses these fields just leaves the
+// plain on/off status in place.
+async function loadServingStatuses(
+  client: QueryClient,
+  input: { connectionId: string; customerId: string },
+  query: string,
+  idPath: string,
+  resource: string
+): Promise<Map<string, string>> {
+  const statuses = new Map<string, string>()
+  try {
+    const rows = await client.queryAllRows({ ...input, query })
+    for (const row of rows) {
+      const serving = servingStatusOf(
+        rowValue(row, `${resource}.primaryStatus`),
+        rowValue(row, `${resource}.primaryStatusReasons`)
+      )
+      if (serving) statuses.set(asString(rowValue(row, idPath)), serving)
+    }
+  } catch (error) {
+    console.warn("google_ads.serving_status_unavailable", {
+      resource,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  }
+  return statuses
+}
+
 export class GoogleAdsCustomerService {
   constructor(
     private readonly client: {
@@ -120,6 +179,13 @@ export class GoogleAdsCampaignService {
         FROM campaign
       `,
     })
+    const servingStatuses = await loadServingStatuses(
+      this.client,
+      input,
+      "SELECT campaign.id, campaign.primary_status, campaign.primary_status_reasons FROM campaign",
+      "campaign.id",
+      "campaign"
+    )
 
     // campaign.start_date/end_date (plain YYYY-MM-DD) were removed in API v23, replaced by
     // start_date_time/end_date_time ("yyyy-MM-dd HH:mm:ss" in the customer's time zone) -- sliced
@@ -134,6 +200,7 @@ export class GoogleAdsCampaignService {
         customerId: input.customerId,
         name: asString(rowValue(row, "campaign.name"), "Unnamed Campaign"),
         status: asString(rowValue(row, "campaign.status"), "UNKNOWN"),
+        servingStatus: servingStatuses.get(asString(rowValue(row, "campaign.id"))) ?? null,
         budgetMicros: asNumber(rowValue(row, "campaignBudget.amountMicros")) || null,
         biddingStrategyType: asString(rowValue(row, "campaign.biddingStrategyType"), "") || null,
         channelType: asString(rowValue(row, "campaign.advertising_channel_type"), "") || null,
@@ -297,6 +364,13 @@ export class GoogleAdsAdService {
       query:
         "SELECT ad_group_ad.ad.id, ad_group.id, campaign.id, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.responsive_search_ad.headlines FROM ad_group_ad",
     })
+    const servingStatuses = await loadServingStatuses(
+      this.client,
+      input,
+      "SELECT ad_group_ad.ad.id, ad_group_ad.primary_status, ad_group_ad.primary_status_reasons FROM ad_group_ad",
+      "adGroupAd.ad.id",
+      "adGroupAd"
+    )
 
     return rows.map((row) => {
       const headline = rowValue(row, "adGroupAd.ad.responsiveSearchAd.headlines")
@@ -306,6 +380,7 @@ export class GoogleAdsAdService {
         campaignId: asString(rowValue(row, "campaign.id")),
         customerId: input.customerId,
         status: asString(rowValue(row, "adGroupAd.status"), "UNKNOWN"),
+        servingStatus: servingStatuses.get(asString(rowValue(row, "adGroupAd.ad.id"))) ?? null,
         type: asString(rowValue(row, "adGroupAd.ad.type"), "UNKNOWN"),
         headline: Array.isArray(headline) ? asString(headline[0]) : null,
       }
