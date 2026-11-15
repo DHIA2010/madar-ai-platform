@@ -99,7 +99,12 @@ import { issueSessionForMember } from "../session-issuer"
 import { permissionsForRole, type PlatformRole } from "../../platform-admin/staff-roles"
 import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../../billing/moyasar/plan-pricing"
 import { activationSettingsPatch, bundleTrialSettingsPatch } from "../../subscriptions/activation"
-import { activateFree, activatePaid, startTrial } from "../../subscriptions/lifecycle"
+import {
+  activateFree,
+  activatePaid,
+  startTrial,
+  trialEndFromSettings,
+} from "../../subscriptions/lifecycle"
 import { findBillingSettingsViolations } from "../../subscriptions/billing-controlled-settings"
 import { MADAR_COMPLETE, type SubscriptionApplication } from "../../subscriptions/types"
 
@@ -1448,6 +1453,8 @@ export class IdentityCommandHandlers {
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
     }
+    // Read before the patch below clears it: paying during a trial keeps the days that are left.
+    const trialEndsAt = trialEndFromSettings(organizationState.settings, request.application)
     const organization = OrganizationEntity.rehydrate(organizationState)
     // Switches the covered applications on (every one, for the bundle) and clears any stale
     // *TrialEndsAt so the paid approval is never mistaken for a lapsed trial.
@@ -1486,6 +1493,7 @@ export class IdentityCommandHandlers {
             ? { id: purchased.packageId, name: purchased.packageName ?? "" }
             : null,
           interval: purchased.billingInterval ?? "monthly",
+          trialEndsAt,
           priceHalalas: purchased.packageId ? purchased.priceHalalas : legacyPrice,
           source: "bank_transfer",
           now,

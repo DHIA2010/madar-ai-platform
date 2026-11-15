@@ -11,7 +11,7 @@ import type { PricingService } from "../../pricing/service"
 import { extraBranchPrice } from "../../pricing/service"
 import { activationSettingsPatch } from "../../subscriptions/activation"
 import { BranchAllowanceService } from "../../subscriptions/branches"
-import { activatePaid, addExtraBranches } from "../../subscriptions/lifecycle"
+import { activatePaid, addExtraBranches, trialEndFromSettings } from "../../subscriptions/lifecycle"
 import {
   ADDON_CODES,
   ADDON_ERRORS,
@@ -294,6 +294,15 @@ export class MoyasarBillingService {
           },
         })
       } else if (isGenuinelyPaid) {
+        // Read before the patch below clears it: paying during a trial keeps the days left.
+        const organization = await this.db.query<{ settings: Record<string, unknown> | null }>(
+          "SELECT settings FROM organizations WHERE id = $1",
+          [payment.organizationId]
+        )
+        const trialEndsAt = trialEndFromSettings(
+          organization.rows[0]?.settings,
+          payment.application
+        )
         await this.repository.applySettingsPatch(
           payment.organizationId,
           activationSettingsPatch(payment.application, payment.planTier)
@@ -320,6 +329,7 @@ export class MoyasarBillingService {
               interval: payment.billingInterval,
               priceHalalas: payment.amount,
               extraBranches: payment.extraBranches,
+              trialEndsAt,
               source: "payment",
               now: new Date().toISOString(),
             }

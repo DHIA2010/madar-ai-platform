@@ -101,10 +101,17 @@ export function SubscriptionRemaining({
   )
 }
 
-// The subscription of an app card: by its own id (pos, ai, expenses...), else its category.
+// The subscription of an app card: by its own id (pos, ai, expenses...), else its category. An
+// app opened by the bundle (مدار الكامل) has no subscription of its own -- the bundle's is the
+// one that runs it, so its trial or paid period is what the card counts down.
 export function periodFor(
-  application: { id: string; category: string },
+  application: { id: string; category: string; subscriptionStatus?: string },
   periods: Record<string, SubscriptionPeriod>
 ) {
-  return periods[application.id] ?? periods[application.category]
+  const own = periods[application.id] ?? periods[application.category]
+  if (own) return own
+  const bundle = periods.madarComplete
+  if (!bundle) return undefined
+  const onTrial = application.subscriptionStatus === "trial"
+  return onTrial === (bundle.status === "trial") ? bundle : undefined
 }

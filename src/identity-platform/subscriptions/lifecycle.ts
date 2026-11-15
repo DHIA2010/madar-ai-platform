@@ -87,6 +87,9 @@ export function activatePaid(
     extraBranches?: number
     source: SubscriptionSource
     now: string
+    // The app's trial end from the account's settings, for an app opened by the bundle's trial:
+    // that trial is one subscription (the bundle's), so the app has no trial of its own here.
+    trialEndsAt?: string | null
   }
 ): OrganizationSubscriptionState {
   const nowMs = new Date(input.now).getTime()
@@ -96,15 +99,15 @@ export function activatePaid(
     new Date(existing.currentPeriodEnd).getTime() > nowMs
   // Paying before a free trial is over doesn't cost the days that are left: the paid period
   // starts when the trial would have ended.
-  const trialLeft =
-    existing?.status === "trial" &&
-    existing.trialEndsAt !== null &&
-    new Date(existing.trialEndsAt).getTime() > nowMs
-  const periodStart = stillRunning
-    ? existing.currentPeriodEnd!
-    : trialLeft
-      ? existing.trialEndsAt!
-      : input.now
+  // Whichever trial runs longest: the app's own, or the one the bundle's trial opened it with
+  // (an app can have an own trial that already ended and still be open through the bundle's).
+  const trialEnd =
+    [existing?.status === "trial" ? existing.trialEndsAt : null, input.trialEndsAt ?? null]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null
+  const trialLeft = trialEnd !== null && new Date(trialEnd).getTime() > nowMs
+  const periodStart = stillRunning ? existing.currentPeriodEnd! : trialLeft ? trialEnd : input.now
   return {
     id: existing?.id ?? input.id,
     organizationId: input.organizationId,
@@ -128,6 +131,17 @@ export function activatePaid(
     createdAt: existing?.createdAt ?? input.now,
     updatedAt: input.now,
   }
+}
+
+// When the account's settings say an application's free trial ends -- set for its own trial and
+// for one opened by the bundle's. Read BEFORE the settings are patched for a paid activation,
+// which clears it.
+export function trialEndFromSettings(
+  settings: Record<string, unknown> | null | undefined,
+  application: PurchasableApplication
+): string | null {
+  const value = settings?.[`${application}TrialEndsAt`]
+  return typeof value === "string" && value ? value : null
 }
 
 // A free application: active right away, with no price, until endsAt -- when billing maintenance
