@@ -7,6 +7,7 @@ export type {
 export {
   forgotPasswordSchema,
   loginSchema,
+  normalizePhone,
   resetPasswordSchema,
   signupInvitationSchema,
   signupSchema,

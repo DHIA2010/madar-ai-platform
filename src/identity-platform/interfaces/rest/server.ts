@@ -1494,11 +1494,13 @@ export function createIdentityApiServer(
             companyName: command.organizationName ?? command.fullName,
             contactName: command.fullName,
             email: command.email,
+            phone: command.phone ?? null,
             attribution: command.attribution ?? null,
           })
           void salesLeadService?.notifySignup({
             name: command.organizationName ?? command.fullName,
             email: command.email,
+            phone: command.phone ?? null,
             attribution: command.attribution ?? null,
           })
           // Invoices it paid before it had an account switch their apps on now.

@@ -525,9 +525,9 @@ export async function crmFromSignup(
       await db.query(
         `UPDATE crm_leads SET organization_id = $2, updated_at = now(),
            contact_name = COALESCE(contact_name, $3), email = COALESCE(email, $4),
-           attribution = COALESCE(attribution, $5::jsonb)
+           attribution = COALESCE(attribution, $5::jsonb), phone = COALESCE(phone, $6)
          WHERE id = $1`,
-        [match.id, input.organizationId, input.contactName, email, attribution]
+        [match.id, input.organizationId, input.contactName, email, attribution, input.phone ?? null]
       )
       await addActivity(db, {
         leadId: match.id,

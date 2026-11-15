@@ -204,6 +204,7 @@ export class AuthenticationApiAdapter {
       email: payload.email,
       password: payload.password,
       organizationName: payload.organizationName,
+      phone: payload.phone,
       invitationToken: payload.invitationToken,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       language: "en",

@@ -154,68 +154,28 @@
     },
     "register": {
       "heading": "Create a new account",
-      "subheading": "Start your journey with MADAR to analyze your marketing campaigns and get the best results",
-      "steps": {
-        "account": "Account info",
-        "company": "Company details",
-        "confirm": "Confirm account"
-      },
+      "subheading": "Create your account and start using MADAR in a minute.",
       "fullNameLabel": "Full name",
       "fullNamePlaceholder": "Enter your full name",
       "emailLabel": "Email",
       "emailPlaceholder": "Enter your email",
       "passwordLabel": "Password",
       "passwordPlaceholder": "Create a strong password",
-      "passwordHelper": "At least 12 characters, including an uppercase letter, a number, and a special character.",
+      "passwordHelper": "At least 12 characters.",
       "confirmPasswordLabel": "Confirm password",
       "confirmPasswordPlaceholder": "Re-enter your password",
-      "jobRoleLabel": "Job role",
-      "jobRolePlaceholder": "Select your job role",
-      "jobRoles": {
-        "marketingManager": "Marketing Manager",
-        "founderCeo": "Founder / CEO",
-        "growthMarketer": "Growth Marketer",
-        "agencyOwner": "Marketing Agency Owner",
-        "other": "Other"
-      },
-      "acceptTermsPrefix": "I agree to the",
       "termsAndConditions": "Terms and Conditions",
       "and": "and",
       "privacyPolicy": "Privacy Policy",
+      "consentPrefix": "By creating an account, you agree to the",
+      "orWithEmail": "or sign up with your email",
       "companyNameLabel": "Company name",
       "companyNamePlaceholder": "Enter your company or store name",
-      "industryLabel": "Industry",
-      "industryPlaceholder": "Select your industry",
-      "industries": {
-        "ecommerce": "E-commerce",
-        "retail": "Retail",
-        "fashion": "Fashion",
-        "foodBeverage": "Food & Beverage",
-        "technology": "Technology",
-        "other": "Other"
-      },
-      "companySizeLabel": "Company size",
-      "companySizePlaceholder": "Select the number of employees",
-      "companySizes": {
-        "1-10": "1-10 employees",
-        "11-50": "11-50 employees",
-        "51-200": "51-200 employees",
-        "200+": "200+ employees"
-      },
-      "next": "Next",
-      "back": "Back",
+      "phoneLabel": "Phone number",
+      "phonePlaceholder": "05XXXXXXXX",
       "submit": "Create account",
       "alreadyHaveAccount": "Already have an account?",
       "signIn": "Sign in",
-      "summary": {
-        "fullName": "Full name",
-        "email": "Email",
-        "jobRole": "Job role",
-        "companyName": "Company name",
-        "industry": "Industry",
-        "companySize": "Company size",
-        "empty": "—"
-      },
       "success": {
         "greeting": "Welcome, {name} 👋",
         "descriptionLine1": "Your account has been created and everything's ready now.",
@@ -391,7 +351,6 @@
     },
     "google": {
       "continue": "Continue with Google",
-      "orSignUpWith": "or sign up with",
       "errors": {
         "failed": "Couldn't sign in with Google. Please try again.",
         "unverified_email": "Your Google email isn't verified. Use a verified Google account or sign up with email and password.",

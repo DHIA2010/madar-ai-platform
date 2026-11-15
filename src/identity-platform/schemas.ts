@@ -46,12 +46,23 @@ export const attributionSchema = z
   .catch(null)
 export type LeadAttribution = NonNullable<z.infer<typeof attributionSchema>>
 
+// A phone number as people type it: Arabic digits, spaces and dashes are tidied away first.
+const phoneNumberSchema = z
+  .string()
+  .trim()
+  .transform((value) =>
+    value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[\s-]/g, "")
+  )
+  .pipe(z.string().regex(/^\+?\d{7,15}$/))
+
 export const registerSchema = z
   .object({
     email: z.string().email(),
     password: z.string().min(12),
     fullName: z.string().min(2),
     organizationName: z.string().min(2).optional(),
+    // Asked for on the sign-up form, for the sales team (it goes on the account's CRM lead).
+    phone: phoneNumberSchema.optional(),
     invitationToken: z.string().optional(),
     rememberMe: z.boolean().optional(),
     timezone: z.string().default("UTC"),
@@ -1506,13 +1517,7 @@ export const productCategoryStatusSchema = z.object({
 // it is answered as if it worked, and nothing is stored.
 export const salesLeadSchema = z.object({
   companyName: z.string().trim().min(2).max(160),
-  phone: z
-    .string()
-    .trim()
-    .transform((value) =>
-      value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[\s-]/g, "")
-    )
-    .pipe(z.string().regex(/^\+?\d{7,15}$/)),
+  phone: phoneNumberSchema,
   email: z
     .union([z.literal(""), z.string().trim().toLowerCase().email().max(254)])
     .optional()

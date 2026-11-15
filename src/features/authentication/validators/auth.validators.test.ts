@@ -22,47 +22,30 @@ describe("auth validators", () => {
     expect(parsed.success).toBe(false)
   })
 
-  it("accepts a complete signup payload", () => {
-    const parsed = signupSchema.safeParse({
-      fullName: "Demo",
-      email: "user@madar.ai",
-      password: "password12345",
-      confirmPassword: "password12345",
-      jobRole: "marketing-manager",
-      acceptTerms: true,
-      companyName: "Madar",
-      industry: "ecommerce",
-      companySize: "1-10",
-    })
+  const signup = {
+    fullName: "Demo",
+    companyName: "Madar",
+    phone: "055 123 4567",
+    email: "user@madar.ai",
+    password: "password12345",
+    confirmPassword: "password12345",
+  }
 
-    expect(parsed.success).toBe(true)
+  it("accepts a complete signup payload", () => {
+    expect(signupSchema.safeParse(signup).success).toBe(true)
+    // Arabic digits and an international prefix are fine too.
+    expect(signupSchema.safeParse({ ...signup, phone: "+٩٦٦٥٥١٢٣٤٥٦٧" }).success).toBe(true)
   })
 
   it("rejects mismatched signup passwords", () => {
-    const parsed = signupSchema.safeParse({
-      fullName: "Demo",
-      email: "user@madar.ai",
-      password: "password12345",
-      confirmPassword: "different-password123",
-      jobRole: "marketing-manager",
-      acceptTerms: true,
-      companyName: "Madar",
-      industry: "ecommerce",
-      companySize: "1-10",
-    })
-
+    const parsed = signupSchema.safeParse({ ...signup, confirmPassword: "different-password123" })
     expect(parsed.success).toBe(false)
   })
 
-  it("rejects signup payload missing required onboarding fields", () => {
-    const parsed = signupSchema.safeParse({
-      fullName: "Demo",
-      email: "user@madar.ai",
-      password: "password12345",
-      confirmPassword: "password12345",
-    })
-
-    expect(parsed.success).toBe(false)
+  it("rejects a signup without a company name or a real phone number", () => {
+    expect(signupSchema.safeParse({ ...signup, companyName: "" }).success).toBe(false)
+    expect(signupSchema.safeParse({ ...signup, phone: "abc" }).success).toBe(false)
+    expect(signupSchema.safeParse({ ...signup, phone: "" }).success).toBe(false)
   })
 
   it("accepts forgot password payload", () => {

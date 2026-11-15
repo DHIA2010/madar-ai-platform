@@ -4,7 +4,7 @@ import { localeDirection, type Locale } from "@/i18n/locales"
 
 import { LanguageSwitcher } from "@/components/language-switcher"
 
-import { AuthShowcasePanel, SignupForm } from "@/features/authentication/components"
+import { RegisterShowcasePanel, SignupForm } from "@/features/authentication/components"
 
 export default async function BasicRegisterPage() {
   const locale = (await getLocale()) as Locale
@@ -18,13 +18,13 @@ export default async function BasicRegisterPage() {
 
   return (
     <div className="relative grid min-h-svh w-full lg:grid-cols-2" dir={localeDirection(locale)}>
-      <LanguageSwitcher className="absolute end-4 top-4 z-10 bg-white/80 shadow-sm backdrop-blur lg:end-6 lg:top-6" />
+      <LanguageSwitcher className="absolute end-4 top-4 z-10 bg-white/90 shadow-sm backdrop-blur lg:end-6 lg:top-6" />
 
-      <div className="flex items-center justify-center p-6 md:p-10">
+      <div className="flex items-center justify-center bg-white px-6 py-16 md:px-10">
         <SignupForm />
       </div>
 
-      <AuthShowcasePanel
+      <RegisterShowcasePanel
         eyebrow={t("eyebrow")}
         heading={t("heading")}
         headingHighlight={t("headingHighlight")}
@@ -33,7 +33,7 @@ export default async function BasicRegisterPage() {
         badges={badges}
         footer={
           <>
-            <span className="font-medium text-slate-900">{t("footerPrefix")}</span>{" "}
+            <span className="font-semibold text-white">{t("footerPrefix")}</span>{" "}
             {t("footerSuffix")}
           </>
         }

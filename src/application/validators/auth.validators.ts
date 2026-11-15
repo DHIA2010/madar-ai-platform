@@ -12,6 +12,7 @@ export const registerRequestDtoSchema = z
     email: z.string().email(),
     password: z.string().min(12),
     organizationName: z.string().min(2).optional(),
+    phone: z.string().optional(),
     invitationToken: z.string().optional(),
     rememberMe: z.boolean().optional(),
   })

@@ -154,68 +154,28 @@
     },
     "register": {
       "heading": "إنشاء حساب جديد",
-      "subheading": "ابدأ رحلتك مع مدار لتحليل حملاتك التسويقية وتحقيق أفضل النتائج",
-      "steps": {
-        "account": "معلومات الحساب",
-        "company": "تفاصيل الشركة",
-        "confirm": "تأكيد الحساب"
-      },
+      "subheading": "أنشئ حسابك وابدأ باستخدام مدار خلال دقيقة واحدة.",
       "fullNameLabel": "الاسم الكامل",
       "fullNamePlaceholder": "أدخل اسمك الكامل",
       "emailLabel": "البريد الإلكتروني",
       "emailPlaceholder": "أدخل بريدك الإلكتروني",
       "passwordLabel": "كلمة المرور",
-      "passwordPlaceholder": "إنشاء كلمة مرور قوية",
-      "passwordHelper": "12 حرفًا على الأقل، تتضمن حرفاً كبيراً ورقماً ورمزاً خاصاً.",
+      "passwordPlaceholder": "أنشئ كلمة مرور قوية",
+      "passwordHelper": "12 حرفًا على الأقل.",
       "confirmPasswordLabel": "تأكيد كلمة المرور",
       "confirmPasswordPlaceholder": "أعد إدخال كلمة المرور",
-      "jobRoleLabel": "الدور الوظيفي",
-      "jobRolePlaceholder": "اختر دورك الوظيفي",
-      "jobRoles": {
-        "marketingManager": "مدير تسويق",
-        "founderCeo": "مؤسس / رئيس تنفيذي",
-        "growthMarketer": "أخصائي نمو",
-        "agencyOwner": "صاحب وكالة تسويق",
-        "other": "أخرى"
-      },
-      "acceptTermsPrefix": "أوافق على",
       "termsAndConditions": "الشروط والأحكام",
       "and": "و",
       "privacyPolicy": "سياسة الخصوصية",
+      "consentPrefix": "بإنشاء الحساب، أنت توافق على",
+      "orWithEmail": "أو أنشئ حسابك بالبريد الإلكتروني",
       "companyNameLabel": "اسم الشركة",
       "companyNamePlaceholder": "أدخل اسم شركتك أو متجرك",
-      "industryLabel": "المجال",
-      "industryPlaceholder": "اختر مجال عملك",
-      "industries": {
-        "ecommerce": "التجارة الإلكترونية",
-        "retail": "تجارة التجزئة",
-        "fashion": "الأزياء والموضة",
-        "foodBeverage": "الأغذية والمشروبات",
-        "technology": "التكنولوجيا",
-        "other": "أخرى"
-      },
-      "companySizeLabel": "حجم الشركة",
-      "companySizePlaceholder": "اختر عدد الموظفين",
-      "companySizes": {
-        "1-10": "1-10 موظفين",
-        "11-50": "11-50 موظف",
-        "51-200": "51-200 موظف",
-        "200+": "أكثر من 200 موظف"
-      },
-      "next": "التالي",
-      "back": "رجوع",
+      "phoneLabel": "رقم الجوال",
+      "phonePlaceholder": "05XXXXXXXX",
       "submit": "إنشاء الحساب",
       "alreadyHaveAccount": "لديك حساب بالفعل؟",
       "signIn": "تسجيل الدخول",
-      "summary": {
-        "fullName": "الاسم الكامل",
-        "email": "البريد الإلكتروني",
-        "jobRole": "الدور الوظيفي",
-        "companyName": "اسم الشركة",
-        "industry": "المجال",
-        "companySize": "حجم الشركة",
-        "empty": "—"
-      },
       "success": {
         "greeting": "مرحباً، {name} 👋",
         "descriptionLine1": "تم إنشاء حسابك بنجاح، وكل شيء جاهز الآن.",
@@ -391,7 +351,6 @@
     },
     "google": {
       "continue": "المتابعة باستخدام Google",
-      "orSignUpWith": "أو أنشئ حسابك باستخدام",
       "errors": {
         "failed": "تعذر تسجيل الدخول باستخدام Google. حاول مرة أخرى.",
         "unverified_email": "بريدك في Google غير موثّق. استخدم حساب Google موثّقاً أو سجّل بالبريد وكلمة المرور.",

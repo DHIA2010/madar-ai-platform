@@ -56,13 +56,14 @@ export class SalesLeadService {
   async notifySignup(input: {
     name: string
     email: string | null
+    phone?: string | null
     attribution?: LeadAttribution | null
   }): Promise<void> {
     void this.leadAlerts?.notify({ kind: "signup", ...input })
     await this.emailTeam({
       leadKind: "signup",
       companyName: input.name,
-      phone: null,
+      phone: input.phone ?? null,
       email: input.email,
       source: sourceLabel(input.attribution),
       submittedAt: new Date().toISOString(),

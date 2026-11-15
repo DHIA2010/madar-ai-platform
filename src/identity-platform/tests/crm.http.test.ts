@@ -499,14 +499,17 @@ describe("CRM", () => {
       companyName: "Fresh Shop",
       contactName: "Fresh Owner",
       email: "fresh@shop.test",
+      phone: "0551239999",
     })
 
     let leads = await call<{ items: Lead[] }>("GET", staff.token, "/crm/leads")
     const nokhba = leads.body.items.find((lead) => lead.companyName === "متجر النخبة")!
     expect(nokhba).toMatchObject({ stage: "trial", organizationId: shop.actor.organizationId })
+    // The number given on the sign-up form is on the lead, for the sales team to call.
     expect(leads.body.items.find((lead) => lead.companyName === "Fresh Shop")).toMatchObject({
       source: "signup",
       stage: "trial",
+      phone: "0551239999",
     })
 
     await crmPaymentReceived(database, {

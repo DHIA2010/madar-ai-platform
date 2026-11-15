@@ -59,6 +59,7 @@ export interface RegisterRequest {
   email: string
   password: string
   organizationName?: string
+  phone?: string
   invitationToken?: string
   rememberMe?: boolean
 }
