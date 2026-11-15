@@ -743,8 +743,10 @@ export class GoogleAdsRepository implements ProviderSyncRepository<
         clicks: item.clicks,
         ctr: item.ctr,
         costMicros: item.costMicros,
-        averageCpc: item.cpcMicros,
-        averageCpm: item.cpmMicros,
+        // Google sends these averages with decimals (e.g. 55714285.71); the columns hold whole
+        // micros, so an unrounded value failed the whole sync.
+        averageCpc: Math.round(item.cpcMicros),
+        averageCpm: Math.round(item.cpmMicros),
         conversions: item.conversions,
         conversionValue: item.conversionValue,
         searchImpressionShare: item.searchImpressionShare,
