@@ -64,6 +64,7 @@ import {
   isOverdue,
   LeadFormDialog,
   leadPlatform,
+  leadTouch,
   LostReasonDialog,
   MEETING_SOURCE_LABEL,
   OwnerAvatar,
@@ -86,7 +87,7 @@ const NONE = "__none"
 
 // "campaign" grouping: one column per platform + campaign that first brought the lead.
 const campaignKey = (lead: CrmLead) =>
-  `${leadPlatform(lead)}\u0000${lead.attribution?.first?.campaign ?? ""}`
+  `${leadPlatform(lead)}\u0000${leadTouch(lead)?.campaign ?? ""}`
 function campaignLabel(key: string) {
   const [platform, campaign] = key.split("\u0000")
   return campaign ? `${platformLabel(platform)} • ${campaign}` : platformLabel(platform)

@@ -595,7 +595,12 @@ export async function crmPaymentReceived(
 // "direct" (typed the address, or no tracking info).
 function leadPlatform(row: LeadRow) {
   const first = row.attribution?.first
-  return (first?.source || first?.referrer || "direct").toLowerCase()
+  const last = row.attribution?.last
+  // The first visit, unless it carried no campaign tags or ad click and the latest one did (the
+  // same rule the admin screens use, crm-ui.tsx leadTouch).
+  const tagged = (touch: typeof first) => Boolean(touch?.source || touch?.clickId)
+  const touch = !tagged(first) && tagged(last) ? last : first
+  return (touch?.source || touch?.referrer || "direct").toLowerCase()
 }
 
 function campaignBreakdown(leads: LeadRow[], withMeeting: Set<string>) {

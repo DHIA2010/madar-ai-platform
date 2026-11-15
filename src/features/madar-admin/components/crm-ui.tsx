@@ -113,10 +113,20 @@ const PLATFORM_LABEL: Record<string, string> = {
   direct: "مباشر",
 }
 
-// The platform that first brought a lead (UTM source, else referring site, else direct).
-export function leadPlatform(lead: Pick<CrmLead, "attribution">) {
+// The visit a lead is credited to: the first one, unless that one carried no campaign tags or ad
+// click (only a referring site) and the latest one did -- then the tagged visit says more about
+// what brought them than the site they happened to come through first.
+export function leadTouch(lead: Pick<CrmLead, "attribution">) {
   const first = lead.attribution?.first
-  return (first?.source || first?.referrer || "direct").toLowerCase()
+  const last = lead.attribution?.last
+  const tagged = (touch: typeof first) => Boolean(touch?.source || touch?.clickId)
+  return !tagged(first) && tagged(last) ? last : first
+}
+
+// The platform that brought a lead (UTM source, else referring site, else direct).
+export function leadPlatform(lead: Pick<CrmLead, "attribution">) {
+  const touch = leadTouch(lead)
+  return (touch?.source || touch?.referrer || "direct").toLowerCase()
 }
 
 export function platformLabel(platform: string) {

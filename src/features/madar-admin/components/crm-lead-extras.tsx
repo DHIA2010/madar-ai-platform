@@ -22,7 +22,7 @@ import {
 import { crmService, formatDate } from "../services"
 import type { CrmCustomField, CrmFieldType, CrmFieldValue, CrmLead, CrmLeadInput } from "../types"
 import { INTEREST_APPS } from "./crm-filters"
-import { formatDateTime, leadPlatform, platformLabel } from "./crm-ui"
+import { formatDateTime, leadPlatform, leadTouch, platformLabel } from "./crm-ui"
 
 const FIELD_TYPE_LABEL: Record<CrmFieldType, string> = {
   text: "نص",
@@ -469,7 +469,8 @@ function CustomFieldsDialog({
 // مصدر الحملة: the ad or site that first brought the lead, and its latest visit.
 export function LeadAttributionCard({ lead }: { lead: CrmLead }) {
   const attribution = lead.attribution
-  const first = attribution?.first
+  // The details below describe the visit the lead is credited to (see leadTouch).
+  const first = leadTouch(lead)
   const last = attribution?.last
   const platform = leadPlatform(lead)
   const rows: [string, string | null | undefined][] = [
@@ -480,7 +481,7 @@ export function LeadAttributionCard({ lead }: { lead: CrmLead }) {
     ["الكلمة", first?.term],
     ["الموقع المُحيل", first?.referrer],
     ["صفحة الهبوط", first?.landingPage],
-    ["أول زيارة", first?.at ? formatDateTime(first.at) : null],
+    ["تاريخ الزيارة", first?.at ? formatDateTime(first.at) : null],
   ]
   const lastDiffers =
     last && first && (last.source !== first.source || last.campaign !== first.campaign)
