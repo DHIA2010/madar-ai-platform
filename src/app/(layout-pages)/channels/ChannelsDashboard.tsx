@@ -1,5 +1,6 @@
 "use client"
 
+import { toLocalDay } from "@/lib/local-day"
 import { useEffect, useMemo, useState } from "react"
 import { endOfMonth, startOfMonth, subDays, subMonths } from "date-fns"
 import {
@@ -121,7 +122,7 @@ interface DateRangeOption {
 function getDateRangeOptions(t: ChannelsTranslator): DateRangeOption[] {
   const today = new Date()
   const lastMonth = subMonths(today, 1)
-  const toSql = (d: Date) => d.toISOString().slice(0, 10)
+  const toSql = (d: Date) => toLocalDay(d)
 
   return [
     {

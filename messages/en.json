@@ -6876,7 +6876,8 @@
         "workspaceActivated": "Workspace activated.",
         "workspaceActivateFailed": "Couldn't activate the workspace.",
         "workspaceDeactivated": "Workspace deactivated.",
-        "workspaceDeactivateFailed": "Couldn't deactivate the workspace."
+        "workspaceDeactivateFailed": "Couldn't deactivate the workspace.",
+        "workspaceSwitchFailed": "Couldn't switch workspace. Please try again."
       },
       "initialsFallback": "?"
     }

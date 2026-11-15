@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl"
 import { ArrowLeft, ArrowLeftRight, Hash, Loader2, Package, ScanLine, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
+import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
@@ -72,7 +73,7 @@ export function StockTransferFormPage() {
 
   const [fromBranch, setFromBranch] = useState("")
   const [toBranch, setToBranch] = useState("")
-  const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [transferDate, setTransferDate] = useState(() => toLocalDay())
   const [notes, setNotes] = useState("")
   const [lines, setLines] = useState<TransferLine[]>([])
   // Every product that keeps stock, with its quantity in the branch it leaves from.

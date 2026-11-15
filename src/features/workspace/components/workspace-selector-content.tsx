@@ -227,7 +227,13 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
   }
 
   async function handleWorkspaceSelect(workspace: Workspace) {
-    await switchWorkspace({ organizationId: workspace.organizationId, workspaceId: workspace.id })
+    try {
+      await switchWorkspace({ organizationId: workspace.organizationId, workspaceId: workspace.id })
+    } catch {
+      // The person stays in the workspace they had open; they can simply try again.
+      toast.error(t("toasts.workspaceSwitchFailed"))
+      return
+    }
     onComplete?.()
   }
 

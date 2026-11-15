@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
+import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
@@ -497,8 +498,9 @@ export function CampaignDashboardScreen() {
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  const startDate = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : undefined
-  const endDate = (dateRange?.to ?? dateRange?.from)?.toISOString().slice(0, 10)
+  const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
+  const endDay = dateRange?.to ?? dateRange?.from
+  const endDate = endDay ? toLocalDay(endDay) : undefined
 
   // Fetches the account-wide KPI summary + platform breakdown (real period-over-period deltas)
   // whenever the date range OR any of platform/status/objective/search changes, and whichever

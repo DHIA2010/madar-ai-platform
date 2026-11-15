@@ -43,10 +43,9 @@ export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRou
   // on this page takes the same post-auth destination (no case where the default should win).
   // `=== url || startsWith(url + "/")` tolerates next.config's trailingSlash:true, same reasoning
   // as nav-main.tsx's own isActive() -- a strict `===` against ROUTES.auth.basic.register ("no
-  // trailing slash") never matches usePathname()'s actual "/auth/basic/register/".
-  const isRegisterPage = [ROUTES.auth.basic.register, ROUTES.auth.cover.register].some(
-    (url) => pathname === url || pathname.startsWith(`${url}/`)
-  )
+  // trailing slash") never matches usePathname()'s actual value, which ends with a slash.
+  const registerUrl = ROUTES.auth.basic.register
+  const isRegisterPage = pathname === registerUrl || pathname.startsWith(`${registerUrl}/`)
 
   // Whether this visitor was signed out at some point on this page -- i.e. any sign-in happened
   // through this page's own form, which then owns the navigation. Someone who arrives already

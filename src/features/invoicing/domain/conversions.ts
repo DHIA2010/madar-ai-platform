@@ -1,5 +1,7 @@
 // Turning a quotation into an invoice draft: everything not billed yet, a progress claim (each
 // line's cumulative completion), chosen lines and quantities, or an advance payment invoice.
+import { toLocalDay } from "@/lib/local-day"
+
 import type {
   AdvanceOption,
   DocumentLine,
@@ -74,7 +76,7 @@ function baseInput(quotation: QuotationDetail): Omit<InvoiceInput, "lines" | "in
     customer: quotation.customer,
     title: quotation.title,
     reference: quotation.reference,
-    issueDate: new Date().toISOString().slice(0, 10),
+    issueDate: toLocalDay(),
     supplyDate: null,
     supplyEndDate: null,
     dueDate: null,

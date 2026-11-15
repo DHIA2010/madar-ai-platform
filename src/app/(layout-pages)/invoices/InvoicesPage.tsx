@@ -425,14 +425,14 @@ export default function InvoicesPage() {
 
   return (
     <div dir={localeDirection(locale)} className="flex flex-col gap-5 pb-10">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>
             {t("page.title")}
           </h1>
           <p className={cn("mt-1 text-[13px]", MUTED)}>{t("page.subtitle")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             asChild
             variant="outline"

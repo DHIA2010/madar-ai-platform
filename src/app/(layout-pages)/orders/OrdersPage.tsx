@@ -529,8 +529,8 @@ function OrderProductsDialog({
                 />
               </div>
 
-              <div className="overflow-hidden rounded-[10px] border border-[#e8edf3]">
-                <table className="w-full text-center">
+              <div className="overflow-x-auto rounded-[10px] border border-[#e8edf3]">
+                <table className="w-full min-w-[32rem] text-center">
                   <thead>
                     <tr className="bg-[#f7f9fc]">
                       {[

@@ -88,7 +88,7 @@ export function SettingsNav() {
     <nav className="flex flex-col">
       <h2 className="mb-2.5 px-2 text-[13px] font-bold text-[#8098b4]">{t("heading")}</h2>
 
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-row gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0 [&>li]:shrink-0 [&>li]:whitespace-nowrap md:[&>li]:whitespace-normal">
         {sections.map((section) => {
           const active = Boolean(section.href) && section.href === activeHref
           const label = t(`sections.${section.key}`)

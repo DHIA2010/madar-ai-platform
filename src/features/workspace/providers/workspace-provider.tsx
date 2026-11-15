@@ -200,11 +200,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setWorkspaceStatus("ready")
         emitWorkspaceLifecycleChanged()
       } catch (error) {
-        const message = getConfigurationErrorMessage(error)
-        if (message) {
-          setConfigurationError(message)
-        }
-        setWorkspaceStatus("error")
+        // A switch that didn't go through leaves the person where they were, in the workspace
+        // they already had open -- not on a full-page error that only a reload clears. Whoever
+        // asked for the switch reports the failure.
+        setWorkspaceStatus("ready")
         throw error
       }
     },
@@ -596,11 +595,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       )}
       {authStatus === "authenticated" && workspaceStatus === "error" && (
         <AppEmpty
-          title="Workspace context unavailable"
+          title="تعذّر تحميل مساحة العمل"
           description={
             configurationError ??
-            "The tenant context could not be restored from configured services."
+            "لم نتمكن من تحميل بيانات مساحة العمل. تحقق من اتصالك ثم أعد المحاولة."
           }
+          actionLabel="إعادة المحاولة"
+          onAction={() => window.location.reload()}
         />
       )}
       {(authStatus !== "authenticated" || workspaceStatus !== "loading") &&

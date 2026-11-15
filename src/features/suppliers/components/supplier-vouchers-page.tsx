@@ -7,6 +7,7 @@ import type { DateRange } from "react-day-picker"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
 
+import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 
 import {
@@ -193,9 +194,7 @@ export function SupplierVouchersPage() {
   const [amount, setAmount] = useState("")
   const [taxInclusive, setTaxInclusive] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<SupplierVoucherPaymentMethod | "">("")
-  const [transactionDate, setTransactionDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  )
+  const [transactionDate, setTransactionDate] = useState(() => toLocalDay())
   const [notes, setNotes] = useState("")
   const [isSaving, setIsSaving] = useState(false)
 
@@ -268,7 +267,7 @@ export function SupplierVouchersPage() {
     setAmount("")
     setTaxInclusive(false)
     setPaymentMethod("")
-    setTransactionDate(new Date().toISOString().slice(0, 10))
+    setTransactionDate(toLocalDay())
     setNotes("")
   }
 

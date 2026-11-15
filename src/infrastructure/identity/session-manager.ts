@@ -116,22 +116,66 @@ export class SessionManager implements SessionStorageGateway {
   }
 
   private async performRefresh(): Promise<AuthSessionDto | null> {
-    const session = this.restore()
-    if (!session) {
+    const started = this.restore()
+    if (!started) {
+      // Nothing left to renew (signed out elsewhere, or the session ran out): the app must not
+      // go on believing it is signed in.
+      notifySessionEnded()
       return null
     }
 
+    // One tab refreshes at a time. Each refresh replaces the refresh token, so two tabs doing it
+    // together (both poll in the background) meant the slower one sent a token that had just been
+    // replaced, was refused, and then wiped the session the faster one had saved -- signing every
+    // tab out. Where the browser has no lock API the checks inside still cover it.
+    const locks = typeof navigator === "undefined" ? undefined : navigator.locks
+    if (locks?.request) {
+      return locks.request(REFRESH_LOCK_NAME, () => this.refreshOnce(started))
+    }
+    return this.refreshOnce(started)
+  }
+
+  private async refreshOnce(started: AuthSessionDto): Promise<AuthSessionDto | null> {
+    // Another tab refreshed while this one waited: use what it saved.
+    const current = this.restore()
+    if (!current) return null
+    if (current.refreshToken.token !== started.refreshToken.token) return current
+
     try {
       const adapter = new AuthenticationApiAdapter(createApiClient())
-      const refreshed = await adapter.refreshSession({ refreshToken: session.refreshToken.token })
+      const refreshed = await adapter.refreshSession({ refreshToken: current.refreshToken.token })
       this.persist(refreshed)
       return refreshed
-    } catch {
-      this.clear()
+    } catch (error) {
+      // Another tab got there first after all: its session is the valid one.
+      const latest = this.restore()
+      if (latest && latest.refreshToken.token !== current.refreshToken.token) return latest
+
+      // Only the server saying "this session is over" ends it. A dropped connection, a timeout
+      // or a server error at the moment the token expired is no reason to sign a cashier out
+      // mid-shift: keep the session and let the next request try again.
+      const status = (error as { status?: number } | null)?.status
+      if (status === 400 || status === 401 || status === 403) {
+        this.clear()
+        notifySessionEnded()
+      }
       return null
     }
   }
 }
+
+const REFRESH_LOCK_NAME = "madar-auth-refresh"
+
+// Raised when the server refuses to renew the session, so the app can send the person to sign in
+// again instead of leaving them on pages where every request now fails.
+export const SESSION_ENDED_EVENT = "madar:session-ended"
+
+function notifySessionEnded() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
+}
+
+// The key the session is stored under, for noticing a sign-out made in another tab.
+export const AUTH_SESSION_STORAGE_KEY = SESSION_STORAGE_KEY
 
 export function createSessionManager(): SessionManager {
   return new SessionManager()

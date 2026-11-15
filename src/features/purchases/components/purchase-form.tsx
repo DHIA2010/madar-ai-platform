@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl"
 import { ExternalLink, FileText, Lock, Plus, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 
+import { toLocalDay } from "@/lib/local-day"
 import { openPrivateFile } from "@/lib/open-private-file"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -78,7 +79,7 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
   const [values, setValues] = useState<PurchaseFormValues>(() =>
     initialPurchase
       ? purchaseToFormValues(initialPurchase)
-      : { ...EMPTY_PURCHASE_FORM_VALUES, date: new Date().toISOString().slice(0, 10) }
+      : { ...EMPTY_PURCHASE_FORM_VALUES, date: toLocalDay() }
   )
   const [taxLevel, setTaxLevel] = useState<CalculationLevel>(() => inferTaxLevel(values))
   const [submitting, setSubmitting] = useState(false)

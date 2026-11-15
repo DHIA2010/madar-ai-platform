@@ -1,5 +1,6 @@
 "use client"
 
+import { toLocalDay } from "@/lib/local-day"
 import { useEffect, useState } from "react"
 import { useLocale, useTranslations } from "next-intl"
 import type { DateRange } from "react-day-picker"
@@ -241,6 +242,9 @@ export default function CampaignsSummaryDashboard() {
   const [objectives, setObjectives] = useState<CampaignObjectiveRow[]>([])
   const [trend, setTrend] = useState<ChannelsTrendPoint[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // A failed load is shown as such, with a way to try again -- not as a spinner that never ends.
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const [trendKpis, setTrendKpis] = useState<CampaignKpi[]>(["spend"])
   const [platformKpi, setPlatformKpi] = useState<CampaignKpi>("spend")
@@ -252,12 +256,13 @@ export default function CampaignsSummaryDashboard() {
 
     async function load() {
       setIsLoading(true)
+      setLoadFailed(false)
       const range = dateRange?.from
         ? { from: dateRange.from, to: dateRange.to ?? dateRange.from }
         : defaultRange()
       const params = {
-        startDate: range.from!.toISOString().slice(0, 10),
-        endDate: range.to!.toISOString().slice(0, 10),
+        startDate: toLocalDay(range.from!),
+        endDate: toLocalDay(range.to!),
       }
       try {
         const [summaryRes, platformsRes, objectivesRes, trendRes] = await Promise.all([
@@ -271,6 +276,8 @@ export default function CampaignsSummaryDashboard() {
         setPlatforms(platformsRes.items)
         setObjectives(objectivesRes.items)
         setTrend(trendRes.items)
+      } catch {
+        if (!cancelled) setLoadFailed(true)
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -280,7 +287,7 @@ export default function CampaignsSummaryDashboard() {
     return () => {
       cancelled = true
     }
-  }, [dateRange])
+  }, [dateRange, reloadKey])
 
   function bucketLabel(bucketStart: string): string {
     return new Date(bucketStart).toLocaleDateString(locale === "ar" ? "ar-SA" : "en-US", {
@@ -357,7 +364,22 @@ export default function CampaignsSummaryDashboard() {
         <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
-      {isLoading || !summary ? (
+      {loadFailed ? (
+        <div className="flex flex-col items-center justify-center gap-3 p-16 text-center">
+          <p className="text-[13px] text-muted-foreground">
+            {locale === "ar"
+              ? "تعذّر تحميل البيانات. تحقق من اتصالك ثم أعد المحاولة."
+              : "Couldn't load the data. Check your connection and try again."}
+          </p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="rounded-[10px] border border-[#e1e7f0] bg-white px-4 py-2 text-[13px] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"
+          >
+            {locale === "ar" ? "إعادة المحاولة" : "Try again"}
+          </button>
+        </div>
+      ) : isLoading || !summary ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
         </div>

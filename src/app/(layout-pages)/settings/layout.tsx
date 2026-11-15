@@ -20,10 +20,10 @@ export default async function SettingsLayout({ children }: { children: ReactNode
   return (
     <div
       dir={localeDirection(locale)}
-      className="-m-6 flex min-h-[calc(100svh-4rem)] flex-col items-stretch md:flex-row"
+      className="-m-4 flex min-h-[calc(100svh-4rem)] flex-col items-stretch md:-m-6 md:flex-row"
     >
       {/* On a phone the rail stacks above the content instead of squeezing it. */}
-      <aside className="w-full shrink-0 border-b border-[#e8edf3] bg-white px-3 py-5 md:w-[230px] md:border-b-0 md:border-e">
+      <aside className="w-full shrink-0 border-b border-[#e8edf3] bg-white px-3 py-3 md:w-[230px] md:py-5 md:border-b-0 md:border-e">
         <SettingsNav />
       </aside>
       <div className="min-w-0 flex-1 px-[22px] py-6">{children}</div>

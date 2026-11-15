@@ -188,7 +188,7 @@ export default function LiveVisitorsPage() {
       ) : null}
 
       {/* KPI row 1 */}
-      <div className="mb-3 flex items-stretch gap-3">
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:items-stretch">
         <KpiCard
           label={t("kpis.liveVisitorsNow.label")}
           value={String(summary?.liveVisitors ?? 0)}
@@ -227,7 +227,7 @@ export default function LiveVisitorsPage() {
       </div>
 
       {/* KPI row 2 */}
-      <div className="mb-3.5 flex items-stretch gap-3">
+      <div className="mb-3.5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:items-stretch">
         <KpiCard
           label={t("kpis.addToCartsNow.label")}
           value={String(summary?.addToCarts ?? 0)}
@@ -269,7 +269,7 @@ export default function LiveVisitorsPage() {
 
       {/* Live list + donut + map.
           RTL grid auto-placement: the first DOM child lands in the rightmost track. */}
-      <div className="mb-3.5 grid grid-cols-[1fr_1fr_2fr] gap-3">
+      <div className="mb-3.5 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr]">
         <SurfaceCard title={t("liveVisitorsCardTitle", { count: summary?.liveVisitors ?? 0 })}>
           <div className="flex-1">
             {filteredVisitors.length === 0 ? (
@@ -338,8 +338,8 @@ export default function LiveVisitorsPage() {
             <Globe className="size-3.5 text-[#8098b4]" />
             <span className="text-sm font-bold text-[#0d1b3e]">{t("visitorDistribution")}</span>
           </div>
-          <div className="flex min-h-0 flex-1 gap-5">
-            <div className="flex w-[170px] shrink-0 flex-col gap-[9px] self-start">
+          <div className="flex min-h-0 flex-1 flex-col gap-5 sm:flex-row">
+            <div className="flex w-full flex-col gap-[9px] self-start sm:w-[170px] sm:shrink-0">
               {(data?.countries ?? []).length === 0 ? (
                 <span className="text-xs text-[#8098b4]">{t("noDataYet")}</span>
               ) : (
@@ -374,7 +374,7 @@ export default function LiveVisitorsPage() {
       </div>
 
       {/* Cart additions + top products */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <SurfaceCard title={t("recentCartAdditions")}>
           <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 border-b border-[#e8edf3] bg-[#f8fafc] px-[18px] py-2">
             <span className="text-[11px] font-semibold text-[#8098b4]">

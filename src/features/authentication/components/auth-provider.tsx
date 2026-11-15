@@ -12,6 +12,7 @@ import { useAuthStore } from "../state/auth.store"
 import type { LoginRequest, RegisterRequest, UpdateProfileRequest } from "../types"
 
 import { useApplicationServices } from "@/application"
+import { AUTH_SESSION_STORAGE_KEY, SESSION_ENDED_EVENT } from "@/infrastructure/identity"
 
 const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024
@@ -221,18 +222,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ]
   )
 
+  // The session can end while the app is open: the server refuses to renew it, or the person
+  // signs out in another tab. Either way this tab stops being signed in too, which is what sends
+  // it to the sign-in page (ProtectedRoute) instead of leaving every request failing.
+  useEffect(() => {
+    const onSessionEnded = () => clear()
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_SESSION_STORAGE_KEY && event.newValue === null) clear()
+    }
+    window.addEventListener(SESSION_ENDED_EVENT, onSessionEnded)
+    window.addEventListener("storage", onStorage)
+    return () => {
+      window.removeEventListener(SESSION_ENDED_EVENT, onSessionEnded)
+      window.removeEventListener("storage", onStorage)
+    }
+  }, [clear])
+
   if (!hasRestoredOnce) {
     return <AppLoading variant="page" />
   }
 
   if (authStatus === "authenticated" && !user) {
     return (
-      <AppEmpty title="Unable to restore session" description="Please sign in again to continue." />
+      <AppEmpty title="تعذّر استعادة جلستك" description="يرجى تسجيل الدخول مرة أخرى للمتابعة." />
     )
   }
 
   if (configurationError) {
-    return <AppEmpty title="Configuration error" description={configurationError} />
+    return <AppEmpty title="خطأ في الإعدادات" description={configurationError} />
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

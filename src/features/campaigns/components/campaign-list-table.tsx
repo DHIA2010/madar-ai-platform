@@ -897,7 +897,7 @@ export function CampaignListTable() {
               <AppTable className="[&_td]:py-4 [&_th]:py-3.5 [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-20 [&_thead_th]:bg-card/95 [&_thead_th]:backdrop-blur-sm">
                 <AppTableHeader>
                   <AppTableRow>
-                    <AppTableHead className="sticky left-0 z-20 w-12 bg-card">
+                    <AppTableHead className="z-20 w-12 bg-card md:sticky md:start-0">
                       <input
                         type="checkbox"
                         checked={allPageSelected}
@@ -906,7 +906,7 @@ export function CampaignListTable() {
                         className="size-4 cursor-pointer rounded border-border"
                       />
                     </AppTableHead>
-                    <AppTableHead className="sticky left-12 z-20 min-w-[220px] bg-card">
+                    <AppTableHead className="z-20 min-w-[220px] bg-card md:sticky md:start-12">
                       <SortHeader
                         label={t("metrics.entity.campaign")}
                         active={sortBy === "name"}
@@ -1034,7 +1034,7 @@ export function CampaignListTable() {
                           onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
                         >
                           <AppTableCell
-                            className="sticky left-0 z-10 bg-card"
+                            className="z-10 bg-card md:sticky md:start-0"
                             onClick={(event) => event.stopPropagation()}
                           >
                             <input
@@ -1056,7 +1056,7 @@ export function CampaignListTable() {
                             />
                           </AppTableCell>
 
-                          <AppTableCell className="sticky left-12 z-10 bg-card">
+                          <AppTableCell className="z-10 bg-card md:sticky md:start-12">
                             <div className="space-y-0.5">
                               <p className="font-medium text-foreground">{campaign.name}</p>
                               <p className="text-xs text-muted-foreground">{campaign.country}</p>

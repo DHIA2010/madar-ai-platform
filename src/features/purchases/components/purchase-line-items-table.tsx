@@ -227,8 +227,8 @@ export function PurchaseLineItemsTable({
         </div>
       </div>
 
-      <div className={cn(PANEL, "overflow-hidden")}>
-        <table className="w-full text-[12.5px]">
+      <div className={cn(PANEL, "overflow-x-auto")}>
+        <table className="w-full min-w-[44rem] text-[12.5px]">
           <thead>
             <tr className="border-b border-[#e1e7f0] bg-[#f7f9fd] text-start">
               <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>

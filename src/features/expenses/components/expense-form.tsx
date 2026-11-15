@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 
+import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
@@ -35,7 +36,7 @@ export function ExpenseForm() {
 
   const [values, setValues] = useState<ExpenseFormValues>(() => ({
     ...EMPTY_EXPENSE_FORM_VALUES,
-    expenseDate: new Date().toISOString().slice(0, 10),
+    expenseDate: toLocalDay(),
   }))
   const [submitting, setSubmitting] = useState(false)
 

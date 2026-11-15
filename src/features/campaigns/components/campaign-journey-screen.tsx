@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl"
 import { subDays } from "date-fns"
 import type { DateRange } from "react-day-picker"
 
+import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 
 import { AppDateRangeFilter } from "@/components/app"
@@ -80,8 +81,9 @@ export function CampaignJourneyScreen() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [rows, setRows] = useState<CampaignJourneyRow[]>([])
 
-  const startDate = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : undefined
-  const endDate = (dateRange?.to ?? dateRange?.from)?.toISOString().slice(0, 10)
+  const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
+  const endDay = dateRange?.to ?? dateRange?.from
+  const endDate = endDay ? toLocalDay(endDay) : undefined
 
   useEffect(() => {
     let cancelled = false

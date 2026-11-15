@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
@@ -87,7 +88,7 @@ export function StockCountFormPage() {
   const [loading, setLoading] = useState(Boolean(countId))
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
   const [branch, setBranch] = useState("")
-  const [countDate, setCountDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [countDate, setCountDate] = useState(() => toLocalDay())
   const [notes, setNotes] = useState("")
   const [rows, setRows] = useState<CountRow[] | null>(null)
   const [loadingStock, setLoadingStock] = useState(false)

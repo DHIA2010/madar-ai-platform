@@ -6872,7 +6872,8 @@
         "workspaceActivated": "تم تنشيط مساحة العمل.",
         "workspaceActivateFailed": "تعذر تنشيط مساحة العمل.",
         "workspaceDeactivated": "تم إيقاف مساحة العمل.",
-        "workspaceDeactivateFailed": "تعذر إيقاف مساحة العمل."
+        "workspaceDeactivateFailed": "تعذر إيقاف مساحة العمل.",
+        "workspaceSwitchFailed": "تعذّر الانتقال إلى مساحة العمل. حاول مرة أخرى."
       },
       "initialsFallback": "؟"
     }

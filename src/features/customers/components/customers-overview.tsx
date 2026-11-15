@@ -584,7 +584,7 @@ export function CustomersOverview() {
             <p className={cn("text-[12.5px]", MUTED)}>{t("subheading")}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <AppButton
             variant="outline"
             icon={<Download className="size-4" />}

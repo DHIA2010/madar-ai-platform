@@ -3696,7 +3696,7 @@ export default function AddProduct() {
       </div>
 
       {/* RTL: the primary action is written first so it sits at the right of the pair. */}
-      <div className="sticky bottom-0 z-30 -mx-6 border-t border-[#e1e7f0] bg-white/95 px-6 py-3 backdrop-blur">
+      <div className="sticky bottom-0 z-30 -mx-4 md:-mx-6 border-t border-[#e1e7f0] bg-white/95 px-6 py-3 backdrop-blur">
         {/* was `fixed inset-x-0`: that draws over the app sidebar's own help card since it
             positions against the whole viewport rather than this page's own column. `sticky`
             stays pinned to the bottom without leaving this column's real width; the negative

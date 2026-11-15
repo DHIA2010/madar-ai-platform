@@ -44,6 +44,7 @@ import {
 import { kpiService } from "../services"
 import { KpiWidgetRenderer } from "./kpi-widget-renderer"
 
+import { useIsMobile } from "@/hooks/use-mobile"
 import { type Locale, localeDirection } from "@/i18n/locales"
 
 type KpiWizardTranslator = ReturnType<typeof useTranslations<"reports.kpiWizard">>
@@ -88,6 +89,7 @@ function widgetPixelHeight(rowSpan: number): number {
 }
 
 export function ReportViewerPage({ reportId }: { reportId: string }) {
+  const isMobile = useIsMobile()
   const t = useTranslations("reports.reportViewer")
   const tKpiWizard = useTranslations("reports.kpiWizard")
   const tCommon = useTranslations("reports.common")
@@ -701,7 +703,12 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
           // A static CSS grid mirroring the builder's 12-column layout (x/w in columns, y/h in
           // rows) -- read-only here, so no drag/resize library is needed, just the same
           // coordinates placed with plain grid-column/grid-row spans.
-          <div dir="ltr" className="grid grid-cols-12 gap-4" style={{ gridAutoRows: "36px" }}>
+          // On a phone the widgets stack in one column, each keeping its own height.
+          <div
+            dir="ltr"
+            className="grid grid-cols-1 gap-4 md:grid-cols-12"
+            style={{ gridAutoRows: "36px" }}
+          >
             {[...report.widgets]
               .sort((a, b) => a.order - b.order)
               .map((widget) => {
@@ -712,10 +719,14 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                     key={widget.id}
                     dir={localeDirection(locale)}
                     className="overflow-hidden rounded-xl border bg-card"
-                    style={{
-                      gridColumn: `${widget.x + 1} / span ${widget.w}`,
-                      gridRow: `${widget.y + 1} / span ${widget.h}`,
-                    }}
+                    style={
+                      isMobile
+                        ? { gridRow: `span ${widget.h}` }
+                        : {
+                            gridColumn: `${widget.x + 1} / span ${widget.w}`,
+                            gridRow: `${widget.y + 1} / span ${widget.h}`,
+                          }
+                    }
                   >
                     {!kpi ? (
                       <p className="p-4 text-sm text-muted-foreground">{t("unknownKpi")}</p>

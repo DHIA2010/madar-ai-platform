@@ -34,7 +34,8 @@ export default function PosSummaryDashboard() {
   const locale = useLocale() as Locale
   const currency = locale === "ar" ? "ر.س" : "SAR"
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
-  const { data, isLoading } = usePosSummaryReport(filters)
+  const { data, isLoading, error, refetch } = usePosSummaryReport(filters)
+  const isError = error !== null && !data
 
   // Fetched once, independent of the report's own loading state -- resolves a payment_method_code
   // to its real configured display name (e.g. "mada" -> "مدى") for the donut, same service the
@@ -70,7 +71,23 @@ export default function PosSummaryDashboard() {
         onWorkspaceChange={setWorkspaceId}
       />
 
-      {isLoading || !data ? (
+      {isError ? (
+        // A failed load is shown as such, with a way to try again -- not as an endless spinner.
+        <div className="flex flex-col items-center justify-center gap-3 p-16 text-center">
+          <p className="text-[13px] text-muted-foreground">
+            {locale === "ar"
+              ? "تعذّر تحميل البيانات. تحقق من اتصالك ثم أعد المحاولة."
+              : "Couldn't load the data. Check your connection and try again."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="rounded-[10px] border border-[#e1e7f0] bg-white px-4 py-2 text-[13px] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"
+          >
+            {locale === "ar" ? "إعادة المحاولة" : "Try again"}
+          </button>
+        </div>
+      ) : isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
         </div>

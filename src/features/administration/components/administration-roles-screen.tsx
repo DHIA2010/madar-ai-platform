@@ -521,10 +521,10 @@ export function AdministrationRolesScreen() {
               </div>
             </div>
           ) : (
-            <div className="flex gap-5">
+            <div className="flex flex-col gap-5 md:flex-row">
               {/* First in DOM = rightmost under dir="rtl", matching the reference layout
                   (stepper on the right, step content on the left). */}
-              <div className="w-[210px] shrink-0 space-y-4">
+              <div className="w-full space-y-4 md:w-[210px] md:shrink-0">
                 <ol className="space-y-1">
                   {WIZARD_STEP_KEYS.map((item) => {
                     const isDone = item.step < step
