@@ -10,8 +10,17 @@ import { presetRange, today, useFormatters, useLoader } from "../hooks/use-accou
 import { accountingService } from "../services/accounting.service"
 import type { PartyType } from "../types/accounting.types"
 import { EntryDialog } from "./entry-dialog"
-import { AccountingPage, Empty, ExportButton, LoadFailed, Loading, RangeControl } from "./shell"
-import { AMOUNT, FIELD, HEADING, MUTED, PANEL, TD, TH } from "./styles"
+import {
+  AccountingPage,
+  Choice,
+  DateField,
+  Empty,
+  ExportButton,
+  LoadFailed,
+  Loading,
+  RangeControl,
+} from "./shell"
+import { AMOUNT, HEADING, MUTED, PANEL, TD, TH } from "./styles"
 
 // One account's statement: what it opened with, every movement, and the balance after each.
 export function LedgerPage() {
@@ -36,18 +45,18 @@ export function LedgerPage() {
       subtitle={t("subtitle")}
       actions={
         <>
-          <select
-            aria-label={t("account")}
+          <Choice
+            ariaLabel={t("account")}
             value={selected ?? ""}
-            onChange={(event) => setAccountId(event.target.value)}
-            className={cn(FIELD, "w-auto max-w-[260px] min-w-[200px]")}
-          >
-            {(accounts.data ?? []).map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.code} · {accountName(account)}
-              </option>
-            ))}
-          </select>
+            onChange={setAccountId}
+            options={(accounts.data ?? []).map((account) => ({
+              value: account.id,
+              label: accountName(account),
+              hint: account.code,
+              keywords: account.code,
+            }))}
+            className="w-full sm:w-[260px]"
+          />
           <RangeControl range={range} onChange={setRange} />
           {data ? (
             <ExportButton
@@ -200,15 +209,15 @@ export function BalancesPage() {
               </button>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-[13px] text-[#6b7b96]">
+          <div className="flex items-center gap-2 text-[13px] text-[#6b7b96]">
             {t("asOf")}
-            <input
-              type="date"
+            <DateField
+              ariaLabel={t("asOf")}
               value={asOf}
-              onChange={(event) => event.target.value && setAsOf(event.target.value)}
-              className={cn(FIELD, "w-auto")}
+              onChange={setAsOf}
+              className="w-[172px]"
             />
-          </label>
+          </div>
           {data ? (
             <ExportButton
               filename={`${type}-balances-${asOf}`}

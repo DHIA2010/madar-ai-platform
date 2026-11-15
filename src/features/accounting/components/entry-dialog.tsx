@@ -17,7 +17,7 @@ import {
 } from "../hooks/use-accounting"
 import { accountingService } from "../services/accounting.service"
 import type { Account, EntryDetail, EntryInput } from "../types/accounting.types"
-import { Loading } from "./shell"
+import { Choice, DateField, Loading } from "./shell"
 import {
   ACCOUNT_CODE,
   AMOUNT,
@@ -260,6 +260,13 @@ export function EntryFormDialog({
   const difference = Math.round((totalDebit - totalCredit) * 100) / 100
   const ready = filled.length >= 2 && difference === 0 && totalDebit > 0
   const active = accounts.filter((account) => account.isActive)
+  // The number sits under the name and is searchable, so an account is found either way.
+  const accountOptions = active.map((account) => ({
+    value: account.id,
+    label: accountName(account),
+    hint: account.code,
+    keywords: account.code,
+  }))
 
   async function save() {
     const input: EntryInput = {
@@ -341,15 +348,10 @@ export function EntryFormDialog({
     >
       <div dir={localeDirection(locale)} className="flex flex-col gap-4 overflow-y-auto">
         <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
-          <label>
+          <div>
             <span className={FIELD_LABEL}>{t("date")}</span>
-            <input
-              type="date"
-              value={date}
-              onChange={(event) => event.target.value && setDate(event.target.value)}
-              className={FIELD}
-            />
-          </label>
+            <DateField ariaLabel={t("date")} value={date} onChange={setDate} />
+          </div>
           <label>
             <span className={FIELD_LABEL}>{t("description")}</span>
             <input
@@ -377,19 +379,14 @@ export function EntryFormDialog({
               {lines.map((line) => (
                 <tr key={line.key} className="border-t border-[#eef1f6]">
                   <td className="p-1.5">
-                    <select
-                      aria-label={t("account")}
+                    <Choice
+                      ariaLabel={t("account")}
                       value={line.accountId}
-                      onChange={(event) => update(line.key, { accountId: event.target.value })}
-                      className={cn(FIELD, "h-10")}
-                    >
-                      <option value="">{t("pickAccount")}</option>
-                      {active.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.code} · {accountName(account)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(accountId) => update(line.key, { accountId })}
+                      placeholder={t("pickAccount")}
+                      options={accountOptions}
+                      className="min-w-[220px]"
+                    />
                   </td>
                   {(["debit", "credit"] as const).map((side) => (
                     <td key={side} className="p-1.5">
@@ -405,7 +402,7 @@ export function EntryFormDialog({
                           })
                         }
                         placeholder="0.00"
-                        className={cn(FIELD, "h-10 text-end", AMOUNT)}
+                        className={cn(FIELD, "text-end", AMOUNT)}
                       />
                     </td>
                   ))}
@@ -415,7 +412,7 @@ export function EntryFormDialog({
                       value={line.memo}
                       onChange={(event) => update(line.key, { memo: event.target.value })}
                       maxLength={300}
-                      className={cn(FIELD, "h-10")}
+                      className={FIELD}
                     />
                   </td>
                   <td className="p-1.5 text-center">

@@ -48,6 +48,7 @@ export function AppDateField({
   placeholder,
   ariaLabel,
   triggerClassName,
+  clearable = true,
 }: {
   value: string
   onChange: (next: string) => void
@@ -55,6 +56,8 @@ export function AppDateField({
   ariaLabel?: string
   // Overrides for the field itself, e.g. a shorter height in a compact row.
   triggerClassName?: string
+  // False for a date the screen can't do without: the clear button is left out.
+  clearable?: boolean
 }) {
   const locale = useLocale()
   const t = useTranslations("dateRangeFilter")
@@ -110,7 +113,7 @@ export function AppDateField({
 
         {/* Sits outside the trigger: a button inside a button is invalid, and clearing the date
             must not also open the picker. */}
-        {selected ? (
+        {selected && clearable ? (
           <button
             type="button"
             aria-label={t("clear")}

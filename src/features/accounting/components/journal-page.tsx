@@ -10,10 +10,12 @@ import { presetRange, useAccountingAccess, useFormatters, useLoader } from "../h
 import { accountingService } from "../services/accounting.service"
 import { ENTRY_SOURCES, type EntryDetail } from "../types/accounting.types"
 import { EntryDialog, EntryFormDialog } from "./entry-dialog"
-import { AccountingPage, Empty, LoadFailed, Loading, RangeControl } from "./shell"
+import { AccountingPage, Choice, Empty, LoadFailed, Loading, RangeControl } from "./shell"
 import { AMOUNT, FIELD, MUTED, PANEL, PRIMARY_BUTTON, SECONDARY_BUTTON, TD, TH } from "./styles"
 
 const PAGE_SIZE = 25
+// The dropdown needs a real value for "every source"; the filter itself is an empty string.
+const ALL_SOURCES = "all"
 
 // Every journal entry, newest first: the ones Madar posted from documents and the manual ones.
 export function JournalPage() {
@@ -87,22 +89,19 @@ export function JournalPage() {
           placeholder={t("searchPlaceholder")}
           className={cn(FIELD, "w-full sm:w-64")}
         />
-        <select
-          aria-label={t("source")}
-          value={sourceType}
-          onChange={(event) => {
-            setSourceType(event.target.value)
+        <Choice
+          ariaLabel={t("source")}
+          value={sourceType || ALL_SOURCES}
+          onChange={(next) => {
+            setSourceType(next === ALL_SOURCES ? "" : next)
             setPage(1)
           }}
-          className={cn(FIELD, "w-auto min-w-[170px]")}
-        >
-          <option value="">{t("allSources")}</option>
-          {ENTRY_SOURCES.map((source) => (
-            <option key={source} value={source}>
-              {tSource(source)}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: ALL_SOURCES, label: t("allSources") },
+            ...ENTRY_SOURCES.map((source) => ({ value: source, label: tSource(source) })),
+          ]}
+          className="w-full sm:w-[200px]"
+        />
         <RangeControl
           range={range}
           onChange={(next) => {

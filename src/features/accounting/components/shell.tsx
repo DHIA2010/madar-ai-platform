@@ -8,6 +8,8 @@ import { BookOpenCheck, Download, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
+import { AppDateField, AppSearchableSelect } from "@/components/app"
+
 import {
   presetRange,
   RANGE_PRESETS,
@@ -15,7 +17,7 @@ import {
   useAccountingAccess,
 } from "../hooks/use-accounting"
 import type { Range } from "../types/accounting.types"
-import { FIELD, HEADING, MUTED, PANEL, SECONDARY_BUTTON } from "./styles"
+import { HEADING, MUTED, PANEL, SECONDARY_BUTTON } from "./styles"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
@@ -110,48 +112,105 @@ export function RangeControl({
   const t = useTranslations("accounting.range")
   const [preset, setPreset] = useState<RangePreset | "custom">("thisMonth")
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <select
-        aria-label={t("period")}
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <Choice
+        ariaLabel={t("period")}
         value={preset}
-        onChange={(event) => {
-          const next = event.target.value as RangePreset | "custom"
-          setPreset(next)
-          if (next !== "custom") onChange(presetRange(next))
+        onChange={(next) => {
+          setPreset(next as RangePreset | "custom")
+          if (next !== "custom") onChange(presetRange(next as RangePreset))
         }}
-        className={cn(FIELD, "w-auto min-w-[150px]")}
-      >
-        {RANGE_PRESETS.map((option) => (
-          <option key={option} value={option}>
-            {t(option)}
-          </option>
-        ))}
-        <option value="custom">{t("custom")}</option>
-      </select>
-      <input
-        type="date"
-        aria-label={t("from")}
-        value={range.from}
-        max={range.to}
-        onChange={(event) => {
-          if (!event.target.value) return
-          setPreset("custom")
-          onChange({ ...range, from: event.target.value })
-        }}
-        className={cn(FIELD, "w-auto")}
+        options={[
+          ...RANGE_PRESETS.map((option) => ({ value: option, label: t(option) })),
+          { value: "custom", label: t("custom") },
+        ]}
+        className="w-full sm:w-[160px]"
       />
-      <span className={cn("text-[13px]", MUTED)}>{t("to")}</span>
-      <input
-        type="date"
-        aria-label={t("to")}
-        value={range.to}
-        min={range.from}
-        onChange={(event) => {
-          if (!event.target.value) return
+      <DateField
+        ariaLabel={t("from")}
+        value={range.from}
+        onChange={(from) => {
           setPreset("custom")
-          onChange({ ...range, to: event.target.value })
+          // The start never passes the end.
+          onChange({ from, to: from > range.to ? from : range.to })
         }}
-        className={cn(FIELD, "w-auto")}
+        className="w-full sm:w-[172px]"
+      />
+      <span className={cn("hidden text-[13px] sm:inline", MUTED)}>{t("to")}</span>
+      <DateField
+        ariaLabel={t("to")}
+        value={range.to}
+        onChange={(to) => {
+          setPreset("custom")
+          onChange({ from: to < range.from ? to : range.from, to })
+        }}
+        className="w-full sm:w-[172px]"
+      />
+    </div>
+  )
+}
+
+// A date, picked from Madar's own calendar (Arabic month and day names, the app's styling)
+// instead of the browser's. A date can only be emptied where the screen allows it.
+export function DateField({
+  value,
+  onChange,
+  ariaLabel,
+  className,
+  clearable = false,
+}: {
+  value: string
+  onChange: (next: string) => void
+  ariaLabel?: string
+  className?: string
+  clearable?: boolean
+}) {
+  return (
+    <div className={cn("shrink-0", className)}>
+      <AppDateField
+        value={value}
+        ariaLabel={ariaLabel}
+        clearable={clearable}
+        onChange={(next) => {
+          if (next || clearable) onChange(next)
+        }}
+        triggerClassName="h-11 w-full rounded-[12px] border-[#e1e7f0] bg-white text-[13px]"
+      />
+    </div>
+  )
+}
+
+// A choice from a list, in Madar's own dropdown instead of the browser's.
+export function Choice({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  placeholder,
+  disabled,
+  className,
+}: {
+  value: string
+  onChange: (next: string) => void
+  options: Array<{ value: string; label: string; hint?: string; keywords?: string }>
+  ariaLabel?: string
+  placeholder?: string
+  disabled?: boolean
+  className?: string
+}) {
+  const t = useTranslations("accounting.common")
+  return (
+    <div className={cn("shrink-0", className)}>
+      <AppSearchableSelect
+        value={value}
+        onChange={onChange}
+        options={options}
+        ariaLabel={ariaLabel}
+        placeholder={placeholder ?? t("choose")}
+        searchPlaceholder={t("search")}
+        emptyLabel={t("noResults")}
+        disabled={disabled}
+        triggerClassName="h-11 w-full rounded-[12px] border-[#e1e7f0] bg-white text-[13px]"
       />
     </div>
   )

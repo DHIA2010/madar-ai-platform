@@ -14,16 +14,8 @@ import {
   useLoader,
 } from "../hooks/use-accounting"
 import { accountingService } from "../services/accounting.service"
-import { AccountingPage, LoadFailed, Loading } from "./shell"
-import {
-  FIELD,
-  FIELD_LABEL,
-  HEADING,
-  MUTED,
-  PANEL,
-  PRIMARY_BUTTON,
-  SECONDARY_BUTTON,
-} from "./styles"
+import { AccountingPage, DateField, LoadFailed, Loading } from "./shell"
+import { FIELD_LABEL, HEADING, MUTED, PANEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "./styles"
 
 // Closing a period (nothing in it changes afterwards) and rebuilding the automatic entries.
 export function AccountingSettingsPage() {
@@ -86,15 +78,15 @@ export function AccountingSettingsPage() {
             </p>
             {canManage ? (
               <div className="mt-4 flex flex-wrap items-end gap-2">
-                <label className="min-w-[180px] flex-1">
+                <div className="min-w-[180px] flex-1">
                   <span className={FIELD_LABEL}>{t("closeThrough")}</span>
-                  <input
-                    type="date"
+                  <DateField
+                    ariaLabel={t("closeThrough")}
                     value={lockDay}
-                    onChange={(event) => setLockDay(event.target.value)}
-                    className={FIELD}
+                    onChange={setLockDay}
+                    clearable
                   />
-                </label>
+                </div>
                 <button
                   type="button"
                   className={PRIMARY_BUTTON}

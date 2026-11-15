@@ -10,8 +10,16 @@ import { ROUTES } from "@/constants/routes"
 import { presetRange, today, useFormatters, useLoader } from "../hooks/use-accounting"
 import { accountingService } from "../services/accounting.service"
 import type { Account, StatementSection } from "../types/accounting.types"
-import { AccountingPage, Empty, ExportButton, LoadFailed, Loading, RangeControl } from "./shell"
-import { ACCOUNT_CODE, AMOUNT, FIELD, HEADING, MUTED, PANEL, TD, TH } from "./styles"
+import {
+  AccountingPage,
+  DateField,
+  Empty,
+  ExportButton,
+  LoadFailed,
+  Loading,
+  RangeControl,
+} from "./shell"
+import { ACCOUNT_CODE, AMOUNT, HEADING, MUTED, PANEL, TD, TH } from "./styles"
 
 // ---- Trial balance ----
 
@@ -287,15 +295,15 @@ export function BalanceSheetPage() {
       subtitle={t("subtitle")}
       actions={
         <>
-          <label className="flex items-center gap-2 text-[13px] text-[#6b7b96]">
+          <div className="flex items-center gap-2 text-[13px] text-[#6b7b96]">
             {t("asOf")}
-            <input
-              type="date"
+            <DateField
+              ariaLabel={t("asOf")}
               value={asOf}
-              onChange={(event) => event.target.value && setAsOf(event.target.value)}
-              className={cn(FIELD, "w-auto")}
+              onChange={setAsOf}
+              className="w-[172px]"
             />
-          </label>
+          </div>
           {data ? (
             <ExportButton
               filename={`balance-sheet-${asOf}`}

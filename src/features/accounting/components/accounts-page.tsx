@@ -26,7 +26,7 @@ import {
   type AccountType,
   SECTIONS_BY_TYPE,
 } from "../types/accounting.types"
-import { AccountingPage, LoadFailed, Loading } from "./shell"
+import { AccountingPage, Choice, LoadFailed, Loading } from "./shell"
 import {
   AMOUNT,
   FIELD,
@@ -177,38 +177,31 @@ function AccountDialog({
             className={FIELD}
           />
         </label>
-        <label>
+        <div>
           <span className={FIELD_LABEL}>{t("type")}</span>
-          <select
+          <Choice
+            ariaLabel={t("type")}
             value={form.type}
             disabled={locked}
-            onChange={(event) => {
-              const type = event.target.value as AccountType
+            onChange={(next) => {
+              const type = next as AccountType
               setForm((current) => ({ ...current, type, section: SECTIONS_BY_TYPE[type][0] }))
             }}
-            className={FIELD}
-          >
-            {ACCOUNT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {tType(type)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
+            options={ACCOUNT_TYPES.map((type) => ({ value: type, label: tType(type) }))}
+          />
+        </div>
+        <div>
           <span className={FIELD_LABEL}>{t("section")}</span>
-          <select
+          <Choice
+            ariaLabel={t("section")}
             value={form.section}
-            onChange={(event) => set("section", event.target.value as AccountSection)}
-            className={FIELD}
-          >
-            {SECTIONS_BY_TYPE[form.type].map((section) => (
-              <option key={section} value={section}>
-                {tSection(section)}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={(next) => set("section", next as AccountSection)}
+            options={SECTIONS_BY_TYPE[form.type].map((section) => ({
+              value: section,
+              label: tSection(section),
+            }))}
+          />
+        </div>
         {locked ? (
           <p className={cn("text-[12px] leading-5 sm:col-span-2", MUTED)}>{t("systemNote")}</p>
         ) : null}
