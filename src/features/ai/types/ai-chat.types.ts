@@ -8,7 +8,7 @@ import type { ApplicationCategoryId } from "@/features/applications"
 // reason -- see its own comment).
 export type AiChatScopeCategory = Exclude<
   ApplicationCategoryId,
-  "ai" | "customReports" | "promotions" | "invoicing"
+  "ai" | "customReports" | "promotions" | "invoicing" | "accounting"
 >
 
 export type ChatMessageRole = "user" | "assistant" | "system_notice"

@@ -20,6 +20,7 @@ const APP_LABEL: Record<string, string> = {
   expenses: "المصروفات",
   promotions: "العروض الترويجية",
   invoicing: "الفواتير وعروض الأسعار",
+  accounting: "المحاسبة",
   madarApps: "تطبيقات مدار",
   madarComplete: "مدار الكامل",
 }

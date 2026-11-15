@@ -27,7 +27,9 @@ import { ReceiptService } from "../../billing/receipts"
 import { runBillingMaintenance } from "../../subscriptions/maintenance"
 import { toPublicPlatformSettings } from "../../platform-settings/types"
 import { handlePlatformAdminRoute } from "./platform-admin-routes"
+import { handleAccountingRoute } from "./accounting-routes"
 import { handleInvoicingRoute, handlePublicInvoicingRoute } from "./invoicing-routes"
+import { AccountingService } from "../../accounting/service"
 import { SalesInvoicesService } from "../../invoicing/invoices-service"
 import { QuotationsService } from "../../invoicing/quotations-service"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
@@ -910,6 +912,9 @@ export function createIdentityApiServer(
     : null
   const posSettingsService = container.infrastructure.database
     ? new PosSettingsService(container.infrastructure.database)
+    : null
+  const accountingService = container.infrastructure.database
+    ? new AccountingService(container.infrastructure.database)
     : null
   const invoicingServices = {
     database: container.infrastructure.database ?? null,
@@ -2775,6 +2780,20 @@ export function createIdentityApiServer(
           services: invoicingServices,
           send,
           sendRaw,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
+
+      // Accounting (accounting/): chart of accounts, journal, statements.
+      if (
+        await handleAccountingRoute({
+          method,
+          url,
+          actor,
+          service: accountingService,
+          send,
           readJsonBody: () => readJsonBody(request),
         })
       ) {

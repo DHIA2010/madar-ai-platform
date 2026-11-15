@@ -220,6 +220,7 @@ export interface RequestApplicationActivationCommand {
     | "customReports"
     | "promotions"
     | "invoicing"
+    | "accounting"
     | "madarComplete"
   // Resolved and priced by the REST route against current pricing (PricingService) before this
   // command runs -- the command layer has no pricing access of its own.

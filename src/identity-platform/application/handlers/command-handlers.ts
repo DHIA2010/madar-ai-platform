@@ -1363,6 +1363,7 @@ export class IdentityCommandHandlers {
     customReports: "customReportsEnabled",
     promotions: "promotionsEnabled",
     invoicing: "invoicingEnabled",
+    accounting: "accountingEnabled",
   }
 
   async requestApplicationActivation(

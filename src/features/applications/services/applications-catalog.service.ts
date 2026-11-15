@@ -2,6 +2,7 @@ import type { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import {
   BadgePercent,
+  BookOpenCheck,
   Bot,
   CreditCard,
   FileBarChart,
@@ -39,6 +40,7 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   customReports: "customReportsEnabled",
   promotions: "promotionsEnabled",
   invoicing: "invoicingEnabled",
+  accounting: "accountingEnabled",
 }
 
 // Which application categories this organization currently has activated -- the single shared
@@ -78,6 +80,7 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   customReports: "customReportsTrialEndsAt",
   promotions: "promotionsTrialEndsAt",
   invoicing: "invoicingTrialEndsAt",
+  accounting: "accountingTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -92,6 +95,7 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     customReports: "customReportsTrialUsed",
     promotions: "promotionsTrialUsed",
     invoicing: "invoicingTrialUsed",
+    accounting: "accountingTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -276,6 +280,24 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     accent: {
       iconWrapperClassName: "bg-[#eef2ff] text-[#4f46e5]",
       primaryButtonClassName: "bg-[#4f46e5] text-white hover:bg-[#4338ca]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 5,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Double-entry books that fill themselves in from sales, purchases and expenses -- its own
+  // subscription (accountingEnabled), enforced by subscriptions/app-access.ts.
+  {
+    id: "accounting",
+    category: "accounting",
+    tabCategory: "madarApps",
+    icon: BookOpenCheck,
+    accent: {
+      iconWrapperClassName: "bg-[#ecfdf5] text-[#047857]",
+      primaryButtonClassName: "bg-[#047857] text-white hover:bg-[#065f46]",
     },
     pricingModel: "paid",
     hasPriceLabel: true,

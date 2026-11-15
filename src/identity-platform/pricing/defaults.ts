@@ -248,6 +248,23 @@ export function defaultPricingFor(application: PurchasableApplication): {
           ]),
         ],
       }
+    case "accounting":
+      return {
+        mode: "fixed",
+        packages: [
+          {
+            ...single("المحاسبة", 149, [
+              "قيود تلقائية من المبيعات والمشتريات والمصروفات",
+              "دليل حسابات جاهز وقيود يدوية وأرصدة افتتاحية",
+              "ميزان المراجعة وقائمة الدخل والمركز المالي",
+              "ذمم العملاء والموردين وملخص ضريبة القيمة المضافة",
+              "إقفال الفترات المحاسبية",
+            ]),
+            // Its own app, not a tier of the account-wide plan.
+            legacyPlanTier: null,
+          },
+        ],
+      }
     case "customReports":
       return {
         mode: "fixed",

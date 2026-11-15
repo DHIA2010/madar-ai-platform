@@ -13,7 +13,13 @@ import { loadOrganizationEntitlements } from "./entitlements"
 // Several screens serve more than one app (invoices for POS and E-commerce, products for POS,
 // E-commerce and Supplies), so a rule lists every app that may use it -- any one is enough.
 
-type GatedApplication = "pos" | "ecommerce" | "advertising" | "procurement" | "invoicing"
+type GatedApplication =
+  | "pos"
+  | "ecommerce"
+  | "advertising"
+  | "procurement"
+  | "invoicing"
+  | "accounting"
 
 interface AccessRule {
   prefix: string
@@ -36,6 +42,7 @@ const RULES: AccessRule[] = [
     applications: ["pos", "ecommerce", "procurement", "invoicing"],
   },
   { prefix: "/v1/invoicing/", applications: ["invoicing"] },
+  { prefix: "/v1/accounting/", applications: ["accounting"] },
   { prefix: "/v1/inventory/", applications: ["pos", "ecommerce", "procurement"] },
   { prefix: "/v1/orders", applications: ["ecommerce"] },
   { prefix: "/v1/stores", applications: ["ecommerce"] },

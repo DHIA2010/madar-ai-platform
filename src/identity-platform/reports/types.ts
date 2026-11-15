@@ -14,6 +14,7 @@ export type CatalogApplication =
   | "customReports"
   | "promotions"
   | "invoicing"
+  | "accounting"
 
 export type ReportAggregation = "sum" | "avg" | "count" | "min" | "max"
 export type ReportTimeGrouping = "day" | "week" | "month" | "quarter" | "year" | "none"

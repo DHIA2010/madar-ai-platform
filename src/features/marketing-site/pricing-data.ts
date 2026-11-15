@@ -230,6 +230,26 @@ const FALLBACK_PRICING: PublicApplicationPricing[] = [
     ],
   },
   {
+    application: "accounting",
+    mode: "fixed",
+    freeDays: null,
+    packages: [
+      pkg(
+        "المحاسبة",
+        149,
+        1490,
+        [
+          "قيود تلقائية من المبيعات والمشتريات والمصروفات",
+          "دليل حسابات جاهز وقيود يدوية وأرصدة افتتاحية",
+          "ميزان المراجعة وقائمة الدخل والمركز المالي",
+          "ذمم العملاء والموردين وملخص ضريبة القيمة المضافة",
+          "إقفال الفترات المحاسبية",
+        ],
+        true
+      ),
+    ],
+  },
+  {
     application: "ai",
     mode: "fixed",
     freeDays: null,
