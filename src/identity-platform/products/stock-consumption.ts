@@ -157,6 +157,27 @@ export async function computeStockConsumption(
 // Only called when the organization has turned "السماح بالبيع عند نفاد المخزون" off --
 // migration 079's platform-wide default is still to allow it unconditionally (never call this
 // and stock_quantity/stock is free to go negative, exactly as before this setting existed).
+// Holds the stock rows a sale is about to draw from until its transaction commits, so two sales
+// of the last unit can't both pass the availability check. Called inside the transaction, just
+// before that check is repeated. Rows are locked in id order, the same order for every sale, so
+// two sales that share products wait for each other instead of deadlocking.
+export async function lockStockRows(
+  database: PostgresDatabase,
+  consumption: StockConsumptionResult
+): Promise<void> {
+  const lock = async (table: "products" | "product_variants", ids: string[]) => {
+    if (ids.length === 0) return
+    const sorted = [...ids].sort()
+    const placeholders = sorted.map((_, index) => "$" + String(index + 1)).join(", ")
+    await database.query(
+      "SELECT id FROM " + table + " WHERE id IN (" + placeholders + ") ORDER BY id FOR UPDATE",
+      sorted
+    )
+  }
+  await lock("products", [...consumption.products.keys()])
+  await lock("product_variants", [...consumption.variants.keys()])
+}
+
 // Reads current stock fresh right before the transaction rather than trusting anything cached
 // earlier, so a concurrent sale that already depleted stock is still caught.
 //

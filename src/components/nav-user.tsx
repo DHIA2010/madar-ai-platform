@@ -159,7 +159,7 @@ export function NavUser({ variant = "sidebar" }: NavUserProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="my-2" />
         <DropdownMenuGroup>
-          <DropdownMenuItem className="gap-2 h-9">
+          <DropdownMenuItem className="gap-2 h-9" onClick={() => router.push(ROUTES.marketplace)}>
             <ShieldPlus className="!size-5" />
             {t("upgradeToPro")}
           </DropdownMenuItem>
@@ -180,7 +180,10 @@ export function NavUser({ variant = "sidebar" }: NavUserProps) {
             <CreditCardIcon className="!size-5" />
             {t("billing")}
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2 h-9">
+          <DropdownMenuItem
+            className="gap-2 h-9"
+            onClick={() => router.push("/account/notifications")}
+          >
             <BellIcon className="!size-5" />
             {t("notifications")}
           </DropdownMenuItem>

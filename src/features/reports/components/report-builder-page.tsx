@@ -637,6 +637,14 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
 
   return (
     <div dir={localeDirection(locale)} className="space-y-3.5">
+      {/* Arranging widgets is done by dragging on a wide grid, which a phone can't do well:
+          say so up front instead of leaving the person to find out. Reports still open and
+          read fine on a phone. */}
+      <p className="rounded-[12px] border border-[#fde68a] bg-[#fffbeb] px-3.5 py-2.5 text-[12.5px] font-semibold text-[#b45309] md:hidden">
+        {locale === "ar"
+          ? "منشئ التقارير مصمّم للشاشات الكبيرة. افتحه من حاسوب أو جهاز لوحي لترتيب العناصر بسهولة."
+          : "The report builder is made for larger screens. Open it on a computer or tablet to arrange widgets comfortably."}
+      </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[#eaf1ff] text-[#2878ff]">

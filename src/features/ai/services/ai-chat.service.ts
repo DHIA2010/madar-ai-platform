@@ -205,12 +205,20 @@ export const aiChatService = {
   ): Promise<void> {
     let response: Response
     try {
-      response = await fetch(resolveAiStreamUrl(sessionId), {
-        method: "POST",
-        headers: await buildStreamHeaders(),
-        body: JSON.stringify({ content }),
-        signal,
-      })
+      const send = async () =>
+        fetch(resolveAiStreamUrl(sessionId), {
+          method: "POST",
+          headers: await buildStreamHeaders(),
+          body: JSON.stringify({ content }),
+          signal,
+        })
+      response = await send()
+      // This request doesn't go through the shared client, so it renews an expired session
+      // itself: once, then asks again (the question otherwise failed with a generic error after
+      // the app had sat open for a while).
+      if (response.status === 401 && (await sessionManager.refreshAccessToken())) {
+        response = await send()
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         callbacks.onCancelled()

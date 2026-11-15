@@ -113,7 +113,10 @@ export function ProtectedRoute({
     <>
       {showLoading && <AppLoading variant="page" />}
       {showError && (
-        <AppEmpty title="No active user" description="Sign in again to access this section." />
+        <AppEmpty
+          title="لا يوجد مستخدم نشط"
+          description="سجّل الدخول مرة أخرى للوصول إلى هذه الصفحة."
+        />
       )}
       {showContent && <>{children}</>}
     </>

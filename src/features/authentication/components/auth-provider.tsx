@@ -157,13 +157,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
         throw new ValidationError({
           code: "avatar_invalid_type",
-          message: "Please choose a PNG, JPEG, WEBP, or GIF image.",
+          message: "اختر صورة بصيغة PNG أو JPEG أو WEBP أو GIF.",
         })
       }
       if (file.size > MAX_AVATAR_BYTES) {
         throw new ValidationError({
           code: "avatar_too_large",
-          message: "Images must be 3MB or smaller.",
+          message: "حجم الصورة يجب ألا يتجاوز 3 ميغابايت.",
         })
       }
 

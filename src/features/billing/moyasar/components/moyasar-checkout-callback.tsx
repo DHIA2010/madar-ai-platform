@@ -101,8 +101,12 @@ export function MoyasarCheckoutCallback() {
             </p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
+              // A full page load, not an in-app move: what was just paid for is switched on in
+              // the account's settings, which the app read before the payment. Loading the page
+              // afresh is what makes the new app (or branch, or add-on) show as active at once,
+              // instead of staying locked until the person happened to reload.
               onClick={() =>
-                router.push(
+                window.location.assign(
                   isAddonPurchase
                     ? ROUTES.settingsDailyReport
                     : isBranchPurchase

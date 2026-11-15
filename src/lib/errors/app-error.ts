@@ -78,6 +78,45 @@ function extractApiError(body: unknown): ApiError | undefined {
   return undefined
 }
 
+// The server answers in English, and many screens show an error's message as it is. For someone
+// using the app in Arabic, the common failures are put in Arabic here, once, instead of leaving
+// each screen to show English: by the server's error code where it is a known one, otherwise by
+// the kind of failure when the English text carries nothing specific (no connection, a timeout,
+// a server fault). A specific message with no translation is still shown as the server wrote it.
+const ARABIC_BY_CODE: Record<string, string> = {
+  AUTH_FORBIDDEN: "ليست لديك صلاحية لتنفيذ هذا الإجراء.",
+  AUTH_TOKEN_INVALID: "انتهت جلستك. سجّل الدخول مرة أخرى.",
+  AUTH_TOKEN_MISSING: "انتهت جلستك. سجّل الدخول مرة أخرى.",
+  AUTH_INVALID_CREDENTIALS: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+  AUTH_EMAIL_EXISTS: "هذا البريد الإلكتروني مسجّل من قبل.",
+  AUTH_EMAIL_NOT_VERIFIED: "يرجى تأكيد بريدك الإلكتروني أولًا.",
+  AUTH_ACCOUNT_LOCKED: "تم إيقاف الحساب مؤقتًا بسبب محاولات دخول متكررة. حاول لاحقًا.",
+  AUTH_ACCOUNT_SUSPENDED: "تم إيقاف صلاحيتك. تواصل مع مسؤول الحساب.",
+  RESOURCE_NOT_FOUND: "العنصر المطلوب غير موجود.",
+  VALIDATION_ERROR: "تحقق من البيانات المدخلة ثم أعد المحاولة.",
+  INVALID_JSON: "تعذّرت معالجة الطلب.",
+  PAYLOAD_TOO_LARGE: "الملف أو البيانات المرسلة أكبر من الحد المسموح.",
+  APPLICATION_NOT_SUBSCRIBED: "هذا التطبيق غير مفعّل في حسابك.",
+  PLATFORM_MAINTENANCE: "مدار تحت الصيانة حاليًا. حاول بعد قليل.",
+  SERVICE_UNAVAILABLE: "الخدمة غير متاحة حاليًا. حاول بعد قليل.",
+  INTERNAL_ERROR: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+  authorization_error: "ليست لديك صلاحية لتنفيذ هذا الإجراء.",
+  validation_error: "تعذّرت معالجة الطلب. تحقق من البيانات المدخلة.",
+  network_error: "تعذّر الاتصال بالخادم. تحقق من اتصالك بالإنترنت ثم أعد المحاولة.",
+  request_timeout: "انتهت مهلة الطلب. حاول مرة أخرى.",
+  unknown_error: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+}
+
+function readingArabic(): boolean {
+  return typeof document !== "undefined" && document.documentElement.lang.startsWith("ar")
+}
+
+// The message to show: Arabic for a known code when the app is in Arabic, else `english`.
+function messageFor(code: string | undefined, english: string): string {
+  if (!readingArabic()) return english
+  return (code && ARABIC_BY_CODE[code]) || english
+}
+
 // Fired whenever the server refuses a feature the customer's plan doesn't include, so the app can
 // explain it in one place (see features/applications PlanUpgradeNotifier).
 export const PLAN_FEATURE_REQUIRED_EVENT = "madar:plan-feature-required"
@@ -97,7 +136,10 @@ export function mapHttpResponseError(response: Response, body: unknown): AppErro
     }
     return new AuthorizationError({
       code: apiError?.code ?? "authorization_error",
-      message: apiError?.message ?? "You are not authorized to perform this action.",
+      message: messageFor(
+        apiError?.code ?? "authorization_error",
+        apiError?.message ?? "You are not authorized to perform this action."
+      ),
       details: apiError?.details,
       traceId,
       status: response.status,
@@ -107,7 +149,10 @@ export function mapHttpResponseError(response: Response, body: unknown): AppErro
   if (response.status === 400 || response.status === 422) {
     return new ValidationError({
       code: apiError?.code ?? "validation_error",
-      message: apiError?.message ?? "The request could not be processed.",
+      message: messageFor(
+        apiError?.code ?? "validation_error",
+        apiError?.message ?? "The request could not be processed."
+      ),
       details: apiError?.details,
       traceId,
       status: response.status,
@@ -117,7 +162,10 @@ export function mapHttpResponseError(response: Response, body: unknown): AppErro
   if (response.status >= 500) {
     return new NetworkError({
       code: apiError?.code ?? "network_error",
-      message: apiError?.message ?? "A server error occurred.",
+      // A server fault says nothing useful to the person either way: one plain message.
+      message: readingArabic()
+        ? "حدث خطأ في الخادم. حاول بعد قليل."
+        : (apiError?.message ?? "A server error occurred."),
       details: apiError?.details,
       traceId,
       status: response.status,
@@ -126,7 +174,10 @@ export function mapHttpResponseError(response: Response, body: unknown): AppErro
 
   return new UnknownError({
     code: apiError?.code ?? "unknown_error",
-    message: apiError?.message ?? `Request failed with status ${response.status}`,
+    message: messageFor(
+      apiError?.code ?? "unknown_error",
+      apiError?.message ?? `Request failed with status ${response.status}`
+    ),
     details: apiError?.details,
     traceId,
     status: response.status,
@@ -141,7 +192,7 @@ export function toAppError(error: unknown): AppError {
   if (error instanceof DOMException && error.name === "AbortError") {
     return new NetworkError({
       code: "request_timeout",
-      message: "The request timed out.",
+      message: messageFor("request_timeout", "The request timed out."),
       cause: error,
     })
   }
@@ -149,7 +200,10 @@ export function toAppError(error: unknown): AppError {
   if (error instanceof TypeError) {
     return new NetworkError({
       code: "network_error",
-      message: error.message || "A network error occurred.",
+      // The browser's own text here is "Failed to fetch" and the like.
+      message: readingArabic()
+        ? ARABIC_BY_CODE.network_error
+        : error.message || "A network error occurred.",
       cause: error,
     })
   }

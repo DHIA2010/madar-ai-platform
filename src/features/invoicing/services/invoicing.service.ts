@@ -130,15 +130,26 @@ export const salesInvoiceService = {
   readiness: () => client.get<ZatcaReadiness>(path("invoicing", "zatca-readiness")),
   // ZATCA's XML of an issued document, downloaded with the signed-in session.
   async downloadXml(id: string, number: string): Promise<void> {
-    const session = sessionManager.restore()
-    const response = await fetch(
-      new URL(path("invoicing", "invoices", id, "xml"), getClientEnvironment().API_BASE_URL),
-      {
-        headers: session?.accessToken?.token
-          ? { authorization: `${session.accessToken.tokenType} ${session.accessToken.token}` }
-          : {},
+    const request = () => {
+      const session = sessionManager.restore()
+      const headers: Record<string, string> = {}
+      if (session?.accessToken?.token) {
+        headers.authorization = `${session.accessToken.tokenType} ${session.accessToken.token}`
       }
-    )
+      // The workspace this tab is on, like every other request.
+      const workspaceId = getWorkspaceIdFromStorage()
+      if (workspaceId) headers["x-workspace-id"] = workspaceId
+      return fetch(
+        new URL(path("invoicing", "invoices", id, "xml"), getClientEnvironment().API_BASE_URL),
+        { headers }
+      )
+    }
+    let response = await request()
+    // A download is a plain request, outside the shared client: it renews an expired session
+    // itself, once, then asks again.
+    if (response.status === 401 && (await sessionManager.refreshAccessToken())) {
+      response = await request()
+    }
     if (!response.ok) throw new Error("xml")
     const blob = await response.blob()
     const link = document.createElement("a")

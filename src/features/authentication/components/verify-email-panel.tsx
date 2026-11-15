@@ -39,8 +39,8 @@ export function VerifyEmailPanel({ className, ...props }: React.ComponentPropsWi
 
   if (state === "verifying") {
     return (
-      <div className={cn("flex flex-col gap-6", className)} {...props}>
-        <AppCard title="Verifying your email" subtitle="Just a moment while we confirm your link.">
+      <div dir="rtl" className={cn("flex flex-col gap-6", className)} {...props}>
+        <AppCard title="جارٍ تأكيد بريدك الإلكتروني" subtitle="لحظات ونتحقق من الرابط.">
           <div className="flex justify-center py-4">
             <Loader2 className="size-8 animate-spin text-violet-600" />
           </div>
@@ -51,14 +51,14 @@ export function VerifyEmailPanel({ className, ...props }: React.ComponentPropsWi
 
   if (state === "success") {
     return (
-      <div className={cn("flex flex-col gap-6", className)} {...props}>
+      <div dir="rtl" className={cn("flex flex-col gap-6", className)} {...props}>
         <AppCard
-          title="Email verified"
-          subtitle="Your email has been confirmed. You can now sign in."
+          title="تم تأكيد بريدك الإلكتروني"
+          subtitle="يمكنك الآن تسجيل الدخول إلى حسابك."
           icon={<CheckCircle2 className="h-6 w-6 text-emerald-600" />}
         >
           <AppButton fullWidth asChild>
-            <Link href={ROUTES.login}>Continue to login</Link>
+            <Link href={ROUTES.login}>متابعة إلى تسجيل الدخول</Link>
           </AppButton>
         </AppCard>
       </div>
@@ -67,17 +67,17 @@ export function VerifyEmailPanel({ className, ...props }: React.ComponentPropsWi
 
   if (state === "error") {
     return (
-      <div className={cn("flex flex-col gap-6", className)} {...props}>
+      <div dir="rtl" className={cn("flex flex-col gap-6", className)} {...props}>
         <AppCard
-          title="Couldn't verify this link"
-          subtitle={errorMessage ?? "This verification link is invalid or has expired."}
+          title="تعذّر التحقق من هذا الرابط"
+          subtitle={errorMessage ?? "رابط التأكيد غير صحيح أو انتهت صلاحيته."}
           icon={<XCircle className="h-6 w-6 text-destructive" />}
         >
           <p className="text-center text-sm text-muted-foreground">
-            If your account already works, it may already be verified — try signing in.
+            إذا كان حسابك يعمل، فربما تم تأكيده من قبل. جرّب تسجيل الدخول.
           </p>
           <AppButton fullWidth asChild>
-            <Link href={ROUTES.login}>Back to login</Link>
+            <Link href={ROUTES.login}>العودة إلى تسجيل الدخول</Link>
           </AppButton>
         </AppCard>
       </div>
@@ -85,11 +85,11 @@ export function VerifyEmailPanel({ className, ...props }: React.ComponentPropsWi
   }
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <AppCard title="Verify your email" subtitle="We sent a verification link to your inbox.">
+    <div dir="rtl" className={cn("flex flex-col gap-6", className)} {...props}>
+      <AppCard title="أكّد بريدك الإلكتروني" subtitle="أرسلنا رابط التأكيد إلى بريدك.">
         <p className="text-center text-sm">
           <Link className="underline underline-offset-4" href={ROUTES.login}>
-            Back to login
+            العودة إلى تسجيل الدخول
           </Link>
         </p>
       </AppCard>

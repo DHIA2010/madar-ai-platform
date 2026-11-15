@@ -14,7 +14,6 @@ import {
   Layers3,
   Library,
   MoreHorizontal,
-  Plus,
   Trash2,
   Upload,
 } from "lucide-react"
@@ -544,12 +543,8 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                 subtitle={t("detailsView.creativesCard.subtitle")}
                 actions={
                   <div className="flex items-center gap-2">
-                    <AppButton
-                      icon={<Upload className="size-4" />}
-                      onClick={() => setIsUploadOpen(true)}
-                    >
-                      {t("detailsView.uploadCreativeAction")}
-                    </AppButton>
+                    {/* Uploading a creative isn't offered: there is nowhere to store the file
+                        yet, so an "uploaded" one only lasted until the page was reloaded. */}
                     <AppButton
                       variant="outline"
                       icon={<Library className="size-4" />}
@@ -568,12 +563,6 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                       <p className="text-sm text-muted-foreground">
                         {t("detailsView.emptyState.description")}
                       </p>
-                      <AppButton
-                        icon={<Plus className="size-4" />}
-                        onClick={() => setIsUploadOpen(true)}
-                      >
-                        {t("detailsView.emptyState.action")}
-                      </AppButton>
                     </div>
                   </div>
                 ) : (

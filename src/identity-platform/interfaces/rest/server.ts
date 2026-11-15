@@ -1487,7 +1487,9 @@ export function createIdentityApiServer(
         return send(200, {
           status: databaseHealth.ok && cacheHealth.ok ? "ok" : "degraded",
           service: "identity-platform",
-          checks: { database: databaseHealth, cache: cacheHealth },
+          // Only whether each dependency answers: this route is public, and the raw failure text
+          // (a database error message) belongs in the logs, not in what anyone can read.
+          checks: { database: { ok: databaseHealth.ok }, cache: { ok: cacheHealth.ok } },
         })
       }
 
@@ -1502,7 +1504,9 @@ export function createIdentityApiServer(
         return send(ready ? 200 : 503, {
           status: ready ? "ready" : "not_ready",
           service: "identity-platform",
-          checks: { database: databaseHealth, cache: cacheHealth },
+          // Only whether each dependency answers: this route is public, and the raw failure text
+          // (a database error message) belongs in the logs, not in what anyone can read.
+          checks: { database: { ok: databaseHealth.ok }, cache: { ok: cacheHealth.ok } },
         })
       }
 

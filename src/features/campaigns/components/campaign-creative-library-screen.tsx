@@ -1,10 +1,10 @@
 "use client"
 
-import { lazy, Suspense, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useTranslations } from "next-intl"
-import { FileText, Film, ImageIcon, Plus, Tags, Upload } from "lucide-react"
+import { FileText, Film, ImageIcon, Tags, Upload } from "lucide-react"
 
 import { ROUTES } from "@/constants/routes"
 
@@ -27,11 +27,6 @@ import {
   CAMPAIGN_SELECT_ITEM_CLASSNAME,
   CAMPAIGN_SELECT_TRIGGER_CLASSNAME,
 } from "./campaign-select-styles"
-
-const CreativeUploadArea = lazy(async () => {
-  const mod = await import("./campaign-creative-upload-area")
-  return { default: mod.CampaignCreativeUploadArea }
-})
 
 type CreativeAsset = {
   id: string
@@ -109,21 +104,9 @@ export function CampaignCreativeLibraryScreen() {
     <div className="space-y-4">
       <CampaignModuleNav />
 
-      <AppPageHeader
-        title={t("title")}
-        subtitle={t("subtitle")}
-        actions={<AppButton icon={<Plus className="size-4" />}>{t("newCreative")}</AppButton>}
-      />
-
-      <AppCard title={t("uploadCard.title")} subtitle={t("uploadCard.subtitle")}>
-        <Suspense
-          fallback={
-            <div className="h-52 animate-pulse rounded-xl border border-border/60 bg-muted/20" />
-          }
-        >
-          <CreativeUploadArea />
-        </Suspense>
-      </AppCard>
+      <AppPageHeader title={t("title")} subtitle={t("subtitle")} />
+      {/* No upload here: there is nowhere to store a creative's file yet, and the upload that
+          used to be shown only animated a progress bar and kept nothing. */}
 
       <AppCard title={t("libraryCard.title")} subtitle={t("libraryCard.subtitle")}>
         <div className="space-y-4">

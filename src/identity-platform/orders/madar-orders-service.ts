@@ -9,6 +9,7 @@ import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "../pos/pos-settin
 import {
   applyStockConsumption,
   assertStockAvailability,
+  lockStockRows,
   computeStockConsumption,
 } from "../products/stock-consumption"
 import type { SallaStockPushService } from "../products/salla-stock-push-service"
@@ -487,6 +488,14 @@ export class MadarOrdersService {
     const zidPushStatus: MadarOrderPushStatus = zidConnection ? "pending" : "not_applicable"
 
     await this.database.withTransaction(async () => {
+      // Checked again with the stock rows held, so two orders for the last unit can't both pass
+      // (see lockStockRows).
+      if (!posSettings.allowOutOfStockSale) {
+        await lockStockRows(this.database, stockConsumption)
+        await assertStockAvailability(this.database, stockConsumption, new Map(), (name) =>
+          MADAR_ORDER_ERRORS.outOfStockSaleNotAllowed(name)
+        )
+      }
       // A per-workspace counter, incremented with a row-locked UPSERT inside this same
       // transaction -- see migration 099_madar_orders.sql's comment for why (same lesson
       // pos_invoices already learned in migration 067: a rollback must revert the counter too).

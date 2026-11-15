@@ -8,6 +8,7 @@ import type { ZidProductStockPushService } from "../products/zid-product-stock-p
 import {
   applyStockConsumption as applyStockConsumptionShared,
   assertStockAvailability as assertStockAvailabilityShared,
+  lockStockRows,
   computeStockConsumption as computeStockConsumptionShared,
   type StockConsumptionLine,
   type StockConsumptionResult,
@@ -604,6 +605,17 @@ const INVOICE_SELECT = `
     FROM pos_invoices
 `
 
+// How many invoices' items and payments are fetched per statement when listing.
+const INVOICE_ID_BATCH = 5000
+
+// A store that couldn't be told about a stock change: recorded, never raised to the cashier.
+const logStockPushFailure = (store: "salla" | "zid") => (error: unknown) => {
+  console.error("pos.stock_push_failed", {
+    store,
+    message: error instanceof Error ? error.message : String(error),
+  })
+}
+
 export class PosInvoicesService {
   constructor(
     private readonly database: PostgresDatabase,
@@ -670,34 +682,41 @@ export class PosInvoicesService {
     // A plain IN-list rather than `= ANY($1::uuid[])`: the latter is standard, well-supported SQL
     // against real Postgres, but the test harness's in-memory engine (pg-mem) silently returns no
     // rows for it (the same class of gap already documented on summary()'s FILTER avoidance).
-    const idPlaceholders = invoiceIds.map((_, index) => `$${index + 1}`).join(", ")
-    const [itemRows, paymentRows] = await Promise.all([
-      this.database.query<InvoiceItemRow>(
-        `SELECT id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
-                 line_total, discount_amount, net_amount, tax_amount, returned_quantity,
-                 promotion_id, promotion_name, promotion_discount_amount
-           FROM pos_invoice_items
-          WHERE invoice_id IN (${idPlaceholders})`,
-        invoiceIds
-      ),
-      this.database.query<InvoicePaymentRow>(
-        `SELECT invoice_id, payment_method_code, amount
-           FROM pos_invoice_payments
-          WHERE invoice_id IN (${idPlaceholders})`,
-        invoiceIds
-      ),
-    ])
+    //
+    // In batches: one placeholder per invoice in a single statement stops working past 65,535
+    // of them (Postgres's limit on bound parameters), so a busy shop's unfiltered list failed
+    // outright; a few thousand at a time has no such ceiling.
     const itemsByInvoice = new Map<string, InvoiceItemView[]>()
-    for (const item of itemRows.rows) {
-      const list = itemsByInvoice.get(item.invoice_id) ?? []
-      list.push(mapItem(item))
-      itemsByInvoice.set(item.invoice_id, list)
-    }
     const paymentsByInvoice = new Map<string, InvoicePaymentView[]>()
-    for (const payment of paymentRows.rows) {
-      const list = paymentsByInvoice.get(payment.invoice_id) ?? []
-      list.push(mapPayment(payment))
-      paymentsByInvoice.set(payment.invoice_id, list)
+    for (let start = 0; start < invoiceIds.length; start += INVOICE_ID_BATCH) {
+      const batch = invoiceIds.slice(start, start + INVOICE_ID_BATCH)
+      const idPlaceholders = batch.map((_, index) => `$${index + 1}`).join(", ")
+      const [itemRows, paymentRows] = await Promise.all([
+        this.database.query<InvoiceItemRow>(
+          `SELECT id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
+                   line_total, discount_amount, net_amount, tax_amount, returned_quantity,
+                   promotion_id, promotion_name, promotion_discount_amount
+             FROM pos_invoice_items
+            WHERE invoice_id IN (${idPlaceholders})`,
+          batch
+        ),
+        this.database.query<InvoicePaymentRow>(
+          `SELECT invoice_id, payment_method_code, amount
+             FROM pos_invoice_payments
+            WHERE invoice_id IN (${idPlaceholders})`,
+          batch
+        ),
+      ])
+      for (const item of itemRows.rows) {
+        const list = itemsByInvoice.get(item.invoice_id) ?? []
+        list.push(mapItem(item))
+        itemsByInvoice.set(item.invoice_id, list)
+      }
+      for (const payment of paymentRows.rows) {
+        const list = paymentsByInvoice.get(payment.invoice_id) ?? []
+        list.push(mapPayment(payment))
+        paymentsByInvoice.set(payment.invoice_id, list)
+      }
     }
 
     return result.rows.map((row) =>
@@ -1177,6 +1196,14 @@ export class PosInvoicesService {
         )
         invoiceNumber = `INV-${String(counterResult.rows[0].next_number).padStart(6, "0")}`
 
+        // Checked again here, with the stock rows held: the check above ran before this
+        // transaction, so two cashiers selling the last unit at once both passed it. Now the
+        // second waits for the first to commit, sees the stock gone, and is refused.
+        if (!settings.allowOutOfStockSale) {
+          await lockStockRows(this.database, stockConsumption)
+          await this.assertStockAvailability(stockConsumption, nameByProduct)
+        }
+
         // A separate, optional per-sale number (Settings -> إعدادات الإيصال -> رقم الطلب) --
         // distinct from invoiceNumber above, off by default; null (the counter table untouched)
         // when it's off. The "is this a new day" / "did we hit the max" decision is made here in
@@ -1459,12 +1486,16 @@ export class PosInvoicesService {
     // Reported to ZATCA in the background -- the sale is already complete either way.
     if (created.zatcaSigned) this.zatcaReporting?.reportInBackground("invoice", id)
 
+    // Not awaited: the sale is saved, and the cashier shouldn't wait on Salla or Zid answering
+    // (a slow store used to leave the checkout spinning after the sale had already gone through).
+    // A push that fails is logged; the next sale or stock change of the product pushes again.
+    //
     // Deliberately after the transaction commits, not alongside applyStockConsumption inside it
     // above -- this reads each linked product's/variant's now-committed absolute stock figure, so
     // it must run once that write is visible, and it must never be able to roll back a completed
     // sale.
     if (this.sallaStockPushService) {
-      await this.sallaStockPushService
+      void this.sallaStockPushService
         .pushStockForLines(
           input.organizationId,
           input.workspaceId,
@@ -1474,10 +1505,10 @@ export class PosInvoicesService {
           })),
           -1
         )
-        .catch(() => {})
+        .catch(logStockPushFailure("salla"))
     }
     if (this.zidStockPushService) {
-      await this.zidStockPushService
+      void this.zidStockPushService
         .pushStockForLines(
           input.organizationId,
           input.workspaceId,
@@ -1487,7 +1518,7 @@ export class PosInvoicesService {
           })),
           -1
         )
-        .catch(() => {})
+        .catch(logStockPushFailure("zid"))
     }
 
     return created
@@ -1988,24 +2019,24 @@ export class PosInvoicesService {
     // Symmetric with create()'s own push, after this transaction's own commit for the same reason
     // -- reads the now-restocked, committed stock figure.
     if (this.sallaStockPushService) {
-      await this.sallaStockPushService
+      void this.sallaStockPushService
         .pushStockForLines(
           organizationId,
           invoiceRow.workspace_id,
           returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
           1
         )
-        .catch(() => {})
+        .catch(logStockPushFailure("salla"))
     }
     if (this.zidStockPushService) {
-      await this.zidStockPushService
+      void this.zidStockPushService
         .pushStockForLines(
           organizationId,
           invoiceRow.workspace_id,
           returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
           1
         )
-        .catch(() => {})
+        .catch(logStockPushFailure("zid"))
     }
 
     return created

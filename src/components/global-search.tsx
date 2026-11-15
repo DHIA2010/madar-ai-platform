@@ -14,22 +14,20 @@ import {
   CommandSeparator,
 } from "@/components/ui/command"
 import { DialogTitle } from "@/components/ui/dialog"
+import { ROUTES } from "@/constants/routes"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
-import {
-  Search,
-  LayoutDashboard,
-  BarChart3,
-  Users,
-  User,
-  CreditCard,
-  ArrowRight,
-} from "lucide-react"
+import { Search, LayoutDashboard, User, CreditCard, ArrowRight } from "lucide-react"
 
 export function GlobalSearch() {
   const t = useTranslations("shared.globalSearch")
   const [open, setOpen] = React.useState(false)
   const router = useRouter()
+  // Opens a page and closes the search box behind it.
+  const go = (href: string) => {
+    setOpen(false)
+    router.push(href)
+  }
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -93,29 +91,11 @@ export function GlobalSearch() {
             className="px-2 text-xs font-semibold text-muted-foreground"
           >
             <CommandItem
-              onSelect={() => router.push("/")}
+              onSelect={() => go(ROUTES.dashboard)}
               className="flex items-center gap-2 px-2 py-2 rounded-md cursor-pointer"
             >
               <LayoutDashboard className="size-4 text-muted-foreground" />
               <span>{t("groups.dashboard.dashboard")}</span>
-              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
-            </CommandItem>
-
-            <CommandItem
-              onSelect={() => router.push("/analytics")}
-              className="flex items-center gap-2 px-2 py-2 rounded-md"
-            >
-              <BarChart3 className="size-4 text-muted-foreground" />
-              <span>{t("groups.dashboard.analytics")}</span>
-              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
-            </CommandItem>
-
-            <CommandItem
-              onSelect={() => router.push("/crm")}
-              className="flex items-center gap-2 px-2 py-2 rounded-md"
-            >
-              <Users className="size-4 text-muted-foreground" />
-              <span>{t("groups.dashboard.crm")}</span>
               <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
           </CommandGroup>
@@ -128,7 +108,7 @@ export function GlobalSearch() {
             className="px-2 text-xs font-semibold text-muted-foreground"
           >
             <CommandItem
-              onSelect={() => alert(t("groups.settings.profile"))}
+              onSelect={() => go("/account/edit-profile")}
               className="flex items-center gap-2 px-2 py-2 rounded-md"
             >
               <User className="size-4 text-muted-foreground" />
@@ -137,7 +117,7 @@ export function GlobalSearch() {
             </CommandItem>
 
             <CommandItem
-              onSelect={() => alert(t("groups.settings.billing"))}
+              onSelect={() => go(ROUTES.accountBilling)}
               className="flex items-center gap-2 px-2 py-2 rounded-md"
             >
               <CreditCard className="size-4 text-muted-foreground" />
