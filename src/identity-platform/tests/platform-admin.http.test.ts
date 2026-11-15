@@ -196,7 +196,20 @@ describe("platform admin: customers and subscriptions", () => {
     expect((await orgSettings(organizationId)).expensesEnabled).toBe(true)
 
     const customer = await get<CustomerRow>(staff.token, `/customers/${organizationId}`)
-    expect(customer.body).toMatchObject({ status: "active", monthlyRevenueHalalas: 29900 })
+    expect(customer.body).toMatchObject({
+      status: "active",
+      monthlyRevenueHalalas: 29900,
+      phone: null,
+    })
+
+    // The number given at sign-up is kept on the account's sales lead.
+    await database.query(
+      `insert into crm_leads (id, company_name, phone, source, stage, organization_id)
+       values ($1, 'Grant Shop', '0551234567', 'signup', 'trial', $2)`,
+      [randomUUID(), organizationId]
+    )
+    const withPhone = await get<CustomerRow>(staff.token, `/customers/${organizationId}`)
+    expect(withPhone.body).toMatchObject({ phone: "0551234567" })
 
     // Renewing early stacks a year on top of the running month -- no days lost.
     const firstEnd = new Date(granted.body.currentPeriodEnd!)

@@ -76,6 +76,9 @@ export interface PlatformAdminCustomerSummary {
 }
 
 export interface PlatformAdminCustomerDetail extends PlatformAdminCustomer {
+  // The number given on the sign-up form (kept on the account's sales lead); null for accounts
+  // created before the form asked for one.
+  phone: string | null
   members: Array<{ userId: string; name: string; email: string; role: string; status: string }>
   payments: Array<{
     id: string

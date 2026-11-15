@@ -77,6 +77,15 @@ export function formatDate(iso: string | null): string {
   })
 }
 
+// The time of day, for when the exact moment matters (e.g. when an account was created).
+export function formatTime(iso: string | null): string {
+  if (!iso) return "—"
+  return new Date(iso).toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
 // Halalas -> "SAR 1,234" (whole riyals unless there's a fraction to show).
 export function formatSar(halalas: number | null): string {
   if (halalas === null) return "—"

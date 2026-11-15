@@ -22,6 +22,7 @@ import {
   formatDate,
   formatRelative,
   formatSar,
+  formatTime,
   nextRenewalDate,
   PLAN_META,
   platformAdminService,
@@ -121,10 +122,32 @@ export function CustomerDetailDialog({
         </div>
       ) : (
         <div dir="rtl" className="max-h-[65vh] space-y-6 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Fact label="الحالة" value={<SubscriptionStatusBadge status={loaded.status} />} />
             <Fact label="الإيراد الشهري" value={formatSar(loaded.monthlyRevenueHalalas)} />
-            <Fact label="تاريخ التسجيل" value={formatDate(loaded.createdAt)} />
+            <Fact
+              label="رقم الجوال"
+              value={
+                loaded.phone ? (
+                  <a href={`tel:${loaded.phone}`} dir="ltr" className="hover:underline">
+                    {loaded.phone}
+                  </a>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <Fact
+              label="تاريخ التسجيل"
+              value={
+                <>
+                  {formatDate(loaded.createdAt)}
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    الساعة {formatTime(loaded.createdAt)}
+                  </span>
+                </>
+              }
+            />
             <Fact label="آخر نشاط" value={formatRelative(loaded.lastActivityAt)} />
           </div>
 

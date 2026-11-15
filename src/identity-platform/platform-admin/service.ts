@@ -323,6 +323,14 @@ export class PlatformAdminService {
         LIMIT 20`,
       [organizationId]
     )
+    // The sign-up form's phone number lives on the account's sales lead.
+    const lead = await this.db.query<{ phone: string | null }>(
+      `SELECT phone FROM crm_leads
+        WHERE organization_id = $1 AND phone IS NOT NULL AND phone <> ''
+        ORDER BY created_at
+        LIMIT 1`,
+      [organizationId]
+    )
     const activity = await this.db.query<Record<string, unknown>>(
       `SELECT a.action, a.created_at, u.full_name AS actor_name
          FROM audit_logs a
@@ -335,6 +343,7 @@ export class PlatformAdminService {
 
     return {
       ...customer,
+      phone: lead.rows[0]?.phone ?? null,
       members: members.map((row) => ({
         userId: String(row.user_id),
         name: String(row.full_name ?? ""),

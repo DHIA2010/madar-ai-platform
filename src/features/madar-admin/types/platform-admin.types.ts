@@ -59,6 +59,8 @@ export interface AdminCustomer {
 }
 
 export interface AdminCustomerDetail extends AdminCustomer {
+  // From the sign-up form; null for accounts created before it asked for a number.
+  phone: string | null
   members: Array<{ userId: string; name: string; email: string; role: string; status: string }>
   payments: Array<{
     id: string
