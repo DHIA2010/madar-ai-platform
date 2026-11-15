@@ -124,6 +124,7 @@ export function ApplicationCard({
             trial={isTrial}
             period={period}
             now={now}
+            payNowHint={isTrial && Boolean(application.primaryCta.label)}
             className={application.priceLabel ? "mt-3" : undefined}
           />
         ) : null}
@@ -148,6 +149,17 @@ export function ApplicationCard({
               <Clock className="size-3.5" />
               {t("pendingReview")}
             </span>
+          ) : application.primaryCta.label && isTrial ? (
+            // Still on the free trial: paying now is offered right on the card.
+            <AppButton
+              className={cn(
+                "h-10 flex-1 rounded-[10px] text-[12.5px] font-semibold",
+                application.accent.primaryButtonClassName
+              )}
+              onClick={() => onActivate(application)}
+            >
+              {t("subscribeNow")}
+            </AppButton>
           ) : application.primaryCta.label && !isActive ? (
             <AppButton
               className={cn(

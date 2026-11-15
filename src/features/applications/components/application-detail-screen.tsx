@@ -126,12 +126,35 @@ export function ApplicationDetailScreen({
           ) : entry.primaryCta.label ? (
             <div className="flex shrink-0 items-center gap-2">
               {entry.subscriptionStatus === "subscribed" || entry.subscriptionStatus === "trial" ? (
-                <SubscriptionRemaining
-                  trial={entry.subscriptionStatus === "trial"}
-                  period={periodFor(entry, periods)}
-                  now={loadedAt}
-                  className="w-64"
-                />
+                <div className="flex w-64 flex-col gap-2">
+                  <SubscriptionRemaining
+                    trial={entry.subscriptionStatus === "trial"}
+                    period={periodFor(entry, periods)}
+                    now={loadedAt}
+                    payNowHint={entry.subscriptionStatus === "trial"}
+                  />
+                  {entry.subscriptionStatus === "trial" ? (
+                    // Still on the free trial: paying now is offered here too.
+                    <AppButton
+                      className={cn(
+                        "h-11 rounded-[10px] text-[13px] font-semibold",
+                        entry.accent.primaryButtonClassName
+                      )}
+                      onClick={() =>
+                        setPendingRequest({
+                          applicationId: entry.id,
+                          category: entry.category,
+                          name: entry.name,
+                          icon: entry.icon,
+                          iconWrapperClassName: entry.accent.iconWrapperClassName,
+                          trialAvailable: false,
+                        })
+                      }
+                    >
+                      {t("card.subscribeNow")}
+                    </AppButton>
+                  ) : null}
+                </div>
               ) : entry.subscriptionStatus === "pending_review" ? (
                 <span className="flex h-11 items-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-4 text-[13px] font-semibold text-[#b45309]">
                   <Clock className="size-4" />

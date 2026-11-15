@@ -30,6 +30,7 @@ export function SubscriptionRemaining({
   trial,
   period,
   now,
+  payNowHint = false,
   className,
 }: {
   // The app is in its free trial (else a paid / granted subscription).
@@ -37,6 +38,8 @@ export function SubscriptionRemaining({
   period: SubscriptionPeriod | undefined
   // When the periods were loaded (0 while loading).
   now: number
+  // On a trial that can be paid for now: says the days left aren't lost by paying early.
+  payNowHint?: boolean
   className?: string
 }) {
   const endsAt = period?.endsAt ?? null
@@ -83,6 +86,11 @@ export function SubscriptionRemaining({
           <p className="mt-1.5 text-[11px] text-[#6b7b96]">
             {trial ? "تنتهي التجربة في" : "ينتهي الاشتراك في"} {formatDay(endsAt)}
           </p>
+          {trial && payNowHint ? (
+            <p className="mt-1 text-[11px] font-semibold text-[#2878ff]">
+              اشترك الآن وتُضاف أيام تجربتك المتبقية إلى اشتراكك.
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="mt-1 text-[11px] text-[#6b7b96]">

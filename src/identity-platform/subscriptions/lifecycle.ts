@@ -72,8 +72,9 @@ export function startTrial(
 }
 
 // A paid activation or renewal. While a paid period is still running, the new period stacks on
-// top of it (renewing early never loses days); otherwise it starts now. A trial or a cancelled /
-// lapsed subscription always starts a fresh period.
+// top of it (renewing early never loses days); paying during a free trial starts the paid period
+// when the trial would have ended, for the same reason. Otherwise -- an ended trial, a cancelled
+// or lapsed subscription -- it starts now.
 export function activatePaid(
   existing: OrganizationSubscriptionState | null,
   input: Identity & {
@@ -88,11 +89,22 @@ export function activatePaid(
     now: string
   }
 ): OrganizationSubscriptionState {
+  const nowMs = new Date(input.now).getTime()
   const stillRunning =
     existing?.status === "active" &&
     existing.currentPeriodEnd !== null &&
-    new Date(existing.currentPeriodEnd).getTime() > new Date(input.now).getTime()
-  const periodStart = stillRunning ? existing.currentPeriodEnd! : input.now
+    new Date(existing.currentPeriodEnd).getTime() > nowMs
+  // Paying before a free trial is over doesn't cost the days that are left: the paid period
+  // starts when the trial would have ended.
+  const trialLeft =
+    existing?.status === "trial" &&
+    existing.trialEndsAt !== null &&
+    new Date(existing.trialEndsAt).getTime() > nowMs
+  const periodStart = stillRunning
+    ? existing.currentPeriodEnd!
+    : trialLeft
+      ? existing.trialEndsAt!
+      : input.now
   return {
     id: existing?.id ?? input.id,
     organizationId: input.organizationId,
