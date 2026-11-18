@@ -7461,6 +7461,12 @@
         }
       }
     },
+    "history": {
+      "title": "Previous chats",
+      "newChat": "New chat",
+      "empty": "Your saved chats will appear here so you can come back and continue.",
+      "untitled": "New chat"
+    },
     "recommendationsView": {
       "tabs": {
         "all": "All",
@@ -7471,11 +7477,20 @@
       "categoryMeta": {
         "growth": "Growth opportunity",
         "optimization": "Performance optimization",
-        "alert": "Alert"
+        "alert": "Alert",
+        "none": "No action needed"
       },
       "expectedImpact": "Expected impact",
       "viewDetails": "View details",
       "disclaimer": "The recommendations below are illustrative for now and not connected to the AI assistant above",
+      "measuredChange": "Measured change",
+      "askAssistant": "Ask the assistant",
+      "askPrompt": "Explain this recommendation about \"{entity}\": {action} What steps do you suggest?",
+      "loading": "Analysing your campaigns...",
+      "loadFailed": "Couldn't load the recommendations.",
+      "retry": "Try again",
+      "empty": "No recommendations for this period.",
+      "note": "Worked out from your campaign numbers for the last {days} days against the period before.",
       "items": {
         "1": {
           "title": "Increase budget for high-performing campaigns",

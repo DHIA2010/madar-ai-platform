@@ -173,6 +173,39 @@ async function resolveComparisonPeriods(
   return { ...resolveRanges(input), isAllTime: false }
 }
 
+// The recommendations page (not the chat): the same evidence-gated recommendations the
+// generate_campaign_recommendations tool gives the model, for the last `days` days against the
+// `days` before them. Nothing here is written by a model.
+export async function computeCampaignRecommendations(
+  actor: AuthenticatedActor,
+  services: AiChatToolServices,
+  days: number
+) {
+  const day = (offset: number) =>
+    new Date(Date.now() - offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const ranges = {
+    current: { from: day(days - 1), to: day(0) },
+    previous: { from: day(days * 2 - 1), to: day(days) },
+  }
+  const comparison = await services.campaignAnalyticsEngine.comparePeriods(actor, ranges)
+  const drivers = services.campaignAnalyticsEngine.identifyPerformanceDrivers(comparison, "roas")
+  const contributions = await services.campaignAnalyticsEngine.getContributionAnalysis(actor, {
+    ranges,
+    limit: 5,
+  })
+  return {
+    period: ranges,
+    recommendations: [
+      generateAccountRecommendation(comparison, drivers),
+      ...generateContributionRecommendations(
+        contributions,
+        comparison.period,
+        comparison.confidence
+      ),
+    ],
+  }
+}
+
 const RANKABLE_METRICS = [
   "spend",
   "revenue",

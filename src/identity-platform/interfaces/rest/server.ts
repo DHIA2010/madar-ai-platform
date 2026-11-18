@@ -3614,6 +3614,13 @@ export function createIdentityApiServer(
           return send(200, { items: await aiChatService.listSessions(actor) })
         }
 
+        if (method === "GET" && url.pathname === "/v1/ai/recommendations") {
+          if (!actor.modulePermissions.includes("ai:view")) throw ERRORS.forbidden()
+          const requested = Number(url.searchParams.get("days"))
+          const days = [7, 30, 90].includes(requested) ? requested : 30
+          return send(200, await aiChatService.getRecommendations(actor, days))
+        }
+
         // Cost control (section 25): each message send is a real, billed Anthropic call, up to
         // AI_CHAT_MAX_TOOL_ROUNDS rounds -- unlike every other route's rate limit (abuse
         // prevention), this one exists specifically to bound spend. Two windows: a per-user burst

@@ -10,7 +10,12 @@ import { isApplicationEnabled, requireApplicationEnabled } from "./guards"
 import { AiChatRepository } from "./repository"
 import { buildStructuredResponse } from "./response-formatter"
 import type { RawToolResult, StructuredAnalyticsResponse } from "./response-types"
-import { buildToolsForCategory, dispatchToolCall, type AiChatToolServices } from "./tools"
+import {
+  buildToolsForCategory,
+  computeCampaignRecommendations,
+  dispatchToolCall,
+  type AiChatToolServices,
+} from "./tools"
 import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto, ToolCallTrace } from "./types"
 
 // Genie-level quality audit section 21: everything buildStructuredResponse needs (every tool's
@@ -231,6 +236,19 @@ export class AiChatService {
   async listSessions(actor: AuthenticatedActor): Promise<ChatSessionDto[]> {
     assertActorCanUseAiChat(actor)
     return this.repository.listSessionsByUser(actor.organizationId, actor.userId)
+  }
+
+  // The recommendations tab: computed from the account's own campaign numbers. An account
+  // without the advertising app has none, rather than an error.
+  async getRecommendations(actor: AuthenticatedActor, days: number) {
+    assertActorCanUseAiChat(actor)
+    await requireAiAppEnabled(this.db, actor.organizationId)
+    try {
+      await requireApplicationEnabled(this.db, actor.organizationId, "advertising")
+    } catch {
+      return { period: null, recommendations: [] }
+    }
+    return computeCampaignRecommendations(actor, this.toolServices, days)
   }
 
   private async loadOwnedSession(

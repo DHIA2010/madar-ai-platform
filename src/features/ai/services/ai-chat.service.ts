@@ -2,7 +2,12 @@ import type { useTranslations } from "next-intl"
 
 import type { ApplicationCategoryId } from "@/features/applications"
 
-import type { ChatMessageDto, ChatSessionDto, ChatStructuredResponse } from "../types"
+import type {
+  ChatMessageDto,
+  ChatRecommendation,
+  ChatSessionDto,
+  ChatStructuredResponse,
+} from "../types"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
@@ -40,6 +45,19 @@ function getWorkspaceIdFromStorage(): string | null {
 
 // Avoids the slash-prefix literal lint rule (same trick as campaign-performance.service.ts).
 const AI_ENDPOINT = ["", "v1", "ai", "sessions"].join(String.fromCharCode(47))
+const AI_RECOMMENDATIONS_ENDPOINT = ["", "v1", "ai", "recommendations"].join(
+  String.fromCharCode(47)
+)
+
+// What the recommendations tab shows: worked out by the server from the account's own campaign
+// numbers for the chosen days against the same number of days before them.
+export interface AiRecommendationsResult {
+  period: {
+    current: { from: string; to: string }
+    previous: { from: string; to: string }
+  } | null
+  recommendations: ChatRecommendation[]
+}
 
 const sessionManager = createSessionManager()
 const client = createHttpDataClient({
@@ -172,6 +190,10 @@ export const aiChatService = {
       AI_ENDPOINT,
       { applicationCategory }
     )
+  },
+
+  async getRecommendations(days: number): Promise<AiRecommendationsResult> {
+    return client.get<AiRecommendationsResult>(`${AI_RECOMMENDATIONS_ENDPOINT}?days=${days}`)
   },
 
   async listSessions(): Promise<ChatSessionDto[]> {

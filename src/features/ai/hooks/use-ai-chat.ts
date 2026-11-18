@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslations } from "next-intl"
 
 import { APPLICATION_SETTINGS_KEY } from "@/features/applications"
@@ -70,6 +70,28 @@ export function useAiChat() {
     } finally {
       setIsLoadingSessions(false)
     }
+  }, [])
+
+  // The saved conversations, loaded when the page opens.
+  useEffect(() => {
+    let cancelled = false
+    aiChatService
+      .listSessions()
+      .then((items) => {
+        if (!cancelled) setSessions(items)
+      })
+      .catch(() => {
+        // The list is a convenience: the chat itself still works without it.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Back to an empty conversation; the next message starts a new saved one.
+  const startNewChat = useCallback(() => {
+    setActiveSessionId(null)
+    setMessages([])
   }, [])
 
   const openSession = useCallback(async (sessionId: string) => {
@@ -218,6 +240,11 @@ export function useAiChat() {
       } finally {
         activeRequestsRef.current.delete(sessionId)
         setSessionStreaming(sessionId, false)
+        // The server names a conversation after its first question: pick the name up.
+        aiChatService
+          .listSessions()
+          .then(setSessions)
+          .catch(() => {})
       }
     },
     [activeSessionId, createSession, setSessionStreaming, t, updateMessage]
@@ -245,6 +272,7 @@ export function useAiChat() {
     isSending: activeSessionId ? streamingSessionIds.has(activeSessionId) : false,
     isSessionStreaming,
     refreshSessions,
+    startNewChat,
     openSession,
     createSession,
     sendMessage,

@@ -13,7 +13,9 @@ import {
   Gauge,
   Info,
   LayoutGrid,
+  Loader2,
   Megaphone,
+  MessageSquarePlus,
   Minus,
   Send,
   ShoppingBag,
@@ -41,8 +43,7 @@ import {
   AppSelectTrigger,
   AppSelectValue,
 } from "@/components/app"
-import { PlatformBadge } from "@/components/platform-badge"
-import { useAiChat } from "@/features/ai"
+import { useAiChat, useAiRecommendations } from "@/features/ai"
 import type { AiChatScopeCategory } from "@/features/ai"
 import type {
   ChatChartSpec,
@@ -56,6 +57,7 @@ import type {
   ChatRecommendation,
   ChatReportTable,
   ChatReportTableColumn,
+  ChatSessionDto,
 } from "@/features/ai/types/ai-chat.types"
 
 type AiTranslator = ReturnType<typeof useTranslations<"ai">>
@@ -519,74 +521,26 @@ function ChatFollowUpChips({
   )
 }
 
-// --- Mock data for the "التوصيات المقترحة" panel -- a separate, proactive-insights feature
-// (background analysis + notification) from the reactive chat below, not built in this pass.
-// title/description/impactMetric come from the `ai` namespace; platform/platformLabel stay as
-// literal brand names (Google Ads/Snapchat/Meta Ads/TikTok Ads), same principle as elsewhere in
-// this rollout, and impactValue/the ROAS/CPA acronyms are literal data values, not UI prose. ---
+// --- The "التوصيات المقترحة" tab: recommendations the server works out from the account's own
+// campaign numbers (GET /v1/ai/recommendations) -- the same evidence-gated ones the assistant
+// uses. Nothing on it is sample text. ---
 
 type RecommendationCategory = "growth" | "optimization" | "alert"
 
-interface Recommendation {
-  id: string
-  platform: string
-  platformLabel: string
-  category: RecommendationCategory
-  title: string
-  description: string
-  impactValue: number
-  impactMetric: string
+// Which tab a recommendation belongs under. "No action needed" belongs to none of them and
+// shows only under "all".
+function recommendationCategory(type: ChatRecommendation["type"]): RecommendationCategory | null {
+  if (type === "budget_increase_consideration") return "growth"
+  if (type === "budget_review" || type === "investigate_decline") return "alert"
+  if (type === "no_action") return null
+  return "optimization"
 }
 
-const CATEGORY_META: Record<RecommendationCategory, { className: string }> = {
+const CATEGORY_META: Record<RecommendationCategory | "none", { className: string }> = {
   growth: { className: "bg-emerald-50 text-emerald-600" },
   optimization: { className: "bg-blue-50 text-blue-600" },
   alert: { className: "bg-rose-50 text-rose-600" },
-}
-
-function buildRecommendationsMock(t: AiTranslator): Recommendation[] {
-  return [
-    {
-      id: "1",
-      platform: "Google Ads",
-      platformLabel: "Google Ads",
-      category: "growth",
-      title: t("recommendationsView.items.1.title"),
-      description: t("recommendationsView.items.1.description"),
-      impactValue: 24.5,
-      impactMetric: "ROAS",
-    },
-    {
-      id: "2",
-      platform: "Snapchat",
-      platformLabel: "Snapchat Ads",
-      category: "optimization",
-      title: t("recommendationsView.items.2.title"),
-      description: t("recommendationsView.items.2.description"),
-      impactValue: -18.3,
-      impactMetric: "CPA",
-    },
-    {
-      id: "3",
-      platform: "Meta Ads",
-      platformLabel: "Meta Ads",
-      category: "growth",
-      title: t("recommendationsView.items.3.title"),
-      description: t("recommendationsView.items.3.description"),
-      impactValue: 31.2,
-      impactMetric: t("metricLabels.conversions"),
-    },
-    {
-      id: "4",
-      platform: "TikTok Ads",
-      platformLabel: "TikTok Ads",
-      category: "alert",
-      title: t("recommendationsView.items.4.title"),
-      description: t("recommendationsView.items.4.description"),
-      impactValue: -32.0,
-      impactMetric: "CPA",
-    },
-  ]
+  none: { className: "bg-slate-100 text-slate-600" },
 }
 
 const RECOMMENDATION_TABS: Array<{ key: "all" | RecommendationCategory; icon?: LucideIcon }> = [
@@ -627,48 +581,163 @@ const SUGGESTED_QUESTION_CONFIG: Record<
   expenses: [{ key: "topCategories", icon: Wallet }],
 }
 
-function RecommendationCard({ item }: { item: Recommendation }) {
+function RecommendationCard({
+  item,
+  onAsk,
+}: {
+  item: ChatRecommendation
+  onAsk: (item: ChatRecommendation) => void
+}) {
   const t = useTranslations("ai")
-  const category = CATEGORY_META[item.category]
-  const categoryLabel = t(
-    `recommendationsView.categoryMeta.${item.category}` as "recommendationsView.categoryMeta.growth"
-  )
-  const isPositive = item.impactValue >= 0
+  const categoryKey = recommendationCategory(item.type) ?? "none"
+  // The biggest measured change behind it -- a fact from the two periods, not a forecast.
+  const change = [...item.evidence]
+    .filter((evidence) => evidence.changePercent !== null)
+    .sort((a, b) => Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0))[0]
 
   return (
     <div className="rounded-2xl border border-border/60 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <PlatformBadge platform={item.platform} className="size-9" />
-          <span className="text-sm font-medium text-foreground">{item.platformLabel}</span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2878ff]">
+            <Megaphone className="size-4" />
+          </span>
+          <span className="truncate text-sm font-medium text-foreground">{item.entityName}</span>
         </div>
         <span
           className={cn(
             "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
-            category.className
+            CATEGORY_META[categoryKey].className
           )}
         >
-          {categoryLabel}
+          {t(
+            `recommendationsView.categoryMeta.${categoryKey}` as "recommendationsView.categoryMeta.growth"
+          )}
         </span>
       </div>
 
-      <p className="mt-3 text-sm font-semibold text-foreground">{item.title}</p>
-      <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.description}</p>
+      <p className="mt-3 text-sm font-semibold text-foreground">{item.recommendedAction}</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.reason}</p>
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
         <div>
-          <p className="text-xs text-muted-foreground">{t("recommendationsView.expectedImpact")}</p>
-          <p className={cn("text-lg font-bold", isPositive ? "text-emerald-600" : "text-rose-600")}>
-            {isPositive ? "+" : ""}
-            {item.impactValue.toFixed(1)}%
-          </p>
-          <p className="text-xs text-muted-foreground">{item.impactMetric}</p>
+          {change ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {t("recommendationsView.measuredChange")}
+              </p>
+              <p
+                className={cn(
+                  "text-lg font-bold",
+                  (change.changePercent ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"
+                )}
+                dir="ltr"
+              >
+                {(change.changePercent ?? 0) >= 0 ? "+" : ""}
+                {(change.changePercent ?? 0).toFixed(1)}%
+              </p>
+              <p className="text-xs text-muted-foreground">{driverMetricLabel(change.metric, t)}</p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t(
+                `chat.recommendationsPanel.priority.${item.priority}` as "chat.recommendationsPanel.priority.high"
+              )}
+            </p>
+          )}
         </div>
-        <AppButton variant="outline" size="sm">
-          {t("recommendationsView.viewDetails")}
+        <AppButton variant="outline" size="sm" onClick={() => onAsk(item)}>
+          {t("recommendationsView.askAssistant")}
         </AppButton>
       </div>
     </div>
+  )
+}
+
+// The saved conversations beside the chat: pick one to read it again and carry on.
+function ChatHistoryPanel({
+  sessions,
+  activeSessionId,
+  disabled,
+  locale,
+  onOpen,
+  onNew,
+}: {
+  sessions: ChatSessionDto[]
+  activeSessionId: string | null
+  disabled: boolean
+  locale: Locale
+  onOpen: (session: ChatSessionDto) => void
+  onNew: () => void
+}) {
+  const t = useTranslations("ai")
+  const dateFormat = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+        day: "numeric",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    [locale]
+  )
+  // A conversation gets its name from its first question: one without a name has nothing in it.
+  const named = sessions.filter((session) => session.title || session.id === activeSessionId)
+
+  return (
+    <AppCard title={t("history.title")} className="rounded-2xl border-border/60 shadow-sm">
+      <AppButton
+        variant="outline"
+        className="h-10 w-full justify-center gap-2 rounded-xl"
+        disabled={disabled}
+        onClick={onNew}
+      >
+        <span className="flex items-center justify-center gap-2">
+          <MessageSquarePlus className="size-4" />
+          {t("history.newChat")}
+        </span>
+      </AppButton>
+      {named.length === 0 ? (
+        <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
+          {t("history.empty")}
+        </p>
+      ) : (
+        <ul className="mt-3 max-h-[420px] space-y-1 overflow-y-auto">
+          {named.map((session) => {
+            const isActive = session.id === activeSessionId
+            const CategoryIcon = CATEGORY_ICON[session.applicationCategory]?.icon ?? Sparkles
+            return (
+              <li key={session.id}>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onOpen(session)}
+                  className={cn(
+                    "flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-start transition-colors disabled:opacity-60",
+                    isActive ? "bg-primary/10" : "hover:bg-muted"
+                  )}
+                >
+                  <CategoryIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        "block truncate text-[13px] text-foreground",
+                        isActive ? "font-bold" : "font-medium"
+                      )}
+                    >
+                      {session.title ?? t("history.untitled")}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {dateFormat.format(new Date(session.updatedAt))}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </AppCard>
   )
 }
 
@@ -686,8 +755,18 @@ export default function AIAssistantDashboard() {
   const [activeTab, setActiveTab] = useState<"all" | RecommendationCategory>("all")
   const [period, setPeriod] = useState("30")
   const [chatInput, setChatInput] = useState("")
-  const { messages, availableCategories, isSending, activeSessionId, sendMessage, cancelMessage } =
-    useAiChat()
+  const {
+    messages,
+    sessions,
+    availableCategories,
+    isSending,
+    activeSessionId,
+    sendMessage,
+    cancelMessage,
+    openSession,
+    startNewChat,
+  } = useAiChat()
+  const recommendationsQuery = useAiRecommendations(Number(period), view === "recommendations")
 
   const [selectedCategory, setSelectedCategory] = useState<AiChatScopeCategory | null>(null)
   const activeCategory = selectedCategory ?? availableCategories[0] ?? null
@@ -706,12 +785,30 @@ export default function AIAssistantDashboard() {
     [availableCategories, t]
   )
 
-  const recommendationsMock = useMemo(() => buildRecommendationsMock(t), [t])
-
   const filteredRecommendations = useMemo(() => {
-    if (activeTab === "all") return recommendationsMock
-    return recommendationsMock.filter((item) => item.category === activeTab)
-  }, [activeTab, recommendationsMock])
+    const all = recommendationsQuery.data?.recommendations ?? []
+    if (activeTab === "all") return all
+    return all.filter((item) => recommendationCategory(item.type) === activeTab)
+  }, [activeTab, recommendationsQuery.data])
+
+  // "Ask the assistant" on a recommendation: over to the chat with the question written, for
+  // the person to send.
+  function askAbout(item: ChatRecommendation) {
+    setChatInput(
+      t("recommendationsView.askPrompt", {
+        entity: item.entityName,
+        action: item.recommendedAction,
+      })
+    )
+    if (availableCategories.includes("advertising")) setSelectedCategory("advertising")
+    startNewChat()
+    setView("chat")
+  }
+
+  function openSavedChat(session: ChatSessionDto) {
+    setSelectedCategory(session.applicationCategory)
+    void openSession(session.id)
+  }
 
   async function handleSend(text: string) {
     const content = text.trim()
@@ -783,212 +880,222 @@ export default function AIAssistantDashboard() {
       </div>
 
       {view === "chat" ? (
-        <AppCard title={t("pageViews.chat")} className="rounded-2xl border-border/60 shadow-sm">
-          {availableCategories.length === 0 ? (
-            <div className="flex flex-col items-center px-1 py-6 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-muted text-2xl">
-                🤖
-              </div>
-              <p className="mt-4 text-sm font-semibold text-foreground">
-                {t("chat.emptyState.title")}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t("chat.emptyState.description")}
-              </p>
-            </div>
-          ) : (
-            <>
-              {availableCategories.length > 1 ? (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                    {t("chat.scopeLabel")}
-                  </span>
-                  <AppSearchableSelect
-                    value={activeCategory ?? ""}
-                    options={categoryOptions}
-                    onChange={(value) => setSelectedCategory(value as AiChatScopeCategory)}
-                    placeholder={t("chat.scopeSelect.placeholder")}
-                    searchPlaceholder={t("chat.scopeSelect.searchPlaceholder")}
-                    emptyLabel={t("chat.scopeSelect.emptyLabel")}
-                    ariaLabel={t("chat.scopeSelect.ariaLabel")}
-                    compact
-                    triggerClassName="w-56"
-                  />
+        <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <ChatHistoryPanel
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            disabled={isSending}
+            locale={locale}
+            onOpen={openSavedChat}
+            onNew={startNewChat}
+          />
+          <AppCard title={t("pageViews.chat")} className="rounded-2xl border-border/60 shadow-sm">
+            {availableCategories.length === 0 ? (
+              <div className="flex flex-col items-center px-1 py-6 text-center">
+                <div className="flex size-14 items-center justify-center rounded-full bg-muted text-2xl">
+                  🤖
                 </div>
-              ) : null}
-
-              <div className="flex flex-col px-1 py-2">
-                {messages.length === 0 ? (
-                  <div className="flex flex-col items-center text-center">
-                    <div className="flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-blue-100 text-3xl">
-                      🤖
-                    </div>
-                    <p className="mt-4 text-lg font-bold text-foreground">
-                      {t("chat.welcome.greeting")}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {t("chat.welcome.subtitle", { category: activeCategoryLabel })}
-                    </p>
-
-                    <div className="mt-5 w-full space-y-2.5">
-                      {(activeCategory ? SUGGESTED_QUESTION_CONFIG[activeCategory] : []).map(
-                        (question) => {
-                          const Icon = question.icon
-                          const label = activeCategory
-                            ? t(
-                                `chat.suggestedQuestions.${activeCategory}.${question.key}` as "chat.suggestedQuestions.advertising.bestRoas"
-                              )
-                            : ""
-                          return (
-                            <button
-                              key={question.key}
-                              type="button"
-                              onClick={() => setChatInput(label)}
-                              className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 text-start text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
-                            >
-                              <span>{label}</span>
-                              <Icon className="size-4 shrink-0 text-muted-foreground" />
-                            </button>
-                          )
-                        }
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-h-[65vh] space-y-3 overflow-y-auto">
-                    {messages.map((message) => {
-                      // A message loaded from the DB (listMessages) has no status field at all
-                      // (always implicitly "completed" -- see ChatStreamingMessageDto's own
-                      // comment), so this only ever branches for a message created client-side
-                      // during the current session's active send.
-                      const isWaitingForFirstToken =
-                        message.role === "assistant" &&
-                        (message.status === "pending" || message.status === "streaming") &&
-                        message.content.length === 0
-                      const isFailed = message.status === "failed"
-                      const isCancelled = message.status === "cancelled"
-                      return (
-                        <div
-                          key={message.id}
-                          className={cn(
-                            "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6",
-                            message.role === "user"
-                              ? "ms-auto bg-primary text-primary-foreground"
-                              : message.role === "system_notice"
-                                ? "mx-auto bg-amber-50 text-amber-700"
-                                : isFailed
-                                  ? "bg-rose-50 text-rose-700"
-                                  : "bg-muted text-foreground"
-                          )}
-                        >
-                          {isWaitingForFirstToken ? (
-                            <span className="flex items-center gap-2 text-muted-foreground">
-                              <span className="flex gap-1">
-                                <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
-                                <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
-                                <span className="size-1.5 animate-bounce rounded-full bg-current" />
-                              </span>
-                              {message.statusLabel ?? t("status.thinking")}
-                            </span>
-                          ) : (
-                            <>
-                              {message.content}
-                              {message.status === "streaming" ? (
-                                <span className="ms-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-current align-middle" />
-                              ) : null}
-                              {isCancelled ? (
-                                <span className="mt-1 block text-xs text-muted-foreground">
-                                  {t("chat.cancelled")}
-                                </span>
-                              ) : null}
-                            </>
-                          )}
-                          {message.role === "assistant" && message.structured ? (
-                            <>
-                              <ChatKpiRow cards={message.structured.metrics} />
-                              {message.structured.tables.map((table, index) => (
-                                <ReportTableBlock key={index} table={table} />
-                              ))}
-                              {message.structured.charts.map((chart, index) => (
-                                <ChatChartBlock key={index} chart={chart} />
-                              ))}
-                              <ChatDriversPanel drivers={message.structured.drivers} />
-                              <ChatContributionsPanel
-                                contributions={message.structured.contributions}
-                                title={message.structured.contributionsTitle}
-                              />
-                              <ChatFactsInsightsPanel
-                                facts={message.structured.facts}
-                                insights={message.structured.insights}
-                              />
-                              <ChatRecommendationsPanel
-                                recommendations={message.structured.recommendations}
-                              />
-                              <ChatWarningsPanel warnings={message.structured.warnings} />
-                              <ChatConfidenceBadge
-                                confidence={message.structured.confidence}
-                                hasAnalysis={
-                                  message.structured.drivers.length > 0 ||
-                                  message.structured.contributions.length > 0
-                                }
-                              />
-                              <ChatFollowUpChips
-                                questions={message.structured.followUpQuestions}
-                                onSelect={setChatInput}
-                              />
-                            </>
-                          ) : null}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-5 space-y-2">
-                <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        void handleSend(chatInput)
-                      }
-                    }}
-                    placeholder={t("chat.input.placeholder")}
-                    className="h-8 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-                  />
-                  {isSending ? (
-                    <button
-                      type="button"
-                      aria-label={t("chat.input.stopLabel")}
-                      onClick={handleCancel}
-                      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-muted/70"
-                    >
-                      <Square className="size-3.5 fill-current" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label={t("chat.input.sendLabel")}
-                      disabled={!chatInput.trim()}
-                      onClick={() => void handleSend(chatInput)}
-                      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      <Send className="size-4 rtl:-scale-x-100" />
-                    </button>
-                  )}
-                </div>
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Sparkles className="size-3.5 shrink-0" />
-                  {t("chat.footerHint", { category: activeCategoryLabel })}
+                <p className="mt-4 text-sm font-semibold text-foreground">
+                  {t("chat.emptyState.title")}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("chat.emptyState.description")}
                 </p>
               </div>
-            </>
-          )}
-        </AppCard>
+            ) : (
+              <>
+                {availableCategories.length > 1 ? (
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                      {t("chat.scopeLabel")}
+                    </span>
+                    <AppSearchableSelect
+                      value={activeCategory ?? ""}
+                      options={categoryOptions}
+                      onChange={(value) => setSelectedCategory(value as AiChatScopeCategory)}
+                      placeholder={t("chat.scopeSelect.placeholder")}
+                      searchPlaceholder={t("chat.scopeSelect.searchPlaceholder")}
+                      emptyLabel={t("chat.scopeSelect.emptyLabel")}
+                      ariaLabel={t("chat.scopeSelect.ariaLabel")}
+                      compact
+                      triggerClassName="w-56"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col px-1 py-2">
+                  {messages.length === 0 ? (
+                    <div className="flex flex-col items-center text-center">
+                      <div className="flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-blue-100 text-3xl">
+                        🤖
+                      </div>
+                      <p className="mt-4 text-lg font-bold text-foreground">
+                        {t("chat.welcome.greeting")}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t("chat.welcome.subtitle", { category: activeCategoryLabel })}
+                      </p>
+
+                      <div className="mt-5 w-full space-y-2.5">
+                        {(activeCategory ? SUGGESTED_QUESTION_CONFIG[activeCategory] : []).map(
+                          (question) => {
+                            const Icon = question.icon
+                            const label = activeCategory
+                              ? t(
+                                  `chat.suggestedQuestions.${activeCategory}.${question.key}` as "chat.suggestedQuestions.advertising.bestRoas"
+                                )
+                              : ""
+                            return (
+                              <button
+                                key={question.key}
+                                type="button"
+                                onClick={() => setChatInput(label)}
+                                className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 text-start text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
+                              >
+                                <span>{label}</span>
+                                <Icon className="size-4 shrink-0 text-muted-foreground" />
+                              </button>
+                            )
+                          }
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="max-h-[65vh] space-y-3 overflow-y-auto">
+                      {messages.map((message) => {
+                        // A message loaded from the DB (listMessages) has no status field at all
+                        // (always implicitly "completed" -- see ChatStreamingMessageDto's own
+                        // comment), so this only ever branches for a message created client-side
+                        // during the current session's active send.
+                        const isWaitingForFirstToken =
+                          message.role === "assistant" &&
+                          (message.status === "pending" || message.status === "streaming") &&
+                          message.content.length === 0
+                        const isFailed = message.status === "failed"
+                        const isCancelled = message.status === "cancelled"
+                        return (
+                          <div
+                            key={message.id}
+                            className={cn(
+                              "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6",
+                              message.role === "user"
+                                ? "ms-auto bg-primary text-primary-foreground"
+                                : message.role === "system_notice"
+                                  ? "mx-auto bg-amber-50 text-amber-700"
+                                  : isFailed
+                                    ? "bg-rose-50 text-rose-700"
+                                    : "bg-muted text-foreground"
+                            )}
+                          >
+                            {isWaitingForFirstToken ? (
+                              <span className="flex items-center gap-2 text-muted-foreground">
+                                <span className="flex gap-1">
+                                  <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+                                  <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+                                  <span className="size-1.5 animate-bounce rounded-full bg-current" />
+                                </span>
+                                {message.statusLabel ?? t("status.thinking")}
+                              </span>
+                            ) : (
+                              <>
+                                {message.content}
+                                {message.status === "streaming" ? (
+                                  <span className="ms-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-current align-middle" />
+                                ) : null}
+                                {isCancelled ? (
+                                  <span className="mt-1 block text-xs text-muted-foreground">
+                                    {t("chat.cancelled")}
+                                  </span>
+                                ) : null}
+                              </>
+                            )}
+                            {message.role === "assistant" && message.structured ? (
+                              <>
+                                <ChatKpiRow cards={message.structured.metrics} />
+                                {message.structured.tables.map((table, index) => (
+                                  <ReportTableBlock key={index} table={table} />
+                                ))}
+                                {message.structured.charts.map((chart, index) => (
+                                  <ChatChartBlock key={index} chart={chart} />
+                                ))}
+                                <ChatDriversPanel drivers={message.structured.drivers} />
+                                <ChatContributionsPanel
+                                  contributions={message.structured.contributions}
+                                  title={message.structured.contributionsTitle}
+                                />
+                                <ChatFactsInsightsPanel
+                                  facts={message.structured.facts}
+                                  insights={message.structured.insights}
+                                />
+                                <ChatRecommendationsPanel
+                                  recommendations={message.structured.recommendations}
+                                />
+                                <ChatWarningsPanel warnings={message.structured.warnings} />
+                                <ChatConfidenceBadge
+                                  confidence={message.structured.confidence}
+                                  hasAnalysis={
+                                    message.structured.drivers.length > 0 ||
+                                    message.structured.contributions.length > 0
+                                  }
+                                />
+                                <ChatFollowUpChips
+                                  questions={message.structured.followUpQuestions}
+                                  onSelect={setChatInput}
+                                />
+                              </>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-5 space-y-2">
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(event) => setChatInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault()
+                          void handleSend(chatInput)
+                        }
+                      }}
+                      placeholder={t("chat.input.placeholder")}
+                      className="h-8 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    />
+                    {isSending ? (
+                      <button
+                        type="button"
+                        aria-label={t("chat.input.stopLabel")}
+                        onClick={handleCancel}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-muted/70"
+                      >
+                        <Square className="size-3.5 fill-current" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={t("chat.input.sendLabel")}
+                        disabled={!chatInput.trim()}
+                        onClick={() => void handleSend(chatInput)}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        <Send className="size-4 rtl:-scale-x-100" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Sparkles className="size-3.5 shrink-0" />
+                    {t("chat.footerHint", { category: activeCategoryLabel })}
+                  </p>
+                </div>
+              </>
+            )}
+          </AppCard>
+        </div>
       ) : (
         <AppCard
           title={t("pageViews.recommendations")}
@@ -1019,15 +1126,43 @@ export default function AIAssistantDashboard() {
             })}
           </div>
 
-          <div className="space-y-3">
-            {filteredRecommendations.map((item) => (
-              <RecommendationCard key={item.id} item={item} />
-            ))}
-          </div>
+          {recommendationsQuery.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              {t("recommendationsView.loading")}
+            </div>
+          ) : recommendationsQuery.isError ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <p className="text-sm font-medium text-foreground">
+                {t("recommendationsView.loadFailed")}
+              </p>
+              <AppButton
+                variant="outline"
+                size="sm"
+                onClick={() => void recommendationsQuery.refetch()}
+              >
+                {t("recommendationsView.retry")}
+              </AppButton>
+            </div>
+          ) : filteredRecommendations.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              {t("recommendationsView.empty")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {filteredRecommendations.map((item, index) => (
+                <RecommendationCard
+                  key={`${item.type}-${item.entityName}-${index}`}
+                  item={item}
+                  onAsk={askAbout}
+                />
+              ))}
+            </div>
+          )}
 
           <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="size-3.5 shrink-0" />
-            {t("recommendationsView.disclaimer")}
+            {t("recommendationsView.note", { days: Number(period) })}
           </p>
         </AppCard>
       )}
