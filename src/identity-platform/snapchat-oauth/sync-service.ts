@@ -41,7 +41,10 @@ const STATS_WINDOW_MAX_RETRIES = 4
 // the full field set broken out per campaign in the same request, rather than an
 // account-wide total. Snapchat has no literal "clicks"/"ctr" fields; "swipes" is the
 // swipe-up equivalent of a click, and "swipe_up_percent" is its pre-computed CTR equivalent.
-const STATS_FIELDS = "spend,impressions,swipes,swipe_up_percent"
+// The conversion_* fields are what Snapchat's pixel counted against each ad (page visits,
+// sign-ups, purchases). They arrive about a day late, which the rolling re-sync picks up.
+const STATS_FIELDS =
+  "spend,impressions,swipes,swipe_up_percent,conversion_page_views,conversion_sign_ups,conversion_purchases,conversion_purchases_value"
 
 interface SnapchatCampaignApiRow {
   id: string

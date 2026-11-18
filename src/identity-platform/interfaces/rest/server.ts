@@ -168,6 +168,7 @@ import {
   type CampaignPerformancePlatform,
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
+import { CampaignCheckupService } from "../../campaigns/checkup"
 import { CampaignJourneyService } from "../../campaigns/journey-service"
 import { ChannelsAggregationService } from "../../channels/channels-service"
 import { countConnectedPlatforms } from "../../organizations/connected-platforms"
@@ -1200,6 +1201,9 @@ export function createIdentityApiServer(
       : null
   const campaignsPerformanceAggregationService = container.infrastructure.database
     ? new CampaignsPerformanceAggregationService(container.infrastructure.database)
+    : null
+  const campaignCheckupService = campaignsPerformanceAggregationService
+    ? new CampaignCheckupService(campaignsPerformanceAggregationService)
     : null
   const channelsAggregationService = container.infrastructure.database
     ? new ChannelsAggregationService(container.infrastructure.database)
@@ -7591,6 +7595,20 @@ export function createIdentityApiServer(
             pageSize: Number.isFinite(pageSize) ? pageSize : 20,
           })
         )
+      }
+
+      // The ad account check-up: campaign states, the funnel and findings with their evidence.
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/checkup") {
+        if (!campaignCheckupService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, await campaignCheckupService.run(actor, parsePerformanceQuery(url)))
       }
 
       if (method === "GET" && url.pathname === "/v1/campaigns/performance/journey") {

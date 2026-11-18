@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   AlertCircle,
   AlertTriangle,
@@ -31,6 +32,7 @@ import { useLocale, useTranslations } from "next-intl"
 
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 
 import {
   AppCard,
@@ -805,6 +807,21 @@ export default function AIAssistantDashboard() {
     setView("chat")
   }
 
+  // Arriving from the campaign check-up's "ask the assistant": the question comes in the link
+  // and is written into the chat for the person to send.
+  useEffect(() => {
+    const question = new URLSearchParams(window.location.search).get("ask")
+    if (!question) return
+    // After the first paint, so the page hydrates the same as it was rendered on the server.
+    const timer = window.setTimeout(() => {
+      setChatInput(question)
+      setSelectedCategory("advertising")
+      setView("chat")
+      window.history.replaceState(null, "", window.location.pathname)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   function openSavedChat(session: ChatSessionDto) {
     setSelectedCategory(session.applicationCategory)
     void openSession(session.id)
@@ -1102,6 +1119,15 @@ export default function AIAssistantDashboard() {
           icon={<Sparkles className="size-4 text-primary" />}
           className="rounded-2xl border-border/60 shadow-sm"
         >
+          <Link
+            href={ROUTES.campaignsCheckup}
+            className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm transition-colors hover:bg-primary/10"
+          >
+            <span className="text-foreground">{t("recommendationsView.checkupHint")}</span>
+            <span className="shrink-0 font-semibold text-primary">
+              {t("recommendationsView.checkupLink")}
+            </span>
+          </Link>
           <div className="mb-4 flex flex-wrap items-center gap-5 border-b border-border/60">
             {RECOMMENDATION_TABS.map((tab) => {
               const Icon = tab.icon

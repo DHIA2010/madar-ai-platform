@@ -147,6 +147,79 @@ export interface CampaignPerformanceQueryParams {
   search?: string
 }
 
+// Mirrors identity-platform/campaigns/checkup.ts -- the ad account check-up: each campaign's
+// state, the funnel from views to results, and findings with the numbers behind them.
+export type CampaignCheckupFindingKind =
+  | "budget_hog"
+  | "spend_no_result"
+  | "clicks_no_result"
+  | "low_ctr"
+  | "budget_reached"
+  | "budget_unspent"
+  | "not_delivering"
+
+export interface CampaignCheckupFinding {
+  kind: CampaignCheckupFindingKind
+  severity: "high" | "medium"
+  platform: CampaignPerformancePlatform
+  campaignId: string
+  campaignName: string
+  adName: string | null
+  currency: string | null
+  values: Record<string, number | string | null>
+}
+
+export interface CampaignCheckupCampaign {
+  id: string
+  platform: CampaignPerformancePlatform
+  name: string
+  status: string
+  state: "running" | "problem" | "paused" | "other"
+  currency: string | null
+  dailyBudget: number | null
+  spendToday: number
+  spend: number
+  impressions: number
+  clicks: number
+  pageViews: number | null
+  conversions: number
+  cpa: number
+}
+
+export interface CampaignCheckupAd {
+  id: string
+  campaignId: string
+  campaignName: string
+  platform: CampaignPerformancePlatform
+  name: string
+  status: string
+  currency: string | null
+  spend: number
+  spendShare: number
+  impressions: number
+  clicks: number
+  ctr: number
+  pageViews: number | null
+  conversions: number
+  cpa: number
+}
+
+export interface CampaignCheckup {
+  range: { startDate: string; endDate: string; days: number }
+  funnel: {
+    currency: string | null
+    spend: number | null
+    impressions: number
+    clicks: number
+    pageViews: number | null
+    conversions: number
+    cpa: number | null
+  }
+  campaigns: CampaignCheckupCampaign[]
+  findings: CampaignCheckupFinding[]
+  ads: CampaignCheckupAd[]
+}
+
 // Mirrors identity-platform/campaigns/journey-service.ts's CampaignJourneyRow -- ad-spend KPIs
 // joined with real matched-order sales per campaign.
 export interface CampaignJourneyRow {
@@ -252,5 +325,9 @@ export const campaignPerformanceService = {
     return client.get<{ items: CampaignJourneyRow[] }>(
       `${PERFORMANCE_ENDPOINT}/journey${buildQuery(params)}`
     )
+  },
+
+  async getCheckup(params?: CampaignPerformanceQueryParams): Promise<CampaignCheckup> {
+    return client.get<CampaignCheckup>(`${PERFORMANCE_ENDPOINT}/checkup${buildQuery(params)}`)
   },
 }

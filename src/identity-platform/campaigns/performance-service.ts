@@ -67,6 +67,12 @@ export interface CampaignPerformanceRow {
   checkoutStarted: number
   purchases: number
   purchaseValue: number
+  // Visits to the landing page as the platform's own pixel counted them. Only filled where the
+  // platform reports it per ad (Snapchat today); absent means "not known", not zero.
+  pageViews?: number
+  // What the campaign or ad set may spend per day, in the row's currency; null or absent when
+  // the platform row carries no daily budget.
+  dailyBudget?: number | null
 }
 
 export interface OtherCurrencyTotal {
@@ -200,7 +206,7 @@ function finalizeRow(row: CampaignPerformanceRow): CampaignPerformanceRow {
 // same reasoning as orders/service.ts's bucketOrderStatus: no platform's exact status
 // vocabulary is fully confirmed against live data yet, so a loose match is what lets one
 // shared "Active"/"Paused"/"Other" filter work across all three without guessing exact enums.
-function bucketCampaignStatus(rawStatus: string): "Active" | "Paused" | "Other" {
+export function bucketCampaignStatus(rawStatus: string): "Active" | "Paused" | "Other" {
   const text = rawStatus.toLowerCase()
   // "limited" and "learning" are Google campaigns that are running, just not at full strength.
   if (
@@ -1262,6 +1268,10 @@ function reduceSnapchatStats(rows: SnapchatRawRecordRow[]) {
   let spend = 0
   let impressions = 0
   let swipes = 0
+  let pageViews = 0
+  let signUps = 0
+  let purchases = 0
+  let purchaseValue = 0
   let latestDate: string | null = null
 
   for (const row of rows) {
@@ -1271,6 +1281,10 @@ function reduceSnapchatStats(rows: SnapchatRawRecordRow[]) {
     spend += (Number(row.payload.spend) || 0) / 1_000_000
     impressions += Number(row.payload.impressions) || 0
     swipes += Number(row.payload.swipes) || 0
+    pageViews += Number(row.payload.conversion_page_views) || 0
+    signUps += Number(row.payload.conversion_sign_ups) || 0
+    purchases += Number(row.payload.conversion_purchases) || 0
+    purchaseValue += (Number(row.payload.conversion_purchases_value) || 0) / 1_000_000
     const startTime =
       typeof row.payload.startTime === "string" ? row.payload.startTime.slice(0, 10) : null
     if (startTime && (!latestDate || startTime > latestDate)) {
@@ -1278,7 +1292,28 @@ function reduceSnapchatStats(rows: SnapchatRawRecordRow[]) {
     }
   }
 
-  return { spend, impressions, swipes, latestDate }
+  return { spend, impressions, swipes, pageViews, signUps, purchases, purchaseValue, latestDate }
+}
+
+// The numbers every Snapchat row (campaign, ad set, ad) shares. A "result" is what the pixel
+// counted as a sign-up or a purchase; rows synced before those fields were requested simply
+// carry zeros until the next sync rewrites them.
+function snapchatMetrics(reduced: ReturnType<typeof reduceSnapchatStats>) {
+  return {
+    spend: reduced.spend,
+    clicks: reduced.swipes,
+    impressions: reduced.impressions,
+    conversions: reduced.signUps + reduced.purchases,
+    purchases: reduced.purchases,
+    purchaseValue: reduced.purchaseValue,
+    revenue: reduced.purchaseValue,
+    pageViews: reduced.pageViews,
+  }
+}
+
+function snapchatDailyBudget(payload: Record<string, unknown>): number | null {
+  const micro = Number(payload.daily_budget_micro)
+  return Number.isFinite(micro) && micro > 0 ? micro / 1_000_000 : null
 }
 
 async function fetchSnapchatCampaignRows(
@@ -1330,9 +1365,8 @@ async function fetchSnapchatCampaignRows(
         activityDate: reduced.latestDate,
         currency: meta.currency_code ?? null,
       }),
-      spend: reduced.spend,
-      clicks: reduced.swipes,
-      impressions: reduced.impressions,
+      ...snapchatMetrics(reduced),
+      dailyBudget: snapchatDailyBudget(meta.payload),
       cpm:
         reduced.impressions > 0
           ? Number(((reduced.spend / reduced.impressions) * 1000).toFixed(2))
@@ -1385,10 +1419,10 @@ async function fetchSnapchatAdGroupRows(
           status,
           objective: null,
           activityDate: reduced.latestDate,
+          currency: meta.currency_code ?? null,
         }),
-        spend: reduced.spend,
-        clicks: reduced.swipes,
-        impressions: reduced.impressions,
+        ...snapchatMetrics(reduced),
+        dailyBudget: snapchatDailyBudget(meta.payload),
       })
     })
 }
@@ -1437,10 +1471,10 @@ async function fetchSnapchatAdRows(
           status,
           objective: null,
           activityDate: reduced.latestDate,
+          currency: meta.currency_code ?? null,
         }),
-        spend: reduced.spend,
-        clicks: reduced.swipes,
-        impressions: reduced.impressions,
+        ...snapchatMetrics(reduced),
+        dailyBudget: snapchatDailyBudget(meta.payload),
       })
     })
 }

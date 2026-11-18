@@ -10,6 +10,7 @@ import { ROUTES } from "@/constants/routes"
 const CAMPAIGN_NAV_ITEMS = [
   { href: ROUTES.campaigns, labelKey: "dashboard" },
   { href: `${ROUTES.campaigns}/list`, labelKey: "list" },
+  { href: ROUTES.campaignsCheckup, labelKey: "checkup" },
   { href: `${ROUTES.campaigns}/journey`, labelKey: "journey" },
   { href: ROUTES.campaignsCreate, labelKey: "create" },
   { href: `${ROUTES.campaigns}/creative-library`, labelKey: "creativeLibrary" },
@@ -17,7 +18,8 @@ const CAMPAIGN_NAV_ITEMS = [
 ] as const
 
 export function CampaignModuleNav() {
-  const pathname = usePathname()
+  // Without the trailing slash the app adds to every address, so the open tab is marked.
+  const pathname = usePathname().replace(/(.)\/$/, "$1")
   const t = useTranslations("campaigns.moduleNav")
 
   return (

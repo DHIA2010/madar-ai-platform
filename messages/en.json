@@ -7486,6 +7486,8 @@
       "viewDetails": "View details",
       "disclaimer": "The recommendations below are illustrative for now and not connected to the AI assistant above",
       "measuredChange": "Measured change",
+      "checkupHint": "A full check of every campaign and ad, with what needs you.",
+      "checkupLink": "Open the campaign check-up",
       "askAssistant": "Ask the assistant",
       "askPrompt": "Explain this recommendation about \"{entity}\": {action} What steps do you suggest?",
       "loading": "Analysing your campaigns...",
@@ -7547,10 +7549,106 @@
     "moduleNav": {
       "dashboard": "Campaign Dashboard",
       "list": "Campaign List",
+      "checkup": "Check-up",
       "journey": "Spend & Sales",
       "create": "Create Campaign",
       "creativeLibrary": "Creative Library",
       "templates": "Templates"
+    },
+    "checkupScreen": {
+      "title": "Campaign check-up",
+      "subtitle": "A ready reading of your campaigns: are they running, where people drop off, and which ad needs you.",
+      "runNow": "Check now",
+      "checking": "Checking...",
+      "loadError": "Could not check your campaigns. Please try again.",
+      "emptyTitle": "No campaigns to check",
+      "emptyDescription": "Connect an ad platform to see your campaigns here.",
+      "statusTitle": "Campaign status",
+      "state": {
+        "running": "Running",
+        "paused": "Paused",
+        "other": "Inactive",
+        "under_review": "In review",
+        "rejected": "Rejected",
+        "not_delivering": "On but not showing",
+        "pending": "Not started yet",
+        "limited": "Limited delivery"
+      },
+      "todaySpend": "Spent today {spent} of {budget}",
+      "todaySpendNoBudget": "Spent today {spent}",
+      "funnelTitle": "Customer path",
+      "funnel": {
+        "impressions": "Views",
+        "clicks": "Clicks",
+        "pageViews": "Page visits",
+        "conversions": "Results",
+        "ofPrevious": "{rate}% of the previous step",
+        "costPerResult": "Cost per result",
+        "spend": "Spend",
+        "noResults": "No results yet",
+        "mixedCurrencies": "Your campaigns use more than one currency, so no single spend total is shown.",
+        "delayNote": "Results can take a day to appear on some platforms."
+      },
+      "findingsTitle": "What needs your attention",
+      "noFindings": "Nothing needs your attention in this period.",
+      "severity": {
+        "high": "Important",
+        "medium": "Keep an eye"
+      },
+      "askAssistant": "Ask the assistant",
+      "askPrompt": "In the campaign \"{campaign}\": {finding} What do you advise me to do, step by step?",
+      "finding": {
+        "budget_hog": {
+          "title": "One ad takes most of the budget and does worse",
+          "no_result": "\"{ad}\" took {share}% of the campaign's spend ({spend}) and brought no result, while the other ads bring a result for {othersCpa}.",
+          "cost": "\"{ad}\" took {share}% of the campaign's spend, and a result costs {adCpa} there against {othersCpa} for the other ads.",
+          "ctr": "\"{ad}\" took {share}% of the campaign's spend, with a click rate of {adCtr}% against {othersCtr}% for the other ads.",
+          "advice": "Pause it or move it to its own ad set so the budget goes to the better ads."
+        },
+        "spend_no_result": {
+          "title": "An ad spent with no result",
+          "body": "\"{ad}\" spent {spend} and brought no result; a result usually costs you {usualCpa}.",
+          "advice": "Pause it and try another message or design."
+        },
+        "clicks_no_result": {
+          "title": "Clicks with no results",
+          "page_drop": "{clicks} clicks but only {pageViews} page visits. Many people leave before the page opens.",
+          "no_signup": "{clicks} clicks and {pageViews} page visits, and not one result. People reach the page and stop there.",
+          "unknown": "{clicks} clicks costing {spend} and no recorded result.",
+          "advice_page_drop": "Check how fast the page opens on mobile and that the link is right.",
+          "advice_no_signup": "Review the page, the offer and the form, and make sure tracking records the result.",
+          "advice_unknown": "Make sure tracking works, then review the page and the offer."
+        },
+        "low_ctr": {
+          "title": "An ad that does not draw clicks",
+          "body": "\"{ad}\" has a click rate of {adCtr}% against {othersCtr}% for the campaign's other ads.",
+          "advice": "Change the image or headline, or pause it."
+        },
+        "budget_reached": {
+          "title": "The campaign reached today's budget",
+          "body": "Spent today {spendToday} of a daily budget of {dailyBudget}.",
+          "advice": "If results are good, consider raising the budget gradually."
+        },
+        "budget_unspent": {
+          "title": "The campaign is not spending its budget",
+          "body": "It spent only {spendYesterday} yesterday of a daily budget of {dailyBudget}.",
+          "advice": "The audience is narrow or the bid is low. Widen the audience or raise the target cost."
+        },
+        "not_delivering": {
+          "title": "A campaign that is on but not running",
+          "body": "Its state now: {status}.",
+          "advice": "Open it in the ad platform to see why."
+        }
+      },
+      "adsTitle": "Ads",
+      "columns": {
+        "ad": "Ad",
+        "share": "Share of spend",
+        "pageViews": "Page visits",
+        "results": "Results",
+        "costPerResult": "Cost per result"
+      },
+      "noAds": "No active ads in this period."
     },
     "journeyScreen": {
       "title": "Spend & Sales Journey",

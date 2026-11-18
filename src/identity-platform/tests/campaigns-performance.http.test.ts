@@ -1178,6 +1178,89 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
     ])
   })
 
+  it("checks up a Snapchat campaign: funnel, daily budget, and the ad eating the budget", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "campaigns-checkup@madar.test",
+      "Campaigns Checkup Org"
+    )
+    const today = new Date().toISOString().slice(0, 10)
+    const connectionId = await insertConnectedSnapchatConnection({
+      organizationId: actor.organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+    })
+    const record = (entityType: string, entityId: string, payload: Record<string, unknown>) =>
+      insertSnapchatRecord({
+        connectionId,
+        customerId: "snap-checkup",
+        entityType,
+        entityId,
+        recordDate: today,
+        payload,
+      })
+    const stats = (level: string, entityId: string, numbers: Record<string, string>) =>
+      record("stats", `${entityId}:${today}`, { level, entityId, startTime: today, ...numbers })
+
+    await record("campaigns", "ck-camp", { name: "Leads", status: "ACTIVE" })
+    await record("ad_squads", "ck-squad", {
+      name: "Everyone",
+      status: "ACTIVE",
+      campaign_id: "ck-camp",
+      daily_budget_micro: 150_000_000,
+    })
+    await record("ads", "ck-ad-a", { name: "Ad A", status: "ACTIVE", ad_squad_id: "ck-squad" })
+    await record("ads", "ck-ad-b", { name: "Ad B", status: "ACTIVE", ad_squad_id: "ck-squad" })
+    const total = {
+      spend: "100000000",
+      impressions: "5000",
+      swipes: "200",
+      conversion_page_views: "150",
+      conversion_sign_ups: "4",
+    }
+    await stats("campaign", "ck-camp", total)
+    await stats("ad_squad", "ck-squad", total)
+    // Ad A takes 80% of the money and brings nobody; Ad B brings all four sign-ups.
+    await stats("ad", "ck-ad-a", { spend: "80000000", impressions: "4000", swipes: "40" })
+    await stats("ad", "ck-ad-b", {
+      spend: "20000000",
+      impressions: "1000",
+      swipes: "160",
+      conversion_page_views: "150",
+      conversion_sign_ups: "4",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/campaigns/performance/checkup`, {
+      headers: authHeaders(login),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      funnel: Record<string, number | null>
+      campaigns: Array<{ name: string; state: string; dailyBudget: number | null }>
+      findings: Array<{ kind: string; adName: string | null; values: Record<string, unknown> }>
+      ads: Array<{ name: string; spendShare: number; conversions: number }>
+    }
+
+    expect(body.funnel).toMatchObject({
+      spend: 100,
+      impressions: 5000,
+      clicks: 200,
+      pageViews: 150,
+      conversions: 4,
+      cpa: 25,
+    })
+    expect(body.campaigns).toEqual([
+      expect.objectContaining({ name: "Leads", state: "running", dailyBudget: 150 }),
+    ])
+    expect(body.ads.map((ad) => [ad.name, ad.spendShare, ad.conversions])).toEqual([
+      ["Ad A", 80, 0],
+      ["Ad B", 20, 4],
+    ])
+    const hog = body.findings.find((finding) => finding.kind === "budget_hog")
+    expect(hog).toMatchObject({ adName: "Ad A", values: { basis: "no_result", share: 80 } })
+    // One finding per ad: the hog is not also reported as "spent with no result" or "low taps".
+    expect(body.findings.filter((finding) => finding.adName === "Ad A")).toHaveLength(1)
+  })
+
   it("rejects unauthenticated requests", async () => {
     const response = await fetch(`${baseUrl}/v1/campaigns/performance/summary`)
     expect(response.status).toBe(401)

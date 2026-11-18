@@ -9,6 +9,7 @@ export const ROUTES = {
   campaignsDetails: (campaignId: string) => `/campaigns/${campaignId}`,
   campaignsEdit: (campaignId: string) => `/campaigns/${campaignId}/edit`,
   campaignLinks: "/campaigns/links",
+  campaignsCheckup: "/campaigns/checkup",
   liveVisitors: "/live-visitors",
   websiteAnalytics: "/website-analytics",
   accountBilling: "/account/billing",
