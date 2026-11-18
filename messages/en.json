@@ -526,7 +526,8 @@
       "last7Days": "Last 7 days",
       "last30Days": "Last 30 days",
       "thisMonth": "This month",
-      "lastMonth": "Last month"
+      "lastMonth": "Last month",
+      "allTime": "All time"
     },
     "months": [
       "January",
@@ -6663,7 +6664,8 @@
       "last90Days": "Last 90 days",
       "thisMonth": "This month",
       "lastMonth": "Last month",
-      "last12Months": "Last 12 months"
+      "last12Months": "Last 12 months",
+      "allTime": "All time"
     },
     "kpis": {
       "users": "Users",
@@ -10714,6 +10716,7 @@
       "thisQuarter": "This quarter",
       "thisYear": "This year",
       "lastYear": "Last year",
+      "allTime": "All time",
       "custom": "Custom",
       "from": "From",
       "to": "to"

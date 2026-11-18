@@ -94,13 +94,20 @@ export function useFormatters() {
 
 // ---- The period a statement covers ----
 
-export type RangePreset = "thisMonth" | "lastMonth" | "thisQuarter" | "thisYear" | "lastYear"
+export type RangePreset =
+  | "thisMonth"
+  | "lastMonth"
+  | "thisQuarter"
+  | "thisYear"
+  | "lastYear"
+  | "allTime"
 export const RANGE_PRESETS: RangePreset[] = [
   "thisMonth",
   "lastMonth",
   "thisQuarter",
   "thisYear",
   "lastYear",
+  "allTime",
 ]
 
 export function presetRange(preset: RangePreset, today = new Date()): Range {
@@ -118,6 +125,9 @@ export function presetRange(preset: RangePreset, today = new Date()): Range {
       return { from: day(year, 0, 1), to: toLocalDay(today) }
     case "lastYear":
       return { from: day(year - 1, 0, 1), to: day(year - 1, 11, 31) }
+    // Everything on the books: 2018 is the earliest year the app's date pickers offer.
+    case "allTime":
+      return { from: day(2018, 0, 1), to: toLocalDay(today) }
     default:
       return { from: day(year, month, 1), to: toLocalDay(today) }
   }

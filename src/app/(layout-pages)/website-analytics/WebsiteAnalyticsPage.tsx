@@ -125,6 +125,13 @@ function getDateRangeOptions(t: Translator): DateRangeOption[] {
       startDate: toSql(subDays(today, 364)),
       endDate: toSql(today),
     },
+    // Google Analytics 4 itself began in 2020, so this covers everything a property holds.
+    {
+      id: "allTime",
+      label: t("dateRange.allTime"),
+      startDate: toSql(new Date(2020, 0, 1)),
+      endDate: toSql(today),
+    },
   ]
 }
 

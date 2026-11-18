@@ -526,7 +526,8 @@
       "last7Days": "آخر 7 أيام",
       "last30Days": "آخر 30 يومًا",
       "thisMonth": "هذا الشهر",
-      "lastMonth": "الشهر الماضي"
+      "lastMonth": "الشهر الماضي",
+      "allTime": "كل الوقت"
     },
     "months": [
       "يناير",
@@ -6659,7 +6660,8 @@
       "last90Days": "آخر 90 يوماً",
       "thisMonth": "هذا الشهر",
       "lastMonth": "الشهر الماضي",
-      "last12Months": "آخر 12 شهراً"
+      "last12Months": "آخر 12 شهراً",
+      "allTime": "كل الوقت"
     },
     "kpis": {
       "users": "الزوار",
@@ -10710,6 +10712,7 @@
       "thisQuarter": "هذا الربع",
       "thisYear": "هذه السنة",
       "lastYear": "السنة الماضية",
+      "allTime": "كل الوقت",
       "custom": "فترة مخصصة",
       "from": "من",
       "to": "إلى"

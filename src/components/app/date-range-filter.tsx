@@ -31,6 +31,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 
 const YEAR_OPTIONS = Array.from({ length: 21 }, (_, index) => 2018 + index)
 
+// "All time" is a real range, not an empty one: the screens using this filter all ask their
+// server for a from/to pair. 2018 is the earliest year the pickers offer, so nothing is older.
+const ALL_TIME_START = new Date(2018, 0, 1)
+const isAllTime = (range: DateRange | undefined) =>
+  Boolean(range?.from && range.to && range.from.getTime() === ALL_TIME_START.getTime())
+
 function getDateRangePresets(
   t: ReturnType<typeof useTranslations<"dateRangeFilter">>
 ): Array<{ label: string; range: DateRange }> {
@@ -46,6 +52,7 @@ function getDateRangePresets(
       label: t("presets.lastMonth"),
       range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) },
     },
+    { label: t("presets.allTime"), range: { from: ALL_TIME_START, to: today } },
   ]
 }
 
@@ -142,7 +149,9 @@ export function AppDateRangeFilter({
         >
           <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
           <span className="truncate">
-            {formatDateRangeLabel(value, placeholder ?? t("placeholder"), dateFormatter)}
+            {isAllTime(value)
+              ? t("presets.allTime")
+              : formatDateRangeLabel(value, placeholder ?? t("placeholder"), dateFormatter)}
           </span>
         </Button>
       </PopoverTrigger>
