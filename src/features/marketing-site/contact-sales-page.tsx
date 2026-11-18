@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useCallback, useState } from "react"
+import { type FormEvent, useCallback, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import { CalendarCheck, CalendarDays, CheckCircle2, Loader2, PhoneCall } from "lucide-react"
@@ -61,6 +61,81 @@ function validate(values: Record<Field, string>) {
 const INPUT =
   "h-14 w-full rounded-2xl border-2 bg-white px-5 text-[17px] font-semibold text-[#0b1738] outline-none transition-colors placeholder:font-normal placeholder:text-slate-400 focus:border-[#2878ff]"
 
+// What an ad promised, repeated above the form so the visitor lands on the thing they tapped
+// for instead of a bare form. Chosen by the link's `lp` parameter; without it the page is the
+// plain "talk to sales" form.
+interface Pitch {
+  title: string
+  subtitle: string
+  points: string[]
+}
+
+const PITCHES: Record<string, Pitch> = {
+  pos: {
+    title: "كاشير متكامل لمحلك وفروعك",
+    subtitle: "البيع والورديات والمخزون والفوترة الإلكترونية في نظام واحد.",
+    points: [
+      "شاشة كاشير سريعة تعمل حتى بدون إنترنت",
+      "فواتير متوافقة مع هيئة الزكاة والضريبة",
+      "تقرير يومي بمبيعاتك على واتساب",
+    ],
+  },
+  cashier: {
+    title: "كاشير سريع وسهل لمحلك",
+    subtitle: "ابدأ البيع من أي كمبيوتر أو تابلت خلال دقائق.",
+    points: [
+      "باركود وبحث فوري وطلبات معلقة",
+      "نقدي ومدى وأكثر من وسيلة دفع في الفاتورة",
+      "يعمل حتى بدون إنترنت",
+    ],
+  },
+  zatca: {
+    title: "فواتيرك الإلكترونية جاهزة للهيئة",
+    subtitle: "مدار متوافق مع المرحلة الثانية للفوترة الإلكترونية.",
+    points: [
+      "فاتورة ضريبية برمز QR مع كل عملية بيع",
+      "ربط مباشر مع منصة «فاتورة» وإبلاغ تلقائي",
+      "إقرار ضريبي جاهز من مبيعاتك ومشترياتك",
+    ],
+  },
+  shifts: {
+    title: "اضبط ورديات الكاشير ونقدية الدرج",
+    subtitle: "اعرف كل ريال دخل الدرج أو خرج منه.",
+    points: [
+      "فتح وإغلاق الوردية برصيد افتتاحي",
+      "مطابقة النقدية: مطابق أو زيادة أو عجز",
+      "تقرير لكل وردية ولكل كاشير",
+    ],
+  },
+  inventory: {
+    title: "مخزون دقيق في كل فرع",
+    subtitle: "كل بيع يخصم من المخزون وكل شراء يضيف إليه.",
+    points: [
+      "تنبيه عند انخفاض المخزون أو نفاده",
+      "جرد وتحويلات بين الفروع",
+      "تكلفة البضاعة وقيمة المخزون أمامك",
+    ],
+  },
+  "daily-report": {
+    title: "تقرير مبيعاتك اليومي على واتساب",
+    subtitle: "تابع محلك وفروعك من جوالك دون أن تفتح النظام.",
+    points: [
+      "المبيعات والمصروفات والمرتجعات كل يوم",
+      "الورديات ووسائل الدفع والأكثر مبيعًا",
+      "تنبيه بالمنتجات منخفضة المخزون",
+    ],
+  },
+  "whatsapp-invoices": {
+    title: "أرسل فواتير عملائك عبر واتساب",
+    subtitle: "الفاتورة تصل العميل على جواله بدل الورق.",
+    points: [
+      "رابط الفاتورة يُرسل مباشرة بعد البيع",
+      "فاتورة ضريبية برمز QR",
+      "ورقية أو واتساب أو الاثنان معًا",
+    ],
+  },
+}
+
 // madar.my's "talk to sales" page: deliberately nothing but the form -- no navigation to wander
 // off to, only the option to start a free trial instead.
 export function ContactSalesPage() {
@@ -70,6 +145,12 @@ export function ContactSalesPage() {
     email: "",
   })
   const [website, setWebsite] = useState("")
+  // Read after the page loads (it is a static page): the ad's topic, if the link names one.
+  const [pitch, setPitch] = useState<Pitch | null>(null)
+  useEffect(() => {
+    const topic = new URLSearchParams(window.location.search).get("lp")
+    setPitch(topic ? (PITCHES[topic] ?? null) : null)
+  }, [])
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
   // After the form: choose (meeting or call) → booking (calendar) or calling (day and time).
   const [status, setStatus] = useState<
@@ -433,14 +514,45 @@ export function ContactSalesPage() {
             </div>
           ) : (
             <>
-              <h1 className="text-center text-[30px] leading-tight font-black text-[#0b1738]">
-                تحدث مع فريق المبيعات
-              </h1>
-              <p className="mt-3 text-center text-[17px] leading-8 text-slate-600">
-                اترك بياناتك وسنتواصل معك قريبًا.
-              </p>
+              {pitch ? (
+                <>
+                  <h1 className="text-center text-[28px] leading-tight font-black text-[#0b1738]">
+                    {pitch.title}
+                  </h1>
+                  <p className="mt-3 text-center text-[17px] leading-8 text-slate-600">
+                    {pitch.subtitle}
+                  </p>
+                  <ul className="mt-5 space-y-2.5 rounded-2xl bg-[#f3f7ff] px-5 py-4">
+                    {pitch.points.map((point) => (
+                      <li
+                        key={point}
+                        className="flex items-start gap-2.5 text-[16px] leading-7 font-semibold text-[#0b1738]"
+                      >
+                        <CheckCircle2 className="mt-1 size-5 shrink-0 text-[#2878ff]" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-6 text-center text-[18px] font-extrabold text-[#0b1738]">
+                    اترك بياناتك ونتواصل معك لعرض مجاني
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-center text-[30px] leading-tight font-black text-[#0b1738]">
+                    تحدث مع فريق المبيعات
+                  </h1>
+                  <p className="mt-3 text-center text-[17px] leading-8 text-slate-600">
+                    اترك بياناتك وسنتواصل معك قريبًا.
+                  </p>
+                </>
+              )}
 
-              <form onSubmit={submit} noValidate className="mt-8 space-y-5">
+              <form
+                onSubmit={submit}
+                noValidate
+                className={cn("space-y-5", pitch ? "mt-5" : "mt-8")}
+              >
                 <div>
                   <label
                     htmlFor="companyName"
@@ -550,7 +662,7 @@ export function ContactSalesPage() {
                   className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#2878ff] text-[18px] font-extrabold text-white shadow-[0_14px_30px_rgba(40,120,255,0.35)] transition-all hover:bg-[#1f63d6] disabled:opacity-70"
                 >
                   {status === "sending" ? <Loader2 className="size-5 animate-spin" /> : null}
-                  تسجيل
+                  {pitch ? "اطلب عرضًا مجانيًا" : "تسجيل"}
                 </button>
               </form>
 
