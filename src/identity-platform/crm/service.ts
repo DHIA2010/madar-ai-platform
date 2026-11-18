@@ -178,14 +178,16 @@ export async function crmFromWebsiteLead(
     phone: string
     email: string | null
     attribution?: LeadAttribution | null
+    // The kind of business they picked on the form, kept as a tag on the lead.
+    businessTypeLabel?: string | null
   }
 ) {
   try {
     const id = randomUUID()
     await db.query(
       `INSERT INTO crm_leads (id, company_name, phone, email, source, stage, sales_lead_id,
-         attribution)
-       VALUES ($1, $2, $3, $4, 'website', 'new', $5, $6::jsonb)`,
+         attribution, tags)
+       VALUES ($1, $2, $3, $4, 'website', 'new', $5, $6::jsonb, $7::jsonb)`,
       [
         id,
         input.companyName,
@@ -193,6 +195,7 @@ export async function crmFromWebsiteLead(
         input.email,
         input.salesLeadId,
         input.attribution ? JSON.stringify(input.attribution) : null,
+        JSON.stringify(input.businessTypeLabel ? [input.businessTypeLabel] : []),
       ]
     )
     await addActivity(db, { leadId: id, kind: "created", meta: { source: "website" } })

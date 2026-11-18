@@ -1960,6 +1960,7 @@ export function createIdentityApiServer(
                 phone: body.phone,
                 email: body.email,
                 attribution: body.attribution ?? null,
+                businessType: body.businessType ?? null,
               },
               { ipAddress: context.ipAddress, userAgent: context.userAgent }
             )

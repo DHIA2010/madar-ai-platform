@@ -1516,6 +1516,15 @@ export const productCategoryStatusSchema = z.object({
   status: z.enum(["active", "inactive"]),
 })
 
+export const SALES_LEAD_BUSINESS_TYPES = [
+  "retail",
+  "restaurant",
+  "services",
+  "ecommerce",
+  "other",
+] as const
+export type SalesLeadBusinessType = (typeof SALES_LEAD_BUSINESS_TYPES)[number]
+
 // madar.my's "talk to sales" form. `website` is a hidden field people never see: a bot that fills
 // it is answered as if it worked, and nothing is stored.
 export const salesLeadSchema = z.object({
@@ -1527,6 +1536,9 @@ export const salesLeadSchema = z.object({
     .transform((value) => (value ? value : null)),
   website: z.string().optional(),
   attribution: attributionSchema,
+  // What kind of business it is, asked so the team can tell a merchant from someone who isn't
+  // one before calling. Optional: a page loaded before the question existed doesn't send it.
+  businessType: z.enum(SALES_LEAD_BUSINESS_TYPES).optional(),
 })
 
 // The form's last step: which Madar apps the lead is interested in, and anything else in words.

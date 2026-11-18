@@ -8,7 +8,7 @@ import {
   crmWebsiteInterests,
 } from "../crm/service"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
-import type { LeadAttribution } from "../schemas"
+import type { LeadAttribution, SalesLeadBusinessType } from "../schemas"
 import { sourceLabel, type WhatsAppLeadAlertsService } from "../whatsapp/lead-alerts"
 
 export interface SalesLeadInput {
@@ -17,6 +17,17 @@ export interface SalesLeadInput {
   email: string | null
   // Where they came from (UTM tags...), if the site knew.
   attribution?: LeadAttribution | null
+  // The kind of business they said they run.
+  businessType?: SalesLeadBusinessType | null
+}
+
+// As the team reads it, on the lead and in the WhatsApp alert.
+export const BUSINESS_TYPE_LABEL: Record<SalesLeadBusinessType, string> = {
+  retail: "محل تجزئة",
+  restaurant: "مطعم أو مقهى",
+  services: "خدمات",
+  ecommerce: "متجر إلكتروني",
+  other: "نشاط آخر",
 }
 
 // Stores a "talk to sales" request from madar.my, emails it to Madar's sales inboxes and alerts
@@ -98,11 +109,14 @@ export class SalesLeadService {
       phone: input.phone,
       email: input.email,
       attribution: input.attribution ?? null,
+      businessTypeLabel: input.businessType ? BUSINESS_TYPE_LABEL[input.businessType] : null,
     })
     // Not awaited: the form doesn't wait for WhatsApp.
     void this.leadAlerts?.notify({
       kind: "website",
-      name: input.companyName,
+      name: input.businessType
+        ? `${input.companyName} (${BUSINESS_TYPE_LABEL[input.businessType]})`
+        : input.companyName,
       phone: input.phone,
       email: input.email,
       attribution: input.attribution ?? null,

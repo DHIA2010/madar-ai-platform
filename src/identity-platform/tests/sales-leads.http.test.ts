@@ -159,6 +159,28 @@ describe("sales leads", () => {
     expect(invalid.status).toBe(400)
   })
 
+  it("keeps the kind of business on the lead, and refuses one it doesn't know", async () => {
+    const created = await submitLead({
+      companyName: "مطعم الديوان",
+      phone: "0553334444",
+      businessType: "restaurant",
+    })
+    expect(created.status).toBe(201)
+    const lead = await database.query<{ tags: unknown }>(
+      "SELECT tags FROM crm_leads WHERE company_name = $1",
+      ["مطعم الديوان"]
+    )
+    const tags = lead.rows[0]?.tags
+    expect(typeof tags === "string" ? JSON.parse(tags) : tags).toEqual(["مطعم أو مقهى"])
+
+    const unknown = await submitLead({
+      companyName: "شركة",
+      phone: "0551234567",
+      businessType: "job_seeker",
+    })
+    expect(unknown.status).toBe(400)
+  })
+
   it("rejects a missing company name or a bad phone, and quietly drops bots", async () => {
     expect((await submitLead({ companyName: "", phone: "0551234567" })).status).toBe(400)
     expect((await submitLead({ companyName: "شركة", phone: "12" })).status).toBe(400)

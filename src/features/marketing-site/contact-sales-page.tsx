@@ -42,7 +42,16 @@ function formatMeeting(iso: string) {
   }).format(new Date(iso))
 }
 
-type Field = "companyName" | "phone" | "email"
+type Field = "companyName" | "phone" | "email" | "businessType"
+
+// The kinds of business the form offers; the ids are what the server accepts.
+const BUSINESS_TYPES = [
+  ["retail", "محل تجزئة"],
+  ["restaurant", "مطعم أو مقهى"],
+  ["services", "خدمات"],
+  ["ecommerce", "متجر إلكتروني"],
+  ["other", "نشاط آخر"],
+] as const
 
 const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
 const normalizePhone = (value: string) =>
@@ -55,6 +64,7 @@ function validate(values: Record<Field, string>) {
     errors.phone = "اكتب رقم جوال صحيح"
   if (values.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim()))
     errors.email = "اكتب بريدًا إلكترونيًا صحيحًا أو اتركه فارغًا"
+  if (!values.businessType) errors.businessType = "اختر نوع نشاطك"
   return errors
 }
 
@@ -143,6 +153,7 @@ export function ContactSalesPage() {
     companyName: "",
     phone: "",
     email: "",
+    businessType: "",
   })
   const [website, setWebsite] = useState("")
   // Read after the page loads (it is a static page): the ad's topic, if the link names one.
@@ -281,6 +292,7 @@ export function ContactSalesPage() {
           email: values.email.trim(),
           website,
           attribution: readAttribution(),
+          businessType: values.businessType,
         }),
       })
       if (!response.ok) {
@@ -536,6 +548,9 @@ export function ContactSalesPage() {
                   <p className="mt-6 text-center text-[18px] font-extrabold text-[#0b1738]">
                     اترك بياناتك ونتواصل معك لعرض مجاني
                   </p>
+                  <p className="mt-1 text-center text-[14px] font-semibold text-slate-500">
+                    لأصحاب المحلات والمطاعم والأنشطة التجارية
+                  </p>
                 </>
               ) : (
                 <>
@@ -544,6 +559,9 @@ export function ContactSalesPage() {
                   </h1>
                   <p className="mt-3 text-center text-[17px] leading-8 text-slate-600">
                     اترك بياناتك وسنتواصل معك قريبًا.
+                  </p>
+                  <p className="mt-1 text-center text-[14px] font-semibold text-slate-500">
+                    لأصحاب المحلات والمطاعم والأنشطة التجارية
                   </p>
                 </>
               )}
@@ -576,6 +594,42 @@ export function ContactSalesPage() {
                   {errors.companyName ? (
                     <p className="mt-1.5 text-[14px] font-semibold text-rose-600">
                       {errors.companyName}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <p className="mb-2 block text-[16px] font-bold text-[#0b1738]">
+                    نوع نشاطك <span className="text-rose-500">*</span>
+                  </p>
+                  <div role="radiogroup" aria-label="نوع نشاطك" className="flex flex-wrap gap-2">
+                    {BUSINESS_TYPES.map(([id, label]) => {
+                      const picked = values.businessType === id
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          role="radio"
+                          aria-checked={picked}
+                          onClick={() => {
+                            setValues((current) => ({ ...current, businessType: id }))
+                            setErrors((current) => ({ ...current, businessType: undefined }))
+                          }}
+                          className={cn(
+                            "h-11 rounded-full border-2 px-4 text-[15px] font-bold transition-colors",
+                            picked
+                              ? "border-[#2878ff] bg-[#eef4ff] text-[#1d4fd8]"
+                              : "border-slate-200 bg-white text-[#0b1738] hover:border-slate-300"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {errors.businessType ? (
+                    <p className="mt-1.5 text-[14px] font-semibold text-rose-600">
+                      {errors.businessType}
                     </p>
                   ) : null}
                 </div>
