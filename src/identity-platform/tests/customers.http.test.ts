@@ -168,6 +168,12 @@ describe("GET /v1/customers: real customer aggregation with order stats", () => 
       workspaceId,
       userId: actor.userId,
     })
+    // Recent orders, counted back from today: with fixed dates this customer aged out of
+    // "active" and the test started failing on its own.
+    const daysAgo = (days: number) =>
+      new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
+    const olderOrderDay = daysAgo(20)
+    const newerOrderDay = daysAgo(12)
 
     await insertRecord({
       table: "salla_records",
@@ -192,14 +198,14 @@ describe("GET /v1/customers: real customer aggregation with order stats", () => 
       connectionId,
       entityType: "orders",
       entityId: "1155952133",
-      updatedAt: "2026-08-10T00:00:00Z",
+      updatedAt: `${olderOrderDay}T00:00:00Z`,
       payload: {
         id: 1155952133,
         customer: { id: 1109900279 },
         total: { amount: 349, currency: "SAR" },
         status: { name: "Under review", slug: "under_review" },
         items: [{ name: "فستان", quantity: 2 }],
-        date: { date: "2026-08-10 00:00:00" },
+        date: { date: `${olderOrderDay} 00:00:00` },
       },
     })
     await insertRecord({
@@ -207,14 +213,14 @@ describe("GET /v1/customers: real customer aggregation with order stats", () => 
       connectionId,
       entityType: "orders",
       entityId: "1155952134",
-      updatedAt: "2026-08-18T00:00:00Z",
+      updatedAt: `${newerOrderDay}T00:00:00Z`,
       payload: {
         id: 1155952134,
         customer: { id: 1109900279 },
         total: { amount: 651, currency: "SAR" },
         status: { name: "Completed", slug: "completed" },
         items: [{ name: "حذاء", quantity: 1 }],
-        date: { date: "2026-08-18 00:00:00" },
+        date: { date: `${newerOrderDay} 00:00:00` },
       },
     })
 
