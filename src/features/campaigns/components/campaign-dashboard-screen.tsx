@@ -783,7 +783,9 @@ export function CampaignDashboardScreen() {
       iconClassName: string
     }> = []
 
-    const bestRoas = [...rows].filter((row) => row.roas > 0).sort((a, b) => b.roas - a.roas)[0]
+    // Only a platform that earns more than it spends is worth more budget: "the best" of
+    // several losing platforms (a return of 0.02x) is not a reason to spend more on it.
+    const bestRoas = [...rows].filter((row) => row.roas >= 1).sort((a, b) => b.roas - a.roas)[0]
     if (bestRoas) {
       cards.push({
         key: "budget",
@@ -798,7 +800,10 @@ export function CampaignDashboardScreen() {
       })
     }
 
-    const dormant = rows.find((row) => row.activeCampaigns === 0 && row.impressions > 0)
+    // Never beside "spend more on it": the two would contradict each other.
+    const dormant = rows.find(
+      (row) => row.activeCampaigns === 0 && row.impressions > 0 && row !== bestRoas
+    )
     if (dormant) {
       cards.push({
         key: "reactivate",
@@ -815,9 +820,9 @@ export function CampaignDashboardScreen() {
       })
     }
 
-    const weakestCtr = [...rows]
-      .filter((row) => row.impressions > 0)
-      .sort((a, b) => a.ctr - b.ctr)[0]
+    // "Lowest among the active platforms" only means something with at least two of them.
+    const shown = rows.filter((row) => row.impressions > 0)
+    const weakestCtr = shown.length >= 2 ? [...shown].sort((a, b) => a.ctr - b.ctr)[0] : undefined
     if (weakestCtr) {
       cards.push({
         key: "targeting",
