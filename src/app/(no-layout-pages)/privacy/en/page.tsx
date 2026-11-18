@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://madar.my/privacy/en" },
 }
 
-const EFFECTIVE_DATE = "July 10, 2026"
+const EFFECTIVE_DATE = "November 18, 2026"
 
 export default function PrivacyEnglishPage() {
   return (
@@ -170,6 +170,80 @@ export default function PrivacyEnglishPage() {
           >
             {MADAR_CONTACT_EMAIL}
           </a>
+        </p>
+      </section>
+
+      <section>
+        <h2>12. Google User Data</h2>
+        <p>
+          This section applies when you connect a Google account (Google Ads or Google Analytics) to
+          MADAR, or sign in with Google.
+        </p>
+        <h3 className="mt-4 font-semibold">Data accessed</h3>
+        <ul>
+          <li>
+            Google sign-in: your name, email address, and profile picture, to create and identify
+            your MADAR account.
+          </li>
+          <li>
+            Google Ads: the list of ad accounts you can access, and for the account you choose, its
+            campaigns, ad groups, ads, and keywords with their status and performance figures
+            (impressions, clicks, cost, conversions).
+          </li>
+          <li>
+            Google Analytics: the list of Google Analytics 4 properties you can access, and for the
+            property you choose, aggregated traffic and conversion reports. MADAR does not receive
+            data about individual website visitors.
+          </li>
+        </ul>
+        <h3 className="mt-4 font-semibold">How it is used</h3>
+        <p>
+          Google user data is used only to show you your own advertising and website performance
+          inside MADAR: dashboards, reports, and the answers MADAR&rsquo;s assistant gives to
+          questions you ask about your own data. MADAR does not use Google user data for
+          advertising, does not sell it, and does not use it to build profiles of people.
+        </p>
+        <h3 className="mt-4 font-semibold">Sharing and transfer</h3>
+        <p>
+          Google user data is visible only to the members of the MADAR organization that connected
+          the account. It is not sold and is not shared with advertisers or data brokers. It is
+          processed by the service providers MADAR needs to run the product: its cloud hosting
+          provider, and, when you ask MADAR&rsquo;s assistant a question, the AI service provider
+          that produces the answer, which receives only the figures needed for that answer. These
+          providers act on MADAR&rsquo;s instructions and may not use the data for their own
+          purposes. Google user data is not used to develop or train generalized AI or machine
+          learning models.
+        </p>
+        <h3 className="mt-4 font-semibold">Protection</h3>
+        <p>
+          Data is encrypted in transit. Google access keys are encrypted at rest, and access to
+          connected data is limited by workspace permissions.
+        </p>
+        <h3 className="mt-4 font-semibold">Retention and deletion</h3>
+        <p>
+          MADAR keeps Google user data while your Google account stays connected. You can disconnect
+          it at any time from the integrations page in MADAR, which stops all further access, or
+          remove MADAR&rsquo;s access from your Google Account settings. To have the Google data
+          already stored in MADAR deleted, email{" "}
+          <a
+            className="font-medium text-slate-900 underline underline-offset-2"
+            href={`mailto:${MADAR_CONTACT_EMAIL}`}
+          >
+            {MADAR_CONTACT_EMAIL}
+          </a>
+          ; it is deleted within 30 days of the request.
+        </p>
+        <h3 className="mt-4 font-semibold">Limited Use</h3>
+        <p>
+          MADAR&rsquo;s use and transfer of information received from Google APIs to any other app
+          will adhere to the{" "}
+          <a
+            className="font-medium text-slate-900 underline underline-offset-2"
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+          >
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
         </p>
       </section>
     </LegalPageShell>
