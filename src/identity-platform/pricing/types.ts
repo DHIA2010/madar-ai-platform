@@ -33,6 +33,18 @@ export interface PackageEntitlements {
   maxStores?: number
 }
 
+// Several years of a package bought at once for one price, set per package in Madar Admin. After
+// those years the subscription renews at the package's normal yearly price.
+export interface PackageOffer {
+  // The line the customer sees on the offer (e.g. "عرض السنتين").
+  title: string
+  // Halalas, for all the years together.
+  priceHalalas: number
+  years: number
+  // The last day the offer can be bought (YYYY-MM-DD, Riyadh time); null = until removed.
+  endsOn: string | null
+}
+
 export interface PlatformPackage {
   id: string
   application: PurchasableApplication
@@ -54,6 +66,9 @@ export interface PlatformPackage {
   isActive: boolean
   sortOrder: number
   legacyPlanTier: SubscriptionPlanTier | null
+  // The package's multi-year offer as stored (null = none). Whether it can be bought right now
+  // is activeOffer() in pricing/service.ts.
+  offer: PackageOffer | null
 }
 
 export interface ApplicationPricing {
@@ -78,6 +93,8 @@ export interface PackageInput {
   extraBranchYearlyHalalas: number | null
   isRecommended: boolean
   isActive: boolean
+  // Omitted = leave the package's offer as it is; null = remove it.
+  offer?: PackageOffer | null
 }
 
 // What a customer is buying, resolved and validated against current pricing -- the amount is
@@ -90,4 +107,8 @@ export interface ResolvedPurchase {
   extraBranches: number
   extraBranchesHalalas: number
   amountHalalas: number
+  // Set when the package's offer is being bought: the years paid for now, and what one year
+  // costs when the subscription renews after them.
+  offerYears: number | null
+  renewalHalalas: number | null
 }

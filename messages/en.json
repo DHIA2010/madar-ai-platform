@@ -701,6 +701,14 @@
       "toastDeactivateError": "Couldn't deactivate {name}."
     },
     "requestDialog": {
+      "offer": {
+        "badge": "Offer",
+        "defaultTitle": "{years}-year offer",
+        "line": "The {package} package for {years} years in one payment, then it renews at the normal yearly price.",
+        "duration": "for {years} years",
+        "renewal": "After the offer the subscription renews at the normal yearly price: SAR {amount}. Extra branches are charged for each year of the offer.",
+        "noCoupon": "A coupon can't be used with the offer."
+      },
       "title": "Activation request for {name}",
       "description": "Choose the right plan, then pay instantly by card or attach a bank-transfer receipt -- card activation is instant, and bank-transfer activation happens after the request is reviewed.",
       "trialBannerTitle": "Try it free for {days, plural, =1 {# day} other {# days}}",

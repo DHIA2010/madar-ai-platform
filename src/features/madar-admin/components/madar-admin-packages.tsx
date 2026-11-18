@@ -416,6 +416,13 @@ export function MadarAdminPackages() {
                     </p>
                   </div>
                 </div>
+                {pkg.offer ? (
+                  <p className="mt-2 rounded-[10px] bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                    عرض: {pkg.offer.title || `${pkg.offer.years} سنوات`} — {pkg.offer.years} سنوات
+                    بـ {formatSar(pkg.offer.priceHalalas)}
+                    {pkg.offer.endsOn ? ` (حتى ${pkg.offer.endsOn})` : ""}
+                  </p>
+                ) : null}
                 {pkg.extraBranchMonthlyHalalas !== null || pkg.extraBranchYearlyHalalas !== null ? (
                   <p className="mt-2 rounded-[10px] bg-blue-50 px-3 py-2 text-xs text-blue-700">
                     {pkg.includedBranches === 1

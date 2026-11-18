@@ -34,6 +34,8 @@ export interface MoyasarPurchase {
   // Branches on top of the one the package includes.
   extraBranches?: number
   couponCode?: string | null
+  // Buy the package's multi-year offer (yearly; no coupon on top).
+  offer?: boolean
   // Set instead of buying a package: adds this many branches to the running subscription, for
   // what's left of its period.
   addBranches?: number

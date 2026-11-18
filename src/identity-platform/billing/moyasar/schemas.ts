@@ -8,6 +8,8 @@ export const createCheckoutIntentSchema = z.object({
   interval: z.enum(["monthly", "yearly"]),
   extraBranches: z.number().int().min(0).max(500).default(0),
   couponCode: z.string().trim().max(40).nullish(),
+  // Buy the package's multi-year offer (yearly only; not combinable with a coupon).
+  offer: z.boolean().default(false),
 })
 
 export const createBranchCheckoutSchema = z.object({

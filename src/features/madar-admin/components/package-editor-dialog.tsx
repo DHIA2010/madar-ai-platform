@@ -3,7 +3,14 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
-import { AppButton, AppDialog, AppInput, AppSwitch, AppTextarea } from "@/components/app"
+import {
+  AppButton,
+  AppDateField,
+  AppDialog,
+  AppInput,
+  AppSwitch,
+  AppTextarea,
+} from "@/components/app"
 
 import type { AdminPackage, PackageEntitlements, PackageInput } from "../types/platform-admin.types"
 
@@ -103,6 +110,11 @@ export function PackageEditorDialog({
   const toggleEntitlement = (key: EntitlementSwitch, on: boolean) =>
     setEntitlements((current) => ({ ...current, [key]: on }))
   const [isActive, setIsActive] = useState(initial?.isActive ?? true)
+  const [hasOffer, setHasOffer] = useState(Boolean(initial?.offer))
+  const [offerTitle, setOfferTitle] = useState(initial?.offer?.title ?? "")
+  const [offerPrice, setOfferPrice] = useState(riyals(initial?.offer?.priceHalalas ?? null))
+  const [offerYears, setOfferYears] = useState(String(initial?.offer?.years ?? 2))
+  const [offerEndsOn, setOfferEndsOn] = useState(initial?.offer?.endsOn ?? "")
   const [saving, setSaving] = useState(false)
 
   const monthlyHalalas = toHalalas(monthly)
@@ -133,9 +145,34 @@ export function PackageEditorDialog({
       toast.error("عدد الفروع المشمولة يجب أن يكون 1 أو أكثر.")
       return
     }
+    const offerHalalas = toHalalas(offerPrice)
+    const years = Number(offerYears)
+    if (hasOffer) {
+      if (typeof offerHalalas !== "number" || offerHalalas <= 0) {
+        toast.error("يرجى إدخال سعر العرض.")
+        return
+      }
+      if (!Number.isInteger(years) || years < 2 || years > 5) {
+        toast.error("مدة العرض من سنتين إلى 5 سنوات.")
+        return
+      }
+      if (typeof yearlyHalalas !== "number") {
+        toast.error("العرض يحتاج سعراً سنوياً للباقة، لأن الاشتراك يتجدد به بعد العرض.")
+        return
+      }
+    }
     setSaving(true)
     try {
       await onSave({
+        offer:
+          hasOffer && typeof offerHalalas === "number"
+            ? {
+                title: offerTitle.trim(),
+                priceHalalas: offerHalalas,
+                years,
+                endsOn: offerEndsOn || null,
+              }
+            : null,
         includedBranches: included,
         entitlements: {
           ...Object.fromEntries(
@@ -348,6 +385,67 @@ export function PackageEditorDialog({
                 </div>
               </div>
             </div>
+          </div>
+          <div className="rounded-[12px] border border-border p-3.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">عرض لعدة سنوات</p>
+                <p className="text-xs text-muted-foreground">
+                  يشتري العميل عدة سنوات بسعر واحد، ثم يتجدد اشتراكه بالسعر السنوي العادي.
+                </p>
+              </div>
+              <AppSwitch checked={hasOffer} onCheckedChange={setHasOffer} />
+            </div>
+            {hasOffer ? (
+              <div className="mt-3.5 space-y-3.5">
+                <div>
+                  <label className={FIELD_LABEL}>عنوان العرض</label>
+                  <AppInput
+                    value={offerTitle}
+                    onChange={(event) => setOfferTitle(event.target.value)}
+                    placeholder="عرض السنتين"
+                    className="h-11 rounded-[10px]"
+                  />
+                </div>
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div>
+                    <label className={FIELD_LABEL}>سعر العرض كاملاً (SAR)</label>
+                    <AppInput
+                      type="number"
+                      min={0}
+                      value={offerPrice}
+                      onChange={(event) => setOfferPrice(event.target.value)}
+                      className="h-11 rounded-[10px]"
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_LABEL}>عدد السنوات</label>
+                    <AppInput
+                      type="number"
+                      min={2}
+                      max={5}
+                      value={offerYears}
+                      onChange={(event) => setOfferYears(event.target.value)}
+                      className="h-11 rounded-[10px]"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={FIELD_LABEL}>آخر يوم للعرض (اختياري)</label>
+                  <AppDateField
+                    value={offerEndsOn}
+                    onChange={setOfferEndsOn}
+                    placeholder="بدون تاريخ انتهاء"
+                  />
+                </div>
+                {typeof yearlyHalalas === "number" && Number(offerYears) >= 2 ? (
+                  <p className="text-xs text-muted-foreground">
+                    السعر العادي لنفس المدة: {(yearlyHalalas * Number(offerYears)) / 100} ر.س.
+                    الفروع الإضافية تُحسب بسعرها السنوي عن كل سنة.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center justify-between rounded-[10px] bg-muted/40 px-3.5 py-2.5">
             <div>

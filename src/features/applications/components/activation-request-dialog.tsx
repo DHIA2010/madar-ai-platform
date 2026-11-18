@@ -101,6 +101,8 @@ export function ActivationRequestDialog({
 
   const [chosenInterval, setChosenInterval] = useState<BillingInterval | null>(null)
   const [chosenPackageId, setChosenPackageId] = useState<string | null>(null)
+  // The package whose multi-year offer is being bought (null = an ordinary period).
+  const [offerPackageId, setOfferPackageId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank_transfer">("card")
   const [file, setFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -108,25 +110,35 @@ export function ActivationRequestDialog({
 
   // Defaults resolve once pricing has loaded: monthly when offered, and the recommended (else
   // first) package with a price for that period.
-  const interval: BillingInterval = chosenInterval ?? (offersMonthly ? "monthly" : "yearly")
+  const regularInterval: BillingInterval = chosenInterval ?? (offersMonthly ? "monthly" : "yearly")
   const chosenPackage = packages.find((pkg) => pkg.id === chosenPackageId)
-  const selectedPackage =
-    chosenPackage && priceFor(chosenPackage, interval) !== null
+  const regularPackage =
+    chosenPackage && priceFor(chosenPackage, regularInterval) !== null
       ? chosenPackage
-      : firstPricedFor(packages, interval)
-  const amount = selectedPackage ? priceFor(selectedPackage, interval) : null
+      : firstPricedFor(packages, regularInterval)
+  const offerPackage = packages.find((pkg) => pkg.id === offerPackageId && pkg.offer) ?? null
+  const interval: BillingInterval = offerPackage ? "yearly" : regularInterval
+  const selectedPackage = offerPackage ?? regularPackage
+  const amount = offerPackage?.offer
+    ? offerPackage.offer.priceHalalas
+    : selectedPackage
+      ? priceFor(selectedPackage, interval)
+      : null
+  const offerPackages = packages.filter((pkg) => pkg.offer && pkg.yearlyPriceHalalas !== null)
 
   const Icon = target?.icon
   const loading = catalog === null
   const isFree = !loading && pricing?.mode === "free"
   const contactOnly = !loading && !isFree && (pricing?.mode === "contact" || packages.length === 0)
   const canBuy = !loading && !isFree && !contactOnly && selectedPackage !== null && amount !== null
-  const isCardCheckout = canBuy && paymentMethod === "card"
+  // An offer is paid by card only.
+  const isCardCheckout = canBuy && (paymentMethod === "card" || offerPackage !== null)
   const isFixed = pricing?.mode === "fixed"
 
   function reset() {
     setChosenInterval(null)
     setChosenPackageId(null)
+    setOfferPackageId(null)
     setPaymentMethod("card")
     setFile(null)
   }
@@ -146,6 +158,7 @@ export function ActivationRequestDialog({
     url.searchParams.set("application", target.category)
     url.searchParams.set("packageId", selectedPackage.id)
     url.searchParams.set("interval", interval)
+    if (offerPackage) url.searchParams.set("offer", "1")
     url.searchParams.set("name", target.name)
     close()
     router.push(`${url.pathname}${url.search}`)
@@ -356,10 +369,13 @@ export function ActivationRequestDialog({
                       <button
                         key={option}
                         type="button"
-                        onClick={() => setChosenInterval(option)}
+                        onClick={() => {
+                          setOfferPackageId(null)
+                          setChosenInterval(option)
+                        }}
                         className={cn(
                           "flex h-10 items-center justify-center gap-1.5 rounded-[9px] text-[12.5px] font-bold transition-colors",
-                          interval === option
+                          !offerPackage && interval === option
                             ? "bg-white text-[#2878ff] shadow-sm"
                             : "text-[#6b7b96] hover:text-[#0b1738]"
                         )}
@@ -381,6 +397,47 @@ export function ActivationRequestDialog({
                 </div>
               ) : null}
 
+              {offerPackages.map((pkg) => {
+                const offer = pkg.offer!
+                const regular = (pkg.yearlyPriceHalalas ?? 0) * offer.years
+                const chosen = offerPackage?.id === pkg.id
+                return (
+                  <button
+                    key={`offer:${pkg.id}`}
+                    type="button"
+                    onClick={() => setOfferPackageId(chosen ? null : pkg.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-[12px] border-2 p-3.5 text-start transition-colors",
+                      chosen
+                        ? "border-[#e11d2a] bg-[#fff1f2]"
+                        : "border-dashed border-[#f3a5ab] bg-[#fff8f8] hover:border-[#e11d2a]"
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-extrabold text-[#0b1738]">
+                        <span className="rounded-full bg-[#e11d2a] px-2 py-0.5 text-[10.5px] font-bold text-white">
+                          {t("offer.badge")}
+                        </span>
+                        {offer.title || t("offer.defaultTitle", { years: offer.years })}
+                      </p>
+                      <p className="mt-1 text-[12px] text-[#6b7b96]">
+                        {t("offer.line", { package: pkg.name, years: offer.years })}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-end">
+                      {regular > offer.priceHalalas ? (
+                        <p className="text-[12px] font-semibold text-[#95a4bd] line-through">
+                          SAR {formatRiyals(regular)}
+                        </p>
+                      ) : null}
+                      <p className="text-[16px] font-extrabold text-[#e11d2a]">
+                        SAR {formatRiyals(offer.priceHalalas)}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+
               <div>
                 <label className="mb-2 block text-[12.5px] font-semibold text-[#0b1738]">
                   {isFixed ? t("priceLabel") : t("planLabel")}
@@ -393,14 +450,17 @@ export function ActivationRequestDialog({
                 >
                   {packages.map((pkg) => {
                     const price = priceFor(pkg, interval)
-                    const selected = selectedPackage?.id === pkg.id
+                    const selected = !offerPackage && selectedPackage?.id === pkg.id
                     const saving = interval === "yearly" ? yearlySavingPercent(pkg) : null
                     return (
                       <button
                         key={pkg.id}
                         type="button"
                         disabled={price === null}
-                        onClick={() => setChosenPackageId(pkg.id)}
+                        onClick={() => {
+                          setOfferPackageId(null)
+                          setChosenPackageId(pkg.id)
+                        }}
                         className={cn(
                           "relative rounded-[12px] border p-3.5 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                           selected
@@ -469,7 +529,12 @@ export function ActivationRequestDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 rounded-[12px] bg-[#f1f4f9] p-1">
+              <div
+                className={cn(
+                  "grid grid-cols-2 gap-2 rounded-[12px] bg-[#f1f4f9] p-1",
+                  offerPackage && "hidden"
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("card")}

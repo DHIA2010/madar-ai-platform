@@ -154,6 +154,17 @@ export interface AdminPackage {
   isActive: boolean
   sortOrder: number
   subscriberCount: number
+  // The package's multi-year offer (null = none).
+  offer: PackageOffer | null
+}
+
+// Several years of a package for one price; afterwards it renews at the normal yearly price.
+export interface PackageOffer {
+  title: string
+  priceHalalas: number
+  years: number
+  // The last day it can be bought (YYYY-MM-DD); null = until removed.
+  endsOn: string | null
 }
 
 export interface AdminApplicationPricing {
@@ -180,6 +191,8 @@ export interface PackageInput {
   extraBranchYearlyHalalas: number | null
   isRecommended: boolean
   isActive: boolean
+  // Omitted = leave the offer as it is; null = remove it.
+  offer?: PackageOffer | null
 }
 
 // A paid add-on bought on its own, independent of any package (backend: subscriptions/addons.ts).

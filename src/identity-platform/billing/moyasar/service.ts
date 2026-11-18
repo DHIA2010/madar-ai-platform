@@ -61,6 +61,13 @@ export class MoyasarBillingService {
     // The amount comes from the package's current price in Madar Admin -- never from the client.
     // A "contact us" application, an inactive package, or a period with no price is refused here.
     const purchase = await this.pricing.resolvePurchase(input)
+    // An offer is already a reduced price: no coupon on top of it.
+    if (purchase.offerYears && input.couponCode) {
+      throw ERRORS.conflict(
+        "COUPON_NOT_WITH_OFFER",
+        "A coupon can't be used together with an offer."
+      )
+    }
     // A coupon is re-checked here (not just trusted from the customer's earlier quote) and only
     // counted as used once the payment actually succeeds.
     const quote = input.couponCode
@@ -83,6 +90,7 @@ export class MoyasarBillingService {
       packageId: purchase.package.id,
       billingInterval: purchase.interval,
       extraBranches: purchase.extraBranches,
+      offerYears: purchase.offerYears,
       coupon: quote
         ? {
             id: quote.couponId,
@@ -331,7 +339,14 @@ export class MoyasarBillingService {
               planTier: payment.planTier,
               package: payment.packageId ? { id: payment.packageId, name: pkg?.name ?? "" } : null,
               interval: payment.billingInterval,
-              priceHalalas: payment.amount,
+              // An offer pays for several years at once; what is kept as the subscription's
+              // price is one ordinary year, which is what its renewal will cost.
+              periods: payment.offerYears ?? 1,
+              priceHalalas:
+                payment.offerYears && pkg?.yearlyPriceHalalas != null
+                  ? pkg.yearlyPriceHalalas +
+                    payment.extraBranches * (extraBranchPrice(pkg, "yearly") ?? 0)
+                  : payment.amount,
               extraBranches: payment.extraBranches,
               trialEndsAt,
               source: "payment",
@@ -361,6 +376,7 @@ export class MoyasarBillingService {
             planTier: payment.planTier,
             packageId: payment.packageId,
             interval: payment.billingInterval,
+            offerYears: payment.offerYears,
             couponId: payment.couponId,
             moyasarPaymentId: moyasarPayment.id,
           },

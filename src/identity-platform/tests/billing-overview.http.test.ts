@@ -213,6 +213,8 @@ describe("public pricing", () => {
             "isRecommended",
             "monthlyPriceHalalas",
             "name",
+            // The package's multi-year offer while it's running (null otherwise).
+            "offer",
             "yearlyPriceHalalas",
           ].sort()
         )

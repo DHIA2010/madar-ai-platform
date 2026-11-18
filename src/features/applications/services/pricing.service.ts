@@ -20,6 +20,16 @@ export interface PricingPackage {
   extraBranchMonthlyHalalas: number | null
   extraBranchYearlyHalalas: number | null
   isRecommended: boolean
+  // The package's multi-year offer, when Madar Admin has one running: its years for one price,
+  // then the subscription renews at the normal yearly price.
+  offer?: PackageOffer | null
+}
+
+export interface PackageOffer {
+  title: string
+  priceHalalas: number
+  years: number
+  endsOn: string | null
 }
 
 export interface ApplicationPricing {

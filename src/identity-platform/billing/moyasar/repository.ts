@@ -21,6 +21,7 @@ function mapPayment(row: Record<string, unknown>): MoyasarPaymentRecord {
     purpose: (row.purpose as MoyasarPaymentRecord["purpose"]) ?? "subscription",
     addonCode: (row.addon_code as string | null) ?? null,
     extraBranches: Number(row.extra_branches ?? 0),
+    offerYears: row.offer_years ? Number(row.offer_years) : null,
     couponId: (row.coupon_id as string | null) ?? null,
     originalAmount:
       row.original_amount === null || row.original_amount === undefined
@@ -51,6 +52,7 @@ export class MoyasarBillingRepository {
     billingInterval: MoyasarPaymentRecord["billingInterval"]
     purpose?: MoyasarPaymentRecord["purpose"]
     extraBranches?: number
+    offerYears?: number | null
     addonCode?: string | null
     coupon: { id: string; originalAmount: number; discountHalalas: number } | null
     amount: number
@@ -61,8 +63,8 @@ export class MoyasarBillingRepository {
       `INSERT INTO billing_moyasar_payments (
          id, organization_id, requested_by_user_id, application, plan_tier, amount, currency,
          package_id, billing_interval, coupon_id, original_amount, discount_halalas, purpose,
-         extra_branches, addon_code
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         extra_branches, addon_code, offer_years
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         id,
@@ -80,6 +82,7 @@ export class MoyasarBillingRepository {
         input.purpose ?? "subscription",
         input.extraBranches ?? 0,
         input.addonCode ?? null,
+        input.offerYears ?? null,
       ]
     )
     return mapPayment(result.rows[0])

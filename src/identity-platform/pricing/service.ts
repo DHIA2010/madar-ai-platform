@@ -13,6 +13,7 @@ import type {
   ApplicationPricing,
   PackageEntitlements,
   PackageInput,
+  PackageOffer,
   PlatformPackage,
   PricingMode,
   ResolvedPurchase,
@@ -68,7 +69,35 @@ function mapPackage(row: Record<string, unknown>): PlatformPackage {
     isActive: row.is_active === true,
     sortOrder: Number(row.sort_order ?? 0),
     legacyPlanTier: (row.legacy_plan_tier as SubscriptionPlanTier | null) ?? null,
+    offer: mapOffer(row),
   }
+}
+
+function mapOffer(row: Record<string, unknown>): PackageOffer | null {
+  const price = Number(row.offer_price_halalas)
+  const years = Number(row.offer_years)
+  if (!row.offer_price_halalas || !Number.isInteger(years) || years < 2 || !(price > 0)) return null
+  const endsOn = row.offer_ends_on
+  return {
+    title: String(row.offer_title ?? ""),
+    priceHalalas: price,
+    years,
+    endsOn:
+      endsOn instanceof Date
+        ? endsOn.toISOString().slice(0, 10)
+        : endsOn
+          ? String(endsOn).slice(0, 10)
+          : null,
+  }
+}
+
+// The package's offer if it can be bought right now: it needs a yearly price to renew at, and
+// must not be past its last day (Riyadh time).
+export function activeOffer(pkg: PlatformPackage, now: Date = new Date()): PackageOffer | null {
+  if (!pkg.offer || pkg.yearlyPriceHalalas === null) return null
+  const today = new Date(now.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  if (pkg.offer.endsOn && pkg.offer.endsOn < today) return null
+  return pkg.offer
 }
 
 const purchaseUnavailable = (message: string) => ERRORS.conflict("PACKAGE_NOT_PURCHASABLE", message)
@@ -109,8 +138,9 @@ export class PricingService {
                id, application, name, description, features, monthly_price_halalas,
                yearly_price_halalas, is_recommended, is_active, sort_order, legacy_plan_tier,
                extra_branch_monthly_halalas, extra_branch_yearly_halalas, included_branches,
-               entitlements
-             ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, true, $9, $10, $11, $12, $13, $14::jsonb)`,
+               entitlements, offer_price_halalas, offer_years, offer_title
+             ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, true, $9, $10, $11, $12, $13, $14::jsonb,
+                       $15, $16, $17)`,
             [
               randomUUID(),
               application,
@@ -126,6 +156,9 @@ export class PricingService {
               pkg.extraBranchYearlyHalalas ?? null,
               pkg.includedBranches ?? 1,
               JSON.stringify(pkg.entitlements ?? {}),
+              pkg.offer?.priceHalalas ?? null,
+              pkg.offer?.years ?? null,
+              pkg.offer?.title ?? null,
             ]
           )
         }
@@ -173,6 +206,8 @@ export class PricingService {
     packageId: string
     interval: BillingInterval
     extraBranches?: number
+    // true = buy the package's multi-year offer instead of one ordinary period.
+    offer?: boolean
   }): Promise<ResolvedPurchase> {
     const pricing = (await this.getCatalog({ includeInactive: false })).find(
       (entry) => entry.application === input.application
@@ -195,6 +230,25 @@ export class PricingService {
     if (extraBranches > 0 && branchPrice === null) {
       throw purchaseUnavailable("This package doesn't sell extra branches.")
     }
+    if (input.offer) {
+      // The offer: its years at its one price; extra branches are paid for every one of those
+      // years. Renewal afterwards is one ordinary year.
+      const offer = activeOffer(pkg)
+      if (!offer || input.interval !== "yearly") {
+        throw purchaseUnavailable("This package has no offer available right now.")
+      }
+      const branchesPerYear = extraBranches * (branchPrice ?? 0)
+      return {
+        application: input.application,
+        package: pkg,
+        interval: "yearly",
+        extraBranches,
+        extraBranchesHalalas: branchesPerYear * offer.years,
+        amountHalalas: offer.priceHalalas + branchesPerYear * offer.years,
+        offerYears: offer.years,
+        renewalHalalas: amount + branchesPerYear,
+      }
+    }
     const extraBranchesHalalas = extraBranches * (branchPrice ?? 0)
     return {
       application: input.application,
@@ -203,6 +257,8 @@ export class PricingService {
       extraBranches,
       extraBranchesHalalas,
       amountHalalas: amount + extraBranchesHalalas,
+      offerYears: null,
+      renewalHalalas: null,
     }
   }
 
@@ -251,8 +307,9 @@ export class PricingService {
          id, application, name, description, features, monthly_price_halalas,
          yearly_price_halalas, is_recommended, is_active, sort_order,
          extra_branch_monthly_halalas, extra_branch_yearly_halalas, included_branches,
-         entitlements
-       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)`,
+         entitlements, offer_price_halalas, offer_years, offer_title, offer_ends_on
+       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb,
+                 $15, $16, $17, $18::date)`,
       [
         id,
         application,
@@ -268,19 +325,27 @@ export class PricingService {
         input.extraBranchYearlyHalalas,
         input.includedBranches,
         JSON.stringify(input.entitlements ?? {}),
+        input.offer?.priceHalalas ?? null,
+        input.offer?.years ?? null,
+        input.offer?.title ?? null,
+        input.offer?.endsOn ?? null,
       ]
     )
     return this.getPackage(id)
   }
 
   async updatePackage(packageId: string, input: PackageInput): Promise<PlatformPackage> {
-    await this.getPackage(packageId)
+    const current = await this.getPackage(packageId)
+    // An editor that doesn't send the offer leaves it alone.
+    const offer = input.offer === undefined ? current.offer : input.offer
     await this.db.query(
       `UPDATE platform_packages
           SET name = $2, description = $3, features = $4::jsonb, monthly_price_halalas = $5,
               yearly_price_halalas = $6, is_recommended = $7, is_active = $8,
               extra_branch_monthly_halalas = $9, extra_branch_yearly_halalas = $10,
-              included_branches = $11, entitlements = $12::jsonb, updated_at = now()
+              included_branches = $11, entitlements = $12::jsonb,
+              offer_price_halalas = $13, offer_years = $14, offer_title = $15,
+              offer_ends_on = $16::date, updated_at = now()
         WHERE id = $1`,
       [
         packageId,
@@ -295,6 +360,10 @@ export class PricingService {
         input.extraBranchYearlyHalalas,
         input.includedBranches,
         JSON.stringify(input.entitlements ?? {}),
+        offer?.priceHalalas ?? null,
+        offer?.years ?? null,
+        offer?.title ?? null,
+        offer?.endsOn ?? null,
       ]
     )
     return this.getPackage(packageId)

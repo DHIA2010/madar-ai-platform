@@ -376,6 +376,89 @@ describe("coupons at checkout", () => {
   })
 })
 
+describe("a package's multi-year offer", () => {
+  async function posBasic() {
+    const catalog = await pricing.getCatalog({ includeInactive: false })
+    return catalog
+      .find((entry) => entry.application === "pos")!
+      .packages.find((entry) => entry.legacyPlanTier === "starter")!
+  }
+
+  it("charges the offer price for its years, then keeps one normal year as the renewal price", async () => {
+    const pkg = await posBasic()
+    expect(pkg.offer).toMatchObject({ priceHalalas: 169900, years: 2 })
+
+    const intent = await service.createCheckoutIntent(actor(), {
+      application: "pos",
+      packageId: pkg.id,
+      interval: "yearly",
+      extraBranches: 1,
+      offer: true,
+    })
+    // 1,699 for the two years, plus one extra branch for each of them.
+    expect(intent.amount).toBe(169900 + 2 * pkg.extraBranchYearlyHalalas!)
+
+    await service.handleWebhookEvent({
+      id: "evt_offer",
+      type: "payment_paid",
+      secret_token: "whsec_fixture",
+      data: {
+        id: "pay_offer",
+        status: "paid",
+        amount: intent.amount,
+        currency: intent.currency,
+        metadata: { checkout_id: intent.checkoutId },
+      },
+    })
+    const subscription = await database.query<{
+      current_period_end: string
+      price_halalas: number
+      billing_interval: string
+    }>(
+      "select current_period_end, price_halalas, billing_interval from organization_subscriptions where organization_id = $1 and application = 'pos'",
+      [ORG_A]
+    )
+    const row = subscription.rows[0]
+    const days = (new Date(row.current_period_end).getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(725)
+    expect(days).toBeLessThan(735)
+    expect(row.billing_interval).toBe("yearly")
+    expect(Number(row.price_halalas)).toBe(pkg.yearlyPriceHalalas! + pkg.extraBranchYearlyHalalas!)
+  })
+
+  it("is refused monthly, with a coupon, on a package without one, and after its last day", async () => {
+    const pkg = await posBasic()
+    const buy = (overrides: Record<string, unknown>) =>
+      service.createCheckoutIntent(actor(), {
+        application: "pos",
+        packageId: pkg.id,
+        interval: "yearly",
+        offer: true,
+        ...overrides,
+      })
+
+    await expect(buy({ interval: "monthly" })).rejects.toMatchObject({
+      code: "PACKAGE_NOT_PURCHASABLE",
+    })
+    await expect(buy({ couponCode: "ANY" })).rejects.toMatchObject({
+      code: "COUPON_NOT_WITH_OFFER",
+    })
+    const growth = await tierPackage("pos", "growth")
+    await expect(buy({ packageId: growth.packageId })).rejects.toMatchObject({
+      code: "PACKAGE_NOT_PURCHASABLE",
+    })
+
+    // Madar Admin sets a last day that has passed: the offer is gone, the package still sells.
+    await pricing.updatePackage(pkg.id, {
+      ...pkg,
+      offer: { ...pkg.offer!, endsOn: "2020-01-01" },
+    })
+    await expect(buy({})).rejects.toMatchObject({ code: "PACKAGE_NOT_PURCHASABLE" })
+    const ordinary = await buy({ offer: false })
+    expect(ordinary.amount).toBe(pkg.yearlyPriceHalalas)
+  })
+})
+
 describe("add-on checkout", () => {
   const paid = (checkoutId: string, amount: number): MoyasarWebhookPayload => ({
     id: "evt_addon",

@@ -88,6 +88,20 @@ export const packageInputSchema = z.object({
   extraBranchYearlyHalalas: halalas.default(null),
   isRecommended: z.boolean().default(false),
   isActive: z.boolean().default(true),
+  // The package's multi-year offer: omitted leaves it as it is, null removes it.
+  offer: z
+    .object({
+      title: z.string().trim().max(160).default(""),
+      priceHalalas: z.number().int().min(1).max(100_000_000),
+      years: z.number().int().min(2).max(5),
+      endsOn: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
+    })
+    .nullable()
+    .optional(),
 })
 
 export const applicationVisibilitySchema = z.object({ visible: z.boolean() })

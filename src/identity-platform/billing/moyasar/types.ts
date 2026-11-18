@@ -22,6 +22,8 @@ export interface MoyasarPaymentRecord {
   addonCode: string | null
   // Branches bought: on top of the package's included one ("subscription"), or added ("branches").
   extraBranches: number
+  // The years paid for when the package's multi-year offer was bought (null = one period).
+  offerYears: number | null
   // The coupon used, and the price before it (null when no coupon was used).
   couponId: string | null
   originalAmount: number | null
@@ -41,6 +43,7 @@ export interface CreateCheckoutIntentInput {
   interval: BillingInterval
   extraBranches?: number
   couponCode?: string | null
+  offer?: boolean
 }
 
 // Buys a period of a paid add-on (subscriptions/addons.ts).

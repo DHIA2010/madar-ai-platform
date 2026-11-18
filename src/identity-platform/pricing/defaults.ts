@@ -1,5 +1,5 @@
 import type { PurchasableApplication, SubscriptionPlanTier } from "../subscriptions/types"
-import type { PackageEntitlements, PricingMode } from "./types"
+import type { PackageEntitlements, PackageOffer, PricingMode } from "./types"
 
 // Starting pricing, written once per application the first time pricing is read (seed.ts) and
 // edited from Madar Admin after that. The November 2026 pricing: per-branch POS packages (one
@@ -20,6 +20,8 @@ interface DefaultPackage {
   entitlements?: PackageEntitlements
   isRecommended: boolean
   legacyPlanTier: SubscriptionPlanTier | null
+  // A multi-year offer the package starts with (edited or removed in Madar Admin afterwards).
+  offer?: PackageOffer
 }
 
 const sar = (amount: number) => amount * 100
@@ -41,6 +43,7 @@ function tier(
     includedBranches?: number
     entitlements?: PackageEntitlements
     sellsBranches?: boolean
+    offer?: PackageOffer
   } = {}
 ): DefaultPackage {
   const sellsBranches = options.sellsBranches ?? true
@@ -57,6 +60,7 @@ function tier(
     entitlements: options.entitlements ?? {},
     isRecommended: options.recommended ?? false,
     legacyPlanTier,
+    offer: options.offer,
   }
 }
 
@@ -74,7 +78,12 @@ const POS_PACKAGES: DefaultPackage[] = [
       "إدارة المخزون والعملاء",
       "التقارير الجاهزة",
     ],
-    { entitlements: { shiftCash: true } }
+    {
+      entitlements: { shiftCash: true },
+      // Two years for 1,699 instead of 2 x 1,490. Migration 169 gave the same offer to
+      // environments that already had pricing.
+      offer: { title: "عرض السنتين", priceHalalas: sar(1699), years: 2, endsOn: null },
+    }
   ),
   tier(
     "growth",

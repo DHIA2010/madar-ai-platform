@@ -156,6 +156,12 @@ function PackageCheckoutPage() {
     ?.packages.find((entry) => entry.id === packageId)
   const branchPrice = pkg && interval ? extraBranchPriceFor(pkg, interval as BillingInterval) : null
   const includedBranches = pkg?.includedBranches ?? 1
+  // offer=1: the package's multi-year offer -- its years for one price, branches paid for each
+  // of those years, no coupon. Only while Madar Admin still has the offer running.
+  const offer =
+    !addingBranches && searchParams.get("offer") === "1" && interval === "yearly"
+      ? (pkg?.offer ?? null)
+      : null
   const extraBranches = !addingBranches && branchPrice !== null ? extraCount : 0
 
   const purchase = useMemo<MoyasarPurchase | null>(
@@ -166,9 +172,10 @@ function PackageCheckoutPage() {
             packageId: (packageId ?? "") as string,
             interval: interval as BillingInterval,
             ...(addingBranches ? { addBranches: addCount } : { extraBranches }),
+            ...(offer ? { offer: true } : {}),
           }
         : null,
-    [isValid, application, packageId, interval, addingBranches, addCount, extraBranches]
+    [isValid, application, packageId, interval, addingBranches, addCount, extraBranches, offer]
   )
 
   // The checkout (and its Moyasar form) is re-created whenever the coupon changes, so the amount
@@ -231,9 +238,11 @@ function PackageCheckoutPage() {
     ? allowance?.proratedHalalasPerBranch != null
       ? allowance.proratedHalalasPerBranch * addCount
       : null
-    : basePrice === null
-      ? null
-      : basePrice + extraBranches * (branchPrice ?? 0)
+    : offer
+      ? offer.priceHalalas + extraBranches * (branchPrice ?? 0) * offer.years
+      : basePrice === null
+        ? null
+        : basePrice + extraBranches * (branchPrice ?? 0)
   const periodEnd = allowance?.subscription?.currentPeriodEnd
     ? new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
         day: "numeric",
@@ -262,9 +271,11 @@ function PackageCheckoutPage() {
                 ? t(`${addKey}.subtitle`, { count: addCount })
                 : t("planLabel", { tier: pkg?.name ?? "…" })}{" "}
               ·{" "}
-              {purchase.interval === "yearly"
-                ? tDialog("billingYearly")
-                : tDialog("billingMonthly")}
+              {offer
+                ? offer.title || tDialog("offer.defaultTitle", { years: offer.years })
+                : purchase.interval === "yearly"
+                  ? tDialog("billingYearly")
+                  : tDialog("billingMonthly")}
             </p>
           </div>
           {amount !== null ? (
@@ -278,7 +289,11 @@ function PackageCheckoutPage() {
                 SAR {formatRiyals(coupon ? coupon.finalAmountHalalas : amount)}{" "}
                 {addingBranches ? null : (
                   <span className="text-[12px] font-semibold text-[#6b7b96]">
-                    {purchase.interval === "yearly" ? tDialog("perYear") : tDialog("perMonth")}
+                    {offer
+                      ? tDialog("offer.duration", { years: offer.years })
+                      : purchase.interval === "yearly"
+                        ? tDialog("perYear")
+                        : tDialog("perMonth")}
                   </span>
                 )}
               </p>
@@ -341,7 +356,16 @@ function PackageCheckoutPage() {
           </div>
         ) : null}
 
-        <div className={addingBranches ? "hidden" : "mb-5"}>
+        {offer && pkg?.yearlyPriceHalalas != null ? (
+          <p className="mb-5 rounded-[12px] border border-[#f6caca] bg-[#fff8f8] p-3.5 text-[12px] leading-5 text-[#334155]">
+            {tDialog("offer.renewal", {
+              amount: formatRiyals(pkg.yearlyPriceHalalas + extraBranches * (branchPrice ?? 0)),
+            })}{" "}
+            {tDialog("offer.noCoupon")}
+          </p>
+        ) : null}
+
+        <div className={addingBranches || offer ? "hidden" : "mb-5"}>
           <label className="mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-[#0b1738]">
             <TicketPercent className="size-4 text-[#2878ff]" />
             {t("couponLabel")}

@@ -82,6 +82,8 @@ export function activatePaid(
     // Omitted = keep whatever package the subscription already has (a manual renewal).
     package?: { id: string; name: string } | null
     interval: BillingInterval
+    // How many of those periods were paid for at once (a multi-year offer); 1 when omitted.
+    periods?: number
     priceHalalas: number | null
     // Omitted = keep the branches the subscription already has (a renewal).
     extraBranches?: number
@@ -124,7 +126,10 @@ export function activatePaid(
     currency: "SAR",
     source: input.source,
     startedAt: stillRunning ? existing.startedAt : input.now,
-    currentPeriodEnd: addBillingInterval(periodStart, input.interval),
+    currentPeriodEnd: Array.from({ length: Math.max(1, input.periods ?? 1) }).reduce<string>(
+      (end) => addBillingInterval(end, input.interval),
+      periodStart
+    ),
     trialEndsAt: null,
     cancelledAt: null,
     cancelledByUserId: null,

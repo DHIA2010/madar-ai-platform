@@ -21,7 +21,7 @@ import { requirePlatformPermission } from "../../platform-admin/guard"
 import { PlatformGovernanceService } from "../../platform-admin/governance-service"
 import { PlatformOperationsService } from "../../platform-admin/operations-service"
 import { PlatformAdminService } from "../../platform-admin/service"
-import { PricingService } from "../../pricing/service"
+import { activeOffer, PricingService } from "../../pricing/service"
 import { CouponService } from "../../coupons/service"
 import { ReceiptService } from "../../billing/receipts"
 import { runBillingMaintenance } from "../../subscriptions/maintenance"
@@ -2151,6 +2151,7 @@ export function createIdentityApiServer(
                 extraBranchMonthlyHalalas: pkg.extraBranchMonthlyHalalas,
                 extraBranchYearlyHalalas: pkg.extraBranchYearlyHalalas,
                 isRecommended: pkg.isRecommended,
+                offer: activeOffer(pkg),
               })),
             }))
         )
@@ -2826,7 +2827,15 @@ export function createIdentityApiServer(
         if (!pricingService) {
           return send(503, { code: "PRICING_UNAVAILABLE", message: "Pricing is unavailable." })
         }
-        return send(200, await pricingService.getCatalog({ includeInactive: false }))
+        // An offer past its last day isn't shown to customers.
+        const catalog = await pricingService.getCatalog({ includeInactive: false })
+        return send(
+          200,
+          catalog.map((entry) => ({
+            ...entry,
+            packages: entry.packages.map((pkg) => ({ ...pkg, offer: activeOffer(pkg) })),
+          }))
+        )
       }
 
       // Lets the checkout page show a coupon's effect before paying. The same check runs again
