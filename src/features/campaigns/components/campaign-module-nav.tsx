@@ -14,8 +14,8 @@ const CAMPAIGN_NAV_ITEMS = [
   { href: `${ROUTES.campaigns}/journey`, labelKey: "journey" },
   // "Create campaign" is left out until it can really publish to an ad platform: the form
   // behind it saves nothing, so offering it would look like a campaign was created.
-  { href: `${ROUTES.campaigns}/creative-library`, labelKey: "creativeLibrary" },
-  { href: `${ROUTES.campaigns}/templates`, labelKey: "templates" },
+  // The creative library (sample assets) and templates (placeholders) are left out for the same
+  // reason: neither holds anything real yet.
 ] as const
 
 export function CampaignModuleNav() {

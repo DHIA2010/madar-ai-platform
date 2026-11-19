@@ -1,17 +1,9 @@
-"use client"
+import { redirect } from "next/navigation"
 
-import dynamic from "next/dynamic"
+import { ROUTES } from "@/constants/routes"
 
-const CampaignCreativeLibraryScreen = dynamic(
-  () => import("@/features/campaigns").then((module) => module.CampaignCreativeLibraryScreen),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-96 animate-pulse rounded-xl border border-border/70 bg-muted/20" />
-    ),
-  }
-)
-
+// The creative library is hidden until it holds real assets (it only showed samples).
+// An old link or bookmark lands on the campaigns list instead.
 export default function Page() {
-  return <CampaignCreativeLibraryScreen />
+  redirect(`${ROUTES.campaigns}/list`)
 }
