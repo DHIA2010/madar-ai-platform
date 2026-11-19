@@ -142,7 +142,7 @@ export default async function RootLayout({
           >
             <QueryProvider>
               <ApplicationProvider>
-                <AuthProvider>
+                <AuthProvider marketingSite={isMarketingSite}>
                   <WorkspaceProvider>
                     <PermissionProvider>
                       <StoreContextProvider>{children}</StoreContextProvider>

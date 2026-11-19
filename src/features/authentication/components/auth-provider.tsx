@@ -25,11 +25,15 @@ const MAX_AVATAR_BYTES = 3 * 1024 * 1024
 // need -- on a phone that wait was the whole of the page's blank time.
 const SESSION_FREE_PATHS = [ROUTES.contactSales, ROUTES.privacy, ROUTES.terms, ROUTES.blog]
 
-function isSessionFreePath(pathname: string | null): boolean {
+function isSessionFreePath(pathname: string | null, marketingSite: boolean): boolean {
   if (!pathname) return false
   const path = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname
-  // "/" is only ever rendered on the marketing site: the app redirects it on the server.
-  if (path === ROUTES.home) return true
+  // The home address is the marketing home page on the marketing site only. On the app it is a
+  // server redirect to the dashboard, and it must stay behind the placeholder there: the load
+  // balancer's health check asks for exactly this address and accepts only a normal page (200).
+  // Rendering it straight through turns the answer into the redirect itself (307), which fails
+  // the check and rolls the deploy back.
+  if (path === ROUTES.home) return marketingSite
   return SESSION_FREE_PATHS.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
 }
 
@@ -45,8 +49,15 @@ function getConfigurationErrorMessage(error: unknown): string | null {
   return error.message || "Runtime configuration is invalid."
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const sessionFree = isSessionFreePath(usePathname())
+export function AuthProvider({
+  children,
+  marketingSite = false,
+}: {
+  children: React.ReactNode
+  // True on the public marketing site (madar.my), as the server sees the request's host.
+  marketingSite?: boolean
+}) {
+  const sessionFree = isSessionFreePath(usePathname(), marketingSite)
   const { authenticationApplicationService } = useApplicationServices()
   const [configurationError, setConfigurationError] = useState<string | null>(null)
   // Tracks only the one-time initial session check on app boot -- distinct from authStatus,
