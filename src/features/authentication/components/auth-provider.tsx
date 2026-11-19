@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { usePathname } from "next/navigation"
 
 import { AppError, ValidationError } from "@/lib/app-errors"
 import { fileToBase64 } from "@/lib/file-to-base64"
+import { ROUTES } from "@/constants/routes"
 
 import { AppEmpty, AppLoading } from "@/components/app"
 
@@ -16,6 +18,20 @@ import { AUTH_SESSION_STORAGE_KEY, SESSION_ENDED_EVENT } from "@/infrastructure/
 
 const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024
+
+// Public pages that show the same thing to everyone, signed in or not (the marketing site, the
+// ad landing page, the legal pages). They are sent ready-made by the server and shown at once,
+// instead of waiting behind the app's "restoring your session" placeholder for code they don't
+// need -- on a phone that wait was the whole of the page's blank time.
+const SESSION_FREE_PATHS = [ROUTES.contactSales, ROUTES.privacy, ROUTES.terms, ROUTES.blog]
+
+function isSessionFreePath(pathname: string | null): boolean {
+  if (!pathname) return false
+  const path = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname
+  // "/" is only ever rendered on the marketing site: the app redirects it on the server.
+  if (path === ROUTES.home) return true
+  return SESSION_FREE_PATHS.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+}
 
 function getConfigurationErrorMessage(error: unknown): string | null {
   if (!(error instanceof AppError)) {
@@ -30,6 +46,7 @@ function getConfigurationErrorMessage(error: unknown): string | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const sessionFree = isSessionFreePath(usePathname())
   const { authenticationApplicationService } = useApplicationServices()
   const [configurationError, setConfigurationError] = useState<string | null>(null)
   // Tracks only the one-time initial session check on app boot -- distinct from authStatus,
@@ -238,7 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clear])
 
-  if (!hasRestoredOnce) {
+  if (!hasRestoredOnce && !sessionFree) {
     return <AppLoading variant="page" />
   }
 

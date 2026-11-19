@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://madar.my/contact-sales" },
 }
 
-export default function Page() {
-  return <ContactSalesPage />
+// ?lp= names the ad the visitor came from; the page opens with that ad's headline.
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ lp?: string | string[] }>
+}) {
+  const { lp } = await searchParams
+  return <ContactSalesPage topic={typeof lp === "string" ? lp : null} />
 }

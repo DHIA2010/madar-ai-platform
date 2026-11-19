@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useCallback, useEffect, useState } from "react"
+import { type FormEvent, useCallback, useState } from "react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import { CalendarCheck, CalendarDays, CheckCircle2, Loader2, PhoneCall } from "lucide-react"
@@ -167,7 +167,7 @@ const PITCHES: Record<string, Pitch> = {
 
 // madar.my's "talk to sales" page: deliberately nothing but the form -- no navigation to wander
 // off to, only the option to start a free trial instead.
-export function ContactSalesPage() {
+export function ContactSalesPage({ topic }: { topic?: string | null }) {
   const [values, setValues] = useState<Record<Field, string>>({
     companyName: "",
     phone: "",
@@ -175,12 +175,10 @@ export function ContactSalesPage() {
     businessType: "",
   })
   const [website, setWebsite] = useState("")
-  // Read after the page loads (it is a static page): the ad's topic, if the link names one.
-  const [pitch, setPitch] = useState<Pitch | null>(null)
-  useEffect(() => {
-    const topic = new URLSearchParams(window.location.search).get("lp")
-    setPitch(topic ? (PITCHES[topic] ?? null) : null)
-  }, [])
+  // The ad's topic, if the link names one (?lp=). The server reads it from the address and
+  // passes it in, so the ad's own headline is part of the page as sent -- not swapped in after
+  // the page's code has loaded.
+  const pitch: Pitch | null = topic ? (PITCHES[topic] ?? null) : null
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
   // After the form: choose (meeting or call) → booking (calendar) or calling (day and time).
   const [status, setStatus] = useState<
