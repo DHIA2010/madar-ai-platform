@@ -63,6 +63,7 @@ import {
 } from "./campaign-metrics"
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { CampaignSpendDonut } from "./campaign-spend-donut"
+import { campaignStatusPill } from "./campaign-status-pill"
 
 import { cairo } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
@@ -201,39 +202,7 @@ function translatedPlatformOption(option: ExplorerPlatformFilter, t: CampaignsTr
 // than the internal CampaignStatus enum CampaignStatusBadge/translatedCampaignStatusMeta cover
 // (draft/scheduled/active/paused/completed/archived), so this stays its own small translated map
 // rather than reusing those.
-const STATUS_PILL_KEYS: Record<string, { key: string; className: string }> = {
-  active: { key: "active", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  enabled: { key: "active", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  paused: { key: "paused", className: "bg-[#fff7e6] text-[#e08b00]" },
-  removed: { key: "removed", className: "bg-[#fdeeee] text-[#e0484d]" },
-  ended: { key: "ended", className: "bg-[#eef2f8] text-[#5b6b85]" },
-  // TikTok's on/off words.
-  enable: { key: "active", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  disable: { key: "paused", className: "bg-[#fff7e6] text-[#e08b00]" },
-  // What the platform says about something that is switched on but not simply running (see the
-  // backend's campaigns/delivery-status.ts).
-  rejected: { key: "rejected", className: "bg-[#fdeeee] text-[#e0484d]" },
-  not_delivering: { key: "notDelivering", className: "bg-[#eef2f8] text-[#5b6b85]" },
-  under_review: { key: "underReview", className: "bg-[#eaf2ff] text-[#2563eb]" },
-  learning: { key: "learning", className: "bg-[#eaf2ff] text-[#2563eb]" },
-  limited: { key: "limited", className: "bg-[#fff7e6] text-[#e08b00]" },
-  pending: { key: "pending", className: "bg-[#eef2f8] text-[#5b6b85]" },
-  not_eligible: { key: "notEligible", className: "bg-[#fdeeee] text-[#e0484d]" },
-  misconfigured: { key: "misconfigured", className: "bg-[#fdeeee] text-[#e0484d]" },
-}
-
-function statusPill(status: string, t: CampaignsTranslator) {
-  const entry = STATUS_PILL_KEYS[status.toLowerCase()]
-  if (!entry) {
-    return { label: status, className: "bg-[#eef2f8] text-[#5b6b85]" }
-  }
-  return {
-    label: t(`dashboardScreen.statusPill.${entry.key}` as "dashboardScreen.statusPill.active"),
-    className: entry.className,
-  }
-}
-
-// Mirrors campaign-list-table.tsx/campaign-details-view.tsx's locale-aware number/currency
+// Mirrors campaign-details-view.tsx's locale-aware number/currency
 // helpers in this same feature: Arabic numerals are forced to Western digits via -u-nu-latn so
 // they match the plain numbers coming from the backend, and the currency amount gets a trailing
 // "ر.س" (Arabic) or a leading "SAR " (English).
@@ -383,7 +352,7 @@ function bucketObjective(rawObjective: string | null): CampaignTypeFilter {
 }
 
 function toEntityRow(row: CampaignPerformanceRow, t: CampaignsTranslator): EntityRow {
-  const statusLabel = statusPill(row.status, t).label
+  const statusLabel = campaignStatusPill(row.status, t).label
   return {
     ...row,
     nodeId: row.id,
@@ -896,7 +865,7 @@ export function CampaignDashboardScreen() {
     }
 
     if (column.key === "status") {
-      const pill = statusPill(row.status, t)
+      const pill = campaignStatusPill(row.status, t)
       return (
         <span
           className={cn(

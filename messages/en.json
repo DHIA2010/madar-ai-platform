@@ -7676,6 +7676,20 @@
     },
     "listScreen": {
       "title": "Campaign List",
+      "realSubtitle": "Every campaign on your connected platforms, with its real numbers for the chosen period.",
+      "searchPlaceholder": "Search by campaign name...",
+      "allPlatforms": "All platforms",
+      "loadError": "Could not load campaigns. Please try again.",
+      "emptyTitle": "No campaigns yet",
+      "emptyDescription": "Connect an ad platform from the integrations page to see your campaigns here.",
+      "noMatchTitle": "No matching campaigns",
+      "noMatchDescription": "Try changing the search or filters.",
+      "filters": {
+        "all": "All",
+        "active": "Active",
+        "paused": "Paused",
+        "other": "Other"
+      },
       "subtitle": "Search, filter, and manage campaigns in one operational table.",
       "newCampaign": "New Campaign",
       "createCampaign": "Create Campaign",

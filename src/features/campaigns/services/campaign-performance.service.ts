@@ -51,6 +51,8 @@ export interface CampaignPerformanceRow {
   status: string
   objective: string | null
   activityDate: string | null
+  // The ad account's own currency, when the platform reported it.
+  currency?: string | null
   spend: number
   revenue: number
   roas: number
