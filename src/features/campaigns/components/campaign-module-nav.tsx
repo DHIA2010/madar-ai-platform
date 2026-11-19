@@ -12,7 +12,8 @@ const CAMPAIGN_NAV_ITEMS = [
   { href: `${ROUTES.campaigns}/list`, labelKey: "list" },
   { href: ROUTES.campaignsCheckup, labelKey: "checkup" },
   { href: `${ROUTES.campaigns}/journey`, labelKey: "journey" },
-  { href: ROUTES.campaignsCreate, labelKey: "create" },
+  // "Create campaign" is left out until it can really publish to an ad platform: the form
+  // behind it saves nothing, so offering it would look like a campaign was created.
   { href: `${ROUTES.campaigns}/creative-library`, labelKey: "creativeLibrary" },
   { href: `${ROUTES.campaigns}/templates`, labelKey: "templates" },
 ] as const

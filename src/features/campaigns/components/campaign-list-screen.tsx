@@ -1,19 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { useLocale, useTranslations } from "next-intl"
 import { subDays } from "date-fns"
-import { Plus, Search } from "lucide-react"
+import { Search } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
 import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
-import { ROUTES } from "@/constants/routes"
 
 import { AppDateRangeFilter, AppSearchInput } from "@/components/app"
-
-import { Can } from "@/features/authentication"
 
 import {
   type CampaignPerformanceRow,
@@ -147,15 +143,6 @@ export function CampaignListScreen() {
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
-            <Can permission="campaigns:create">
-              <Link
-                href={ROUTES.campaignsCreate}
-                className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#1d4fd8] px-4 text-[13px] font-bold text-white transition-colors hover:bg-[#1a45bd]"
-              >
-                <Plus className="size-4" />
-                {t("listScreen.newCampaign")}
-              </Link>
-            </Can>
           </div>
         </div>
 
