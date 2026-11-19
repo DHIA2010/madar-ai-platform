@@ -18,6 +18,7 @@ import {
 } from "date-fns"
 import {
   Archive,
+  Briefcase,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -25,10 +26,17 @@ import {
   ChevronRight,
   Circle,
   Clock3,
+  Heart,
   type LucideIcon,
+  Mail,
+  Megaphone,
+  MousePointerClick,
   PauseCircle,
   PlayCircle,
   Search,
+  ShoppingBag,
+  Target,
+  UserPlus,
 } from "lucide-react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 
@@ -62,6 +70,8 @@ import {
   CAMPAIGN_SELECT_ITEM_CLASSNAME,
   CAMPAIGN_SELECT_TRIGGER_CLASSNAME,
 } from "./campaign-select-styles"
+
+import { PlatformBadge } from "@/components/platform-badge"
 
 interface CampaignFormProps {
   mode: "create" | "edit"
@@ -265,23 +275,91 @@ const AUDIENCE_OPTIONS: SearchOption[] = [
   { value: "Returning customers", label: "Returning customers" },
 ]
 
-function SectionCard({
-  title,
-  description,
-  children,
+// Plain text fields at the same height as the selects and date fields beside them.
+const TEXT_INPUT_CLASSNAME = "h-12 rounded-xl px-4 text-sm font-medium"
+
+const OBJECTIVE_ICONS: Record<string, LucideIcon> = {
+  awareness: Megaphone,
+  traffic: MousePointerClick,
+  leads: UserPlus,
+  conversions: Target,
+  sales: ShoppingBag,
+  engagement: Heart,
+}
+
+const CHANNEL_LOGO: Record<string, string> = {
+  meta: "Meta",
+  google: "Google",
+  tiktok: "TikTok",
+  snapchat: "Snapchat",
+}
+
+function ChannelIcon({ channel }: { channel: string }) {
+  const logo = CHANNEL_LOGO[channel]
+  if (logo) return <PlatformBadge platform={logo} className="size-10" iconClassName="size-5" />
+  const Icon = channel === "email" ? Mail : Briefcase
+  return (
+    <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+      <Icon className="size-5" />
+    </span>
+  )
+}
+
+// A question answered by tapping one large card instead of opening a dropdown.
+function ChoiceGrid({
+  label,
+  options,
+  value,
+  onValueChange,
+  columns,
+  errorText,
 }: {
-  title: string
-  description?: string
-  children: React.ReactNode
+  label: string
+  options: Array<SelectOption & { description?: string; icon: React.ReactNode }>
+  value: string
+  onValueChange: (value: string) => void
+  columns: string
+  errorText?: string
 }) {
   return (
-    <section className="rounded-2xl border border-border/70 bg-card">
-      <div className="border-b border-border/60 px-5 py-4 md:px-6">
-        <h2 className="text-sm font-semibold tracking-wide text-foreground">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+    <div>
+      <p className="mb-2.5 text-sm font-semibold text-foreground">
+        {label} <span className="text-destructive">*</span>
+      </p>
+      <div className={cn("grid gap-3", columns)}>
+        {options.map((option) => {
+          const selected = option.value === value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onValueChange(option.value)}
+              className={cn(
+                "flex min-h-16 items-center gap-3 rounded-xl border-2 p-3.5 text-start transition-colors",
+                selected
+                  ? "border-primary bg-primary/5"
+                  : "border-border/70 bg-background hover:border-primary/40"
+              )}
+            >
+              {option.icon}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-foreground">
+                  {option.label}
+                </span>
+                {option.description ? (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {option.description}
+                  </span>
+                ) : null}
+              </span>
+              {selected ? <CheckCircle2 className="size-5 shrink-0 text-primary" /> : null}
+            </button>
+          )
+        })}
       </div>
-      <div className="px-5 py-5 md:px-6">{children}</div>
-    </section>
+      {errorText ? <p className="mt-1.5 text-xs text-destructive">{errorText}</p> : null}
+    </div>
   )
 }
 
@@ -676,6 +754,7 @@ function SearchableSelectField({
         required={required}
         errorText={errorText}
         placeholder={placeholder}
+        className={TEXT_INPUT_CLASSNAME}
         value={open ? query : (selected?.label ?? "")}
         onFocus={() => {
           setOpen(true)
@@ -756,6 +835,8 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
   const form = useForm<CampaignFormSchemaValues>({
     resolver: zodResolver(campaignFormSchema),
     defaultValues,
+    // A field's error clears as soon as it is corrected, not only on the next attempt to move on.
+    mode: "onChange",
   })
 
   const country = useWatch({ control: form.control, name: "country" })
@@ -827,6 +908,48 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
     router.push(ROUTES.campaignsDetails(updated.payload.id))
   })
 
+  // The schema's own messages are in English; the form shows one plain line in the user's
+  // language instead.
+  const requiredText = (error: unknown) => (error ? t("form.wizard.required") : undefined)
+  const [step, setStep] = useState(0)
+  const watched = useWatch({ control: form.control })
+  const steps = [
+    { key: "basics", fields: ["name", "channel", "objective"] },
+    { key: "budget", fields: ["budget", "status", "startDate", "endDate"] },
+    { key: "targeting", fields: ["country", "language", "audience"] },
+  ] as const
+  const isLastStep = step === steps.length - 1
+
+  // Moving forward checks only the fields of the step being left, so a mistake is fixed where
+  // it was made instead of surfacing at the very end.
+  async function goNext() {
+    const valid = await form.trigger([...steps[step].fields])
+    if (!valid || (step === 1 && dateRangeError)) return
+    setStep((current) => Math.min(current + 1, steps.length - 1))
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const channelLabel = CHANNEL_OPTIONS.find((option) => option.value === watched.channel)?.label
+  const objectiveLabel = objectiveOptions.find(
+    (option) => option.value === watched.objective
+  )?.label
+  const summaryRows = [
+    { label: t("form.fields.name.label"), value: watched.name },
+    { label: t("detailsView.detailLabels.channel"), value: channelLabel },
+    { label: t("detailsView.detailLabels.objective"), value: objectiveLabel },
+    {
+      label: t("form.fields.budget.label"),
+      value: watched.budget ? `${watched.budget} ${tCommon("currency")}` : "",
+    },
+    {
+      label: t("form.wizard.period"),
+      value:
+        watched.startDate && watched.endDate ? `${watched.startDate} ← ${watched.endDate}` : "",
+    },
+    { label: t("form.fields.country.label"), value: watched.country },
+    { label: t("detailsView.detailLabels.audience"), value: watched.audience },
+  ]
+
   return (
     <AppCard
       title={t("form.title")}
@@ -835,60 +958,126 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
       headerClassName="border-b border-border/60 px-5 py-5 md:px-6"
       contentClassName="p-0"
     >
-      <AppForm onSubmit={onSubmit}>
-        <div className="space-y-6 px-5 py-5 md:px-6">
-          <SectionCard
-            title={t("form.sections.basics.title")}
-            description={t("form.sections.basics.description")}
-          >
-            <div className="grid gap-4 md:grid-cols-2">
+      <AppForm
+        onSubmit={(event) => {
+          // Enter on an early step moves on; only the last step saves.
+          if (!isLastStep) {
+            event.preventDefault()
+            void goNext()
+            return
+          }
+          void onSubmit(event)
+        }}
+      >
+        <div className="mx-auto w-full max-w-3xl space-y-6 px-5 py-6 md:px-6">
+          <ol className="flex items-center gap-2">
+            {steps.map((item, index) => {
+              const done = index < step
+              const current = index === step
+              return (
+                <li key={item.key} className="flex flex-1 items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={index > step}
+                    onClick={() => setStep(index)}
+                    className="flex min-w-0 items-center gap-2.5 text-start disabled:cursor-default"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors",
+                        done && "bg-emerald-500 text-white",
+                        current && "bg-primary text-primary-foreground",
+                        !done && !current && "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {done ? <Check className="size-4" /> : index + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        "hidden truncate text-sm font-semibold sm:block",
+                        current ? "text-foreground" : "text-muted-foreground"
+                      )}
+                    >
+                      {t(`form.wizard.steps.${item.key}` as "form.wizard.steps.basics")}
+                    </span>
+                  </button>
+                  {index < steps.length - 1 ? (
+                    <span
+                      className={cn(
+                        "h-0.5 flex-1 rounded-full",
+                        done ? "bg-emerald-500" : "bg-border"
+                      )}
+                    />
+                  ) : null}
+                </li>
+              )
+            })}
+          </ol>
+          <p className="text-sm font-semibold text-foreground sm:hidden">
+            {t(`form.wizard.steps.${steps[step].key}` as "form.wizard.steps.basics")}
+          </p>
+
+          {step === 0 ? (
+            <div className="space-y-6">
               <AppInput
                 label={t("form.fields.name.label")}
                 required
-                wrapperClassName="md:col-span-2"
-                errorText={form.formState.errors.name?.message}
+                className={TEXT_INPUT_CLASSNAME}
+                helperText={t("form.wizard.nameHint")}
+                errorText={requiredText(form.formState.errors.name)}
                 {...form.register("name")}
-              />
-
-              <Controller
-                control={form.control}
-                name="objective"
-                render={({ field, fieldState }) => (
-                  <SelectField
-                    label={t("detailsView.detailLabels.objective")}
-                    required
-                    value={field.value}
-                    placeholder={t("form.fields.objective.placeholder")}
-                    options={objectiveOptions}
-                    onValueChange={field.onChange}
-                    errorText={fieldState.error?.message}
-                  />
-                )}
               />
 
               <Controller
                 control={form.control}
                 name="channel"
                 render={({ field, fieldState }) => (
-                  <SelectField
-                    label={t("detailsView.detailLabels.channel")}
-                    required
+                  <ChoiceGrid
+                    label={t("form.wizard.platformQuestion")}
+                    errorText={requiredText(fieldState.error)}
                     value={field.value}
-                    placeholder={t("form.fields.channel.placeholder")}
-                    options={CHANNEL_OPTIONS}
                     onValueChange={field.onChange}
-                    errorText={fieldState.error?.message}
+                    columns="grid-cols-2 sm:grid-cols-3"
+                    options={CHANNEL_OPTIONS.map((option) => ({
+                      ...option,
+                      icon: <ChannelIcon channel={option.value} />,
+                    }))}
+                  />
+                )}
+              />
+
+              <Controller
+                control={form.control}
+                name="objective"
+                render={({ field, fieldState }) => (
+                  <ChoiceGrid
+                    label={t("form.wizard.objectiveQuestion")}
+                    errorText={requiredText(fieldState.error)}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    columns="grid-cols-1 sm:grid-cols-2"
+                    options={objectiveOptions.map((option) => {
+                      const Icon = OBJECTIVE_ICONS[option.value] ?? Target
+                      return {
+                        ...option,
+                        description: t(
+                          `form.wizard.objectiveHints.${option.value}` as "form.wizard.objectiveHints.leads"
+                        ),
+                        icon: (
+                          <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                            <Icon className="size-5" />
+                          </span>
+                        ),
+                      }
+                    })}
                   />
                 )}
               />
             </div>
-          </SectionCard>
+          ) : null}
 
-          <SectionCard
-            title={t("form.sections.budget.title")}
-            description={t("form.sections.budget.description")}
-          >
-            <div className="grid gap-4 md:grid-cols-2">
+          {step === 1 ? (
+            <div className="grid gap-5 md:grid-cols-2">
               <AppInput
                 label={t("form.fields.budget.label")}
                 type="number"
@@ -896,12 +1085,15 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 inputMode="numeric"
                 min={0}
                 step="1"
+                className={TEXT_INPUT_CLASSNAME}
                 endIcon={
                   <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {tCommon("currency")}
                   </span>
                 }
-                errorText={form.formState.errors.budget?.message}
+                errorText={
+                  form.formState.errors.budget ? t("form.wizard.budgetRequired") : undefined
+                }
                 {...form.register("budget", { valueAsNumber: true })}
               />
 
@@ -915,7 +1107,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                     value={field.value}
                     placeholder={t("form.fields.status.placeholder")}
                     onValueChange={field.onChange}
-                    errorText={fieldState.error?.message}
+                    errorText={requiredText(fieldState.error)}
                   />
                 )}
               />
@@ -929,7 +1121,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                     required
                     value={field.value}
                     onValueChange={field.onChange}
-                    errorText={fieldState.error?.message}
+                    errorText={requiredText(fieldState.error)}
                   />
                 )}
               />
@@ -943,112 +1135,138 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                     required
                     value={field.value}
                     onValueChange={field.onChange}
-                    errorText={fieldState.error?.message ?? dateRangeError}
+                    errorText={requiredText(fieldState.error) ?? dateRangeError}
                   />
                 )}
               />
             </div>
-          </SectionCard>
+          ) : null}
 
-          <SectionCard
-            title={t("form.sections.targeting.title")}
-            description={t("form.sections.targeting.description")}
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <SearchableSelectField
-                label={t("form.fields.country.label")}
-                required
-                value={country}
-                placeholder={t("form.fields.country.placeholder")}
-                options={COUNTRY_OPTIONS}
-                onValueChange={(value) =>
-                  form.setValue("country", value, { shouldDirty: true, shouldValidate: true })
-                }
-                searchPlaceholder={t("form.fields.country.searchPlaceholder")}
-                errorText={form.formState.errors.country?.message}
-              />
+          {step === 2 ? (
+            <div className="space-y-6">
+              <div className="grid gap-5 md:grid-cols-2">
+                <SearchableSelectField
+                  label={t("form.fields.country.label")}
+                  required
+                  value={country}
+                  placeholder={t("form.fields.country.placeholder")}
+                  options={COUNTRY_OPTIONS}
+                  onValueChange={(value) =>
+                    form.setValue("country", value, { shouldDirty: true, shouldValidate: true })
+                  }
+                  searchPlaceholder={t("form.fields.country.searchPlaceholder")}
+                  errorText={requiredText(form.formState.errors.country)}
+                />
 
-              <Controller
-                control={form.control}
-                name="language"
-                render={({ field, fieldState }) => (
-                  <SelectField
-                    label={tCommon("language")}
+                <Controller
+                  control={form.control}
+                  name="language"
+                  render={({ field, fieldState }) => (
+                    <SelectField
+                      label={tCommon("language")}
+                      required
+                      value={field.value}
+                      placeholder={t("form.fields.language.placeholder")}
+                      options={languageOptions}
+                      onValueChange={field.onChange}
+                      errorText={requiredText(fieldState.error)}
+                    />
+                  )}
+                />
+
+                <div className="md:col-span-2">
+                  <SearchableSelectField
+                    label={t("detailsView.detailLabels.audience")}
                     required
-                    value={field.value}
-                    placeholder={t("form.fields.language.placeholder")}
-                    options={languageOptions}
-                    onValueChange={field.onChange}
-                    errorText={fieldState.error?.message}
+                    value={audience}
+                    placeholder={t("form.fields.audience.placeholder")}
+                    options={AUDIENCE_OPTIONS}
+                    onValueChange={(value) =>
+                      form.setValue("audience", value, { shouldDirty: true, shouldValidate: true })
+                    }
+                    searchPlaceholder={t("form.fields.audience.searchPlaceholder")}
+                    errorText={requiredText(form.formState.errors.audience)}
                   />
-                )}
-              />
-
-              <SearchableSelectField
-                label={t("detailsView.detailLabels.audience")}
-                required
-                value={audience}
-                placeholder={t("form.fields.audience.placeholder")}
-                options={AUDIENCE_OPTIONS}
-                onValueChange={(value) =>
-                  form.setValue("audience", value, { shouldDirty: true, shouldValidate: true })
-                }
-                searchPlaceholder={t("form.fields.audience.searchPlaceholder")}
-                errorText={form.formState.errors.audience?.message}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title={t("creativeLibrary.title")}
-            description={t("form.sections.creative.description")}
-          >
-            <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background p-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-medium">{t("form.creative.selectedLabel")}</p>
-                <p className="text-xs text-muted-foreground">
-                  {selectedCreative
-                    ? t("form.creative.creativeIdLabel", { id: selectedCreative })
-                    : t("form.creative.noneSelected")}
-                </p>
+                </div>
               </div>
-              <AppButton asChild variant="outline" size="sm">
-                <Link
-                  href={`${ROUTES.campaigns}/creative-library?returnTo=${encodeURIComponent(ROUTES.campaignsCreate)}`}
-                >
-                  {t("form.creative.openLibrary")}
-                </Link>
-              </AppButton>
-            </div>
-          </SectionCard>
 
-          <SectionCard
-            title={t("form.sections.notes.title")}
-            description={t("form.sections.notes.description")}
-          >
-            <AppTextarea
-              label={t("form.sections.notes.title")}
-              placeholder={t("form.fields.notes.placeholder")}
-              wrapperClassName="md:col-span-2"
-              className="min-h-[96px] resize-y"
-              helperText={t("form.fields.notes.optional")}
-            />
-          </SectionCard>
+              <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background p-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-medium">{t("form.creative.selectedLabel")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCreative
+                      ? t("form.creative.creativeIdLabel", { id: selectedCreative })
+                      : t("form.creative.noneSelected")}
+                  </p>
+                </div>
+                <AppButton asChild variant="outline" className="h-11 px-4">
+                  <Link
+                    href={`${ROUTES.campaigns}/creative-library?returnTo=${encodeURIComponent(ROUTES.campaignsCreate)}`}
+                  >
+                    {t("form.creative.openLibrary")}
+                  </Link>
+                </AppButton>
+              </div>
+
+              <AppTextarea
+                label={t("form.sections.notes.title")}
+                placeholder={t("form.fields.notes.placeholder")}
+                className="min-h-[110px] resize-y rounded-xl"
+                helperText={t("form.fields.notes.optional")}
+              />
+
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-bold text-foreground">{t("form.wizard.summaryTitle")}</p>
+                <dl className="mt-3 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
+                  {summaryRows.map((row) => (
+                    <div key={row.label} className="flex items-baseline justify-between gap-3">
+                      <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                      <dd className="truncate text-sm font-semibold text-foreground">
+                        {row.value || "—"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="sticky bottom-0 z-20 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur md:px-6">
-          <div className="flex items-center justify-end gap-3">
-            <AppButton type="button" variant="outline" size="lg" onClick={() => router.back()}>
-              {tCommon("cancel")}
-            </AppButton>
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <AppButton
-              type="submit"
-              size="lg"
-              loading={isSubmitting}
-              disabled={isSubmitting || Boolean(dateRangeError)}
+              type="button"
+              variant="outline"
+              className="h-12 min-w-28 rounded-xl px-5 text-sm font-semibold"
+              onClick={() => (step === 0 ? router.back() : setStep(step - 1))}
             >
-              {mode === "create" ? t("listScreen.createCampaign") : t("form.actions.saveChanges")}
+              {step === 0 ? tCommon("cancel") : t("form.wizard.back")}
             </AppButton>
+            <p className="hidden text-xs text-muted-foreground sm:block">
+              {t("form.wizard.stepCount", { current: step + 1, total: steps.length })}
+            </p>
+            {isLastStep ? (
+              <AppButton
+                // Its own key: without it the "next" button turns into this one mid-click, and
+                // the same click would submit the form.
+                key="save"
+                type="submit"
+                className="h-12 min-w-40 rounded-xl px-6 text-sm font-bold"
+                loading={isSubmitting}
+                disabled={isSubmitting || Boolean(dateRangeError)}
+              >
+                {mode === "create" ? t("listScreen.createCampaign") : t("form.actions.saveChanges")}
+              </AppButton>
+            ) : (
+              <AppButton
+                key="next"
+                type="button"
+                className="h-12 min-w-40 rounded-xl px-6 text-sm font-bold"
+                onClick={() => void goNext()}
+              >
+                {t("form.wizard.next")}
+              </AppButton>
+            )}
           </div>
         </div>
       </AppForm>

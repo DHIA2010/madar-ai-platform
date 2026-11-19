@@ -8001,6 +8001,31 @@
       "dimensionsNotApplicable": "غير متاح"
     },
     "form": {
+      "wizard": {
+        "steps": {
+          "basics": "الأساسيات",
+          "budget": "الميزانية والمدة",
+          "targeting": "الجمهور والمراجعة"
+        },
+        "next": "التالي",
+        "back": "السابق",
+        "required": "هذا الحقل مطلوب.",
+        "budgetRequired": "أدخل ميزانية أكبر من صفر.",
+        "stepCount": "الخطوة {current} من {total}",
+        "nameHint": "اسم يساعدك على تمييز الحملة لاحقًا.",
+        "platformQuestion": "على أي منصة ستعلن؟",
+        "objectiveQuestion": "ما هدف الحملة؟",
+        "objectiveHints": {
+          "awareness": "تعريف أكبر عدد من الناس بنشاطك",
+          "traffic": "زيارات أكثر لموقعك أو متجرك",
+          "leads": "عملاء محتملون يتركون بياناتهم",
+          "conversions": "إجراء محدد على موقعك",
+          "sales": "طلبات ومبيعات مباشرة",
+          "engagement": "تفاعل مع محتواك"
+        },
+        "period": "المدة",
+        "summaryTitle": "ملخص الحملة"
+      },
       "title": "إعداد الحملة",
       "subtitle": "أنشئ حملة تسويقية وقم بتكوينها قبل نشرها.",
       "sections": {

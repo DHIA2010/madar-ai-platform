@@ -8005,6 +8005,31 @@
       "dimensionsNotApplicable": "N/A"
     },
     "form": {
+      "wizard": {
+        "steps": {
+          "basics": "Basics",
+          "budget": "Budget & dates",
+          "targeting": "Audience & review"
+        },
+        "next": "Next",
+        "back": "Back",
+        "required": "This field is required.",
+        "budgetRequired": "Enter a budget above zero.",
+        "stepCount": "Step {current} of {total}",
+        "nameHint": "A name that helps you recognise the campaign later.",
+        "platformQuestion": "Which platform will you advertise on?",
+        "objectiveQuestion": "What is the campaign's goal?",
+        "objectiveHints": {
+          "awareness": "Make more people know your business",
+          "traffic": "More visits to your site or store",
+          "leads": "Potential customers who leave their details",
+          "conversions": "A specific action on your site",
+          "sales": "Direct orders and sales",
+          "engagement": "Interaction with your content"
+        },
+        "period": "Period",
+        "summaryTitle": "Campaign summary"
+      },
       "title": "Campaign Configuration",
       "subtitle": "Create and configure a marketing campaign before publishing.",
       "sections": {

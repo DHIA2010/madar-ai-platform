@@ -61,6 +61,7 @@ import {
   translatedAnalysisTabs,
   translatedMetricsColumns,
 } from "./campaign-metrics"
+import { CampaignModuleNav } from "./campaign-module-nav"
 import { CampaignSpendDonut } from "./campaign-spend-donut"
 
 import { cairo } from "@/components/design/fonts"
@@ -1036,6 +1037,8 @@ export function CampaignDashboardScreen() {
             />
           </div>
         </div>
+
+        <CampaignModuleNav />
 
         <section className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {campaignKpiCards.map((kpi) => (
