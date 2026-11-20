@@ -7641,6 +7641,11 @@ export function createIdentityApiServer(
             await campaignPublishingService.get(actor.organizationId, publicationMatch[1])
           )
         }
+        if (publicationMatch && method === "DELETE" && !publicationMatch[2]) {
+          if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+          await campaignPublishingService.remove(actor, publicationMatch[1])
+          return send(204, null)
+        }
         if (publicationMatch && method === "POST" && publicationMatch[2]) {
           if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
           const payload = publicationStatusSchema.parse(await readJsonBody(request))

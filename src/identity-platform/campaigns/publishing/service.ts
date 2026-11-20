@@ -107,6 +107,7 @@ export interface SnapchatPublisher {
     campaignId: string
     active: boolean
   }): Promise<void>
+  deleteCampaign(input: { accessToken: string; campaignId: string }): Promise<void>
 }
 
 // Snapchat's floor is 5 US dollars a day; 20 covers it in riyals and the neighbouring currencies.
@@ -511,6 +512,42 @@ export class CampaignPublishingService {
       [id, active ? "active" : "paused"]
     )
     return this.get(actor.organizationId, id)
+  }
+
+  // Removes a campaign published from Madar: deleted on the platform first (so nothing keeps
+  // spending), then taken off Madar's list. A publish that failed left nothing on the platform
+  // and is only taken off the list; one still being published cannot be removed yet.
+  async remove(actor: AuthenticatedActor, id: string): Promise<void> {
+    const row = await this.row(actor.organizationId, id)
+    const view = mapPublication(row, this.now())
+    if (view.status === "publishing") {
+      throw new IdentityError(
+        "PUBLICATION_STILL_PUBLISHING",
+        409,
+        "business",
+        "The campaign is still being published."
+      )
+    }
+    const ids = json<Partial<SnapchatPublishedIds>>(row.external_ids, {})
+    if (view.status === "published" && ids.campaignId) {
+      try {
+        await this.snapchat.deleteCampaign({
+          accessToken: await this.snapchatAccess.resolveAccessToken(row.connection_id),
+          campaignId: ids.campaignId,
+        })
+      } catch (caught) {
+        if (caught instanceof SnapchatPublishError) {
+          throw new IdentityError(caught.code, 422, "external", caught.reason, {
+            step: caught.step,
+          })
+        }
+        throw caught
+      }
+    }
+    await this.db.query(
+      `DELETE FROM campaign_publications WHERE organization_id = $1 AND id = $2`,
+      [actor.organizationId, id]
+    )
   }
 
   // Waits for the publishes this process started (tests).

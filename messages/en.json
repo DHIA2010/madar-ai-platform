@@ -7990,7 +7990,15 @@
         "switchLabel": "Switch “{name}” on or off",
         "switchedOn": "The campaign is on",
         "switchedOff": "The campaign is off",
-        "switchFailed": "The campaign's state could not be changed. Try again."
+        "switchFailed": "The campaign's state could not be changed. Try again.",
+        "remove": "Delete campaign",
+        "removeLabel": "Delete “{name}”",
+        "removeWarning": "The campaign will be deleted from Snapchat for good and cannot be brought back.",
+        "confirmRemove": "Yes, delete it",
+        "removing": "Deleting…",
+        "cancel": "Cancel",
+        "removed": "The campaign was deleted",
+        "removeFailed": "The campaign could not be deleted. Try again."
       }
     },
     "metrics": {

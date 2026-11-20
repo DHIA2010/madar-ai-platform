@@ -1,11 +1,11 @@
 "use client"
 
 // إنشاء حملة: the publish wizard, and under it the campaigns already published from Madar with
-// their on/off switch (backend: campaigns/publishing/service.ts).
+// their on/off switch and remove button (backend: campaigns/publishing/service.ts).
 
 import { useCallback, useEffect, useState } from "react"
 import { useLocale, useTranslations } from "next-intl"
-import { Loader2 } from "lucide-react"
+import { Loader2, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -39,9 +39,11 @@ const STATE_TINT: Record<string, string> = {
 function PublishedCampaigns({
   publications,
   onChanged,
+  onRemoved,
 }: {
   publications: Publication[]
   onChanged: (next: Publication) => void
+  onRemoved: (id: string) => void
 }) {
   const t = useTranslations("campaigns.publish.published")
   const locale = useLocale() as Locale
@@ -56,6 +58,25 @@ function PublishedCampaigns({
       toast.error(t("switchFailed"))
     } finally {
       setSwitching(null)
+    }
+  }
+
+  // Removing deletes the campaign on Snapchat, so it is asked for twice: the bin, then a
+  // confirmation in the row itself.
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+
+  const remove = async (publication: Publication) => {
+    setRemoving(publication.id)
+    try {
+      await campaignPublishingService.removePublication(publication.id)
+      onRemoved(publication.id)
+      toast.success(t("removed"))
+    } catch {
+      toast.error(t("removeFailed"))
+    } finally {
+      setRemoving(null)
+      setConfirming(null)
     }
   }
 
@@ -101,6 +122,43 @@ function PublishedCampaigns({
                       onCheckedChange={(active) => void toggle(publication, active)}
                       aria-label={t("switchLabel", { name: publication.name })}
                     />
+                  )}
+                </Can>
+              ) : null}
+              {publication.status === "published" ? (
+                <Can permission="campaigns:create">
+                  {confirming === publication.id ? (
+                    <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                      <p className="min-w-0 flex-1 text-[12.5px] leading-6 text-[#b42318]">
+                        {t("removeWarning")}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={removing === publication.id}
+                        onClick={() => void remove(publication)}
+                        className="h-10 rounded-[10px] bg-[#d92d20] px-4 text-[12.5px] font-bold text-white disabled:opacity-60"
+                      >
+                        {removing === publication.id ? t("removing") : t("confirmRemove")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={removing === publication.id}
+                        onClick={() => setConfirming(null)}
+                        className="h-10 rounded-[10px] border border-[#e1e7f0] px-4 text-[12.5px] font-semibold text-[#3b4a66]"
+                      >
+                        {t("cancel")}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={t("removeLabel", { name: publication.name })}
+                      title={t("remove")}
+                      onClick={() => setConfirming(publication.id)}
+                      className="flex size-10 items-center justify-center rounded-[10px] border border-[#e1e7f0] text-[#b42318] transition-colors hover:bg-[#fef3f2]"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
                   )}
                 </Can>
               ) : null}
@@ -151,6 +209,9 @@ export function CampaignCreateScreen() {
               setPublications((current) =>
                 current.map((publication) => (publication.id === next.id ? next : publication))
               )
+            }
+            onRemoved={(id) =>
+              setPublications((current) => current.filter((publication) => publication.id !== id))
             }
           />
         ) : null}

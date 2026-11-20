@@ -60,7 +60,17 @@ function memoryStorage() {
 
 // A stand-in for Snapchat's API: records every call, answers the way Snapchat does, and can be
 // told to refuse one path.
-function fakeSnapchat(options: { refuse?: string; noPixel?: boolean; noProfile?: boolean } = {}) {
+function fakeSnapchat(
+  options: {
+    refuse?: string
+    noPixel?: boolean
+    noProfile?: boolean
+    // The campaign was already deleted in Ads Manager: Snapchat no longer answers for it.
+    campaignGone?: boolean
+    // Snapchat refuses to delete a campaign that is still there.
+    deleteRefused?: boolean
+  } = {}
+) {
   const calls: Array<{ method: string; path: string; body: unknown }> = []
   const ok = (listKey: string, itemKey: string, item: Record<string, unknown>) => ({
     request_status: "SUCCESS",
@@ -131,6 +141,12 @@ function fakeSnapchat(options: { refuse?: string; noPixel?: boolean; noProfile?:
     }
     if (method === "POST" && path === "/adsquads/squad-1/ads") {
       return reply(ok("ads", "ad", { id: "ad-1" }))
+    }
+    if (options.campaignGone && path === "/campaigns/camp-1") {
+      return reply({ request_status: "ERROR", debug_message: "Campaign not found" }, 400)
+    }
+    if (options.deleteRefused && method === "DELETE") {
+      return reply({ request_status: "ERROR", debug_message: "Try again later" }, 500)
     }
     if (method === "GET" && path === "/campaigns/camp-1") {
       return reply(
@@ -283,6 +299,21 @@ describe("publishing to Snapchat", () => {
       status: "ACTIVE",
       ad_account_id: ACCOUNT,
     })
+  })
+
+  it("deletes a campaign, and counts one already gone from Snapchat as deleted", async () => {
+    const there = fakeSnapchat()
+    await there.publisher.deleteCampaign({ accessToken: "token", campaignId: "camp-1" })
+    expect(there.calls).toEqual([{ method: "DELETE", path: "/campaigns/camp-1", body: null }])
+
+    const gone = fakeSnapchat({ campaignGone: true })
+    await gone.publisher.deleteCampaign({ accessToken: "token", campaignId: "camp-1" })
+
+    // Still on Snapchat and not deleted: the refusal stands.
+    const refused = fakeSnapchat({ deleteRefused: true })
+    await expect(
+      refused.publisher.deleteCampaign({ accessToken: "token", campaignId: "camp-1" })
+    ).rejects.toMatchObject({ reason: "Try again later" })
   })
 })
 
@@ -460,6 +491,53 @@ describe("the creative library and the publish record", () => {
 
     const on = await publishing.setActive(actor, started.id, true)
     expect(on.platformStatus).toBe("active")
+  })
+
+  it("removes a published campaign from Snapchat and from the list", async () => {
+    const { publishing, snap } = service()
+    const creative = await upload()
+    const started = await publishing.publish(actor, request(creative.id))
+    await publishing.settled()
+    // Not while it is still being published.
+    const setStatus = (status: string) =>
+      database.query(`update campaign_publications set status = $2 where id = $1`, [
+        started.id,
+        status,
+      ])
+    await setStatus("publishing")
+    await expect(publishing.remove(actor, started.id)).rejects.toMatchObject({
+      code: "PUBLICATION_STILL_PUBLISHING",
+    })
+    await setStatus("published")
+    // Not by another organization.
+    await expect(
+      publishing.remove({ ...actor, organizationId: OTHER_ORG }, started.id)
+    ).rejects.toMatchObject({ code: "PUBLICATION_NOT_FOUND" })
+
+    await publishing.remove(actor, started.id)
+    expect(snap.calls.at(-1)).toMatchObject({ method: "DELETE", path: "/campaigns/camp-1" })
+    expect(await publishing.list(ORG)).toEqual([])
+  })
+
+  it("keeps a campaign on the list when Snapchat refuses to delete it", async () => {
+    const { publishing } = service(fakeSnapchat({ deleteRefused: true }))
+    const creative = await upload()
+    const started = await publishing.publish(actor, request(creative.id))
+    await publishing.settled()
+    await expect(publishing.remove(actor, started.id)).rejects.toMatchObject({
+      code: "SNAPCHAT_REFUSED",
+    })
+    expect((await publishing.list(ORG)).map((entry) => entry.id)).toEqual([started.id])
+  })
+
+  it("takes a campaign already deleted on Snapchat off the list", async () => {
+    const { publishing } = service()
+    const creative = await upload()
+    const started = await publishing.publish(actor, request(creative.id))
+    await publishing.settled()
+    const gone = service(fakeSnapchat({ campaignGone: true }))
+    await gone.publishing.remove(actor, started.id)
+    expect(await publishing.list(ORG)).toEqual([])
   })
 
   it("refuses what it can judge itself before anything reaches Snapchat", async () => {

@@ -412,6 +412,35 @@ export class SnapchatCampaignPublisher {
     }
   }
 
+  // Deletes a published campaign from the account, with its ad set and ad. A campaign that is
+  // already gone (deleted in Ads Manager) counts as deleted: Snapchat no longer answers for it,
+  // so when the delete is refused the campaign is looked up, and only one that is still there
+  // makes the refusal stand.
+  async deleteCampaign(input: { accessToken: string; campaignId: string }): Promise<void> {
+    try {
+      await this.call("campaign", input.accessToken, "DELETE", `/campaigns/${input.campaignId}`)
+    } catch (error) {
+      if (error instanceof SnapchatPublishError && error.code === "SNAPCHAT_ACCESS_DENIED") {
+        throw error
+      }
+      const stillThere = await this.call(
+        "campaign",
+        input.accessToken,
+        "GET",
+        `/campaigns/${input.campaignId}`
+      ).then(
+        (body) => Array.isArray(body.campaigns) && body.campaigns.length > 0,
+        (lookup: unknown) => {
+          if (lookup instanceof SnapchatPublishError && lookup.code === "SNAPCHAT_ACCESS_DENIED") {
+            throw lookup
+          }
+          return false
+        }
+      )
+      if (stillThere) throw error
+    }
+  }
+
   // Switches a published campaign on or off. Snapchat updates a campaign by sending the whole
   // campaign back, so it is read first and returned with only its status changed.
   async setCampaignStatus(input: {

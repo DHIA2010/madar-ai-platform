@@ -216,4 +216,9 @@ export const campaignPublishingService = {
       active,
     })
   },
+
+  // Deletes the campaign on the platform and takes it off Madar's list.
+  async removePublication(id: string): Promise<void> {
+    await client.delete(path("publications", id))
+  },
 }
