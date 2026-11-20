@@ -47,6 +47,9 @@ interface MetaAdAccountApiRow {
 // -style Business Manager asset calls. Kept minimal on purpose -- broader scopes are exactly
 // what triggers a harder App Review.
 const DEFAULT_SCOPES = ["ads_read"]
+// Asked for on top of the above for the logins allowed to manage ads from Madar (see
+// MetaOAuthRepository.mayManageAds); campaigns/control-service.ts needs it to switch or delete.
+export const META_MANAGE_ADS_SCOPE = "ads_management"
 const META_GRAPH_API_VERSION = "v21.0"
 const META_AUTHORIZATION_URL = `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth`
 const META_TOKEN_URL = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/oauth/access_token`
@@ -314,6 +317,27 @@ async function exchangeForLongLivedToken(input: {
   return body
 }
 
+// What the person actually granted, which can be less than what was asked for (they may untick a
+// permission, and Meta leaves out one the app is not yet approved for). Null when Meta would
+// not say, so the caller falls back to what was asked.
+async function fetchGrantedScopes(
+  config: MetaOAuthServiceConfig,
+  accessToken: string
+): Promise<string[] | null> {
+  const client = new MetaGraphApiClient(accessToken, {
+    apiBaseUrl: config.graphApiBaseUrl,
+    maxRetries: 1,
+    minRequestIntervalMs: 100,
+  })
+  const result = await client
+    .getAllPages<{ permission?: string; status?: string }>("/me/permissions", {})
+    .catch(() => null)
+  if (!result || !result.ok) return null
+  return result.data
+    .filter((entry) => entry.status === "granted" && typeof entry.permission === "string")
+    .map((entry) => entry.permission as string)
+}
+
 async function fetchAdAccounts(config: MetaOAuthServiceConfig, accessToken: string) {
   const client = new MetaGraphApiClient(accessToken, {
     apiBaseUrl: config.graphApiBaseUrl,
@@ -380,6 +404,11 @@ export class MetaOAuthService {
       resolvedProject.projectId
     )
     const connectionId = existingConnection?.id ?? randomUUID()
+    const scopes =
+      !config.scopes.includes(META_MANAGE_ADS_SCOPE) &&
+      (await this.repository.mayManageAds(actor.userId))
+        ? [...config.scopes, META_MANAGE_ADS_SCOPE]
+        : config.scopes
     const state = createStateToken()
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
@@ -395,7 +424,7 @@ export class MetaOAuthService {
       providerAccountEmail: null,
       encryptedRefreshToken: existingConnection ? null : null,
       encryptedAccessToken: existingConnection ? null : null,
-      scopes: config.scopes,
+      scopes,
       tokenExpiresAt: null,
       status: "pending",
       connectionReference: input.connectionName ?? null,
@@ -413,7 +442,7 @@ export class MetaOAuthService {
       projectId: resolvedProject.projectId,
       userId: actor.userId,
       connectionId,
-      requestedScopes: config.scopes,
+      requestedScopes: scopes,
       redirectUri: config.redirectUri,
       expiresAt,
     })
@@ -422,7 +451,7 @@ export class MetaOAuthService {
     authorizationUrl.searchParams.set("client_id", config.clientId)
     authorizationUrl.searchParams.set("redirect_uri", config.redirectUri)
     authorizationUrl.searchParams.set("response_type", "code")
-    authorizationUrl.searchParams.set("scope", config.scopes.join(","))
+    authorizationUrl.searchParams.set("scope", scopes.join(","))
     authorizationUrl.searchParams.set("state", state)
 
     const startedAt = now.toISOString()
@@ -436,7 +465,7 @@ export class MetaOAuthService {
         projectId: resolvedProject.projectId,
         occurredAt: startedAt,
         payload: {
-          scopes: config.scopes,
+          scopes,
           authorizationEndpoint: config.authorizationUrl,
         },
       },
@@ -491,6 +520,11 @@ export class MetaOAuthService {
     const projectId = String(state.project_id)
     const now = new Date().toISOString()
 
+    // Kept on the connection: the campaigns list shows its switches only where the permission
+    // to manage ads was really granted.
+    const grantedScopes =
+      (await fetchGrantedScopes(config, longLivedToken.access_token)) ?? config.scopes
+
     const adAccounts = await fetchAdAccounts(config, longLivedToken.access_token)
     const discoveredAccounts = adAccounts.map((account) => ({
       customerId: account.id,
@@ -525,7 +559,7 @@ export class MetaOAuthService {
         providerAccountEmail: null,
         encryptedRefreshToken: null,
         encryptedAccessToken: encryptSecret(longLivedToken.access_token, config.tokenEncryptionKey),
-        scopes: config.scopes,
+        scopes: grantedScopes,
         tokenExpiresAt: longLivedToken.expires_in
           ? new Date(Date.now() + longLivedToken.expires_in * 1000).toISOString()
           : null,
@@ -559,7 +593,7 @@ export class MetaOAuthService {
             discoveredAccountCount: discoveredAccounts.length,
             tokenEndpoint: config.tokenUrl,
             discoveryEndpoint: `${config.graphApiBaseUrl.replace(/\/$/, "")}/me/adaccounts`,
-            scopes: config.scopes,
+            scopes: grantedScopes,
           },
         },
         "integration.meta_oauth.connected"

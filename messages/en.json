@@ -7788,8 +7788,8 @@
         "cancel": "Cancel",
         "deleted": "Deleted from the ad platform",
         "deleteFailed": "Could not delete. Try again.",
-        "notSupported": "Soon",
-        "notSupportedHint": "Switching and deleting from Madar works for Snapchat, TikTok and Google today; Meta is coming."
+        "notSupported": "Read-only",
+        "notSupportedHint": "This connection is read-only for now, so it cannot be switched or deleted from Madar."
       }
     },
     "performanceChart": {

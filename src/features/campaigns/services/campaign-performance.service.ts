@@ -87,6 +87,8 @@ export interface CampaignPerformanceRow {
   checkoutStarted: number
   purchases: number
   purchaseValue: number
+  // Meta only: whether this row's connection may change ads.
+  manageable?: boolean
 }
 
 export interface CampaignPerformancePlatformRow extends CampaignPerformanceRow {
@@ -274,7 +276,7 @@ const client = createHttpDataClient({
 export type CampaignControlLevel = "campaign" | "adGroup" | "ad"
 
 // The platforms whose saved connection may change ads: Snapchat, TikTok and Google Ads (its three
-// kinds of campaign). Meta is read-only for now.
+// kinds of campaign). Meta depends on the connection -- see canControlCampaignRow.
 const CONTROLLABLE_PLATFORMS = new Set<string>([
   "Snapchat",
   "TikTok",
@@ -283,8 +285,12 @@ const CONTROLLABLE_PLATFORMS = new Set<string>([
   "YouTube",
 ])
 
-export function canControlCampaignRow(row: Pick<CampaignPerformanceRow, "platform" | "level">) {
-  return CONTROLLABLE_PLATFORMS.has(row.platform) && row.level !== "keyword"
+export function canControlCampaignRow(
+  row: Pick<CampaignPerformanceRow, "platform" | "level" | "manageable">
+) {
+  if (row.level === "keyword") return false
+  // Meta: only a connection that was granted the permission to manage ads (the row says so).
+  return CONTROLLABLE_PLATFORMS.has(row.platform) || (row.platform === "Meta" && !!row.manageable)
 }
 
 // Whether the row's own switch is on, whatever word its platform uses for "off".

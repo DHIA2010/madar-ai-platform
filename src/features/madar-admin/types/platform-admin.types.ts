@@ -219,6 +219,7 @@ export interface AdminPlatformSettings {
   calcomWebhookSecret: string
   quoteTerms: string
   invoiceTerms: string
+  metaManageAdsEmails: string
 }
 
 export type AdminCouponStatus = "active" | "disabled" | "expired" | "exhausted"

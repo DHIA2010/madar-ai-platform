@@ -24,6 +24,11 @@ export interface PlatformSettings {
   // Terms and conditions printed on every quote / invoice (each can be changed for one document).
   quoteTerms: string
   invoiceTerms: string
+  // Madar logins (emails, one per line) whose Meta connection also asks for the permission to
+  // manage ads, so campaigns can be switched or deleted from Madar. A single "*" means everyone.
+  // Kept to named accounts until Meta's App Review grants the permission to the app: before
+  // that, Meta only gives it to people with a role on Madar's Meta app.
+  metaManageAdsEmails: string
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -42,6 +47,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   calcomWebhookSecret: "",
   quoteTerms: "",
   invoiceTerms: "",
+  metaManageAdsEmails: "",
 }
 
 // The subset anyone may read (before signing in, too): what the login/sign-up pages and the

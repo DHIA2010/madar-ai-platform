@@ -1,4 +1,4 @@
-// The calls that switch or delete a campaign, an ad group or an ad on TikTok and on Google Ads,
+// The calls that switch or delete a campaign, an ad group or an ad on TikTok, Google Ads and Meta,
 // kept apart from control-service.ts so each can be stood in for in tests. (Snapchat's live in
 // publishing/snapchat-publisher.ts, next to the calls that publish.)
 
@@ -7,7 +7,7 @@ export type ControlLevel = "campaign" | "adGroup" | "ad"
 // A refusal from the ad platform, with its own words.
 export class PlatformControlError extends Error {
   constructor(
-    readonly platform: "tiktok" | "google",
+    readonly platform: "tiktok" | "google" | "meta",
     readonly reason: string,
     readonly denied = false
   ) {
@@ -76,6 +76,63 @@ export class TikTokCampaignControl {
         denied
       )
     }
+  }
+}
+
+// ---- Meta ----
+// A campaign, an ad set and an ad are each addressed by their own id on the Graph API: a POST
+// with the new status switches it, a DELETE removes it (with what is under it). Both need the
+// "ads_management" permission -- a connection granted only "ads_read" is refused, which is
+// reported as a denial so the screen can say the connection is read-only.
+
+const META_DEFAULT_BASE = "https://graph.facebook.com/v21.0"
+// Meta's error codes for a missing permission (10, and the 200-299 range).
+const metaDenied = (code: unknown) =>
+  typeof code === "number" && (code === 10 || (code >= 200 && code <= 299))
+
+export class MetaCampaignControl {
+  private readonly base: string
+
+  constructor(private readonly options: { apiBaseUrl?: string; fetch?: typeof fetch } = {}) {
+    this.base = (
+      options.apiBaseUrl ??
+      process.env.IDENTITY_PLATFORM_META_GRAPH_API_BASE_URL ??
+      META_DEFAULT_BASE
+    ).replace(/\/$/, "")
+  }
+
+  private async send(accessToken: string, id: string, method: "POST" | "DELETE", status?: string) {
+    const response = await (this.options.fetch ?? fetch)(`${this.base}/${encodeURIComponent(id)}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        accept: "application/json",
+        ...(status ? { "content-type": "application/json" } : {}),
+      },
+      body: status ? JSON.stringify({ status }) : undefined,
+    })
+    const text = await response.text()
+    let body: { success?: boolean; error?: { message?: string; code?: number } } = {}
+    try {
+      body = text ? (JSON.parse(text) as typeof body) : {}
+    } catch {
+      body = { error: { message: text.slice(0, 300) } }
+    }
+    if (!response.ok || body.error || body.success === false) {
+      throw new PlatformControlError(
+        "meta",
+        String(body.error?.message ?? `request failed (${response.status})`).slice(0, 400),
+        response.status === 401 || response.status === 403 || metaDenied(body.error?.code)
+      )
+    }
+  }
+
+  async setStatus(input: { accessToken: string; id: string; active: boolean }): Promise<void> {
+    await this.send(input.accessToken, input.id, "POST", input.active ? "ACTIVE" : "PAUSED")
+  }
+
+  async remove(input: { accessToken: string; id: string }): Promise<void> {
+    await this.send(input.accessToken, input.id, "DELETE")
   }
 }
 

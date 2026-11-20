@@ -777,9 +777,9 @@ describe("the creative library and the publish record", () => {
       await expect(service.remove(actor, rowId("ad-1"), "campaign")).rejects.toMatchObject({
         code: "CAMPAIGN_CONTROL_NOT_FOUND",
       })
-      // Meta, and a platform this service was not given.
+      // An unknown source, and a platform this service was not given.
       await expect(
-        service.setActive(actor, "meta_ads:x:y:z", "campaign", true)
+        service.setActive(actor, "other_ads:x:y:z", "campaign", true)
       ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_SUPPORTED" })
       await expect(
         service.setActive(actor, "google_ads:x:y:z", "campaign", true)

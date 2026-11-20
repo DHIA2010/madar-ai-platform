@@ -15,7 +15,8 @@ import { SnapchatPublishError, type SnapchatEntityLevel } from "./publishing/sna
 // this acts on the platform itself and then corrects Madar's own copy, so the list is right at
 // once instead of after the next sync.
 //
-// Snapchat, TikTok and Google Ads: the three whose saved connections are allowed to change ads.
+// Snapchat, TikTok, Google Ads and Meta. (Meta only answers once its connection has been granted
+// the permission to manage ads; until then it refuses, and the refusal is passed on.)
 // A row's id says which one it is ("<source>:<connection>:<account>:<id>"), and everything is
 // checked against the organization's own synced rows before the platform is asked for anything.
 
@@ -50,6 +51,11 @@ export interface GoogleControl {
   remove(target: GoogleControlTarget): Promise<void>
 }
 
+export interface MetaControl {
+  setStatus(input: { accessToken: string; id: string; active: boolean }): Promise<void>
+  remove(input: { accessToken: string; id: string }): Promise<void>
+}
+
 interface TokenAccess {
   resolveAccessToken(connectionId: string): Promise<string>
 }
@@ -58,6 +64,7 @@ export interface CampaignControlPlatforms {
   snapchat?: { access: TokenAccess; api: SnapchatControl }
   tiktok?: { access: TokenAccess; api: TikTokControl }
   google?: { api: GoogleControl }
+  meta?: { access: TokenAccess; api: MetaControl }
 }
 
 const SNAPCHAT_LEVEL: Record<ControlLevel, SnapchatEntityLevel> = {
@@ -73,6 +80,11 @@ const SNAPCHAT_RECORD: Record<ControlLevel, string> = {
 const TIKTOK_RECORD: Record<ControlLevel, string> = {
   campaign: "campaigns",
   adGroup: "adgroups",
+  ad: "ads",
+}
+const META_RECORD: Record<ControlLevel, string> = {
+  campaign: "campaigns",
+  adGroup: "adsets",
   ad: "ads",
 }
 const GOOGLE_TABLE: Record<ControlLevel, { table: string; idColumn: string }> = {
@@ -170,6 +182,7 @@ export class CampaignControlService {
     if (target.source === "snapchat_ads") return this.snapchatSetActive(actor, target, active)
     if (target.source === "tiktok_ads") return this.tiktokSetActive(actor, target, active)
     if (target.source === "google_ads") return this.googleSetActive(actor, target, active)
+    if (target.source === "meta_ads") return this.metaSetActive(actor, target, active)
     throw notSupported()
   }
 
@@ -178,10 +191,11 @@ export class CampaignControlService {
     if (target.source === "snapchat_ads") return this.snapchatRemove(actor, target)
     if (target.source === "tiktok_ads") return this.tiktokRemove(actor, target)
     if (target.source === "google_ads") return this.googleRemove(actor, target)
+    if (target.source === "meta_ads") return this.metaRemove(actor, target)
     throw notSupported()
   }
 
-  // ---- shared by Snapchat and TikTok: both keep their synced rows as records with a payload ----
+  // ---- shared by Snapchat, TikTok and Meta: all three keep their synced rows as records with a payload ----
 
   // The organization's own connection, connected and (when a branch is chosen) of that branch.
   private async ownConnection(actor: AuthenticatedActor, table: string, connectionId: string) {
@@ -367,6 +381,52 @@ export class CampaignControlService {
       ads: "ads",
       campaignKey: "campaign_id",
       adGroupKey: "adgroup_id",
+    })
+  }
+
+  // ---- Meta ----
+
+  private meta() {
+    if (!this.platforms.meta) throw notSupported()
+    return this.platforms.meta
+  }
+
+  private async metaSetActive(actor: AuthenticatedActor, target: Target, active: boolean) {
+    const { access, api } = this.meta()
+    await this.ownConnection(actor, "meta_oauth_connections", target.connectionId)
+    const own = await this.record("meta_records", target, META_RECORD[target.level])
+    await onPlatform(async () =>
+      api.setStatus({
+        accessToken: await access.resolveAccessToken(target.connectionId),
+        id: target.externalId,
+        active,
+      })
+    )
+    const status = active ? "ACTIVE" : "PAUSED"
+    // The finer state Meta reported at the last sync follows the switch until the next one.
+    await this.savePayload("meta_records", own.id, {
+      ...parse(own.payload),
+      status,
+      effective_status: status,
+    })
+    return { id: target.rowId, status }
+  }
+
+  private async metaRemove(actor: AuthenticatedActor, target: Target) {
+    const { access, api } = this.meta()
+    await this.ownConnection(actor, "meta_oauth_connections", target.connectionId)
+    const own = await this.record("meta_records", target, META_RECORD[target.level])
+    await onPlatform(async () =>
+      api.remove({
+        accessToken: await access.resolveAccessToken(target.connectionId),
+        id: target.externalId,
+      })
+    )
+    await this.dropRecords("meta_records", target, own, {
+      adGroups: "adsets",
+      ads: "ads",
+      campaignKey: "campaign_id",
+      adGroupKey: "adset_id",
     })
   }
 

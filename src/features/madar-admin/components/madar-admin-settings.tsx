@@ -31,6 +31,7 @@ type GeneralSettings = Pick<
   | "calcomWebhookSecret"
   | "quoteTerms"
   | "invoiceTerms"
+  | "metaManageAdsEmails"
 >
 
 // Platform-wide settings, saved to the backend and applied immediately: the announcement banner
@@ -58,6 +59,7 @@ export function MadarAdminSettings() {
           calcomWebhookSecret: loaded.calcomWebhookSecret ?? "",
           quoteTerms: loaded.quoteTerms ?? "",
           invoiceTerms: loaded.invoiceTerms ?? "",
+          metaManageAdsEmails: loaded.metaManageAdsEmails ?? "",
         })
       )
       .catch(() => toast.error("تعذر تحميل إعدادات المنصة."))
@@ -277,6 +279,25 @@ export function MadarAdminSettings() {
             />
           </div>
         </div>
+      </AppCard>
+
+      <AppCard className="rounded-[14px] border-border bg-white p-5 shadow-none">
+        <h2 className="text-base font-bold text-foreground">إدارة إعلانات ميتا من مدار</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          الحسابات المكتوبة هنا يُطلب لها عند ربط ميتا إذن إدارة الإعلانات، فتظهر لها أزرار التشغيل
+          والإيقاف والحذف في قائمة الحملات. اكتب بريد الدخول إلى مدار، بريدًا في كل سطر. بعد موافقة
+          ميتا على الإذن للتطبيق اكتب * ليشمل الجميع. من كان مربوطًا من قبل يعيد ربط ميتا مرة واحدة.
+        </p>
+        <textarea
+          dir="ltr"
+          rows={3}
+          spellCheck={false}
+          placeholder="name@example.com"
+          aria-label="حسابات إدارة إعلانات ميتا"
+          className="mt-3 w-full rounded-[10px] border border-border bg-white px-3 py-2.5 text-sm outline-none focus:border-[#1d4fd8]"
+          value={settings?.metaManageAdsEmails ?? ""}
+          onChange={(event) => update("metaManageAdsEmails", event.target.value)}
+        />
       </AppCard>
 
       <div className="flex justify-end">

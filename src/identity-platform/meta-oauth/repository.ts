@@ -59,6 +59,29 @@ export class MetaOAuthRepository
 {
   constructor(private readonly db: PostgresDatabase) {}
 
+  // Whether this Madar login is one whose Meta connection asks for the permission to manage ads
+  // (platform setting metaManageAdsEmails: emails one per line, or "*" for everyone).
+  async mayManageAds(userId: string): Promise<boolean> {
+    const stored = await this.db.query<{ settings: unknown }>(
+      "SELECT settings FROM platform_settings WHERE id = 1"
+    )
+    const raw = stored.rows[0]?.settings
+    const settings = (typeof raw === "string" ? JSON.parse(raw) : (raw ?? {})) as {
+      metaManageAdsEmails?: unknown
+    }
+    const allowed = String(settings.metaManageAdsEmails ?? "")
+      .split(/[\s,;]+/)
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean)
+    if (allowed.length === 0) return false
+    if (allowed.includes("*")) return true
+    const user = await this.db.query<{ email: string }>("SELECT email FROM users WHERE id = $1", [
+      userId,
+    ])
+    const email = user.rows[0]?.email?.toLowerCase()
+    return Boolean(email && allowed.includes(email))
+  }
+
   async withTransaction<T>(work: () => Promise<T>) {
     return this.db.withTransaction(work)
   }

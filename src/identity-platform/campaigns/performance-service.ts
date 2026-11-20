@@ -73,6 +73,10 @@ export interface CampaignPerformanceRow {
   // What the campaign or ad set may spend per day, in the row's currency; null or absent when
   // the platform row carries no daily budget.
   dailyBudget?: number | null
+  // Whether the row can be switched or deleted from Madar. Only said where it depends on the
+  // connection (Meta: true once the permission to manage ads was granted); for the other
+  // platforms the screen knows from the platform alone.
+  manageable?: boolean
 }
 
 export interface OtherCurrencyTotal {
@@ -618,6 +622,20 @@ async function fetchGoogleLeafRows(
 // division of labor as orders/service.ts's per-provider normalize functions, just applied to
 // a group of rows instead of one row at a time.
 
+// Whether the Meta connection behind a row was granted the permission to manage ads.
+function metaManageable(row: { scopes?: unknown }): boolean {
+  const scopes = typeof row.scopes === "string" ? safeJsonArray(row.scopes) : row.scopes
+  return Array.isArray(scopes) && scopes.includes("ads_management")
+}
+
+function safeJsonArray(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return null
+  }
+}
+
 interface MetaRawRecordRow {
   connection_id: string
   workspace_id: string | null
@@ -627,6 +645,7 @@ interface MetaRawRecordRow {
   record_date: string
   payload: Record<string, unknown>
   currency_code?: string | null
+  scopes?: unknown
   [key: string]: unknown
 }
 
@@ -667,7 +686,7 @@ async function fetchMetaRawRecords(
   const result = await db.query<MetaRawRecordRow>(
     `
     SELECT r.connection_id, conn.workspace_id, r.customer_id, r.entity_type, r.entity_id,
-           r.record_date, r.payload, ma.currency_code
+           r.record_date, r.payload, ma.currency_code, conn.scopes
     FROM meta_records r
     JOIN meta_oauth_connections conn ON conn.id = r.connection_id
     -- Real per-account currency, captured from Meta's Graph API (see meta-oauth/service.ts) but
@@ -798,6 +817,7 @@ async function fetchMetaCampaignRows(
         activityDate: reduced.latestDate,
         currency: meta.currency_code ?? null,
       }),
+      manageable: metaManageable(meta),
       spend: reduced.spend,
       revenue: reduced.purchaseValue,
       clicks: reduced.clicks,
@@ -864,6 +884,7 @@ async function fetchMetaAdGroupRows(
           objective: null,
           activityDate: reduced.latestDate,
         }),
+        manageable: metaManageable(meta),
         spend: reduced.spend,
         revenue: reduced.purchaseValue,
         clicks: reduced.clicks,
@@ -926,6 +947,7 @@ async function fetchMetaAdRows(
           objective: null,
           activityDate: reduced.latestDate,
         }),
+        manageable: metaManageable(meta),
         spend: reduced.spend,
         revenue: reduced.purchaseValue,
         clicks: reduced.clicks,

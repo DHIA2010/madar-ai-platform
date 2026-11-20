@@ -12,12 +12,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import {
   GoogleCampaignControl,
+  MetaCampaignControl,
   TikTokCampaignControl,
   type GoogleAdsMutator,
 } from "../campaigns/control-platforms"
 import { CampaignControlService } from "../campaigns/control-service"
+import { CampaignsPerformanceAggregationService } from "../campaigns/performance-service"
 import { GoogleAdsMutateError } from "../google-ads/client"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { MetaOAuthRepository } from "../meta-oauth/repository"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 
 const ORG = "20000000-0000-0000-0000-000000000001"
@@ -25,6 +28,8 @@ const OTHER_ORG = "20000000-0000-0000-0000-000000000002"
 const USER = "10000000-0000-0000-0000-000000000001"
 const TIKTOK = "40000000-0000-0000-0000-000000000002"
 const GOOGLE = "40000000-0000-0000-0000-000000000003"
+const META = "40000000-0000-0000-0000-000000000004"
+const META_ACCOUNT = "act_123"
 const ADVERTISER = "7700000000000000001"
 const CUSTOMER = "2739111244"
 
@@ -69,7 +74,7 @@ function fakeGoogle(refuse?: GoogleAdsMutateError) {
   return { calls, api: new GoogleCampaignControl(client) }
 }
 
-describe("the campaigns list controls on TikTok and Google Ads", () => {
+describe("the campaigns list controls on TikTok, Meta and Google Ads", () => {
   let database: PostgresDatabase
 
   beforeEach(async () => {
@@ -96,6 +101,12 @@ describe("the campaigns list controls on TikTok and Google Ads", () => {
          (id, organization_id, project_id, status, created_by_user_id, updated_by_user_id)
        values ($1, $2, $3, 'connected', $4, $4)`,
       [TIKTOK, ORG, randomUUID(), USER]
+    )
+    await database.query(
+      `insert into meta_oauth_connections
+         (id, organization_id, project_id, status, created_by_user_id, updated_by_user_id)
+       values ($1, $2, $3, 'connected', $4, $4)`,
+      [META, ORG, randomUUID(), USER]
     )
     const project = randomUUID()
     const oauthAccount = randomUUID()
@@ -226,6 +237,135 @@ describe("the campaigns list controls on TikTok and Google Ads", () => {
       service.remove(actor, `tiktok_ads:${TIKTOK}:999:c1`, "campaign")
     ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_FOUND" })
     expect(fake.calls).toEqual([])
+  })
+
+  // ---- Meta ----
+
+  // Meta's Graph API stood in for: records each call and answers as told.
+  function fakeMeta(answer: object = { success: true }, status = 200) {
+    const calls: Array<{ method: string; path: string; body: unknown; auth: string | null }> = []
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        method: init?.method ?? "GET",
+        path: new URL(String(input)).pathname,
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+        auth: new Headers(init?.headers).get("authorization"),
+      })
+      return new Response(JSON.stringify(answer), { status })
+    }) as typeof fetch
+    return {
+      calls,
+      api: new MetaCampaignControl({ apiBaseUrl: "https://meta.test/v21.0", fetch: fetchImpl }),
+    }
+  }
+  const metaRow = (id: string) => `meta_ads:${META}:${META_ACCOUNT}:${id}`
+  const metaRecord = (type: string, id: string, payload: object) =>
+    database.query(
+      `insert into meta_records
+         (id, connection_id, customer_id, entity_type, entity_id, record_date, payload)
+       values ($1, $2, $3, $4, $5, '2026-01-10', $6::jsonb)`,
+      [randomUUID(), META, META_ACCOUNT, type, id, JSON.stringify(payload)]
+    )
+  const metaStored = async (type: string) =>
+    (
+      await database.query<{ entity_id: string; payload: unknown }>(
+        `select entity_id, payload from meta_records where entity_type = $1`,
+        [type]
+      )
+    ).rows
+      .map((row) => {
+        const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload
+        return [row.entity_id, payload.status, payload.effective_status]
+      })
+      .sort()
+  const seedMeta = async () => {
+    await metaRecord("campaigns", "m1", { status: "PAUSED", effective_status: "PAUSED" })
+    await metaRecord("campaigns", "m2", { status: "ACTIVE", effective_status: "ACTIVE" })
+    await metaRecord("adsets", "s1", { status: "ACTIVE", campaign_id: "m1" })
+    await metaRecord("adsets", "s2", { status: "ACTIVE", campaign_id: "m2" })
+    await metaRecord("ads", "d1", { status: "ACTIVE", adset_id: "s1" })
+    await metaRecord("ads", "d2", { status: "ACTIVE", adset_id: "s2" })
+  }
+  const metaService = (fake = fakeMeta()) => ({
+    fake,
+    service: new CampaignControlService(database, {
+      meta: { access: { resolveAccessToken: async () => "meta-token" }, api: fake.api },
+    }),
+  })
+
+  it("switches and deletes on Meta by the thing's own id, and corrects Madar's copy", async () => {
+    await seedMeta()
+    const { service, fake } = metaService()
+    expect(await service.setActive(actor, metaRow("m1"), "campaign", true)).toEqual({
+      id: metaRow("m1"),
+      status: "ACTIVE",
+    })
+    await service.setActive(actor, metaRow("s1"), "adGroup", false)
+    await service.remove(actor, metaRow("m1"), "campaign")
+    expect(fake.calls).toEqual([
+      { method: "POST", path: "/v21.0/m1", body: { status: "ACTIVE" }, auth: "Bearer meta-token" },
+      { method: "POST", path: "/v21.0/s1", body: { status: "PAUSED" }, auth: "Bearer meta-token" },
+      { method: "DELETE", path: "/v21.0/m1", body: null, auth: "Bearer meta-token" },
+    ])
+    expect(await metaStored("campaigns")).toEqual([["m2", "ACTIVE", "ACTIVE"]])
+    expect((await metaStored("adsets")).map((row) => row[0])).toEqual(["s2"])
+    expect((await metaStored("ads")).map((row) => row[0])).toEqual(["d2"])
+  })
+
+  it("reports a read-only Meta connection as a denial and changes nothing", async () => {
+    await seedMeta()
+    const readOnly = metaService(
+      fakeMeta({ error: { message: "(#200) Requires ads_management permission", code: 200 } }, 400)
+    )
+    await expect(
+      readOnly.service.setActive(actor, metaRow("m1"), "campaign", true)
+    ).rejects.toMatchObject({ code: "PLATFORM_ACCESS_DENIED" })
+    await expect(readOnly.service.remove(actor, metaRow("d1"), "ad")).rejects.toMatchObject({
+      code: "PLATFORM_ACCESS_DENIED",
+    })
+    expect(await metaStored("campaigns")).toContainEqual(["m1", "PAUSED", "PAUSED"])
+    expect(await metaStored("ads")).toHaveLength(2)
+
+    // Another organization's row is never sent to Meta at all.
+    const { service, fake } = metaService()
+    await expect(
+      service.setActive({ ...actor, organizationId: OTHER_ORG }, metaRow("m1"), "campaign", true)
+    ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_FOUND" })
+    expect(fake.calls).toEqual([])
+  })
+
+  it("marks Meta rows as changeable only when the connection was granted the permission", async () => {
+    await seedMeta()
+    const list = async () =>
+      (
+        await new CampaignsPerformanceAggregationService(database).listCampaigns(actor, {
+          startDate: "2026-01-01",
+          endDate: "2026-01-31",
+        })
+      ).items.map((row) => [row.id, row.manageable])
+    expect(await list()).toContainEqual([metaRow("m1"), false])
+    await database.query(`update meta_oauth_connections set scopes = $2::jsonb where id = $1`, [
+      META,
+      JSON.stringify(["ads_read", "ads_management"]),
+    ])
+    expect(await list()).toContainEqual([metaRow("m1"), true])
+  })
+
+  it("asks Meta for the manage permission only for the logins named in the platform setting", async () => {
+    const repository = new MetaOAuthRepository(database)
+    const allow = (value: string) =>
+      database.query(
+        `insert into platform_settings (id, settings, updated_at) values (1, $1::jsonb, now())
+         on conflict (id) do update set settings = excluded.settings`,
+        [JSON.stringify({ metaManageAdsEmails: value })]
+      )
+    expect(await repository.mayManageAds(USER)).toBe(false)
+    await allow("someone@else.com")
+    expect(await repository.mayManageAds(USER)).toBe(false)
+    await allow("someone@else.com\n O@X.com ")
+    expect(await repository.mayManageAds(USER)).toBe(true)
+    await allow("*")
+    expect(await repository.mayManageAds(randomUUID())).toBe(true)
   })
 
   // ---- Google Ads ----

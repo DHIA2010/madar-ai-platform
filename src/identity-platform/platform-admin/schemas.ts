@@ -138,6 +138,7 @@ export const platformSettingsPatchSchema = z
     calcomWebhookSecret: z.string().trim().max(200),
     quoteTerms: z.string().trim().max(5000),
     invoiceTerms: z.string().trim().max(5000),
+    metaManageAdsEmails: z.string().trim().max(2000),
   })
   .partial()
 

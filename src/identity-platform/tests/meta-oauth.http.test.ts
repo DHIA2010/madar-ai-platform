@@ -24,6 +24,8 @@ function mockMetaGraphResponses(input: {
   accessToken: string
   longLivedToken: string
   adAccounts: Array<{ id: string; name: string; account_status?: number; currency?: string }>
+  // What the person granted in Meta's window (answers /me/permissions); absent = Meta won't say.
+  permissions?: Array<{ permission: string; status: string }>
 }) {
   const nativeFetch = globalThis.fetch
 
@@ -50,6 +52,13 @@ function mockMetaGraphResponses(input: {
         JSON.stringify({ access_token: input.accessToken, token_type: "bearer", expires_in: 5400 }),
         { status: 200, headers: { "content-type": "application/json" } }
       )
+    }
+
+    if (url.includes("/me/permissions") && input.permissions) {
+      return new Response(JSON.stringify({ data: input.permissions }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
     }
 
     if (url.includes("/me/adaccounts")) {
@@ -269,6 +278,75 @@ describe("meta oauth http flow", () => {
     // Real currency requested from the Graph API and persisted -- previously hardcoded to null
     // regardless of what Meta returned, which silently broke currency-aware spend conversion.
     expect(accountRows.rows[0]?.currency_code).toBe("SAR")
+  })
+
+  it("asks for the permission to manage ads only for a login named in the platform setting, and keeps what Meta granted", async () => {
+    const { login, actor } = await registerAndProvisionOrg("meta-manage@madar.test", "Meta Manage")
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000000420"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000000421",
+      label: "Meta Manage",
+    })
+    await database.query(
+      `insert into platform_settings (id, settings, updated_at) values (1, $1::jsonb, now())
+       on conflict (id) do update set settings = excluded.settings`,
+      [JSON.stringify({ metaManageAdsEmails: "meta-manage@madar.test" })]
+    )
+    const connect = async (permissions: Array<{ permission: string; status: string }>) => {
+      vi.restoreAllMocks()
+      mockMetaGraphResponses({
+        baseUrl,
+        accessToken: "short",
+        longLivedToken: "long",
+        adAccounts: [{ id: "act_1", name: "Account", account_status: 1, currency: "SAR" }],
+        permissions,
+      })
+      const startResponse = await fetch(`${baseUrl}/v1/integrations/meta-ads/oauth/start`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${login.session.accessToken}`,
+          "x-workspace-id": workspaceId,
+        },
+        body: JSON.stringify({ workspaceId, connectionName: "Meta Ads Account" }),
+      })
+      const started = (await startResponse.json()) as {
+        authorizationUrl: string
+        state: string
+        connectionId: string
+      }
+      await fetch(
+        `${baseUrl}/v1/integrations/meta-ads/oauth/callback?state=${encodeURIComponent(started.state)}&code=c`,
+        { redirect: "manual" }
+      )
+      const stored = await database.query<{ scopes: unknown }>(
+        `select scopes from meta_oauth_connections where id = $1`,
+        [started.connectionId]
+      )
+      const scopes = stored.rows[0]?.scopes
+      return {
+        asked: new URL(started.authorizationUrl).searchParams.get("scope"),
+        kept: typeof scopes === "string" ? JSON.parse(scopes) : scopes,
+      }
+    }
+
+    // Asked for, and granted.
+    expect(
+      await connect([
+        { permission: "ads_read", status: "granted" },
+        { permission: "ads_management", status: "granted" },
+      ])
+    ).toEqual({ asked: "ads_read,ads_management", kept: ["ads_read", "ads_management"] })
+    // Asked for, but the person unticked it: the connection stays read-only.
+    expect(
+      await connect([
+        { permission: "ads_read", status: "granted" },
+        { permission: "ads_management", status: "declined" },
+      ])
+    ).toEqual({ asked: "ads_read,ads_management", kept: ["ads_read"] })
   })
 
   it("workspace isolation: a connection created in one workspace is not accessible from a different workspace in the same organization", async () => {

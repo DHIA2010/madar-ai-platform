@@ -16,6 +16,7 @@ import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
 import { SnapchatOAuthService } from "../../snapchat-oauth/service"
 import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-deletion-service"
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
+import { MetaOAuthService } from "../../meta-oauth/service"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
 import { parseJsonPreservingBigInts } from "../../salla-oauth/parse-json-preserving-big-ints"
 import { requirePlatformPermission } from "../../platform-admin/guard"
@@ -172,7 +173,11 @@ import {
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
 import { CampaignCheckupService } from "../../campaigns/checkup"
-import { GoogleCampaignControl, TikTokCampaignControl } from "../../campaigns/control-platforms"
+import {
+  GoogleCampaignControl,
+  MetaCampaignControl,
+  TikTokCampaignControl,
+} from "../../campaigns/control-platforms"
 import { CampaignControlService } from "../../campaigns/control-service"
 import { GoogleAdsAuthProvider } from "../../google-ads/auth-provider"
 import { GoogleAdsClient } from "../../google-ads/client"
@@ -1312,6 +1317,13 @@ export function createIdentityApiServer(
             new TikTokAdsOAuthRepository(container.infrastructure.database)
           ),
           api: new TikTokCampaignControl(),
+        },
+        // Ready for when Meta grants Madar the permission to manage ads: the connection asks
+        // for read access only today (meta-oauth/service.ts), so Meta refuses these calls and
+        // the campaigns list keeps Meta's controls hidden.
+        meta: {
+          access: new MetaOAuthService(new MetaOAuthRepository(container.infrastructure.database)),
+          api: new MetaCampaignControl(),
         },
         // The same settings the Google Ads sync is built with (dependency-injection/container.ts).
         google: {
