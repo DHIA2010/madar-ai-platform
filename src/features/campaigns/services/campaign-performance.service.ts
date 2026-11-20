@@ -244,6 +244,10 @@ export interface CampaignJourneyRow {
 // Avoids the slash-prefix literal lint rule (same trick as order-list.service.ts) -- this is a
 // real backend API path, not a frontend page route.
 const PERFORMANCE_ENDPOINT = ["", "v1", "campaigns", "performance"].join(String.fromCharCode(47))
+const CONTROL_ENDPOINT = {
+  status: ["", "v1", "campaigns", "control", "status"].join(String.fromCharCode(47)),
+  remove: ["", "v1", "campaigns", "control", "delete"].join(String.fromCharCode(47)),
+}
 
 function buildQuery(
   params?: CampaignPerformanceQueryParams & { page?: number; pageSize?: number }
@@ -266,6 +270,13 @@ const client = createHttpDataClient({
   getSession: () => sessionManager.restore(),
   getWorkspaceId: getWorkspaceIdFromStorage,
 })
+
+export type CampaignControlLevel = "campaign" | "adGroup" | "ad"
+
+// Only Snapchat's saved connection may change ads today; the other platforms are read-only.
+export function canControlCampaignRow(row: Pick<CampaignPerformanceRow, "platform" | "level">) {
+  return row.platform === "Snapchat" && row.level !== "keyword"
+}
 
 export const campaignPerformanceService = {
   async getSummary(params?: CampaignPerformanceQueryParams): Promise<CampaignPerformanceSummary> {
@@ -326,6 +337,26 @@ export const campaignPerformanceService = {
   ): Promise<{ items: CampaignJourneyRow[] }> {
     return client.get<{ items: CampaignJourneyRow[] }>(
       `${PERFORMANCE_ENDPOINT}/journey${buildQuery(params)}`
+    )
+  },
+
+  // The list's own controls (backend: campaigns/control-service.ts): switch a campaign, ad
+  // group or ad on or off on its ad platform, or delete it there.
+  async setActive(
+    id: string,
+    level: CampaignControlLevel,
+    active: boolean
+  ): Promise<{ id: string; status: string }> {
+    return client.post<
+      { id: string; level: CampaignControlLevel; active: boolean },
+      { id: string; status: string }
+    >(CONTROL_ENDPOINT.status, { id, level, active })
+  },
+
+  async remove(id: string, level: CampaignControlLevel): Promise<void> {
+    await client.post<{ id: string; level: CampaignControlLevel }, { ok: boolean }>(
+      CONTROL_ENDPOINT.remove,
+      { id, level }
     )
   },
 

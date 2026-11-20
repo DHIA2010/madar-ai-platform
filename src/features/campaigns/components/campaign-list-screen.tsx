@@ -1,23 +1,27 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useLocale, useTranslations } from "next-intl"
 import { subDays } from "date-fns"
-import { Plus, Search } from "lucide-react"
+import { ChevronDown, Loader2, Plus, Search, Trash2 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
+import { toast } from "sonner"
 
+import { AppError } from "@/lib/app-errors"
 import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-import { AppDateRangeFilter, AppSearchInput } from "@/components/app"
+import { AppConfirmDialog, AppDateRangeFilter, AppSearchInput, AppSwitch } from "@/components/app"
 
 import { Can } from "@/features/authentication"
 
 import {
+  type CampaignControlLevel,
   type CampaignPerformanceRow,
   campaignPerformanceService,
+  canControlCampaignRow,
 } from "../services/campaign-performance.service"
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { campaignStatusBucket, campaignStatusPill } from "./campaign-status-pill"
@@ -52,9 +56,14 @@ function formatMoney(value: number, currency: string | null | undefined, locale:
   return locale === "ar" ? `${amount} ${code}` : `${code} ${amount}`
 }
 
+// What is under a row once it is opened: still loading, failed, or its rows.
+type Children = "loading" | "error" | CampaignPerformanceRow[]
+
 // The campaigns list: every campaign on the connected ad platforms with its real numbers for the
 // chosen period (GET /v1/campaigns/performance/campaigns) -- the same rows the dashboard drills
-// into, laid out flat so one can be found by name, platform or state.
+// into, so one can be found by name, platform or state. A campaign opens to its ad groups and an
+// ad group to its ads; where the platform's connection allows it (Snapchat), each of the three
+// can be switched on or off, or deleted, right from its row.
 export function CampaignListScreen() {
   const t = useTranslations("campaigns")
   const locale = useLocale() as Locale
@@ -71,6 +80,12 @@ export function CampaignListScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [platformFilter, setPlatformFilter] = useState<string>("all")
 
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [children, setChildren] = useState<Record<string, Children>>({})
+  const [switching, setSwitching] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<CampaignPerformanceRow | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
   const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
   const endDay = dateRange?.to ?? dateRange?.from
   const endDate = endDay ? toLocalDay(endDay) : undefined
@@ -81,6 +96,9 @@ export function CampaignListScreen() {
     async function load() {
       setIsLoading(true)
       setLoadError(false)
+      // The numbers under an opened row belong to the old period.
+      setExpanded(new Set())
+      setChildren({})
       try {
         const result = await campaignPerformanceService.listCampaigns({
           startDate,
@@ -101,6 +119,96 @@ export function CampaignListScreen() {
       cancelled = true
     }
   }, [startDate, endDate])
+
+  const loadChildren = useCallback(
+    async (row: CampaignPerformanceRow) => {
+      setChildren((current) => ({ ...current, [row.id]: "loading" }))
+      try {
+        const result =
+          row.level === "campaign"
+            ? await campaignPerformanceService.listAdGroups(row.id, { startDate, endDate })
+            : await campaignPerformanceService.listAdsOrKeywords(row.id, "ads", {
+                startDate,
+                endDate,
+              })
+        setChildren((current) => ({ ...current, [row.id]: result.items }))
+      } catch {
+        setChildren((current) => ({ ...current, [row.id]: "error" }))
+      }
+    },
+    [startDate, endDate]
+  )
+
+  const toggleOpen = (row: CampaignPerformanceRow) => {
+    const open = !expanded.has(row.id)
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (open) next.add(row.id)
+      else next.delete(row.id)
+      return next
+    })
+    if (open && !Array.isArray(children[row.id])) void loadChildren(row)
+  }
+
+  // Applies a change to one row wherever it is held: the campaigns, or a parent's opened rows.
+  const patchRow = (
+    row: CampaignPerformanceRow,
+    change: (row: CampaignPerformanceRow) => CampaignPerformanceRow | null
+  ) => {
+    const apply = (list: CampaignPerformanceRow[]) =>
+      list.flatMap((entry) => {
+        if (entry.id !== row.id) return [entry]
+        const next = change(entry)
+        return next ? [next] : []
+      })
+    if (row.parentId === null) {
+      setRows((current) => (current ? apply(current) : current))
+      return
+    }
+    const parentId = row.parentId
+    setChildren((current) => {
+      const list = current[parentId]
+      return Array.isArray(list) ? { ...current, [parentId]: apply(list) } : current
+    })
+  }
+
+  const controlLevel = (row: CampaignPerformanceRow) => row.level as CampaignControlLevel
+
+  const setActive = async (row: CampaignPerformanceRow, active: boolean) => {
+    setSwitching(row.id)
+    try {
+      const result = await campaignPerformanceService.setActive(row.id, controlLevel(row), active)
+      patchRow(row, (entry) => ({ ...entry, status: result.status }))
+      toast.success(
+        t(active ? "listScreen.controls.switchedOn" : "listScreen.controls.switchedOff")
+      )
+    } catch (error) {
+      toast.error(
+        t(
+          error instanceof AppError && error.code === "SNAPCHAT_GONE"
+            ? "listScreen.controls.gone"
+            : "listScreen.controls.switchFailed"
+        )
+      )
+    } finally {
+      setSwitching(null)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    try {
+      await campaignPerformanceService.remove(deleting.id, controlLevel(deleting))
+      patchRow(deleting, () => null)
+      toast.success(t("listScreen.controls.deleted"))
+      setDeleting(null)
+    } catch {
+      toast.error(t("listScreen.controls.deleteFailed"))
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
   const platforms = useMemo(
     () => [...new Set((rows ?? []).map((row) => row.platform))].sort(),
@@ -133,7 +241,176 @@ export function CampaignListScreen() {
     { key: "ctr", label: t("metrics.columns.ctr") },
     { key: "results", label: t("checkupScreen.columns.results") },
     { key: "cpa", label: t("checkupScreen.columns.costPerResult") },
+    { key: "controls", label: t("listScreen.controls.column") },
   ]
+
+  // One row of the table at its depth: a campaign (0), an ad group (1) or an ad (2).
+  const renderRow = (row: CampaignPerformanceRow, depth: number) => {
+    const pill = campaignStatusPill(row.status, t)
+    const open = expanded.has(row.id)
+    const under = children[row.id]
+    const canOpen = row.level === "campaign" || row.level === "adGroup"
+    const on = row.status.toUpperCase() !== "PAUSED"
+    return (
+      <Fragment key={row.id}>
+        <tr
+          className={cn(
+            "border-b border-[#f4f7fb] hover:bg-[#f8fafd]",
+            depth === 1 && "bg-[#fafbfe]",
+            depth === 2 && "bg-[#f5f8fd]"
+          )}
+        >
+          <td className="px-3 py-3.5 text-start">
+            <div className="flex items-center gap-2" style={{ paddingInlineStart: depth * 28 }}>
+              {canOpen ? (
+                <button
+                  type="button"
+                  onClick={() => toggleOpen(row)}
+                  aria-expanded={open}
+                  aria-label={t(
+                    open ? "listScreen.controls.collapse" : "listScreen.controls.expand",
+                    { name: row.name }
+                  )}
+                  title={t(
+                    row.level === "campaign"
+                      ? "listScreen.controls.showAdGroups"
+                      : "listScreen.controls.showAds"
+                  )}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-[8px] text-[#6b7b96] transition-colors hover:bg-[#eef2f8]"
+                >
+                  <ChevronDown
+                    className={cn(
+                      "size-4 transition-transform",
+                      !open && "ltr:-rotate-90 rtl:rotate-90"
+                    )}
+                  />
+                </button>
+              ) : (
+                <span className="size-9 shrink-0" />
+              )}
+              {depth === 0 ? (
+                <PlatformBadge
+                  platform={row.platform}
+                  className="size-9"
+                  iconClassName="size-[18px]"
+                />
+              ) : null}
+              <div className="min-w-0">
+                <p className={cn("max-w-[320px] truncate text-[13px] font-bold", HEADING)}>
+                  {row.name}
+                </p>
+                <p className={cn("text-[11.5px]", MUTED)}>
+                  {depth === 0
+                    ? row.platform
+                    : t(
+                        depth === 1
+                          ? "listScreen.controls.levels.adGroup"
+                          : "listScreen.controls.levels.ad"
+                      )}
+                </p>
+              </div>
+            </div>
+          </td>
+          <td className="px-3 py-3.5">
+            <span
+              className={cn(
+                "inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                pill.className
+              )}
+            >
+              {pill.label}
+            </span>
+          </td>
+          <td className="whitespace-nowrap px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
+            {formatMoney(row.spend, row.currency, locale)}
+          </td>
+          <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
+            {formatNumber(row.impressions, locale)}
+          </td>
+          <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
+            {formatNumber(row.clicks, locale)}
+          </td>
+          <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
+            {formatNumber(row.ctr, locale, 2)}%
+          </td>
+          <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
+            {formatNumber(row.conversions, locale, 1)}
+          </td>
+          <td className="whitespace-nowrap px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
+            {row.conversions > 0 ? formatMoney(row.cpa, row.currency, locale) : "—"}
+          </td>
+          <td className="px-3 py-2">
+            {canControlCampaignRow(row) ? (
+              <Can
+                permission="campaigns:create"
+                fallback={<span className={cn("text-[12px]", MUTED)}>—</span>}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  {switching === row.id ? (
+                    <Loader2 className="size-5 animate-spin text-[#98a2b3]" />
+                  ) : (
+                    <AppSwitch
+                      checked={on}
+                      onCheckedChange={(active) => void setActive(row, active)}
+                      aria-label={t("listScreen.controls.switchLabel", { name: row.name })}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    aria-label={t("listScreen.controls.deleteLabel", { name: row.name })}
+                    title={t("listScreen.controls.delete")}
+                    className="flex size-10 items-center justify-center rounded-[10px] text-[#b42318] transition-colors hover:bg-[#fef3f2]"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </Can>
+            ) : (
+              <span
+                className={cn("whitespace-nowrap text-[11.5px]", MUTED)}
+                title={t("listScreen.controls.notSupportedHint")}
+              >
+                {t("listScreen.controls.notSupported")}
+              </span>
+            )}
+          </td>
+        </tr>
+        {open && !Array.isArray(under) ? (
+          <tr className="border-b border-[#f4f7fb] bg-[#fafbfe]">
+            <td colSpan={columns.length} className="px-4 py-4 text-center">
+              {under === "error" ? (
+                <button
+                  type="button"
+                  onClick={() => void loadChildren(row)}
+                  className="text-[12.5px] font-semibold text-[#e0484d] underline"
+                >
+                  {t("listScreen.controls.childrenLoadError")}
+                </button>
+              ) : (
+                <Loader2 className="mx-auto size-5 animate-spin text-[#98a2b3]" />
+              )}
+            </td>
+          </tr>
+        ) : null}
+        {open && Array.isArray(under) && under.length === 0 ? (
+          <tr className="border-b border-[#f4f7fb] bg-[#fafbfe]">
+            <td
+              colSpan={columns.length}
+              className={cn("px-4 py-4 text-center text-[12.5px]", MUTED)}
+            >
+              {t(
+                row.level === "campaign"
+                  ? "listScreen.controls.noAdGroups"
+                  : "listScreen.controls.noAds"
+              )}
+            </td>
+          </tr>
+        ) : null}
+        {open && Array.isArray(under) ? under.map((child) => renderRow(child, depth + 1)) : null}
+      </Fragment>
+    )
+  }
 
   return (
     <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir={dir}>
@@ -231,7 +508,7 @@ export function CampaignListScreen() {
           ) : null}
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[920px] text-center">
+            <table className="w-full min-w-[1040px] text-center">
               <thead>
                 <tr>
                   {columns.map((column) => (
@@ -279,67 +556,36 @@ export function CampaignListScreen() {
                     </td>
                   </tr>
                 ) : (
-                  visible.map((row) => {
-                    const pill = campaignStatusPill(row.status, t)
-                    return (
-                      <tr key={row.id} className="border-b border-[#f4f7fb] hover:bg-[#f8fafd]">
-                        <td className="px-3 py-3.5 text-start">
-                          <div className="flex items-center gap-3">
-                            <PlatformBadge
-                              platform={row.platform}
-                              className="size-9"
-                              iconClassName="size-[18px]"
-                            />
-                            <div className="min-w-0">
-                              <p
-                                className={cn(
-                                  "max-w-[340px] truncate text-[13px] font-bold",
-                                  HEADING
-                                )}
-                              >
-                                {row.name}
-                              </p>
-                              <p className={cn("text-[11.5px]", MUTED)}>{row.platform}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3.5">
-                          <span
-                            className={cn(
-                              "inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                              pill.className
-                            )}
-                          >
-                            {pill.label}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
-                          {formatMoney(row.spend, row.currency, locale)}
-                        </td>
-                        <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
-                          {formatNumber(row.impressions, locale)}
-                        </td>
-                        <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
-                          {formatNumber(row.clicks, locale)}
-                        </td>
-                        <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
-                          {formatNumber(row.ctr, locale, 2)}%
-                        </td>
-                        <td className="px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
-                          {formatNumber(row.conversions, locale, 1)}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-[13px] tabular-nums text-[#334155]">
-                          {row.conversions > 0 ? formatMoney(row.cpa, row.currency, locale) : "—"}
-                        </td>
-                      </tr>
-                    )
-                  })
+                  visible.map((row) => renderRow(row, 0))
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      <AppConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleting(null)
+        }}
+        title={
+          deleting
+            ? t(`listScreen.controls.deleteTitle.${controlLevel(deleting)}`, {
+                name: deleting.name,
+              })
+            : ""
+        }
+        description={
+          deleting ? t(`listScreen.controls.deleteDescription.${controlLevel(deleting)}`) : ""
+        }
+        confirmLabel={t("listScreen.controls.confirmDelete")}
+        cancelLabel={t("listScreen.controls.cancel")}
+        confirmTone="destructive"
+        loading={deleteBusy}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </div>
   )
 }

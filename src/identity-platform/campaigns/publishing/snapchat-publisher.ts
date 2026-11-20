@@ -73,7 +73,8 @@ export class SnapchatPublishError extends Error {
       | "SNAPCHAT_NO_PUBLIC_PROFILE"
       | "SNAPCHAT_NO_PIXEL"
       | "SNAPCHAT_MEDIA_NOT_READY"
-      | "SNAPCHAT_ACCESS_DENIED" = "SNAPCHAT_REFUSED"
+      | "SNAPCHAT_ACCESS_DENIED"
+      | "SNAPCHAT_GONE" = "SNAPCHAT_REFUSED"
   ) {
     super(`Snapchat refused the ${step} step: ${reason}`)
     this.name = "SnapchatPublishError"
@@ -81,6 +82,50 @@ export class SnapchatPublishError extends Error {
 }
 
 type Json = Record<string, unknown>
+
+// The three things an account holds, from the top down, and how Snapchat's API names each: its
+// list and item keys, the parent it is updated through, and the fields only Snapchat may write.
+export type SnapchatEntityLevel = "campaign" | "ad_set" | "ad"
+
+const ENTITY_SHAPES: Record<
+  SnapchatEntityLevel,
+  { list: string; item: string; parentList: string; parentKey: string; readOnly: Set<string> }
+> = {
+  campaign: {
+    list: "campaigns",
+    item: "campaign",
+    parentList: "adaccounts",
+    parentKey: "ad_account_id",
+    readOnly: new Set(["updated_at", "created_at", "delivery_status", "creation_state"]),
+  },
+  ad_set: {
+    list: "adsquads",
+    item: "adsquad",
+    parentList: "campaigns",
+    parentKey: "campaign_id",
+    readOnly: new Set([
+      "updated_at",
+      "created_at",
+      "delivery_status",
+      "targeting_reach_status",
+      "creation_state",
+      "delivery_properties_version",
+    ]),
+  },
+  ad: {
+    list: "ads",
+    item: "ad",
+    parentList: "adsquads",
+    parentKey: "ad_squad_id",
+    readOnly: new Set([
+      "updated_at",
+      "created_at",
+      "delivery_status",
+      "review_status",
+      "review_status_reasons",
+    ]),
+  },
+}
 type Fetch = typeof fetch
 
 const DEFAULT_API_BASE = "https://adsapi.snapchat.com/v1"
@@ -430,6 +475,85 @@ export class SnapchatCampaignPublisher {
         `/campaigns/${input.campaignId}`
       ).then(
         (body) => Array.isArray(body.campaigns) && body.campaigns.length > 0,
+        (lookup: unknown) => {
+          if (lookup instanceof SnapchatPublishError && lookup.code === "SNAPCHAT_ACCESS_DENIED") {
+            throw lookup
+          }
+          return false
+        }
+      )
+      if (stillThere) throw error
+    }
+  }
+
+  // Switches a campaign, an ad set or an ad on or off. Snapchat updates any of them by taking the
+  // whole object back through its parent, so it is read first and returned with only its status
+  // changed -- minus the fields Snapchat fills itself and refuses to be sent (the lists below were
+  // each used against a live account). Returns the object as Snapchat now holds it.
+  async setEntityStatus(input: {
+    accessToken: string
+    level: SnapchatEntityLevel
+    id: string
+    active: boolean
+  }): Promise<Json> {
+    const shape = ENTITY_SHAPES[input.level]
+    const body = await this.call(
+      "status",
+      input.accessToken,
+      "GET",
+      `/${shape.list}/${input.id}`
+    ).catch((error: unknown) => {
+      if (error instanceof SnapchatPublishError && error.code === "SNAPCHAT_ACCESS_DENIED") {
+        throw error
+      }
+      throw new SnapchatPublishError("status", "It is no longer on Snapchat.", "SNAPCHAT_GONE")
+    })
+    const current = (Array.isArray(body[shape.list]) ? (body[shape.list] as Json[]) : [])[0]?.[
+      shape.item
+    ] as Json | undefined
+    if (!current) {
+      throw new SnapchatPublishError("status", "It is no longer on Snapchat.", "SNAPCHAT_GONE")
+    }
+    const parentId = current[shape.parentKey]
+    if (typeof parentId !== "string") {
+      throw new SnapchatPublishError("status", "Snapchat did not say what it belongs to.")
+    }
+    const next: Json = Object.fromEntries(
+      Object.entries(current).filter(([key]) => !shape.readOnly.has(key))
+    )
+    next.status = input.active ? "ACTIVE" : "PAUSED"
+    const saved = this.created(
+      "status",
+      await this.call(
+        "status",
+        input.accessToken,
+        "PUT",
+        `/${shape.parentList}/${parentId}/${shape.list}`,
+        { [shape.list]: [next] }
+      ),
+      shape.list,
+      shape.item
+    )
+    return { ...current, ...saved }
+  }
+
+  // Deletes a campaign (with its ad sets and ads), an ad set (with its ads) or one ad. One that
+  // is already gone counts as deleted -- see deleteCampaign.
+  async deleteEntity(input: {
+    accessToken: string
+    level: SnapchatEntityLevel
+    id: string
+  }): Promise<void> {
+    const path = `/${ENTITY_SHAPES[input.level].list}/${input.id}`
+    try {
+      await this.call("campaign", input.accessToken, "DELETE", path)
+    } catch (error) {
+      if (error instanceof SnapchatPublishError && error.code === "SNAPCHAT_ACCESS_DENIED") {
+        throw error
+      }
+      const list = ENTITY_SHAPES[input.level].list
+      const stillThere = await this.call("campaign", input.accessToken, "GET", path).then(
+        (body) => Array.isArray(body[list]) && (body[list] as unknown[]).length > 0,
         (lookup: unknown) => {
           if (lookup instanceof SnapchatPublishError && lookup.code === "SNAPCHAT_ACCESS_DENIED") {
             throw lookup

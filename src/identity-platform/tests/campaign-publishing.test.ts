@@ -9,6 +9,8 @@ import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+import { CampaignControlService } from "../campaigns/control-service"
+import { CreativeInsightsService } from "../campaigns/creative-insights"
 import { CampaignCreativesService } from "../campaigns/creatives"
 import {
   CampaignPublishingService,
@@ -159,6 +161,35 @@ function fakeSnapchat(
           delivery_status: ["y"],
         })
       )
+    }
+    if (method === "GET" && path === "/adsquads/squad-1") {
+      return reply(
+        ok("adsquads", "adsquad", {
+          id: "squad-1",
+          name: "مجموعة",
+          status: "ACTIVE",
+          campaign_id: "camp-1",
+          targeting_reach_status: "VALID",
+          delivery_status: ["VALID"],
+        })
+      )
+    }
+    if (method === "PUT" && path === "/campaigns/camp-1/adsquads") {
+      return reply(ok("adsquads", "adsquad", { id: "squad-1", status: "PAUSED" }))
+    }
+    if (method === "GET" && path === "/ads/ad-1") {
+      return reply(
+        ok("ads", "ad", {
+          id: "ad-1",
+          name: "إعلان",
+          status: "PAUSED",
+          ad_squad_id: "squad-1",
+          review_status: "APPROVED",
+        })
+      )
+    }
+    if (method === "PUT" && path === "/adsquads/squad-1/ads") {
+      return reply(ok("ads", "ad", { id: "ad-1", status: "ACTIVE" }))
     }
     if (method === "PUT" && path === `/adaccounts/${ACCOUNT}/campaigns`) {
       return reply(ok("campaigns", "campaign", { id: "camp-1" }))
@@ -314,6 +345,56 @@ describe("publishing to Snapchat", () => {
     await expect(
       refused.publisher.deleteCampaign({ accessToken: "token", campaignId: "camp-1" })
     ).rejects.toMatchObject({ reason: "Try again later" })
+  })
+})
+
+describe("switching and deleting an ad set or an ad on Snapchat", () => {
+  it("sends each one back through its parent, without the fields only Snapchat writes", async () => {
+    const { calls, publisher } = fakeSnapchat()
+    await publisher.setEntityStatus({
+      accessToken: "token",
+      level: "ad_set",
+      id: "squad-1",
+      active: false,
+    })
+    await publisher.setEntityStatus({ accessToken: "token", level: "ad", id: "ad-1", active: true })
+    const puts = calls.filter((call) => call.method === "PUT")
+    expect(puts.map((call) => call.path)).toEqual([
+      "/campaigns/camp-1/adsquads",
+      "/adsquads/squad-1/ads",
+    ])
+    expect((puts[0].body as { adsquads: unknown[] }).adsquads[0]).toEqual({
+      id: "squad-1",
+      name: "مجموعة",
+      status: "PAUSED",
+      campaign_id: "camp-1",
+    })
+    expect((puts[1].body as { ads: unknown[] }).ads[0]).toEqual({
+      id: "ad-1",
+      name: "إعلان",
+      status: "ACTIVE",
+      ad_squad_id: "squad-1",
+    })
+  })
+
+  it("says so when the thing is no longer on Snapchat, and deletes by its own path", async () => {
+    const gone = fakeSnapchat({ campaignGone: true })
+    await expect(
+      gone.publisher.setEntityStatus({
+        accessToken: "token",
+        level: "campaign",
+        id: "camp-1",
+        active: true,
+      })
+    ).rejects.toMatchObject({ code: "SNAPCHAT_GONE" })
+
+    const { calls, publisher } = fakeSnapchat()
+    await publisher.deleteEntity({ accessToken: "token", level: "ad", id: "ad-1" })
+    await publisher.deleteEntity({ accessToken: "token", level: "ad_set", id: "squad-1" })
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "DELETE /ads/ad-1",
+      "DELETE /adsquads/squad-1",
+    ])
   })
 })
 
@@ -538,6 +619,203 @@ describe("the creative library and the publish record", () => {
     const gone = service(fakeSnapchat({ campaignGone: true }))
     await gone.publishing.remove(actor, started.id)
     expect(await publishing.list(ORG)).toEqual([])
+  })
+
+  it("renames a creative, within its own organization only", async () => {
+    const creative = await upload()
+    expect((await creatives.rename(ORG, creative.id, "  عرض الصيف  ")).name).toBe("عرض الصيف")
+    await expect(creatives.rename(OTHER_ORG, creative.id, "x")).rejects.toMatchObject({
+      code: "CREATIVE_NOT_FOUND",
+    })
+  })
+
+  it("adds up each creative's numbers, lists its campaigns and ranks by tap rate", async () => {
+    const insights = new CreativeInsightsService(database)
+    const strong = await upload({ name: "قوي" })
+    const weak = await upload({ name: "ضعيف" })
+    const fresh = await upload({ name: "جديد" })
+    await upload({ name: "غير مستخدم" })
+
+    // One published campaign per ad; "strong" is used twice.
+    const publish = async (creativeId: string, adId: string, name: string) => {
+      await database.query(
+        `insert into campaign_publications
+           (id, organization_id, platform, connection_id, ad_account_id, name, objective, currency,
+            daily_budget, start_at, creative_id, brand_name, headline, call_to_action,
+            destination_url, status, platform_status, external_ids)
+         values ($1, $2, 'snapchat', $3, $4, $5, 'leads', 'SAR', 50, now(), $6, 'b', 'h', 'MORE',
+                 'https://x.sa', 'published', 'active', $7::jsonb)`,
+        [randomUUID(), ORG, CONNECTION, ACCOUNT, name, creativeId, JSON.stringify({ adId })]
+      )
+    }
+    await publish(strong.id, "ad-a", "حملة أ")
+    await publish(strong.id, "ad-b", "حملة ب")
+    await publish(weak.id, "ad-c", "حملة ج")
+    await publish(fresh.id, "ad-d", "حملة د")
+
+    const day = async (level: string, entityId: string, date: string, stats: object) => {
+      await database.query(
+        `insert into snapchat_records
+           (id, connection_id, customer_id, entity_type, entity_id, record_date, payload)
+         values ($1, $2, $3, 'stats', $4, $5, $6::jsonb)`,
+        [
+          randomUUID(),
+          CONNECTION,
+          ACCOUNT,
+          `${level}:${entityId}:${date}`,
+          date,
+          JSON.stringify({ level, entityId, startTime: `${date}T00:00:00Z`, ...stats }),
+        ]
+      )
+    }
+    await day("ad", "ad-a", "2026-01-10", { impressions: 1000, swipes: 30, spend: 20_000_000 })
+    await day("ad", "ad-a", "2026-01-11", {
+      impressions: 1000,
+      swipes: 30,
+      spend: 20_000_000,
+      conversion_sign_ups: 2,
+    })
+    await day("ad", "ad-b", "2026-01-10", { impressions: 2000, swipes: 20, spend: 10_000_000 })
+    await day("ad", "ad-c", "2026-01-10", { impressions: 5000, swipes: 25, spend: 60_000_000 })
+    await day("ad", "ad-d", "2026-01-10", { impressions: 200, swipes: 20, spend: 2_000_000 })
+    // Not an ad of ours, and not ad-level: neither is counted.
+    await day("ad", "someone-else", "2026-01-10", { impressions: 9999, swipes: 999 })
+    await day("campaign", "ad-a", "2026-01-10", { impressions: 7777, swipes: 777 })
+
+    const all = await insights.forOrganization(ORG)
+    const of = (id: string) => all.find((entry) => entry.creativeId === id)
+    expect(all).toHaveLength(3)
+    expect(of(strong.id)).toMatchObject({
+      impressions: 4000,
+      clicks: 80,
+      spend: 50,
+      signUps: 2,
+      clickRate: 2,
+      costPerSignUp: 25,
+      rank: 1,
+      rankedOutOf: 2,
+      currency: "SAR",
+    })
+    expect(
+      of(strong.id)
+        ?.campaigns.map((campaign) => [campaign.name, campaign.impressions])
+        .sort()
+    ).toEqual([
+      ["حملة أ", 2000],
+      ["حملة ب", 2000],
+    ])
+    expect(of(weak.id)).toMatchObject({ clickRate: 0.5, rank: 2, costPerSignUp: null })
+    // Seen too little to be judged: a high tap rate on 200 views does not take first place.
+    expect(of(fresh.id)).toMatchObject({ impressions: 200, clickRate: 10, rank: null })
+    expect(await insights.forOrganization(OTHER_ORG)).toEqual([])
+  })
+
+  describe("the campaigns list controls", () => {
+    const rowId = (id: string) => `snapchat_ads:${CONNECTION}:${ACCOUNT}:${id}`
+    const record = (type: string, id: string, payload: object) =>
+      database.query(
+        `insert into snapchat_records
+           (id, connection_id, customer_id, entity_type, entity_id, record_date, payload)
+         values ($1, $2, $3, $4, $5, '2026-01-10', $6::jsonb)`,
+        [randomUUID(), CONNECTION, ACCOUNT, type, id, JSON.stringify(payload)]
+      )
+    const stored = async (type: string) =>
+      (
+        await database.query<{ entity_id: string; payload: unknown }>(
+          `select entity_id, payload from snapchat_records where entity_type = $1`,
+          [type]
+        )
+      ).rows.map((row) => [
+        row.entity_id,
+        (typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload).status,
+      ])
+    const control = (snap = fakeSnapchat()) => ({
+      snap,
+      service: new CampaignControlService(
+        database,
+        { resolveAccessToken: async () => "token" },
+        snap.publisher
+      ),
+    })
+    const seed = async () => {
+      await record("campaigns", "camp-1", { name: "حملة", status: "PAUSED" })
+      await record("campaigns", "camp-2", { name: "أخرى", status: "ACTIVE" })
+      await record("ad_squads", "squad-1", { status: "ACTIVE", campaign_id: "camp-1" })
+      await record("ad_squads", "squad-9", { status: "ACTIVE", campaign_id: "camp-2" })
+      await record("ads", "ad-1", { status: "PAUSED", ad_squad_id: "squad-1" })
+      await record("ads", "ad-9", { status: "ACTIVE", ad_squad_id: "squad-9" })
+    }
+
+    it("switches each level on Snapchat and corrects Madar's own copy", async () => {
+      await seed()
+      const { service, snap } = control()
+      expect(await service.setActive(actor, rowId("camp-1"), "campaign", true)).toEqual({
+        id: rowId("camp-1"),
+        status: "ACTIVE",
+      })
+      await service.setActive(actor, rowId("squad-1"), "adGroup", false)
+      await service.setActive(actor, rowId("ad-1"), "ad", true)
+      expect(snap.calls.filter((call) => call.method === "PUT")).toHaveLength(3)
+      expect((await stored("campaigns")).sort()).toEqual([
+        ["camp-1", "ACTIVE"],
+        ["camp-2", "ACTIVE"],
+      ])
+      expect(await stored("ad_squads")).toContainEqual(["squad-1", "PAUSED"])
+      expect(await stored("ads")).toContainEqual(["ad-1", "ACTIVE"])
+    })
+
+    it("refuses another organization, an unknown row and a platform it cannot change", async () => {
+      await seed()
+      const { service, snap } = control()
+      await expect(
+        service.setActive(
+          { ...actor, organizationId: OTHER_ORG },
+          rowId("camp-1"),
+          "campaign",
+          true
+        )
+      ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_FOUND" })
+      // An ad's id asked for as a campaign is not a campaign of theirs.
+      await expect(service.remove(actor, rowId("ad-1"), "campaign")).rejects.toMatchObject({
+        code: "CAMPAIGN_CONTROL_NOT_FOUND",
+      })
+      await expect(
+        service.setActive(actor, "google_ads:x:y:z", "campaign", true)
+      ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_SUPPORTED" })
+      expect(snap.calls).toEqual([])
+    })
+
+    it("deletes a campaign with what is under it, and its record of being published", async () => {
+      await seed()
+      const { publishing } = service()
+      const creative = await upload()
+      const started = await publishing.publish(actor, request(creative.id))
+      await publishing.settled()
+
+      const { service: controls, snap } = control()
+      await controls.remove(actor, rowId("camp-1"), "campaign")
+      expect(snap.calls.at(-1)).toMatchObject({ method: "DELETE", path: "/campaigns/camp-1" })
+      expect(await stored("campaigns")).toEqual([["camp-2", "ACTIVE"]])
+      expect(await stored("ad_squads")).toEqual([["squad-9", "ACTIVE"]])
+      expect(await stored("ads")).toEqual([["ad-9", "ACTIVE"]])
+      await expect(publishing.get(ORG, started.id)).rejects.toMatchObject({
+        code: "PUBLICATION_NOT_FOUND",
+      })
+    })
+
+    it("deletes one ad group with its ads only, and keeps everything when Snapchat refuses", async () => {
+      await seed()
+      const refused = control(fakeSnapchat({ deleteRefused: true }))
+      await expect(
+        refused.service.remove(actor, rowId("squad-1"), "adGroup")
+      ).rejects.toMatchObject({ code: "SNAPCHAT_REFUSED" })
+      expect(await stored("ad_squads")).toHaveLength(2)
+
+      await control().service.remove(actor, rowId("squad-1"), "adGroup")
+      expect(await stored("ad_squads")).toEqual([["squad-9", "ACTIVE"]])
+      expect(await stored("ads")).toEqual([["ad-9", "ACTIVE"]])
+      expect(await stored("campaigns")).toHaveLength(2)
+    })
   })
 
   it("refuses what it can judge itself before anything reaches Snapchat", async () => {

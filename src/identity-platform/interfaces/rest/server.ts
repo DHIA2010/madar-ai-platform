@@ -171,6 +171,8 @@ import {
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
 import { CampaignCheckupService } from "../../campaigns/checkup"
+import { CampaignControlService } from "../../campaigns/control-service"
+import { CreativeInsightsService } from "../../campaigns/creative-insights"
 import { CampaignCreativesService } from "../../campaigns/creatives"
 import { CampaignPublishingService } from "../../campaigns/publishing/service"
 import { SnapchatCampaignPublisher } from "../../campaigns/publishing/snapchat-publisher"
@@ -263,6 +265,9 @@ import {
   adsReportSettingsSchema,
   publicationStatusSchema,
   publishCampaignSchema,
+  renameCreativeSchema,
+  campaignControlDeleteSchema,
+  campaignControlStatusSchema,
   uploadCreativeSchema,
   dailyReportSettingsSchema,
   whatsAppEmbeddedSignupSchema,
@@ -1289,6 +1294,14 @@ export function createIdentityApiServer(
           new SnapchatCampaignPublisher()
         )
       : null
+  // Switching or deleting a campaign, ad group or ad from the campaigns list.
+  const campaignControlService = container.infrastructure.database
+    ? new CampaignControlService(
+        container.infrastructure.database,
+        new SnapchatOAuthService(new SnapchatOAuthRepository(container.infrastructure.database)),
+        new SnapchatCampaignPublisher()
+      )
+    : null
   const campaignRepositoryForLinks = container.infrastructure.database
     ? new CampaignRepository(container.infrastructure.database)
     : null
@@ -7588,7 +7601,40 @@ export function createIdentityApiServer(
           )
         }
       }
+      // What each creative has done: the campaigns it was used in, its numbers and its rank.
+      if (method === "GET" && url.pathname === "/v1/campaigns/creatives/insights") {
+        if (!container.infrastructure.database) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+        return send(200, {
+          items: await new CreativeInsightsService(
+            container.infrastructure.database
+          ).forOrganization(actor.organizationId),
+        })
+      }
       const campaignCreativeMatch = url.pathname.match(/^\/v1\/campaigns\/creatives\/([^/]+)$/)
+      if (campaignCreativeMatch && method === "PATCH") {
+        if (!campaignCreativesService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+        const payload = renameCreativeSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await campaignCreativesService.rename(
+            actor.organizationId,
+            campaignCreativeMatch[1],
+            payload.name
+          )
+        )
+      }
       if (campaignCreativeMatch && method === "DELETE") {
         if (!campaignCreativesService) {
           return send(503, {
@@ -7654,6 +7700,32 @@ export function createIdentityApiServer(
             await campaignPublishingService.setActive(actor, publicationMatch[1], payload.active)
           )
         }
+      }
+
+      // The campaigns list's own controls: switch a campaign, ad group or ad on or off on its
+      // ad platform, or delete it there.
+      if (
+        method === "POST" &&
+        (url.pathname === "/v1/campaigns/control/status" ||
+          url.pathname === "/v1/campaigns/control/delete")
+      ) {
+        if (!campaignControlService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+        if (url.pathname.endsWith("/status")) {
+          const payload = campaignControlStatusSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await campaignControlService.setActive(actor, payload.id, payload.level, payload.active)
+          )
+        }
+        const payload = campaignControlDeleteSchema.parse(await readJsonBody(request))
+        await campaignControlService.remove(actor, payload.id, payload.level)
+        return send(200, { ok: true })
       }
 
       if (method === "GET" && url.pathname === "/v1/campaigns/imported") {

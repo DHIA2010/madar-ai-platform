@@ -7753,7 +7753,44 @@
       "newCampaign": "New Campaign",
       "createCampaign": "Create Campaign",
       "importCsv": "Import CSV",
-      "importFrom": "Import from {platform} (Coming Soon)"
+      "importFrom": "Import from {platform} (Coming Soon)",
+      "controls": {
+        "column": "Controls",
+        "expand": "Show what is inside “{name}”",
+        "collapse": "Hide what is inside “{name}”",
+        "showAdGroups": "Show ad groups",
+        "showAds": "Show ads",
+        "levels": {
+          "adGroup": "Ad group",
+          "ad": "Ad"
+        },
+        "noAdGroups": "This campaign has no ad groups.",
+        "noAds": "This ad group has no ads.",
+        "childrenLoadError": "Could not load. Press to try again.",
+        "switchLabel": "Switch “{name}” on or off",
+        "switchedOn": "Switched on at Snapchat",
+        "switchedOff": "Switched off at Snapchat",
+        "switchFailed": "The state could not be changed. Try again.",
+        "gone": "It is no longer on Snapchat. Delete it from the list.",
+        "delete": "Delete",
+        "deleteLabel": "Delete “{name}”",
+        "deleteTitle": {
+          "campaign": "Delete the campaign “{name}”?",
+          "adGroup": "Delete the ad group “{name}”?",
+          "ad": "Delete the ad “{name}”?"
+        },
+        "deleteDescription": {
+          "campaign": "The campaign will be deleted from Snapchat for good, with all its ad groups and ads. It cannot be brought back.",
+          "adGroup": "The ad group will be deleted from Snapchat for good, with all its ads. It cannot be brought back.",
+          "ad": "The ad will be deleted from Snapchat for good. It cannot be brought back."
+        },
+        "confirmDelete": "Yes, delete",
+        "cancel": "Cancel",
+        "deleted": "Deleted from Snapchat",
+        "deleteFailed": "Could not delete. Try again.",
+        "notSupported": "Soon",
+        "notSupportedHint": "Switching and deleting from Madar works for Snapchat today; the other platforms are coming."
+      }
     },
     "performanceChart": {
       "ariaLabel": "Performance trend chart"
@@ -7783,6 +7820,40 @@
       "removed": "Creative deleted",
       "removeFailed": "The creative could not be deleted. Try again.",
       "useInCampaign": "Use in a campaign",
+      "preview": "Show “{name}” full size",
+      "previewHint": "Press to see the design full size",
+      "previewButton": "Preview",
+      "rename": "Rename “{name}”",
+      "renameLabel": "Rename",
+      "saveName": "Save name",
+      "renamed": "The name was changed",
+      "renameFailed": "The name could not be changed. Try again.",
+      "numbersNote": "Numbers come only from campaigns you published from Madar, and update with every Snapchat sync.",
+      "sort": {
+        "label": "Sort:",
+        "newest": "Newest",
+        "performance": "Best performing",
+        "usage": "Most used"
+      },
+      "usage": {
+        "none": "Not used in a campaign yet",
+        "count": "{count, plural, one {Used in 1 campaign:} other {Used in # campaigns:}}",
+        "campaign": "Campaign"
+      },
+      "numbers": {
+        "impressions": "Views",
+        "clicks": "Taps",
+        "clickRate": "Tap rate",
+        "spend": "Spend",
+        "signUps": "Sign-ups"
+      },
+      "rank": {
+        "best": "Best performing",
+        "position": "Rank {rank} of {total}",
+        "hint": "Ranked by tap rate: how many people tapped the ad out of every 100 who saw it.",
+        "pending": "Not ranked yet",
+        "pendingHint": "A design is ranked once it reaches 1,000 views."
+      },
       "fit": {
         "ok": "Fits Snapchat",
         "ratio": "Not upright 9:16",

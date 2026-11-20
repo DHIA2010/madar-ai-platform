@@ -25,6 +25,33 @@ export interface Creative {
   createdAt: string
 }
 
+// What a creative has done (backend: campaigns/creative-insights.ts). Only campaigns published
+// from Madar are counted, since that is where Madar knows which ad carries which file.
+export interface CreativeNumbers {
+  impressions: number
+  clicks: number
+  spend: number
+  pageViews: number
+  signUps: number
+}
+
+export interface CreativeCampaignUse extends CreativeNumbers {
+  publicationId: string
+  name: string
+  platform: string
+  platformStatus: "active" | "paused"
+}
+
+export interface CreativeInsights extends CreativeNumbers {
+  creativeId: string
+  currency: string | null
+  campaigns: CreativeCampaignUse[]
+  clickRate: number | null
+  costPerSignUp: number | null
+  rank: number | null
+  rankedOutOf: number
+}
+
 export const CREATIVE_LIMITS = {
   imageBytes: 5 * 1024 * 1024,
   videoBytes: 30 * 1024 * 1024,
@@ -189,6 +216,14 @@ export const campaignPublishingService = {
       // A video takes far longer to send than an ordinary request.
       { timeoutMs: UPLOAD_TIMEOUT_MS }
     )
+  },
+
+  async renameCreative(id: string, name: string): Promise<Creative> {
+    return client.patch<{ name: string }, Creative>(path("creatives", id), { name })
+  },
+
+  async creativeInsights(): Promise<CreativeInsights[]> {
+    return (await client.get<{ items: CreativeInsights[] }>(path("creatives", "insights"))).items
   },
 
   async removeCreative(id: string): Promise<void> {

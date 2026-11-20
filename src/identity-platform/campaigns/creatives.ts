@@ -187,6 +187,16 @@ export class CampaignCreativesService {
     return this.get(input.organizationId, id)
   }
 
+  async rename(organizationId: string, id: string, name: string): Promise<CreativeView> {
+    const result = await this.db.query(
+      `UPDATE campaign_creatives SET name = $3
+        WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL RETURNING id`,
+      [organizationId, id, name.trim().slice(0, 120)]
+    )
+    if (result.rows.length === 0) throw ERRORS.notFound()
+    return this.get(organizationId, id)
+  }
+
   // Removed from the library; the file stays in storage, since an ad already published may still
   // be shown from the platform's own copy and Madar keeps the record of what was used.
   async remove(organizationId: string, id: string): Promise<void> {

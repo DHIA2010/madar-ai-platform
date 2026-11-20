@@ -535,6 +535,8 @@ export const uploadCreativeSchema = z.object({
   durationSeconds: z.number().positive().max(3600).nullish(),
 })
 
+export const renameCreativeSchema = z.object({ name: z.string().trim().min(1).max(120) })
+
 // A campaign to publish to an ad platform (campaigns/publishing/service.ts). The text limits are
 // Snapchat's own for an ad's headline and brand name.
 export const publishCampaignSchema = z.object({
@@ -559,6 +561,18 @@ export const publishCampaignSchema = z.object({
 })
 
 export const publicationStatusSchema = z.object({ active: z.boolean() })
+
+// A campaign, ad group or ad from the campaigns list to switch or delete (campaigns/control-
+// service.ts). The id is the list's own row id.
+const campaignControlTarget = {
+  id: z.string().min(1).max(300),
+  level: z.enum(["campaign", "adGroup", "ad"]),
+}
+export const campaignControlStatusSchema = z.object({
+  ...campaignControlTarget,
+  active: z.boolean(),
+})
+export const campaignControlDeleteSchema = z.object(campaignControlTarget)
 
 export const importCampaignsSchema = z.object({
   platform: z.enum(CAMPAIGN_PLATFORM_VALUES),
