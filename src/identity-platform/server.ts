@@ -8,6 +8,7 @@ import { validateProductionIntegrationConfiguration } from "./configuration/prod
 import { SalesInvoicesService } from "./invoicing/invoices-service"
 import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
+import { registeredAdsReportService } from "./whatsapp/ads-report"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
@@ -129,6 +130,21 @@ if (dailyReports && dailyReportMinutes > 0) {
       .catch((error: unknown) => console.error("whatsapp.daily_report_pass_failed", error))
   setTimeout(runDailyReports, 120_000).unref()
   setInterval(runDailyReports, dailyReportMinutes * 60_000).unref()
+}
+
+// The daily ads report on WhatsApp, on the same pass (whatsapp/ads-report.ts): each organization's
+// report once a day, after its chosen time.
+const adsReports = registeredAdsReportService()
+if (adsReports && dailyReportMinutes > 0) {
+  const runAdsReports = () =>
+    adsReports
+      .runDue()
+      .then((result) => {
+        if (result.organizations > 0) console.log("whatsapp.ads_report_pass", result)
+      })
+      .catch((error: unknown) => console.error("whatsapp.ads_report_pass_failed", error))
+  setTimeout(runAdsReports, 150_000).unref()
+  setInterval(runAdsReports, dailyReportMinutes * 60_000).unref()
 }
 
 // The team's lead alerts on WhatsApp go out directly (no template, so Meta doesn't cap them) for 24

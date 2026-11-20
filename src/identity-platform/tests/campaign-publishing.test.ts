@@ -1,0 +1,512 @@
+// @vitest-environment node
+
+// The creative library and publishing a campaign to Snapchat (campaigns/creatives.ts,
+// campaigns/publishing): what a creative upload accepts, the exact pieces Snapchat is asked to
+// create and in what order, cleaning up after a refused step, and the record Madar keeps.
+import { randomUUID } from "node:crypto"
+
+import { newDb } from "pg-mem"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
+
+import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+import { CampaignCreativesService } from "../campaigns/creatives"
+import {
+  CampaignPublishingService,
+  snapchatCreativeProblem,
+  withCampaignTracking,
+  type PublishCampaignInput,
+} from "../campaigns/publishing/service"
+import {
+  SnapchatCampaignPublisher,
+  SnapchatPublishError,
+  type SnapchatPublishInput,
+} from "../campaigns/publishing/snapchat-publisher"
+import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
+import { PostgresDatabase } from "../infrastructure/postgres/database"
+
+const ORG = "20000000-0000-0000-0000-000000000001"
+const OTHER_ORG = "20000000-0000-0000-0000-000000000002"
+const USER = "10000000-0000-0000-0000-000000000001"
+const CONNECTION = "40000000-0000-0000-0000-000000000001"
+const ACCOUNT = "acc-1"
+
+const PNG = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from("image-bytes"),
+])
+const MP4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypmp42"), Buffer.alloc(8)])
+
+const actor: AuthenticatedActor = {
+  userId: USER,
+  sessionId: "s",
+  organizationId: ORG,
+  workspaceId: null,
+  roles: [],
+  modulePermissions: [],
+}
+
+// Object storage held in memory.
+function memoryStorage() {
+  const files = new Map<string, { body: Buffer; contentType: string }>()
+  return {
+    files,
+    uploadPublicObject: async (input: { key: string; body: Buffer; contentType: string }) => {
+      files.set(input.key, { body: input.body, contentType: input.contentType })
+      return `https://files.test/${input.key}`
+    },
+    readObject: async (key: string) => files.get(key) ?? null,
+  }
+}
+
+// A stand-in for Snapchat's API: records every call, answers the way Snapchat does, and can be
+// told to refuse one path.
+function fakeSnapchat(options: { refuse?: string; noPixel?: boolean; noProfile?: boolean } = {}) {
+  const calls: Array<{ method: string; path: string; body: unknown }> = []
+  const ok = (listKey: string, itemKey: string, item: Record<string, unknown>) => ({
+    request_status: "SUCCESS",
+    [listKey]: [{ sub_request_status: "SUCCESS", [itemKey]: item }],
+  })
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input))
+    const path = url.pathname.replace(/^\/v1/, "")
+    const method = init?.method ?? "GET"
+    const isForm = init?.body instanceof FormData
+    const body = isForm ? "<file>" : init?.body ? JSON.parse(String(init.body)) : null
+    calls.push({ method, path, body })
+    const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
+
+    if (
+      options.refuse &&
+      method !== "GET" &&
+      method !== "DELETE" &&
+      path.endsWith(options.refuse)
+    ) {
+      return reply({
+        request_status: "ERROR",
+        [options.refuse.replace("/", "")]: [
+          { sub_request_status: "ERROR", sub_request_error_reason: "Headline is too long" },
+        ],
+      })
+    }
+    if (method === "GET" && path === `/adaccounts/${ACCOUNT}`) {
+      return reply(ok("adaccounts", "adaccount", { id: ACCOUNT, organization_id: "snap-org" }))
+    }
+    if (method === "GET" && path === "/organizations/snap-org/public_profiles") {
+      return reply({
+        request_status: "SUCCESS",
+        public_profiles: [],
+      })
+    }
+    if (method === "GET" && path === `/adaccounts/${ACCOUNT}/creatives`) {
+      return reply({
+        request_status: "SUCCESS",
+        creatives: options.noProfile
+          ? []
+          : [{ creative: { id: "old", profile_properties: { profile_id: "profile-1" } } }],
+      })
+    }
+    if (method === "GET" && path === `/adaccounts/${ACCOUNT}/pixels`) {
+      return reply({
+        request_status: "SUCCESS",
+        pixels: options.noPixel ? [] : [{ pixel: { id: "pixel-1" } }],
+      })
+    }
+    if (method === "POST" && path === `/adaccounts/${ACCOUNT}/campaigns`) {
+      return reply(ok("campaigns", "campaign", { id: "camp-1" }))
+    }
+    if (method === "POST" && path === "/campaigns/camp-1/adsquads") {
+      return reply(ok("adsquads", "adsquad", { id: "squad-1" }))
+    }
+    if (method === "POST" && path === `/adaccounts/${ACCOUNT}/media`) {
+      return reply(ok("media", "media", { id: "media-1" }))
+    }
+    if (method === "POST" && path === "/media/media-1/upload") {
+      return reply({ request_status: "SUCCESS" })
+    }
+    if (method === "GET" && path === "/media/media-1") {
+      return reply(ok("media", "media", { id: "media-1", media_status: "READY" }))
+    }
+    if (method === "POST" && path === `/adaccounts/${ACCOUNT}/creatives`) {
+      return reply(ok("creatives", "creative", { id: "creative-1" }))
+    }
+    if (method === "POST" && path === "/adsquads/squad-1/ads") {
+      return reply(ok("ads", "ad", { id: "ad-1" }))
+    }
+    if (method === "GET" && path === "/campaigns/camp-1") {
+      return reply(
+        ok("campaigns", "campaign", {
+          id: "camp-1",
+          name: "حملة",
+          status: "PAUSED",
+          ad_account_id: ACCOUNT,
+          updated_at: "x",
+          delivery_status: ["y"],
+        })
+      )
+    }
+    if (method === "PUT" && path === `/adaccounts/${ACCOUNT}/campaigns`) {
+      return reply(ok("campaigns", "campaign", { id: "camp-1" }))
+    }
+    if (method === "DELETE") return reply({ request_status: "SUCCESS" })
+    return reply({ request_status: "ERROR", debug_message: `unexpected ${method} ${path}` }, 404)
+  }) as typeof fetch
+  return {
+    calls,
+    publisher: new SnapchatCampaignPublisher({
+      apiBaseUrl: "https://snap.test/v1",
+      profileApiBaseUrl: "https://snap.test/v1",
+      fetch: fetchImpl,
+      wait: async () => undefined,
+    }),
+  }
+}
+
+const snapInput = (overrides: Partial<SnapchatPublishInput> = {}): SnapchatPublishInput => ({
+  accessToken: "token",
+  adAccountId: ACCOUNT,
+  name: "حملة الشتاء",
+  objective: "traffic",
+  dailyBudget: 50,
+  startAt: "2026-01-15T09:05:00.000Z",
+  endAt: null,
+  countryCode: "sa",
+  minAge: 25,
+  maxAge: 44,
+  gender: "male",
+  media: { kind: "image", bytes: PNG, contentType: "image/png", fileName: "a.png" },
+  brandName: "مدار",
+  headline: "كاشير سريع",
+  callToAction: "SIGN_UP",
+  url: "https://example.com/?utm_source=snapchat",
+  startActive: false,
+  ...overrides,
+})
+
+describe("publishing to Snapchat", () => {
+  it("creates the campaign, ad set, media, creative and ad, in that order", async () => {
+    const { calls, publisher } = fakeSnapchat()
+    const ids = await publisher.publish(snapInput())
+    expect(ids).toEqual({
+      campaignId: "camp-1",
+      adSquadId: "squad-1",
+      mediaId: "media-1",
+      creativeId: "creative-1",
+      adId: "ad-1",
+    })
+    const writes = calls.filter((call) => call.method !== "GET").map((call) => call.path)
+    expect(writes).toEqual([
+      `/adaccounts/${ACCOUNT}/campaigns`,
+      "/campaigns/camp-1/adsquads",
+      `/adaccounts/${ACCOUNT}/media`,
+      "/media/media-1/upload",
+      `/adaccounts/${ACCOUNT}/creatives`,
+      "/adsquads/squad-1/ads",
+    ])
+    const body = (path: string) =>
+      calls.find((call) => call.method === "POST" && call.path === path)?.body as Record<
+        string,
+        Array<Record<string, unknown>>
+      >
+    expect(body(`/adaccounts/${ACCOUNT}/campaigns`).campaigns[0]).toMatchObject({
+      status: "PAUSED",
+      objective_v2_properties: { objective_v2_type: "TRAFFIC" },
+    })
+    expect(body("/campaigns/camp-1/adsquads").adsquads[0]).toMatchObject({
+      daily_budget_micro: 50_000_000,
+      optimization_goal: "SWIPES",
+      auto_bid: true,
+      targeting: {
+        geos: [{ country_code: "sa", operation: "INCLUDE" }],
+        demographics: [{ min_age: "25", max_age: "44", gender: "MALE", operation: "INCLUDE" }],
+      },
+    })
+    expect(body(`/adaccounts/${ACCOUNT}/creatives`).creatives[0]).toMatchObject({
+      type: "WEB_VIEW",
+      headline: "كاشير سريع",
+      brand_name: "مدار",
+      call_to_action: "SIGN_UP",
+      top_snap_media_id: "media-1",
+      profile_properties: { profile_id: "profile-1" },
+    })
+  })
+
+  it("measures a sign-ups campaign by the account's pixel, and stops early without one", async () => {
+    const withPixel = fakeSnapchat()
+    await withPixel.publisher.publish(snapInput({ objective: "leads", startActive: true }))
+    const squad = withPixel.calls.find((call) => call.path === "/campaigns/camp-1/adsquads")
+      ?.body as { adsquads: Array<Record<string, unknown>> }
+    expect(squad.adsquads[0]).toMatchObject({
+      optimization_goal: "PIXEL_SIGNUP",
+      pixel_id: "pixel-1",
+    })
+
+    const without = fakeSnapchat({ noPixel: true })
+    await expect(
+      without.publisher.publish(snapInput({ objective: "leads" }))
+    ).rejects.toMatchObject({
+      code: "SNAPCHAT_NO_PIXEL",
+    })
+    // Nothing was created.
+    expect(without.calls.every((call) => call.method === "GET")).toBe(true)
+  })
+
+  it("stops before creating anything when the account has no public profile", async () => {
+    const { calls, publisher } = fakeSnapchat({ noProfile: true })
+    await expect(publisher.publish(snapInput())).rejects.toMatchObject({
+      code: "SNAPCHAT_NO_PUBLIC_PROFILE",
+    })
+    expect(calls.every((call) => call.method === "GET")).toBe(true)
+  })
+
+  it("deletes the campaign when a later step is refused, and reports Snapchat's reason", async () => {
+    const { calls, publisher } = fakeSnapchat({ refuse: "/creatives" })
+    const error = await publisher.publish(snapInput()).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(SnapchatPublishError)
+    expect(error).toMatchObject({ step: "creative", reason: "Headline is too long" })
+    expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: "/campaigns/camp-1" })
+  })
+
+  it("switches a campaign on by sending it back with only its status changed", async () => {
+    const { calls, publisher } = fakeSnapchat()
+    await publisher.setCampaignStatus({
+      accessToken: "token",
+      adAccountId: ACCOUNT,
+      campaignId: "camp-1",
+      active: true,
+    })
+    const put = calls.find((call) => call.method === "PUT")?.body as {
+      campaigns: Array<Record<string, unknown>>
+    }
+    expect(put.campaigns[0]).toEqual({
+      id: "camp-1",
+      name: "حملة",
+      status: "ACTIVE",
+      ad_account_id: ACCOUNT,
+    })
+  })
+})
+
+describe("the creative library and the publish record", () => {
+  let database: PostgresDatabase
+  let storage: ReturnType<typeof memoryStorage>
+  let creatives: CampaignCreativesService
+
+  beforeEach(async () => {
+    process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET = "12345678901234567890123456789012"
+    const mem = newDb({ autoCreateForeignKeyIndices: true })
+    database = new PostgresDatabase(new (mem.adapters.createPg().Pool)())
+    await runIdentityMigrations(database, process.cwd())
+    await database.query(
+      `insert into users (id, email, password_hash, full_name, email_verified_at)
+       values ($1, 'o@x.com', 'h', 'Owner', now())`,
+      [USER]
+    )
+    for (const [id, name] of [
+      [ORG, "Org"],
+      [OTHER_ORG, "Other"],
+    ]) {
+      await database.query(
+        `insert into organizations (id, name, owner_user_id) values ($1, $2, $3)`,
+        [id, name, USER]
+      )
+    }
+    await database.query(
+      `insert into snapchat_oauth_connections
+         (id, organization_id, project_id, status, created_by_user_id, updated_by_user_id)
+       values ($1, $2, $3, 'connected', $4, $4)`,
+      [CONNECTION, ORG, randomUUID(), USER]
+    )
+    await database.query(
+      `insert into snapchat_ads_accounts (id, connection_id, account_id, account_name, currency_code)
+       values ($1, $2, $3, 'Madar', 'SAR')`,
+      [randomUUID(), CONNECTION, ACCOUNT]
+    )
+    storage = memoryStorage()
+    creatives = new CampaignCreativesService(database, storage)
+  })
+
+  afterEach(async () => {
+    await database.end()
+  })
+
+  const upload = (overrides: Record<string, unknown> = {}) =>
+    creatives.upload({
+      organizationId: ORG,
+      workspaceId: null,
+      userId: USER,
+      name: "عرض الشتاء",
+      contentType: "image/png",
+      dataBase64: PNG.toString("base64"),
+      width: 1080,
+      height: 1920,
+      ...overrides,
+    })
+
+  it("keeps an uploaded creative, and refuses a file that is not what it says", async () => {
+    const image = await upload()
+    expect(image).toMatchObject({ kind: "image", width: 1080, height: 1920, sizeBytes: PNG.length })
+    expect(image.url).toBe(`https://files.test/campaign-creatives/${ORG}/${image.id}.png`)
+    const video = await upload({
+      contentType: "video/mp4",
+      dataBase64: MP4.toString("base64"),
+      durationSeconds: 12.5,
+    })
+    expect(video).toMatchObject({ kind: "video", durationSeconds: 12.5 })
+
+    await expect(
+      upload({ contentType: "image/jpeg", dataBase64: PNG.toString("base64") })
+    ).rejects.toMatchObject({ code: "CREATIVE_INVALID_FILE" })
+    await expect(
+      upload({
+        dataBase64: Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]).toString("base64"),
+      })
+    ).rejects.toMatchObject({ code: "CREATIVE_TOO_LARGE" })
+
+    expect((await creatives.list(ORG)).map((entry) => entry.id).sort()).toEqual(
+      [image.id, video.id].sort()
+    )
+    // Another organization sees none of it.
+    expect(await creatives.list(OTHER_ORG)).toEqual([])
+    await expect(creatives.get(OTHER_ORG, image.id)).rejects.toMatchObject({
+      code: "CREATIVE_NOT_FOUND",
+    })
+
+    await creatives.remove(ORG, image.id)
+    expect((await creatives.list(ORG)).map((entry) => entry.id)).toEqual([video.id])
+  })
+
+  it("judges whether a creative fits Snapchat, and names the campaign in the address", async () => {
+    const fits = await upload()
+    expect(snapchatCreativeProblem(fits)).toBeNull()
+    expect(snapchatCreativeProblem({ ...fits, width: 1080, height: 1080 })).toBe("ratio")
+    expect(snapchatCreativeProblem({ ...fits, width: 540, height: 960 })).toBe("small")
+    expect(snapchatCreativeProblem({ ...fits, kind: "video", durationSeconds: 2 })).toBe("duration")
+    expect(snapchatCreativeProblem({ ...fits, width: null, height: null })).toBeNull()
+
+    expect(withCampaignTracking("https://shop.sa/offers?x=1", "عروض الشتاء 2026")).toBe(
+      "https://shop.sa/offers?x=1&utm_source=snapchat&utm_medium=paid_social&utm_campaign=" +
+        encodeURIComponent("عروض_الشتاء_2026")
+    )
+    expect(withCampaignTracking("https://shop.sa/?utm_source=mine", "x")).toBe(
+      "https://shop.sa/?utm_source=mine"
+    )
+  })
+
+  function service(snap = fakeSnapchat(), now = new Date("2026-01-15T06:00:00Z")) {
+    return {
+      snap,
+      publishing: new CampaignPublishingService(
+        database,
+        creatives,
+        { resolveAccessToken: async () => "token" },
+        snap.publisher,
+        () => now
+      ),
+    }
+  }
+
+  const request = (creativeId: string, overrides: Partial<PublishCampaignInput> = {}) =>
+    ({
+      platform: "snapchat",
+      connectionId: CONNECTION,
+      adAccountId: ACCOUNT,
+      name: "حملة الشتاء",
+      objective: "traffic",
+      dailyBudget: 50,
+      startDate: "2026-01-15",
+      endDate: "2026-01-20",
+      countryCode: "sa",
+      minAge: 25,
+      maxAge: null,
+      gender: "all",
+      creativeId,
+      brandName: "مدار",
+      headline: "كاشير سريع",
+      callToAction: "SIGN_UP",
+      url: "https://example.com/offer",
+      startActive: false,
+      ...overrides,
+    }) satisfies PublishCampaignInput
+
+  it("lists the connected accounts, publishes in the background and keeps the record", async () => {
+    const { publishing, snap } = service()
+    const creative = await upload()
+    expect((await publishing.options(actor)).snapchat.accounts).toEqual([
+      { connectionId: CONNECTION, adAccountId: ACCOUNT, name: "Madar", currency: "SAR" },
+    ])
+    expect(
+      (await publishing.options({ ...actor, organizationId: OTHER_ORG })).snapchat.accounts
+    ).toEqual([])
+
+    const started = await publishing.publish(actor, request(creative.id))
+    expect(started).toMatchObject({
+      status: "publishing",
+      currency: "SAR",
+      platformStatus: "paused",
+      // Today: five minutes from now. The end date runs to its last minute in Riyadh.
+      startAt: "2026-01-15T06:05:00.000Z",
+      endAt: "2026-01-20T20:59:00.000Z",
+    })
+    expect(started.url).toContain("utm_source=snapchat")
+
+    await publishing.settled()
+    const done = await publishing.get(ORG, started.id)
+    expect(done).toMatchObject({ status: "published", externalCampaignId: "camp-1", error: null })
+    expect(snap.calls.some((call) => call.path === "/media/media-1/upload")).toBe(true)
+    expect((await publishing.list(ORG)).map((entry) => entry.id)).toEqual([started.id])
+    await expect(publishing.get(OTHER_ORG, started.id)).rejects.toMatchObject({
+      code: "PUBLICATION_NOT_FOUND",
+    })
+
+    const on = await publishing.setActive(actor, started.id, true)
+    expect(on.platformStatus).toBe("active")
+  })
+
+  it("refuses what it can judge itself before anything reaches Snapchat", async () => {
+    const { publishing, snap } = service()
+    const creative = await upload()
+    const square = await upload({ width: 1080, height: 1080 })
+    const cases: Array<[Partial<PublishCampaignInput>, string]> = [
+      [{ adAccountId: "someone-else" }, "PUBLISH_ACCOUNT_NOT_CONNECTED"],
+      [{ dailyBudget: 5 }, "PUBLISH_BUDGET_TOO_LOW"],
+      [{ startDate: "2026-01-14" }, "PUBLISH_START_IN_PAST"],
+      [{ endDate: "2026-01-10" }, "PUBLISH_END_BEFORE_START"],
+      [{ minAge: 30, maxAge: 25 }, "PUBLISH_AGE_RANGE"],
+      [{ url: "http://example.com" }, "PUBLISH_INVALID_URL"],
+      [{ creativeId: square.id }, "PUBLISH_CREATIVE_NOT_SUITABLE"],
+      [{ creativeId: randomUUID() }, "CREATIVE_NOT_FOUND"],
+    ]
+    for (const [overrides, code] of cases) {
+      await expect(
+        publishing.publish(actor, request(creative.id, overrides))
+      ).rejects.toMatchObject({ code })
+    }
+    expect(snap.calls).toEqual([])
+    expect(await publishing.list(ORG)).toEqual([])
+  })
+
+  it("records Snapchat's reason when a publish fails, and what was cut short", async () => {
+    const { publishing } = service(fakeSnapchat({ refuse: "/creatives" }))
+    const creative = await upload()
+    const started = await publishing.publish(actor, request(creative.id))
+    await publishing.settled()
+    const failed = await publishing.get(ORG, started.id)
+    expect(failed).toMatchObject({
+      status: "failed",
+      error: { code: "SNAPCHAT_REFUSED", step: "creative", reason: "Headline is too long" },
+    })
+    await expect(publishing.setActive(actor, started.id, true)).rejects.toMatchObject({
+      code: "PUBLICATION_NOT_PUBLISHED",
+    })
+
+    // A publish still marked as running long after it started was interrupted.
+    await database.query(
+      `update campaign_publications set status = 'publishing', updated_at = $2 where id = $1`,
+      [started.id, "2026-01-15T05:00:00Z"]
+    )
+    expect(await publishing.get(ORG, started.id)).toMatchObject({
+      status: "failed",
+      error: { code: "PUBLISH_INTERRUPTED" },
+    })
+  })
+})

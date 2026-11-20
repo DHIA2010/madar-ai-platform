@@ -13,6 +13,7 @@ import { GoogleOAuthRepository } from "../../google-oauth/repository"
 import { GoogleOAuthService } from "../../google-oauth/service"
 import { SnapchatOAuthConnectionDeletionService } from "../../snapchat-oauth/connection-deletion-service"
 import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
+import { SnapchatOAuthService } from "../../snapchat-oauth/service"
 import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-deletion-service"
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
@@ -134,6 +135,7 @@ import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../..
 import { ApplicationAccessService } from "../../subscriptions/app-access"
 import { invoiceIdFromLinkToken, invoiceWhatsAppLink } from "../../whatsapp/invoice-links"
 import { registerDailyReportService, WhatsAppDailyReportService } from "../../whatsapp/daily-report"
+import { registerAdsReportService, WhatsAppAdsReportService } from "../../whatsapp/ads-report"
 import { WhatsAppMerchantConnectionService } from "../../whatsapp/merchant-connection"
 import { AddonsService } from "../../subscriptions/addons"
 import { PackageEntitlementsService } from "../../subscriptions/entitlements"
@@ -169,6 +171,9 @@ import {
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
 import { CampaignCheckupService } from "../../campaigns/checkup"
+import { CampaignCreativesService } from "../../campaigns/creatives"
+import { CampaignPublishingService } from "../../campaigns/publishing/service"
+import { SnapchatCampaignPublisher } from "../../campaigns/publishing/snapchat-publisher"
 import { CampaignJourneyService } from "../../campaigns/journey-service"
 import { ChannelsAggregationService } from "../../channels/channels-service"
 import { countConnectedPlatforms } from "../../organizations/connected-platforms"
@@ -255,6 +260,10 @@ import {
   inviteOrganizationMemberSchema,
   posSettingsUpdateSchema,
   promotionSchema,
+  adsReportSettingsSchema,
+  publicationStatusSchema,
+  publishCampaignSchema,
+  uploadCreativeSchema,
   dailyReportSettingsSchema,
   whatsAppEmbeddedSignupSchema,
   whatsAppSendModeSchema,
@@ -1205,6 +1214,21 @@ export function createIdentityApiServer(
   const campaignCheckupService = campaignsPerformanceAggregationService
     ? new CampaignCheckupService(campaignsPerformanceAggregationService)
     : null
+  // The daily ads report on WhatsApp -- built here (it needs the check-up), and handed to the
+  // backend's scheduled pass (server.ts).
+  const whatsAppAdsReportService =
+    container.infrastructure.database &&
+    whatsAppPlatformService &&
+    whatsAppTemplatesService &&
+    campaignCheckupService
+      ? new WhatsAppAdsReportService(
+          container.infrastructure.database,
+          whatsAppPlatformService,
+          whatsAppTemplatesService,
+          campaignCheckupService
+        )
+      : null
+  registerAdsReportService(whatsAppAdsReportService)
   const channelsAggregationService = container.infrastructure.database
     ? new ChannelsAggregationService(container.infrastructure.database)
     : null
@@ -1246,6 +1270,23 @@ export function createIdentityApiServer(
           },
           new AiChatLlmClient(container.config.anthropicApiKey, container.config.aiChatModel),
           container.config.aiChatModel
+        )
+      : null
+  // The creative library and publishing a campaign to an ad platform (campaigns/creatives.ts,
+  // campaigns/publishing).
+  const campaignCreativesService = container.infrastructure.database
+    ? new CampaignCreativesService(
+        container.infrastructure.database,
+        container.infrastructure.objectStorage ?? null
+      )
+    : null
+  const campaignPublishingService =
+    container.infrastructure.database && campaignCreativesService
+      ? new CampaignPublishingService(
+          container.infrastructure.database,
+          campaignCreativesService,
+          new SnapchatOAuthService(new SnapchatOAuthRepository(container.infrastructure.database)),
+          new SnapchatCampaignPublisher()
         )
       : null
   const campaignRepositoryForLinks = container.infrastructure.database
@@ -6875,6 +6916,47 @@ export function createIdentityApiServer(
         return send(200, await whatsAppDailyReportService.send(actor.organizationId, window))
       }
 
+      // The daily ads report on WhatsApp (whatsapp/ads-report.ts): the organization's choice of time
+      // and numbers, a preview of the report, and a test send.
+      if (url.pathname === "/v1/whatsapp/ads-report") {
+        if (!whatsAppAdsReportService) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+          const [settings, preview] = await Promise.all([
+            whatsAppAdsReportService.getSettings(actor.organizationId),
+            whatsAppAdsReportService.preview(actor.organizationId),
+          ])
+          return send(200, { settings, preview })
+        }
+        if (method === "PUT") {
+          if (!actor.modulePermissions.includes("settings:edit")) throw ERRORS.forbidden()
+          const payload = adsReportSettingsSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await whatsAppAdsReportService.updateSettings(
+              actor.organizationId,
+              actor.userId,
+              payload
+            )
+          )
+        }
+      }
+      if (method === "POST" && url.pathname === "/v1/whatsapp/ads-report/test") {
+        if (!whatsAppAdsReportService) {
+          return send(503, { code: "WHATSAPP_UNAVAILABLE", message: "WhatsApp is unavailable." })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) throw ERRORS.forbidden()
+        return send(
+          200,
+          await whatsAppAdsReportService.send(
+            actor.organizationId,
+            await whatsAppAdsReportService.build(actor.organizationId)
+          )
+        )
+      }
+
       // What the organization's plans unlock (subscriptions/entitlements.ts) -- for the app to show
       // locked features; the server enforces each one on its own route.
       if (method === "GET" && url.pathname === "/v1/entitlements") {
@@ -7478,6 +7560,95 @@ export function createIdentityApiServer(
             endDate: payload.endDate ?? null,
           })
         )
+      }
+
+      // The creative library: the organization's ad images and videos.
+      if (url.pathname === "/v1/campaigns/creatives") {
+        if (!campaignCreativesService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+          return send(200, { items: await campaignCreativesService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+          const payload = uploadCreativeSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await campaignCreativesService.upload({
+              organizationId: actor.organizationId,
+              workspaceId: actor.workspaceId ?? null,
+              userId: actor.userId,
+              ...payload,
+            })
+          )
+        }
+      }
+      const campaignCreativeMatch = url.pathname.match(/^\/v1\/campaigns\/creatives\/([^/]+)$/)
+      if (campaignCreativeMatch && method === "DELETE") {
+        if (!campaignCreativesService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+        await campaignCreativesService.remove(actor.organizationId, campaignCreativeMatch[1])
+        return send(200, { ok: true })
+      }
+
+      // Publishing a campaign to an ad platform: what can be published to, the campaigns
+      // published so far, a new publish (answered at once, finished in the background), one
+      // campaign's progress, and its on/off switch.
+      if (
+        url.pathname === "/v1/campaigns/publish/options" ||
+        url.pathname.startsWith("/v1/campaigns/publications")
+      ) {
+        if (!campaignPublishingService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET" && url.pathname === "/v1/campaigns/publish/options") {
+          if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+          return send(200, await campaignPublishingService.options(actor))
+        }
+        if (url.pathname === "/v1/campaigns/publications") {
+          if (method === "GET") {
+            if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+            return send(200, {
+              items: await campaignPublishingService.list(actor.organizationId),
+            })
+          }
+          if (method === "POST") {
+            if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+            const payload = publishCampaignSchema.parse(await readJsonBody(request))
+            return send(202, await campaignPublishingService.publish(actor, payload))
+          }
+        }
+        const publicationMatch = url.pathname.match(
+          /^\/v1\/campaigns\/publications\/([^/]+)(\/status)?$/
+        )
+        if (publicationMatch && method === "GET" && !publicationMatch[2]) {
+          if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+          return send(
+            200,
+            await campaignPublishingService.get(actor.organizationId, publicationMatch[1])
+          )
+        }
+        if (publicationMatch && method === "POST" && publicationMatch[2]) {
+          if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+          const payload = publicationStatusSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await campaignPublishingService.setActive(actor, publicationMatch[1], payload.active)
+          )
+        }
       }
 
       if (method === "GET" && url.pathname === "/v1/campaigns/imported") {

@@ -1,9 +1,18 @@
-import { redirect } from "next/navigation"
+"use client"
 
-import { ROUTES } from "@/constants/routes"
+import dynamic from "next/dynamic"
 
-// Creating a campaign is hidden until it can really publish to an ad platform (the form saves
-// nothing). An old link or bookmark lands on the campaigns list instead.
+// The wizard reads the chosen creative from the address, so it is drawn in the browser.
+const CampaignCreateScreen = dynamic(
+  () => import("@/features/campaigns").then((module) => module.CampaignCreateScreen),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-96 animate-pulse rounded-xl border border-border/70 bg-muted/20" />
+    ),
+  }
+)
+
 export default function Page() {
-  redirect(`${ROUTES.campaigns}/list`)
+  return <CampaignCreateScreen />
 }

@@ -11,12 +11,19 @@ import { useLocale, useTranslations } from "next-intl"
 import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
-import {
-  dailyReportService,
-  type DailyReportSettings,
-} from "@/features/settings/services/daily-report.service"
+import { adsReportService } from "@/features/settings/services/ads-report.service"
+import { dailyReportService } from "@/features/settings/services/daily-report.service"
 
-import { CATEGORY_META, type ReportCategory } from "./catalog"
+import { CATEGORY_META, type ReportCategory, type ReportTemplate } from "./catalog"
+import { useFormatTime } from "./time-picker"
+
+// What a report's card says about it: on or off, when it goes out, and (the daily report only)
+// which plan it is on.
+interface TemplateStatus {
+  enabled: boolean
+  times: string[]
+  paid?: boolean
+}
 
 export function ReportsBreadcrumb({ items }: { items: Array<{ label: string; href?: string }> }) {
   return (
@@ -42,14 +49,35 @@ export function ScheduledReportsCategory({ category }: { category: ReportCategor
   const locale = useLocale() as Locale
   const meta = CATEGORY_META[category]
   const Icon = meta.icon
-  const [dailyReport, setDailyReport] = useState<DailyReportSettings | null>(null)
+  const formatTime = useFormatTime()
+  const [statuses, setStatuses] = useState<Partial<Record<ReportTemplate["key"], TemplateStatus>>>(
+    {}
+  )
 
   useEffect(() => {
-    if (!meta.templates.some((template) => template.key === "daily-report")) return
-    dailyReportService
-      .get()
-      .then((overview) => setDailyReport(overview.settings))
-      .catch(() => setDailyReport(null))
+    const keep = (key: ReportTemplate["key"], status: TemplateStatus) =>
+      setStatuses((current) => ({ ...current, [key]: status }))
+    for (const template of meta.templates) {
+      if (template.key === "daily-report") {
+        dailyReportService
+          .get()
+          .then(({ settings }) =>
+            keep("daily-report", {
+              enabled: settings.enabled,
+              times: settings.coverage.map((entry) => entry.sendTime),
+              paid: settings.plan.paid,
+            })
+          )
+          .catch(() => undefined)
+      } else {
+        adsReportService
+          .get()
+          .then(({ settings }) =>
+            keep("ads-report", { enabled: settings.enabled, times: [settings.sendTime] })
+          )
+          .catch(() => undefined)
+      }
+    }
   }, [meta.templates])
 
   return (
@@ -83,8 +111,9 @@ export function ScheduledReportsCategory({ category }: { category: ReportCategor
       <div className="grid gap-4 lg:grid-cols-2">
         {meta.templates.map((template) => {
           const TemplateIcon = template.icon
-          const on = Boolean(dailyReport?.enabled)
-          const times = dailyReport?.coverage.map((entry) => entry.sendTime).join("، ")
+          const status = statuses[template.key]
+          const on = Boolean(status?.enabled)
+          const times = status?.times.map(formatTime).join("، ")
           return (
             <Link
               key={template.key}
@@ -96,7 +125,7 @@ export function ScheduledReportsCategory({ category }: { category: ReportCategor
                   <TemplateIcon className="size-5" />
                 </span>
                 <div className="flex flex-wrap justify-end gap-1.5">
-                  {dailyReport ? (
+                  {status ? (
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-1 text-[11px] font-bold",
@@ -106,17 +135,15 @@ export function ScheduledReportsCategory({ category }: { category: ReportCategor
                       {on ? t("status.on") : t("status.off")}
                     </span>
                   ) : null}
-                  {dailyReport ? (
+                  {status && status.paid !== undefined ? (
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
-                        dailyReport.plan.paid
-                          ? "bg-[#fef3c7] text-[#92400e]"
-                          : "bg-[#eef4ff] text-[#1d4ed8]"
+                        status.paid ? "bg-[#fef3c7] text-[#92400e]" : "bg-[#eef4ff] text-[#1d4ed8]"
                       )}
                     >
-                      {dailyReport.plan.paid ? <Crown className="size-3" /> : null}
-                      {dailyReport.plan.paid ? t("plan.paid") : t("plan.free")}
+                      {status.paid ? <Crown className="size-3" /> : null}
+                      {status.paid ? t("plan.paid") : t("plan.free")}
                     </span>
                   ) : null}
                 </div>

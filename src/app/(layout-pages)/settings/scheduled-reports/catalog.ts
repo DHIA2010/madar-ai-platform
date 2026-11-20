@@ -3,6 +3,7 @@
 // set up there; the rest of a category is "coming soon" until its reports are built.
 
 import {
+  BarChart3,
   ClipboardList,
   LayoutGrid,
   Megaphone,
@@ -29,7 +30,7 @@ export const isReportCategory = (value: string): value is ReportCategory =>
   (REPORT_CATEGORIES as readonly string[]).includes(value)
 
 export interface ReportTemplate {
-  key: "daily-report"
+  key: "daily-report" | "ads-report"
   icon: LucideIcon
   href: string
 }
@@ -59,7 +60,7 @@ export const CATEGORY_META: Record<ReportCategory, CategoryMeta> = {
     icon: Megaphone,
     tile: "bg-[#fff1e6] text-[#ea580c]",
     accent: "group-hover:border-[#fed7aa]",
-    templates: [],
+    templates: [{ key: "ads-report", icon: BarChart3, href: ROUTES.settingsAdsReport }],
   },
   procurement: {
     icon: Truck,

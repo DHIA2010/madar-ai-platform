@@ -113,6 +113,7 @@ export const ROUTES = {
   // التقارير المجدولة على واتساب: categories (one per app), each with its report templates.
   settingsScheduledReports: "/settings/scheduled-reports",
   settingsDailyReport: "/settings/scheduled-reports/pos/daily-report",
+  settingsAdsReport: "/settings/scheduled-reports/advertising/ads-report",
   settingsWhatsApp: "/settings/whatsapp",
   madarAdmin: "/madar-admin",
   madarAdminRequests: "/madar-admin/requests",

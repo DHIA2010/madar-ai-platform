@@ -294,6 +294,7 @@ describe("WhatsAppLeadAlertsService", () => {
     expect(statuses.map((entry) => entry.name)).toEqual([
       "madar_pos_invoice",
       "madar_daily_report",
+      "madar_ads_report",
       "madar_new_lead",
       "madar_account_alert",
     ])

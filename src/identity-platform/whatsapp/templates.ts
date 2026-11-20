@@ -97,6 +97,55 @@ export const DAILY_REPORT_TEMPLATE: TemplateDefinition = {
   ],
 }
 
+// The daily ads report sent to the merchant's chosen numbers (whatsapp/ads-report.ts). Utility --
+// an update about the merchant's own ad accounts, worded as a plain account report with no call
+// to action (Meta files anything promotional under marketing, which is capped per recipient).
+// Fixed lines, "—" when empty, as in the daily store report.
+//   {{1}} day · {{2}}-{{6}} spend, impressions, clicks, results, cost per result ·
+//   {{7}}-{{9}} one line per ad platform · {{10}}-{{12}} the check-up's findings
+export const ADS_REPORT_TEMPLATE: TemplateDefinition = {
+  name: "madar_ads_report",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "📊 *تقرير إعلاناتك اليومي مع مدار*",
+    "ملخص أداء حملاتك ليوم *{{1}}*",
+    "",
+    "💰 *الملخص*",
+    "• الصرف: {{2}}",
+    "• مرات الظهور: {{3}}",
+    "• النقرات: {{4}}",
+    "• النتائج: {{5}}",
+    "• تكلفة النتيجة: {{6}}",
+    "",
+    "📱 *حسب المنصة*",
+    "• {{7}}",
+    "• {{8}}",
+    "• {{9}}",
+    "",
+    "⚠️ *ملاحظات فحص الحملات*",
+    "• {{10}}",
+    "• {{11}}",
+    "• {{12}}",
+    "",
+    "هذه رسالة تلقائية من حسابك في مدار.",
+  ].join("\n"),
+  bodyExamples: [
+    "2026-01-14",
+    "150 ر.س",
+    "12,400",
+    "310",
+    "4",
+    "37.5 ر.س",
+    "سناب شات: 100 ر.س · نقرات 210 · نتائج 3",
+    "تيك توك: 50 ر.س · نقرات 100 · نتائج 1",
+    "—",
+    "حملة «عروض الشتاء» وصلت ميزانيتها اليومية",
+    "إعلان «فيديو الكاشير» نقراته أقل من بقية الإعلانات",
+    "—",
+  ],
+}
+
 // The alert Madar's own team gets when a new lead arrives (whatsapp/lead-alerts.ts): {{1}} what
 // happened, {{2}} name, {{3}} mobile, {{4}} email, {{5}} where they came from.
 export const LEAD_ALERT_TEMPLATE: TemplateDefinition = {
@@ -156,6 +205,7 @@ export const SIGNUP_ALERT_TEMPLATE: TemplateDefinition = {
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
+  ADS_REPORT_TEMPLATE,
   LEAD_ALERT_TEMPLATE,
   SIGNUP_ALERT_TEMPLATE,
 ]

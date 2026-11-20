@@ -16,6 +16,7 @@ import type { AdminWhatsAppTemplate } from "../types/platform-admin.types"
 const TEMPLATE_LABEL: Record<string, string> = {
   madar_pos_invoice: "فاتورة نقاط البيع (مع ملف PDF)",
   madar_daily_report: "التقرير اليومي للمتجر",
+  madar_ads_report: "تقرير الإعلانات اليومي",
   madar_new_lead: "تنبيه عميل محتمل جديد (لفريق مدار)",
   madar_account_alert: "تنبيه تسجيل حساب جديد (لفريق مدار)",
 }

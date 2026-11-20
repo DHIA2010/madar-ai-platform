@@ -524,6 +524,42 @@ export const createNativeCampaignSchema = z.object({
   endDate: dateOnlySchema.nullable().optional(),
 })
 
+// One image or video for the creative library. Its size on screen (and a video's length) is
+// measured in the browser.
+export const uploadCreativeSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  contentType: z.enum(["image/png", "image/jpeg", "video/mp4"]),
+  dataBase64: z.string().min(1),
+  width: z.number().positive().max(20000).nullish(),
+  height: z.number().positive().max(20000).nullish(),
+  durationSeconds: z.number().positive().max(3600).nullish(),
+})
+
+// A campaign to publish to an ad platform (campaigns/publishing/service.ts). The text limits are
+// Snapchat's own for an ad's headline and brand name.
+export const publishCampaignSchema = z.object({
+  platform: z.literal("snapchat"),
+  connectionId: z.string().uuid(),
+  adAccountId: z.string().min(1).max(100),
+  name: z.string().trim().min(2).max(120),
+  objective: z.enum(["traffic", "leads"]),
+  dailyBudget: z.number().positive().max(100000),
+  startDate: dateOnlySchema,
+  endDate: dateOnlySchema.nullish(),
+  countryCode: z.enum(["sa", "ae", "kw", "qa", "bh", "om", "eg", "jo"]),
+  minAge: z.number().int().min(18).max(49),
+  maxAge: z.number().int().min(19).max(49).nullish(),
+  gender: z.enum(["all", "male", "female"]),
+  creativeId: z.string().uuid(),
+  brandName: z.string().trim().min(1).max(25),
+  headline: z.string().trim().min(1).max(34),
+  callToAction: z.enum(["MORE", "SHOP_NOW", "ORDER_NOW", "SIGN_UP", "BOOK_NOW", "GET_NOW"]),
+  url: z.string().trim().url().max(1000),
+  startActive: z.boolean(),
+})
+
+export const publicationStatusSchema = z.object({ active: z.boolean() })
+
 export const importCampaignsSchema = z.object({
   platform: z.enum(CAMPAIGN_PLATFORM_VALUES),
   connectionId: z.string().uuid().optional(),
@@ -1620,6 +1656,21 @@ export const whatsAppEmbeddedSignupSchema = z.object({
 
 // The daily store report on WhatsApp -- see whatsapp/daily-report.ts.
 const dailyReportTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+
+// The daily ads report on WhatsApp: on or off, one send time and up to two numbers.
+export const adsReportSettingsSchema = z.object({
+  enabled: z.boolean(),
+  sendTime: dailyReportTimeSchema,
+  recipients: z
+    .array(
+      z.object({
+        phone: z.string().trim().min(5).max(30),
+        name: z.string().trim().max(80).optional().default(""),
+      })
+    )
+    .max(2)
+    .default([]),
+})
 
 export const dailyReportSettingsSchema = z.object({
   enabled: z.boolean(),

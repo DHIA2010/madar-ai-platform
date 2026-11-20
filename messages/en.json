@@ -5123,6 +5123,61 @@
         "limitBuyWorkspaces": "Add a workspace to your subscription to create a new one."
       }
     },
+    "adsReport": {
+      "title": "Daily ads report on WhatsApp",
+      "subtitle": "Every morning a WhatsApp message tells you what your ads spent and brought yesterday on each platform, with the check-up's main findings — without opening the app.",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Report settings saved",
+      "retry": "Try again",
+      "loadError": {
+        "forbidden": "You don't have permission to view this report.",
+        "generic": "The report's settings could not be loaded. Try again."
+      },
+      "pending": {
+        "title": "The message is waiting for WhatsApp's approval",
+        "body": "WhatsApp reviews this report's wording before it can be sent, usually within minutes to a few hours. You can save your settings now; sending starts by itself once it is approved."
+      },
+      "enable": {
+        "title": "Send the ads report",
+        "on": "Sent every day at {time}, Riyadh time",
+        "off": "The report is off — turn it on to get it every morning",
+        "lastSent": "Last sent: {day}"
+      },
+      "time": {
+        "title": "Send time",
+        "hint": "The report covers all of yesterday, so the morning is the best time for it.",
+        "label": "Send time"
+      },
+      "recipients": {
+        "title": "Numbers",
+        "hint": "{count, plural, one {One number receives the report.} other {Up to # numbers receive the report, such as the owner and the marketer.}}",
+        "phonePlaceholder": "05XXXXXXXX",
+        "namePlaceholder": "Name (optional)",
+        "add": "Add a number",
+        "remove": "Remove the number"
+      },
+      "checkupHint": "The findings in the report are the same ones shown in",
+      "checkupLink": "the campaigns check-up",
+      "preview": {
+        "title": "Message preview",
+        "day": "Figures for {day}",
+        "test": "Send a test",
+        "testSent": "{count, plural, one {Test sent to one number} other {Test sent to # numbers}}",
+        "testFailed": "The test could not be sent",
+        "testNeedsRecipients": "Add a number first",
+        "note": "This is the message as it will arrive, with your ad accounts' current figures. If no ad was shown yesterday and there is nothing to flag, nothing is sent."
+      },
+      "errors": {
+        "noRecipients": "Add at least one number to receive the report.",
+        "tooManyRecipients": "Two numbers at most.",
+        "invalidPhone": "The mobile number isn't valid. Write it like 05XXXXXXXX.",
+        "templateNotReady": "WhatsApp hasn't approved the report's wording yet. Try later.",
+        "unavailable": "WhatsApp is unavailable right now. Try later.",
+        "forbidden": "You don't have permission to change this report.",
+        "save": "The settings could not be saved. Try again."
+      }
+    },
     "dailyReport": {
       "title": "Daily WhatsApp report",
       "subtitle": "Your store's daily summary on WhatsApp: sales, purchases, expenses, shifts, payment methods, best sellers and low stock.",
@@ -5405,6 +5460,10 @@
         "daily-report": {
           "name": "Daily report",
           "description": "The day in brief: sales, purchases, expenses, shifts, payment methods, best sellers and low stock."
+        },
+        "ads-report": {
+          "name": "Daily ads report",
+          "description": "Yesterday in brief: spend, impressions, clicks and results on each ad platform, with the check-up's main findings."
         }
       },
       "time": {
@@ -7560,7 +7619,7 @@
       "checkup": "Check-up",
       "journey": "Spend & Sales",
       "create": "Create Campaign",
-      "creativeLibrary": "Creative Library",
+      "creativeLibrary": "Creative library",
       "templates": "Templates"
     },
     "checkupScreen": {
@@ -7699,49 +7758,239 @@
     "performanceChart": {
       "ariaLabel": "Performance trend chart"
     },
-    "creativeUploadArea": {
-      "invalidFiles": "One or more files are invalid. Supported: images, videos, PDFs, HTML5.",
-      "duplicateFiles": "Duplicate files were skipped.",
-      "dropzoneTitle": "Drag & drop files here or click to browse",
-      "dropzoneSubtitle": "Multiple upload supported. Preview and validation enabled.",
-      "uploadQueue": "Upload queue",
-      "completedCount": "{completed}/{total} completed",
-      "previewBeforeSave": "Preview Before Save",
-      "saveToLibrary": "Save to Library"
-    },
     "creativeLibrary": {
-      "title": "Creative Library",
-      "subtitle": "Manage reusable assets for campaigns across channels.",
-      "newCreative": "New Creative",
-      "uploadCard": {
-        "title": "Upload Creatives",
-        "subtitle": "Drag & drop, browse files, and upload multiple assets with progress."
+      "title": "Creative library",
+      "subtitle": "Your ad images and videos in one place. Upload once, use in any campaign.",
+      "upload": "Upload a creative",
+      "uploading": "Uploading {current} of {total}…",
+      "dropzone": {
+        "title": "Drop images or videos here, or click to choose",
+        "hint": "Best size for Snapchat: upright 1080×1920 (9:16). PNG or JPG images up to 5 MB, MP4 video up to 30 MB."
       },
-      "libraryCard": {
-        "title": "Asset Library",
-        "subtitle": "Select creatives for campaign creation without duplicate uploads."
-      },
-      "searchPlaceholder": "Search creatives...",
-      "typeFilterPlaceholder": "Type",
-      "typeOptions": {
-        "all": "All Types",
+      "filters": {
+        "all": "All",
         "image": "Images",
-        "video": "Videos",
-        "logo": "Logos",
-        "pdf": "PDFs",
-        "html5": "HTML5",
-        "headline": "Headlines",
-        "description": "Descriptions",
-        "cta": "CTA Buttons"
+        "video": "Videos"
       },
-      "emptyTitle": "No creatives found.",
-      "emptyDescription": "Upload your first asset to populate the library.",
-      "usedCount": "Used {count}x",
-      "lastModified": "Last modified {modified}",
-      "actions": {
-        "preview": "Preview",
-        "use": "Use",
-        "edit": "Edit"
+      "emptyTitle": "No creatives yet",
+      "emptyDescription": "Upload your ad's first image or video, then use it when you create a campaign.",
+      "loadFailed": "The creatives could not be loaded.",
+      "retry": "Try again",
+      "remove": "Delete",
+      "confirmRemove": "Confirm delete",
+      "removing": "Deleting…",
+      "cancel": "Cancel",
+      "removed": "Creative deleted",
+      "removeFailed": "The creative could not be deleted. Try again.",
+      "useInCampaign": "Use in a campaign",
+      "fit": {
+        "ok": "Fits Snapchat",
+        "ratio": "Not upright 9:16",
+        "small": "Smaller than 1080×1920",
+        "duration": "Length must be 3 seconds to 3 minutes"
+      },
+      "uploadErrors": {
+        "type": "“{name}”: the file has to be a PNG or JPG image or an MP4 video.",
+        "imageSize": "“{name}”: the image is larger than 5 MB.",
+        "videoSize": "“{name}”: the video is larger than 30 MB.",
+        "unavailable": "Uploads are not available right now. Try later.",
+        "failed": "“{name}” could not be uploaded. Try again."
+      }
+    },
+    "publish": {
+      "title": "Create a campaign",
+      "subtitle": "Four short steps, then your campaign is published to Snapchat straight from Madar.",
+      "loadFailed": "The form's data could not be loaded.",
+      "retry": "Try again",
+      "back": "Back",
+      "next": "Next",
+      "publish": "Publish the campaign",
+      "stepCount": "Step {current} of {total}",
+      "steps": {
+        "basics": "Basics",
+        "audience": "Budget and audience",
+        "ad": "The ad",
+        "review": "Review and publish"
+      },
+      "stepTitles": {
+        "basics": "Where do you advertise, and why?",
+        "audience": "How much do you spend, and who sees it?",
+        "ad": "Build your ad",
+        "review": "Review, then publish"
+      },
+      "stepHints": {
+        "basics": "Choose the platform, name your campaign and say what you want from it.",
+        "audience": "Set the daily budget, the start date and who the ad is shown to.",
+        "ad": "Choose the image or video, write the headline and add your website's link.",
+        "review": "Check the details. Nothing is published until you press “Publish the campaign”."
+      },
+      "noAccount": {
+        "title": "Connect your Snapchat ad account first",
+        "body": "To publish a campaign from Madar, a Snapchat ad account has to be connected. Connect it once, then come back here.",
+        "action": "Connect Snapchat"
+      },
+      "platforms": {
+        "snapchat": "Snapchat",
+        "snapchatHint": "Publishing is available now",
+        "meta": "Meta (Facebook and Instagram)",
+        "tiktok": "TikTok",
+        "google": "Google",
+        "soon": "Soon"
+      },
+      "basics": {
+        "platform": "Platform",
+        "account": "Ad account",
+        "name": "Campaign name",
+        "nameHint": "A name that helps you tell it apart. People don't see it.",
+        "namePlaceholder": "Example: Winter offers",
+        "objective": "What do you want from the campaign?"
+      },
+      "objectives": {
+        "traffic": {
+          "title": "Visits to my website",
+          "hint": "The ad is shown to people likely to tap and visit your website."
+        },
+        "leads": {
+          "title": "Sign-ups and orders",
+          "hint": "The ad is shown to people likely to sign up or order. It needs the Snap Pixel installed on your website."
+        }
+      },
+      "audience": {
+        "budget": "Daily budget",
+        "budgetHint": "About {week} {currency} a week. Snapchat may spend a little more on one day and less on another.",
+        "startDate": "Start date",
+        "endDate": "End date (optional)",
+        "endDateHint": "Leave it empty to keep the campaign running until you stop it.",
+        "endDatePlaceholder": "No end",
+        "country": "Country",
+        "minAge": "Age from",
+        "maxAge": "To",
+        "noMaxAge": "No upper limit",
+        "agePlus": "{age} and older",
+        "ageRange": "{min} to {max}",
+        "gender": "Gender",
+        "genders": {
+          "all": "Everyone",
+          "male": "Men",
+          "female": "Women"
+        }
+      },
+      "countries": {
+        "sa": "Saudi Arabia",
+        "ae": "United Arab Emirates",
+        "kw": "Kuwait",
+        "qa": "Qatar",
+        "bh": "Bahrain",
+        "om": "Oman",
+        "eg": "Egypt",
+        "jo": "Jordan"
+      },
+      "ad": {
+        "creative": "Image or video",
+        "creativeHint": "Choose from your library or upload a new file. The size needed is upright 1080×1920 (9:16).",
+        "upload": "Upload a file",
+        "uploading": "Uploading…",
+        "brandName": "Your business name",
+        "brandNameHint": "Shown at the top of the ad.",
+        "brandNamePlaceholder": "Your business name",
+        "headline": "Ad headline",
+        "headlineHint": "A short line that tells the customer what they get.",
+        "headlinePlaceholder": "Ad headline",
+        "callToAction": "Button text",
+        "url": "Your website's link",
+        "urlHint": "The page that opens when the ad is tapped. It has to start with https://",
+        "preview": "Roughly how the ad looks",
+        "previewEmpty": "Choose an image or video to see it here"
+      },
+      "callsToAction": {
+        "MORE": "Learn more",
+        "SHOP_NOW": "Shop now",
+        "ORDER_NOW": "Order now",
+        "SIGN_UP": "Sign up",
+        "BOOK_NOW": "Book now",
+        "GET_NOW": "Get it now"
+      },
+      "review": {
+        "platform": "Platform and account",
+        "name": "Campaign name",
+        "objective": "Goal",
+        "budget": "Budget",
+        "budgetValue": "{amount} {currency} a day",
+        "dates": "Dates",
+        "datesRange": "{start} to {end}",
+        "datesOpen": "Starts {start} and runs until you stop it",
+        "audience": "Audience",
+        "headline": "Headline",
+        "url": "Link",
+        "start": "When does the campaign start?",
+        "startPaused": "Publish it switched off",
+        "startPausedHint": "The campaign is created on Snapchat and spends nothing until you switch it on from Madar.",
+        "startNow": "Start as soon as it is approved",
+        "startNowHint": "It starts spending ({amount} {currency} a day) once Snapchat approves the ad."
+      },
+      "errors": {
+        "account": "Choose the ad account.",
+        "name": "Give the campaign a name.",
+        "budget": "The lowest daily budget is {minimum} {currency}.",
+        "startDate": "Choose the start date.",
+        "startPast": "The start date has passed.",
+        "endDate": "The end date is before the start date.",
+        "ageRange": "The upper age has to be above the lower one.",
+        "creative": "Choose an image or video for the ad.",
+        "creativeFit": "This file does not fit Snapchat. Choose an upright 1080×1920 file.",
+        "brandName": "Write your business name.",
+        "headline": "Write the ad's headline.",
+        "url": "Write a valid link that starts with https://"
+      },
+      "requestErrors": {
+        "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect Snapchat and try again.",
+        "PUBLISH_BUDGET_TOO_LOW": "The daily budget is below the minimum.",
+        "PUBLISH_START_IN_PAST": "The start date has passed. Choose today or a later date.",
+        "PUBLISH_END_BEFORE_START": "The end date is before the start date.",
+        "PUBLISH_AGE_RANGE": "The upper age has to be above the lower one.",
+        "PUBLISH_INVALID_URL": "The link has to start with https://",
+        "PUBLISH_CREATIVE_NOT_SUITABLE": "The chosen file does not fit Snapchat. Choose an upright 1080×1920 file.",
+        "CREATIVE_NOT_FOUND": "The chosen file is no longer in the library. Choose another.",
+        "forbidden": "You don't have permission to publish campaigns.",
+        "generic": "Publishing could not start. Try again."
+      },
+      "result": {
+        "publishingTitle": "Publishing your campaign to Snapchat…",
+        "publishingBody": "We are creating the campaign and uploading the creative. An image takes seconds; a video can take a minute. Keep this page open.",
+        "publishedTitle": "The campaign is published",
+        "publishedActive": "“{name}” is on Snapchat now and starts showing once Snapchat approves the ad.",
+        "publishedPaused": "“{name}” was created on Snapchat and is switched off. Switch it on whenever you like.",
+        "reviewNote": "Snapchat reviews every new ad before showing it, usually within hours. The campaign's numbers appear in the campaigns list after the next sync.",
+        "failedTitle": "The campaign was not published",
+        "failures": {
+          "generic": "Snapchat refused the campaign. The reason as Snapchat sent it:",
+          "SNAPCHAT_NO_PUBLIC_PROFILE": "We could not find your account's public profile on Snapchat, which ads are shown under. Create one ad in Snapchat Ads Manager so the profile is linked to your account, then try from here.",
+          "SNAPCHAT_NO_PIXEL": "The “Sign-ups and orders” goal needs a Snap Pixel on your ad account. Install the pixel on your website, or choose “Visits to my website”.",
+          "SNAPCHAT_MEDIA_NOT_READY": "Snapchat is still processing the file. Try publishing again in a minute, or choose a smaller file.",
+          "SNAPCHAT_ACCESS_DENIED": "Snapchat did not let Madar reach the account. Reconnect Snapchat from the integrations page and try again.",
+          "PUBLISH_INTERRUPTED": "Publishing was interrupted before it finished, and nothing was created on your account. Try again.",
+          "CREATIVE_STORAGE_UNAVAILABLE": "The creative's file could not be read. Try again shortly."
+        },
+        "backToEdit": "Go back and edit",
+        "switchOn": "Switch the campaign on now",
+        "switchFailed": "The campaign could not be switched on. Try again.",
+        "another": "New campaign",
+        "toList": "Campaigns list"
+      },
+      "published": {
+        "title": "Campaigns you published from Madar",
+        "subtitle": "Switch any campaign on or off here; the change is applied on Snapchat right away.",
+        "perDay": "{amount} a day",
+        "states": {
+          "active": "Running",
+          "paused": "Switched off",
+          "publishing": "Publishing",
+          "failed": "Not published"
+        },
+        "switchLabel": "Switch “{name}” on or off",
+        "switchedOn": "The campaign is on",
+        "switchedOff": "The campaign is off",
+        "switchFailed": "The campaign's state could not be changed. Try again."
       }
     },
     "metrics": {
