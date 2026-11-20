@@ -122,6 +122,32 @@ function logGoogleAdsProviderError(input: {
   )
 }
 
+// Google's own explanation of a refused change: the first error's message, else the top one.
+function googleAdsFailureMessage(rawBody: string): string {
+  try {
+    const parsed = JSON.parse(rawBody) as {
+      error?: {
+        message?: string
+        details?: Array<{ errors?: Array<{ message?: string }> }>
+      }
+    }
+    const detail = parsed.error?.details?.flatMap((entry) => entry.errors ?? [])[0]?.message
+    return String(detail ?? parsed.error?.message ?? "no reason given").slice(0, 400)
+  } catch {
+    return rawBody.slice(0, 300) || "no reason given"
+  }
+}
+
+export class GoogleAdsMutateError extends Error {
+  constructor(
+    readonly status: number,
+    readonly reason: string
+  ) {
+    super(`Google Ads refused the change: ${reason}`)
+    this.name = "GoogleAdsMutateError"
+  }
+}
+
 export class GoogleAdsClient {
   private readonly rateLimiter: SimpleRateLimiter
 
@@ -362,6 +388,45 @@ export class GoogleAdsClient {
       true,
       503
     )
+  }
+
+  // A change to the account (as opposed to the reads above): one of the API's "mutate" services
+  // -- campaigns, adGroups, adGroupAds -- with its operations. Sent once: a change is never
+  // repeated on its own, since the first attempt may have gone through.
+  async mutate(input: {
+    connectionId: string
+    customerId: string
+    service: string
+    operations: Array<Record<string, unknown>>
+  }): Promise<unknown> {
+    await this.rateLimiter.waitTurn()
+    const developerToken = this.requireDeveloperToken()
+    const accessToken = await this.authProvider.getAccessToken(input.connectionId)
+    const requestUrl = `${this.config.apiBaseUrl.replace(/\/$/, "")}/customers/${encodeURIComponent(input.customerId)}/${input.service}:mutate`
+    const response = await this.fetchFn(requestUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "developer-token": developerToken,
+        "content-type": "application/json",
+        ...(this.config.loginCustomerId
+          ? { "login-customer-id": this.config.loginCustomerId }
+          : {}),
+      },
+      body: JSON.stringify({ operations: input.operations }),
+    })
+    const rawBody = await response.text()
+    if (!response.ok) {
+      logGoogleAdsProviderError({
+        endpoint: `${input.service}:mutate`,
+        statusCode: response.status,
+        errorCode: "GOOGLE_ADS_MUTATE_REFUSED",
+        correlationId: input.connectionId,
+        requestId: readUpstreamRequestId(response),
+      })
+      throw new GoogleAdsMutateError(response.status, googleAdsFailureMessage(rawBody))
+    }
+    return rawBody ? (JSON.parse(rawBody) as unknown) : {}
   }
 
   private requireDeveloperToken() {

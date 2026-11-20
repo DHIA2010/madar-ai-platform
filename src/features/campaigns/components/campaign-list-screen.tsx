@@ -22,6 +22,7 @@ import {
   type CampaignPerformanceRow,
   campaignPerformanceService,
   canControlCampaignRow,
+  isCampaignRowSwitchedOn,
 } from "../services/campaign-performance.service"
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { campaignStatusBucket, campaignStatusPill } from "./campaign-status-pill"
@@ -62,8 +63,8 @@ type Children = "loading" | "error" | CampaignPerformanceRow[]
 // The campaigns list: every campaign on the connected ad platforms with its real numbers for the
 // chosen period (GET /v1/campaigns/performance/campaigns) -- the same rows the dashboard drills
 // into, so one can be found by name, platform or state. A campaign opens to its ad groups and an
-// ad group to its ads; where the platform's connection allows it (Snapchat), each of the three
-// can be switched on or off, or deleted, right from its row.
+// ad group to its ads; where the platform's connection allows it (Snapchat, TikTok, Google), each
+// of the three can be switched on or off, or deleted, right from its row.
 export function CampaignListScreen() {
   const t = useTranslations("campaigns")
   const locale = useLocale() as Locale
@@ -250,7 +251,7 @@ export function CampaignListScreen() {
     const open = expanded.has(row.id)
     const under = children[row.id]
     const canOpen = row.level === "campaign" || row.level === "adGroup"
-    const on = row.status.toUpperCase() !== "PAUSED"
+    const on = isCampaignRowSwitchedOn(row.status)
     return (
       <Fragment key={row.id}>
         <tr

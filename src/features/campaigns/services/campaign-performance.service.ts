@@ -273,9 +273,23 @@ const client = createHttpDataClient({
 
 export type CampaignControlLevel = "campaign" | "adGroup" | "ad"
 
-// Only Snapchat's saved connection may change ads today; the other platforms are read-only.
+// The platforms whose saved connection may change ads: Snapchat, TikTok and Google Ads (its three
+// kinds of campaign). Meta is read-only for now.
+const CONTROLLABLE_PLATFORMS = new Set<string>([
+  "Snapchat",
+  "TikTok",
+  "Google Search",
+  "Google Display",
+  "YouTube",
+])
+
 export function canControlCampaignRow(row: Pick<CampaignPerformanceRow, "platform" | "level">) {
-  return row.platform === "Snapchat" && row.level !== "keyword"
+  return CONTROLLABLE_PLATFORMS.has(row.platform) && row.level !== "keyword"
+}
+
+// Whether the row's own switch is on, whatever word its platform uses for "off".
+export function isCampaignRowSwitchedOn(status: string) {
+  return !["paused", "disable", "removed"].includes(status.toLowerCase())
 }
 
 export const campaignPerformanceService = {

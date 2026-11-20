@@ -64,6 +64,7 @@ import { verifyZidWebhookBasicAuth } from "../../zid-oauth/webhook-verification"
 import { resolveZidWebhookCredentials } from "../../zid-oauth/zid-credentials"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
+import { TikTokAdsOAuthService } from "../../tiktok-ads-oauth/service"
 import { PosDevicesService } from "../../pos/devices-service"
 import { PosHeldOrdersService } from "../../pos/held-orders-service"
 import { PosInvoicesService, type InvoiceStatus } from "../../pos/invoices-service"
@@ -171,7 +172,10 @@ import {
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
 import { CampaignCheckupService } from "../../campaigns/checkup"
+import { GoogleCampaignControl, TikTokCampaignControl } from "../../campaigns/control-platforms"
 import { CampaignControlService } from "../../campaigns/control-service"
+import { GoogleAdsAuthProvider } from "../../google-ads/auth-provider"
+import { GoogleAdsClient } from "../../google-ads/client"
 import { CreativeInsightsService } from "../../campaigns/creative-insights"
 import { CampaignCreativesService } from "../../campaigns/creatives"
 import { CampaignPublishingService } from "../../campaigns/publishing/service"
@@ -1296,11 +1300,50 @@ export function createIdentityApiServer(
       : null
   // Switching or deleting a campaign, ad group or ad from the campaigns list.
   const campaignControlService = container.infrastructure.database
-    ? new CampaignControlService(
-        container.infrastructure.database,
-        new SnapchatOAuthService(new SnapchatOAuthRepository(container.infrastructure.database)),
-        new SnapchatCampaignPublisher()
-      )
+    ? new CampaignControlService(container.infrastructure.database, {
+        snapchat: {
+          access: new SnapchatOAuthService(
+            new SnapchatOAuthRepository(container.infrastructure.database)
+          ),
+          api: new SnapchatCampaignPublisher(),
+        },
+        tiktok: {
+          access: new TikTokAdsOAuthService(
+            new TikTokAdsOAuthRepository(container.infrastructure.database)
+          ),
+          api: new TikTokCampaignControl(),
+        },
+        // The same settings the Google Ads sync is built with (dependency-injection/container.ts).
+        google: {
+          api: new GoogleCampaignControl(
+            new GoogleAdsClient(
+              new GoogleAdsAuthProvider(container.infrastructure.database, {
+                tokenEndpoint:
+                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
+                  "https://oauth2.googleapis.com/token",
+                encryptionKey:
+                  process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+                  process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+                  "",
+              }),
+              {
+                apiBaseUrl:
+                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+                  "https://googleads.googleapis.com/v25",
+                developerToken:
+                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
+                  process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
+                  "",
+                loginCustomerId: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
+                maxRetries: 0,
+                minRequestIntervalMs: Number(
+                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"
+                ),
+              }
+            )
+          ),
+        },
+      })
     : null
   const campaignRepositoryForLinks = container.infrastructure.database
     ? new CampaignRepository(container.infrastructure.database)

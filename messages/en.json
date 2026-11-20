@@ -7768,10 +7768,10 @@
         "noAds": "This ad group has no ads.",
         "childrenLoadError": "Could not load. Press to try again.",
         "switchLabel": "Switch “{name}” on or off",
-        "switchedOn": "Switched on at Snapchat",
-        "switchedOff": "Switched off at Snapchat",
+        "switchedOn": "Switched on at the ad platform",
+        "switchedOff": "Switched off at the ad platform",
         "switchFailed": "The state could not be changed. Try again.",
-        "gone": "It is no longer on Snapchat. Delete it from the list.",
+        "gone": "It is no longer on the ad platform. Delete it from the list.",
         "delete": "Delete",
         "deleteLabel": "Delete “{name}”",
         "deleteTitle": {
@@ -7780,16 +7780,16 @@
           "ad": "Delete the ad “{name}”?"
         },
         "deleteDescription": {
-          "campaign": "The campaign will be deleted from Snapchat for good, with all its ad groups and ads. It cannot be brought back.",
-          "adGroup": "The ad group will be deleted from Snapchat for good, with all its ads. It cannot be brought back.",
-          "ad": "The ad will be deleted from Snapchat for good. It cannot be brought back."
+          "campaign": "The campaign will be deleted from the ad platform for good, with all its ad groups and ads. It cannot be brought back.",
+          "adGroup": "The ad group will be deleted from the ad platform for good, with all its ads. It cannot be brought back.",
+          "ad": "The ad will be deleted from the ad platform for good. It cannot be brought back."
         },
         "confirmDelete": "Yes, delete",
         "cancel": "Cancel",
-        "deleted": "Deleted from Snapchat",
+        "deleted": "Deleted from the ad platform",
         "deleteFailed": "Could not delete. Try again.",
         "notSupported": "Soon",
-        "notSupportedHint": "Switching and deleting from Madar works for Snapchat today; the other platforms are coming."
+        "notSupportedHint": "Switching and deleting from Madar works for Snapchat, TikTok and Google today; Meta is coming."
       }
     },
     "performanceChart": {

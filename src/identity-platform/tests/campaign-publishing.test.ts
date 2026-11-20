@@ -731,11 +731,9 @@ describe("the creative library and the publish record", () => {
       ])
     const control = (snap = fakeSnapchat()) => ({
       snap,
-      service: new CampaignControlService(
-        database,
-        { resolveAccessToken: async () => "token" },
-        snap.publisher
-      ),
+      service: new CampaignControlService(database, {
+        snapchat: { access: { resolveAccessToken: async () => "token" }, api: snap.publisher },
+      }),
     })
     const seed = async () => {
       await record("campaigns", "camp-1", { name: "حملة", status: "PAUSED" })
@@ -779,6 +777,10 @@ describe("the creative library and the publish record", () => {
       await expect(service.remove(actor, rowId("ad-1"), "campaign")).rejects.toMatchObject({
         code: "CAMPAIGN_CONTROL_NOT_FOUND",
       })
+      // Meta, and a platform this service was not given.
+      await expect(
+        service.setActive(actor, "meta_ads:x:y:z", "campaign", true)
+      ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_SUPPORTED" })
       await expect(
         service.setActive(actor, "google_ads:x:y:z", "campaign", true)
       ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_SUPPORTED" })
