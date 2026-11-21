@@ -225,13 +225,15 @@ describe("paying for a booking online", () => {
 
   it("lets go of an unpaid booking after its hold, and refunds a payment that comes too late", async () => {
     await setUp("full")
-    const slow = await bookOnline(hourAhead(30))
+    // The same time for both, settled before the clock moves (moving it can cross an hour).
+    const slot = hourAhead(30)
+    const slow = await bookOnline(slot)
     const slowId = slow.booking.payment?.bookingId ?? ""
     expect(slow.booking.payment).toMatchObject({ amount: 200, full: true })
 
     // Sixteen minutes on: the time is free again and someone else takes and pays for it.
     now += 16 * 60_000
-    const quick = await bookOnline(hourAhead(30), "0500000002")
+    const quick = await bookOnline(slot, "0500000002")
     expect((await bookings.getBooking(ORG, slowId)).status).toBe("cancelled")
     paid("pay_quick", quick.booking.payment?.bookingId ?? "", 20000)
     expect(await payments.confirm(quick.token, "pay_quick")).toEqual({ outcome: "paid" })
