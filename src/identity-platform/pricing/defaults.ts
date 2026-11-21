@@ -274,6 +274,40 @@ export function defaultPricingFor(application: PurchasableApplication): {
           },
         ],
       }
+    case "booking":
+      return {
+        mode: "fixed",
+        packages: [
+          {
+            ...single("الحجوزات", 149, [
+              "صفحة حجز خاصة بنشاطك يحجز منها العميل بنفسه",
+              "خدمات ومقدمو خدمة بأوقات دوام وإجازات لكل واحد",
+              "تقويم يومي يمنع تعارض المواعيد",
+              "تأكيد وتذكير العميل عبر واتساب بضغطة",
+              "تقارير الحجوزات والإيراد وأوقات الذروة",
+            ]),
+            // Its own app, not a tier of the account-wide plan.
+            legacyPlanTier: null,
+          },
+        ],
+      }
+    case "loyalty":
+      return {
+        mode: "fixed",
+        packages: [
+          {
+            ...single("الولاء", 99, [
+              "نقاط على كل ريال يدفعه العميل في الحجوزات والكاشير",
+              "مكافآت يستبدلها العميل بنقاطه: خصم أو منتج أو خدمة مجانية",
+              "نقاط إضافية على تقييم قوقل والطلب عبر الإنترنت",
+              "بطاقة ولاء بتصميم نشاطك ورمز QR للانضمام",
+              "بطاقة في Apple Wallet بتنبيهات الرصيد والقرب من المتجر",
+            ]),
+            // Its own app, not a tier of the account-wide plan.
+            legacyPlanTier: null,
+          },
+        ],
+      }
     case "customReports":
       return {
         mode: "fixed",

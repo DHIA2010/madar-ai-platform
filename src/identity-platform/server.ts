@@ -9,6 +9,7 @@ import { SalesInvoicesService } from "./invoicing/invoices-service"
 import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
 import { registeredAdsReportService } from "./whatsapp/ads-report"
+import { registeredBookingMessenger } from "./booking/automation"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
@@ -134,6 +135,22 @@ if (dailyReports && dailyReportMinutes > 0) {
 
 // The daily ads report on WhatsApp, on the same pass (whatsapp/ads-report.ts): each organization's
 // report once a day, after its chosen time.
+// The Booking app's WhatsApp reminders: bookings whose start has come inside the business's
+// reminder window. Each is claimed before it is sent, so two tasks never remind twice.
+const bookingReminderMinutes = Number(process.env.BOOKING_REMINDER_INTERVAL_MINUTES ?? "5")
+const bookingMessenger = registeredBookingMessenger()
+if (bookingMessenger && bookingReminderMinutes > 0) {
+  const runBookingReminders = () =>
+    bookingMessenger
+      .runDue()
+      .then((result) => {
+        if (result.sent > 0) console.log("booking.reminder_pass", result)
+      })
+      .catch((error: unknown) => console.error("booking.reminder_pass_failed", error))
+  setTimeout(runBookingReminders, 160_000).unref()
+  setInterval(runBookingReminders, bookingReminderMinutes * 60_000).unref()
+}
+
 const adsReports = registeredAdsReportService()
 if (adsReports && dailyReportMinutes > 0) {
   const runAdsReports = () =>

@@ -37,6 +37,8 @@ const MOCK_APPLICATIONS = [
   "promotions",
   "invoicing",
   "accounting",
+  "booking",
+  "loyalty",
 ] as const
 
 export class MockWorkspaceGateway implements WorkspaceGateway {

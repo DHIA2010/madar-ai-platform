@@ -22,6 +22,8 @@ export const APPLICATION_LABEL: Record<PurchasableApplication, string> = {
   promotions: "العروض الترويجية",
   invoicing: "الفواتير وعروض الأسعار",
   accounting: "المحاسبة",
+  booking: "الحجوزات",
+  loyalty: "الولاء",
   madarComplete: "مدار الكامل",
 }
 

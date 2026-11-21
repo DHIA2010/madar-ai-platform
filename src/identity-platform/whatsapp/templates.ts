@@ -202,12 +202,65 @@ export const SIGNUP_ALERT_TEMPLATE: TemplateDefinition = {
   ],
 }
 
+// The Booking app's two messages to a business's customers (booking/automation.ts): a booking
+// confirmed, and a reminder before it. Plain facts and the customer's own booking link -- no
+// offer and no call to act, so Meta keeps them as utility messages. The link is a value rather
+// than a button (templates here carry no buttons), followed by a closing line because a template
+// cannot end on a value.
+export const BOOKING_CONFIRMATION_TEMPLATE: TemplateDefinition = {
+  name: "madar_booking_confirmation",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "مرحباً {{1}}،",
+    "تم تأكيد حجزك لدى {{2}}.",
+    "الخدمة: {{3}}",
+    "الموعد: {{4}} الساعة {{5}}",
+    "تفاصيل الحجز: {{6}}",
+    "نسعد بخدمتك.",
+  ].join("\n"),
+  bodyExamples: [
+    "نورة",
+    "صالون نور",
+    "قص شعر",
+    "الأحد 22 نوفمبر",
+    "10:00 ص",
+    "https://app.madar.my/bk/abc123",
+  ],
+  footer: "أُرسلت عبر مدار",
+}
+
+export const BOOKING_REMINDER_TEMPLATE: TemplateDefinition = {
+  name: "madar_booking_reminder",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "مرحباً {{1}}،",
+    "نذكّرك بموعدك لدى {{2}}.",
+    "الخدمة: {{3}}",
+    "الموعد: {{4}} الساعة {{5}}",
+    "تفاصيل الحجز: {{6}}",
+    "بانتظارك.",
+  ].join("\n"),
+  bodyExamples: [
+    "نورة",
+    "صالون نور",
+    "قص شعر",
+    "الأحد 22 نوفمبر",
+    "10:00 ص",
+    "https://app.madar.my/bk/abc123",
+  ],
+  footer: "أُرسلت عبر مدار",
+}
+
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
   ADS_REPORT_TEMPLATE,
   LEAD_ALERT_TEMPLATE,
   SIGNUP_ALERT_TEMPLATE,
+  BOOKING_CONFIRMATION_TEMPLATE,
+  BOOKING_REMINDER_TEMPLATE,
 ]
 
 // The sample document Meta reviews with a document-header template.

@@ -6,7 +6,7 @@
 // name, where a plain <Select> and scrolling was the only way to find anything) and promoted here
 // so any feature needing the same searchable-combobox look can reuse it instead of rebuilding it.
 
-import { type Ref, useId, useMemo, useState } from "react"
+import { type Ref, useCallback, useId, useMemo, useState } from "react"
 import type { LucideIcon } from "lucide-react"
 import { Check, ChevronDown, Plus, Search } from "lucide-react"
 
@@ -112,6 +112,14 @@ export function AppSearchableSelect({
     setQuery("")
   }
 
+  // Opens on the chosen option rather than at the top of a long list (a time picker opening on
+  // midnight when the value is five in the afternoon). Runs once, as the list appears.
+  const showSelected = useCallback((list: HTMLDivElement | null) => {
+    const chosen = list?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!list || !chosen) return
+    list.scrollTop = chosen.offsetTop - (list.clientHeight - chosen.offsetHeight) / 2
+  }, [])
+
   return (
     <Popover
       open={open}
@@ -156,6 +164,11 @@ export function AppSearchableSelect({
         dir="rtl"
         align="start"
         sideOffset={6}
+        // Inside a dialog the page's scroll is locked, and that lock also swallows the wheel and
+        // the finger over this panel (it is drawn outside the dialog). Keeping those events to
+        // the panel lets its list scroll.
+        onWheel={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
         className={cn(
           cairo.className,
           "w-[var(--radix-popover-trigger-width)] min-w-[240px] rounded-[16px] border-[#e1e7f0] p-1.5 shadow-[0_12px_32px_rgba(11,23,56,0.12)]"
@@ -194,7 +207,12 @@ export function AppSearchableSelect({
           </button>
         ) : null}
 
-        <div id={listboxId} role="listbox" className="max-h-[264px] overflow-y-auto">
+        <div
+          id={listboxId}
+          ref={showSelected}
+          role="listbox"
+          className="relative max-h-[264px] overflow-y-auto overscroll-contain"
+        >
           {filtered.length === 0 ? (
             canCreate ? null : (
               <p className="px-3 py-6 text-center text-[12px] text-[#6b7b96]">{emptyLabel}</p>

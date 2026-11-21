@@ -54,6 +54,8 @@ const SETTINGS_TEXT_KEYS = [
   "promotionsTrialEndsAt",
   "invoicingTrialEndsAt",
   "accountingTrialEndsAt",
+  "bookingTrialEndsAt",
+  "loyaltyTrialEndsAt",
 ] as const
 
 // Booleans get their own list rather than folding into SETTINGS_TEXT_KEYS above (a `typeof ===
@@ -86,6 +88,8 @@ const APPLICATION_BOOLEAN_KEYS = [
   "promotionsEnabled",
   "invoicingEnabled",
   "accountingEnabled",
+  "bookingEnabled",
+  "loyaltyEnabled",
   // Trial-used flags share the same "default false, not undefined" reasoning -- a trial being
   // available is a real boolean the activation dialog has to check, not a possibly-missing one.
   "advertisingTrialUsed",
@@ -99,6 +103,8 @@ const APPLICATION_BOOLEAN_KEYS = [
   "promotionsTrialUsed",
   "invoicingTrialUsed",
   "accountingTrialUsed",
+  "bookingTrialUsed",
+  "loyaltyTrialUsed",
 ] as const
 
 function toOrganizationSettingsDto(

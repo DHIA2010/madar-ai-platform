@@ -60,6 +60,8 @@ export interface OrganizationSettingsDto {
   promotionsEnabled?: boolean
   invoicingEnabled?: boolean
   accountingEnabled?: boolean
+  bookingEnabled?: boolean
+  loyaltyEnabled?: boolean
   // Set on approval of a subscription activation request (see SubscriptionActivationRequestDto
   // below) -- the account-wide tier chosen at request time.
   currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
@@ -87,10 +89,14 @@ export interface OrganizationSettingsDto {
   promotionsTrialEndsAt?: string
   invoicingTrialEndsAt?: string
   accountingTrialEndsAt?: string
+  bookingTrialEndsAt?: string
+  loyaltyTrialEndsAt?: string
   customReportsTrialUsed?: boolean
   promotionsTrialUsed?: boolean
   invoicingTrialUsed?: boolean
   accountingTrialUsed?: boolean
+  bookingTrialUsed?: boolean
+  loyaltyTrialUsed?: boolean
   // The Madar Complete bundle's one trial has been taken (it opens every application at once).
   madarCompleteTrialUsed?: boolean
 }
@@ -107,6 +113,8 @@ export type SubscriptionApplication =
   | "promotions"
   | "invoicing"
   | "accounting"
+  | "booking"
+  | "loyalty"
 // Everything purchasable: each application, plus the "Madar Complete" bundle.
 export type PurchasableApplication = SubscriptionApplication | "madarComplete"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"

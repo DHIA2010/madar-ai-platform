@@ -20,6 +20,8 @@ type GatedApplication =
   | "procurement"
   | "invoicing"
   | "accounting"
+  | "booking"
+  | "loyalty"
 
 interface AccessRule {
   prefix: string
@@ -34,7 +36,7 @@ const RULES: AccessRule[] = [
   { prefix: "/v1/pos/settings", applications: ["pos", "ecommerce"] },
   { prefix: "/v1/pos/", applications: ["pos"] },
   { prefix: "/v1/zatca/", applications: ["pos", "ecommerce", "invoicing"] },
-  { prefix: "/v1/customers", applications: ["pos", "ecommerce", "invoicing"] },
+  { prefix: "/v1/customers", applications: ["pos", "ecommerce", "invoicing", "booking"] },
   // Purchases need the product list and stock too; quotations and invoices pick products.
   { prefix: "/v1/products", applications: ["pos", "ecommerce", "procurement", "invoicing"] },
   {
@@ -43,6 +45,8 @@ const RULES: AccessRule[] = [
   },
   { prefix: "/v1/invoicing/", applications: ["invoicing"] },
   { prefix: "/v1/accounting/", applications: ["accounting"] },
+  { prefix: "/v1/booking/", applications: ["booking"] },
+  { prefix: "/v1/loyalty/", applications: ["loyalty"] },
   { prefix: "/v1/inventory/", applications: ["pos", "ecommerce", "procurement"] },
   { prefix: "/v1/orders", applications: ["ecommerce"] },
   { prefix: "/v1/stores", applications: ["ecommerce"] },

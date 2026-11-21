@@ -38,6 +38,8 @@ const APPLICATION_NAME: Record<string, string> = {
   promotions: "العروض الترويجية",
   invoicing: "الفواتير وعروض الأسعار",
   accounting: "المحاسبة",
+  booking: "الحجوزات",
+  loyalty: "الولاء",
   madarApps: "تطبيقات مدار",
   madarComplete: "مدار الكامل",
 }

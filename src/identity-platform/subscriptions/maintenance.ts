@@ -29,6 +29,8 @@ const APPLICATION_LABEL_AR: Record<PurchasableApplication, string> = {
   promotions: "العروض الترويجية",
   invoicing: "الفواتير وعروض الأسعار",
   accounting: "المحاسبة",
+  booking: "الحجوزات",
+  loyalty: "الولاء",
   madarComplete: "مدار الكامل",
 }
 

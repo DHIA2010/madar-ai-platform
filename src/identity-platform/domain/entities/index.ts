@@ -891,6 +891,8 @@ export type SubscriptionApplication =
   | "promotions"
   | "invoicing"
   | "accounting"
+  | "booking"
+  | "loyalty"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
 // What a bank-transfer request can be for: one application, or the Madar Complete bundle.
 export type RequestableApplication = SubscriptionApplication | "madarComplete"

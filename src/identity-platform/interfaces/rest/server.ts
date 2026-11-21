@@ -30,8 +30,19 @@ import { runBillingMaintenance } from "../../subscriptions/maintenance"
 import { toPublicPlatformSettings } from "../../platform-settings/types"
 import { handlePlatformAdminRoute } from "./platform-admin-routes"
 import { handleAccountingRoute } from "./accounting-routes"
+import { handleBookingRoute, handlePublicBookingRoute } from "./booking-routes"
+import { handleLoyaltyRoute, handlePublicLoyaltyRoute } from "./loyalty-routes"
 import { handleInvoicingRoute, handlePublicInvoicingRoute } from "./invoicing-routes"
 import { AccountingService } from "../../accounting/service"
+import {
+  BookingInvoicer,
+  BookingMessenger,
+  registerBookingMessenger,
+} from "../../booking/automation"
+import { BookingPayments } from "../../booking/payments"
+import { BookingService } from "../../booking/service"
+import { LoyaltyService } from "../../loyalty/service"
+import { LoyaltyWallet, walletConfigFromEnv } from "../../loyalty/wallet"
 import { SalesInvoicesService } from "../../invoicing/invoices-service"
 import { QuotationsService } from "../../invoicing/quotations-service"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
@@ -940,6 +951,27 @@ export function createIdentityApiServer(
   const accountingService = container.infrastructure.database
     ? new AccountingService(container.infrastructure.database)
     : null
+  // The Loyalty app: one points programme per business, which the Booking app and the cashier
+  // both earn into. Wallet cards are there only where a pass certificate is set up.
+  const loyaltyService = container.infrastructure.database
+    ? new LoyaltyService(container.infrastructure.database)
+    : null
+  const loyaltyWalletConfig = walletConfigFromEnv()
+  const loyaltyWallet =
+    container.infrastructure.database && loyaltyService && loyaltyWalletConfig
+      ? new LoyaltyWallet(container.infrastructure.database, loyaltyService, loyaltyWalletConfig)
+      : null
+  if (loyaltyService && loyaltyWallet) {
+    loyaltyService.onCardChanged = (memberId) => loyaltyWallet.cardChanged(memberId)
+  }
+  const bookingService = container.infrastructure.database
+    ? new BookingService(container.infrastructure.database, undefined, loyaltyService ?? undefined)
+    : null
+  // Online payment for bookings, through each business's own Moyasar account.
+  const bookingPayments =
+    container.infrastructure.database && bookingService
+      ? new BookingPayments(container.infrastructure.database, bookingService)
+      : null
   const invoicingServices = {
     database: container.infrastructure.database ?? null,
     devices: zatcaDevicesService,
@@ -1060,6 +1092,8 @@ export function createIdentityApiServer(
           zatcaReporting
         )
       : null
+  // A cashier sale to a known customer earns them loyalty points.
+  if (posInvoicesService && loyaltyService) posInvoicesService.loyalty = loyaltyService
   const whatsAppTemplatesService = whatsAppPlatformService
     ? new WhatsAppTemplatesService(whatsAppPlatformService)
     : null
@@ -1096,6 +1130,54 @@ export function createIdentityApiServer(
           whatsAppMerchantConnections
         )
       : null
+  // What the Booking app does on its own: WhatsApp confirmations and reminders, and an invoice
+  // for a finished visit (booking/automation.ts). Each is there only where its parts are.
+  const bookingMessenger =
+    container.infrastructure.database &&
+    bookingService &&
+    whatsAppPlatformService &&
+    whatsAppTemplatesService
+      ? new BookingMessenger(
+          container.infrastructure.database,
+          bookingService,
+          whatsAppPlatformService,
+          whatsAppTemplatesService,
+          whatsAppMerchantConnections
+        )
+      : null
+  registerBookingMessenger(bookingMessenger)
+  const bookingInvoicer =
+    container.infrastructure.database &&
+    bookingService &&
+    posInvoicesService &&
+    posPaymentMethodsService &&
+    taxRatesService
+      ? new BookingInvoicer(
+          container.infrastructure.database,
+          bookingService,
+          posInvoicesService,
+          posPaymentMethodsService,
+          taxRatesService
+        )
+      : null
+  if (bookingService) {
+    bookingService.hooks = {
+      confirmed: async (organizationId, bookingId) => {
+        await bookingMessenger?.confirm(organizationId, bookingId)
+      },
+      // Only where the business asked for an invoice with every finished visit. A visit with
+      // nothing to invoice (a package visit, a free one) is simply left.
+      completed: async (organizationId, bookingId, userId) => {
+        if (!bookingInvoicer) return
+        const settings = await bookingService.getSettings(organizationId)
+        if (!settings.invoiceOnCompletion) return
+        await bookingInvoicer.issue(organizationId, bookingId, userId).catch((error: unknown) => {
+          const code = (error as { code?: string }).code
+          if (code !== "BOOKING_INVOICE_NOTHING") throw error
+        })
+      },
+    }
+  }
   const posShiftsService =
     container.infrastructure.database && posInvoicesService && posPaymentMethodsService
       ? new PosShiftsService(
@@ -2237,6 +2319,58 @@ export function createIdentityApiServer(
         return
       }
 
+      // Public: joining a loyalty programme, a member's own card, and what a phone's wallet asks.
+      if (url.pathname.startsWith("/v1/public/loyalty/")) {
+        const handled = await handlePublicLoyaltyRoute({
+          method,
+          url,
+          service: loyaltyService,
+          wallet: loyaltyWallet,
+          authorization: request.headers.authorization ?? null,
+          send,
+          sendRaw: (status, body, headers) => {
+            response.writeHead(status, { ...corsHeaders, ...headers })
+            response.end(body)
+          },
+          readJsonBody: () => readJsonBody(request),
+          limit: async (bucket, max, windowMs) => {
+            const decision = await container.infrastructure.rateLimiter?.check(
+              `${bucket}:${context.ipAddress}`,
+              max,
+              windowMs
+            )
+            return !decision || decision.allowed
+          },
+        })
+        if (handled) return
+      }
+
+      // Public: a business's booking page, and a customer's own booking by its link.
+      if (url.pathname.startsWith("/v1/public/booking/")) {
+        const handled = await handlePublicBookingRoute({
+          method,
+          url,
+          service: bookingService,
+          payments: bookingPayments,
+          database: container.infrastructure.database ?? null,
+          send,
+          sendRaw: (status, body, headers) => {
+            response.writeHead(status, { ...corsHeaders, ...headers })
+            response.end(body)
+          },
+          readJsonBody: () => readJsonBody(request),
+          limit: async (bucket, max, windowMs) => {
+            const decision = await container.infrastructure.rateLimiter?.check(
+              `${bucket}:${context.ipAddress}`,
+              max,
+              windowMs
+            )
+            return !decision || decision.allowed
+          },
+        })
+        if (handled) return
+      }
+
       if (method === "GET" && url.pathname === "/v1/public/pricing") {
         if (!pricingService) {
           return send(503, { code: "PRICING_UNAVAILABLE", message: "Pricing is unavailable." })
@@ -2899,6 +3033,38 @@ export function createIdentityApiServer(
           services: invoicingServices,
           send,
           sendRaw,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
+
+      // Loyalty (loyalty/): the points programme, its rewards and its members.
+      if (
+        await handleLoyaltyRoute({
+          method,
+          url,
+          actor,
+          service: loyaltyService,
+          wallet: loyaltyWallet,
+          send,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
+
+      // Booking (booking/): services, providers, the calendar and the bookings themselves.
+      if (
+        await handleBookingRoute({
+          method,
+          url,
+          actor,
+          service: bookingService,
+          invoicer: bookingInvoicer,
+          payments: bookingPayments,
+          database: container.infrastructure.database ?? null,
+          send,
           readJsonBody: () => readJsonBody(request),
         })
       ) {

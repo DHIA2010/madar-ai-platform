@@ -4,9 +4,11 @@ import {
   BadgePercent,
   BookOpenCheck,
   Bot,
+  CalendarCheck,
   CreditCard,
   FileBarChart,
   FileSignature,
+  Gift,
   Radio,
   ShoppingBag,
   Truck,
@@ -41,6 +43,8 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   promotions: "promotionsEnabled",
   invoicing: "invoicingEnabled",
   accounting: "accountingEnabled",
+  booking: "bookingEnabled",
+  loyalty: "loyaltyEnabled",
 }
 
 // Which application categories this organization currently has activated -- the single shared
@@ -81,6 +85,8 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   promotions: "promotionsTrialEndsAt",
   invoicing: "invoicingTrialEndsAt",
   accounting: "accountingTrialEndsAt",
+  booking: "bookingTrialEndsAt",
+  loyalty: "loyaltyTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -96,6 +102,8 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     promotions: "promotionsTrialUsed",
     invoicing: "invoicingTrialUsed",
     accounting: "accountingTrialUsed",
+    booking: "bookingTrialUsed",
+    loyalty: "loyaltyTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -298,6 +306,42 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     accent: {
       iconWrapperClassName: "bg-[#ecfdf5] text-[#047857]",
       primaryButtonClassName: "bg-[#047857] text-white hover:bg-[#065f46]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 5,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Appointments and a public booking page -- its own subscription (bookingEnabled), enforced
+  // by subscriptions/app-access.ts.
+  {
+    id: "booking",
+    category: "booking",
+    tabCategory: "madarApps",
+    icon: CalendarCheck,
+    accent: {
+      iconWrapperClassName: "bg-[#f5f3ff] text-[#6d28d9]",
+      primaryButtonClassName: "bg-[#6d28d9] text-white hover:bg-[#5b21b6]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 5,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // One points programme shared by bookings and the cashier -- its own subscription
+  // (loyaltyEnabled), enforced by subscriptions/app-access.ts.
+  {
+    id: "loyalty",
+    category: "loyalty",
+    tabCategory: "madarApps",
+    icon: Gift,
+    accent: {
+      iconWrapperClassName: "bg-[#fdf2f8] text-[#be185d]",
+      primaryButtonClassName: "bg-[#be185d] text-white hover:bg-[#9d174d]",
     },
     pricingModel: "paid",
     hasPriceLabel: true,

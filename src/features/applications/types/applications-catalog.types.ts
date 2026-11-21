@@ -12,6 +12,8 @@ export type ApplicationCategoryId =
   | "promotions"
   | "invoicing"
   | "accounting"
+  | "booking"
+  | "loyalty"
 
 export type ApplicationPricingModel = "free" | "paid"
 

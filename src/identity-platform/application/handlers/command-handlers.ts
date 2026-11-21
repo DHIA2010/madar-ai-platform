@@ -1364,6 +1364,8 @@ export class IdentityCommandHandlers {
     promotions: "promotionsEnabled",
     invoicing: "invoicingEnabled",
     accounting: "accountingEnabled",
+    booking: "bookingEnabled",
+    loyalty: "loyaltyEnabled",
   }
 
   async requestApplicationActivation(

@@ -38,6 +38,8 @@ const VALID_APPLICATIONS: ReadonlySet<string> = new Set<PurchasableApplication>(
   "promotions",
   "invoicing",
   "accounting",
+  "booking",
+  "loyalty",
   "madarComplete",
 ])
 const VALID_INTERVALS: ReadonlySet<string> = new Set<BillingInterval>(["monthly", "yearly"])

@@ -33,6 +33,8 @@ import {
   Blocks,
   BookOpenCheck,
   BookText,
+  CalendarCheck,
+  CalendarDays,
   ChartNoAxesCombined,
   CircleUserRound,
   ClipboardCheck,
@@ -49,6 +51,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   List,
+  ListChecks,
   ListTree,
   Lock,
   NotebookPen,
@@ -69,6 +72,7 @@ import {
   Users,
   Wallet,
   Warehouse,
+  Gift,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -90,6 +94,8 @@ const ANY_APPLICATION: ApplicationCategoryId[] = [
   "expenses",
   "invoicing",
   "accounting",
+  "booking",
+  "loyalty",
 ]
 
 // The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
@@ -294,6 +300,42 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     },
     // Accounting -- its own subscription (accountingEnabled), enforced server-side by
     // subscriptions/app-access.ts on every /v1/accounting/ route.
+    {
+      title: t("booking"),
+      url: ROUTES.booking,
+      icon: <CalendarCheck className="text-violet-700" />,
+      permission: "booking:view",
+      applications: ["booking"],
+      items: [
+        { title: t("bookingOverview"), url: ROUTES.booking, icon: <LayoutDashboard /> },
+        { title: t("bookingCalendar"), url: ROUTES.bookingCalendar, icon: <CalendarDays /> },
+        { title: t("bookingList"), url: ROUTES.bookingList, icon: <ListChecks /> },
+        { title: t("bookingWaitlist"), url: ROUTES.bookingWaitlist, icon: <Clock /> },
+        { title: t("bookingServices"), url: ROUTES.bookingServices, icon: <Sparkles /> },
+        { title: t("bookingProviders"), url: ROUTES.bookingProviders, icon: <Users /> },
+        { title: t("bookingResources"), url: ROUTES.bookingResources, icon: <LayoutGrid /> },
+        { title: t("bookingPlans"), url: ROUTES.bookingPlans, icon: <Tags /> },
+        { title: t("bookingOffers"), url: ROUTES.bookingOffers, icon: <BadgePercent /> },
+        { title: t("bookingReviews"), url: ROUTES.bookingReviews, icon: <ClipboardCheck /> },
+        { title: t("bookingSettings"), url: ROUTES.bookingSettings, icon: <Settings2 /> },
+      ],
+    },
+    // Loyalty -- its own subscription (loyaltyEnabled), enforced server-side by
+    // subscriptions/app-access.ts on every /v1/loyalty/ route.
+    {
+      title: t("loyalty"),
+      url: ROUTES.loyalty,
+      icon: <Gift className="text-pink-700" />,
+      permission: "loyalty:view",
+      applications: ["loyalty"],
+      items: [
+        { title: t("loyaltyOverview"), url: ROUTES.loyalty, icon: <LayoutDashboard /> },
+        { title: t("loyaltyMembers"), url: ROUTES.loyaltyMembers, icon: <Users /> },
+        { title: t("loyaltyRewards"), url: ROUTES.loyaltyRewards, icon: <Gift /> },
+        { title: t("loyaltyCard"), url: ROUTES.loyaltyCard, icon: <CreditCard /> },
+        { title: t("loyaltySettings"), url: ROUTES.loyaltySettings, icon: <Settings2 /> },
+      ],
+    },
     {
       title: t("accounting"),
       url: ROUTES.accounting,

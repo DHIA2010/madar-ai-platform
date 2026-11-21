@@ -22,6 +22,18 @@ import { parseNoteLines, type NoteLine } from "./saved-notes-service"
 import { generateZatcaQrCode } from "./zatca-qr-code"
 import type { PosZatcaReporting } from "./zatca-reporting"
 
+// What a sale needs from the Loyalty app (loyalty/service.ts).
+export interface PosLoyalty {
+  earn(
+    organizationId: string,
+    input: { customerId: string; amount: number; source: "pos"; ref: string }
+  ): Promise<number>
+  unearn(
+    organizationId: string,
+    input: { source: "pos"; ref: string; fraction?: number }
+  ): Promise<number>
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // The literal payment_method_code stored on pos_invoices once more than one method was used --
@@ -639,6 +651,10 @@ export class PosInvoicesService {
     // nothing is sent from here (the background retry in server.ts still picks them up).
     private readonly zatcaReporting: PosZatcaReporting | null = null
   ) {}
+
+  // The Loyalty app, set where the server is put together: a sale to a known customer earns
+  // them points and a return takes its share back. Neither may fail the sale or the return.
+  loyalty: PosLoyalty | null = null
 
   async list(organizationId: string, filter: InvoiceListFilter): Promise<InvoiceView[]> {
     const conditions = ["organization_id = $1"]
@@ -1521,6 +1537,20 @@ export class PosInvoicesService {
         .catch(logStockPushFailure("zid"))
     }
 
+    // A booking's own invoice does not earn here: the booking already earned for that visit.
+    if (this.loyalty && created.customerId && !input.idempotencyKey?.startsWith("booking:")) {
+      void this.loyalty
+        .earn(input.organizationId, {
+          customerId: created.customerId,
+          amount: created.totalAmount,
+          source: "pos",
+          ref: created.id,
+        })
+        .catch((error: unknown) =>
+          console.error("pos.loyalty_earn_failed", { invoiceId: created.id, error })
+        )
+    }
+
     return created
   }
 
@@ -2037,6 +2067,25 @@ export class PosInvoicesService {
           1
         )
         .catch(logStockPushFailure("zid"))
+    }
+
+    if (this.loyalty) {
+      const loyalty = this.loyalty
+      // Points go back in the share of the sale that was returned.
+      void this.database
+        .query<{ total_amount: string | number }>(
+          `SELECT total_amount FROM pos_invoices WHERE organization_id = $1 AND id = $2`,
+          [organizationId, invoiceId]
+        )
+        .then((sale) => {
+          const sold = Number(sale.rows[0]?.total_amount ?? 0)
+          return loyalty.unearn(organizationId, {
+            source: "pos",
+            ref: invoiceId,
+            fraction: sold > 0 ? created.totalAmount / sold : 1,
+          })
+        })
+        .catch((error: unknown) => console.error("pos.loyalty_unearn_failed", { invoiceId, error }))
     }
 
     return created

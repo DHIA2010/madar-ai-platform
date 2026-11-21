@@ -23,7 +23,19 @@ const MAX_AVATAR_BYTES = 3 * 1024 * 1024
 // ad landing page, the legal pages). They are sent ready-made by the server and shown at once,
 // instead of waiting behind the app's "restoring your session" placeholder for code they don't
 // need -- on a phone that wait was the whole of the page's blank time.
-const SESSION_FREE_PATHS = [ROUTES.contactSales, ROUTES.privacy, ROUTES.terms, ROUTES.blog]
+const SESSION_FREE_PATHS = [
+  ROUTES.contactSales,
+  ROUTES.privacy,
+  ROUTES.terms,
+  ROUTES.blog,
+  // A business's public booking page and a customer's own booking: opened by people who have
+  // no Madar account at all.
+  ROUTES.publicBookingRoot,
+  ROUTES.publicBookingManageRoot,
+  // Joining a loyalty programme and a member's own card: the same.
+  ROUTES.publicLoyaltyJoinRoot,
+  ROUTES.publicLoyaltyCardRoot,
+]
 
 function isSessionFreePath(pathname: string | null, marketingSite: boolean): boolean {
   if (!pathname) return false
