@@ -155,6 +155,19 @@ const PITCHES: Record<string, Pitch> = {
       "ورديات ومخزون وتقارير في نظام واحد",
     ],
   },
+  // The restaurants and cafes ad: the page repeats its three lines. The kitchen copy is printed
+  // by the Madar app (madar-mobile: a printer given the kitchen role gets an items-only ticket
+  // with every sale); the browser cashier does not print one.
+  restaurant: {
+    title: "كاشير للمطاعم والكافيهات",
+    subtitle: "نظام كاشير سعودي سريع لمطعمك أو مقهاك، متوافق مع هيئة الزكاة والضريبة.",
+    points: [
+      "طلبات سريعة وقت الزحمة",
+      "نسخة للمطبخ مع كل طلب من تطبيق مدار",
+      "ورديات الكاشير ومراجعة المبيعات",
+    ],
+    audience: "لأصحاب المطاعم والمقاهي والكافيهات",
+  },
   // The Booking ad: the page repeats its own words.
   booking: {
     title: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
