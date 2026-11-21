@@ -22,6 +22,7 @@ import type {
   BookingSettings,
   BookingStatus,
   BookingTimeOff,
+  PublicAccount,
   PublicBooking,
   PublicBookingPage,
   Slot,
@@ -74,6 +75,10 @@ export const bookingService = {
   settings: () => client.get<BookingSettings>(path("settings")),
   updateSettings: (patch: Partial<BookingSettings>) =>
     client.put<Partial<BookingSettings>, BookingSettings>(path("settings"), patch),
+
+  // A picture for the public page or a service: saved, and its address handed back.
+  uploadImage: async (image: { contentType: string; dataBase64: string }) =>
+    (await client.post<typeof image, { url: string }>(path("images"), image)).url,
 
   // The business's Moyasar secret key: saved once Moyasar accepts it. Null removes it.
   savePaymentKey: (secretKey: string | null) =>
@@ -314,11 +319,26 @@ export const publicBookingService = {
       customerPhone: string
       preferredDate: string
       website?: string
+      accountToken?: string | null
     }
   ) =>
-    publicRequest<{ id: string | null }>(publicPath("pages", slug, "waitlist"), {
+    publicRequest<{ id: string | null; accountToken?: string | null }>(
+      publicPath("pages", slug, "waitlist"),
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
+  // The customer's own account on the page: their bookings and what they were told.
+  account: (slug: string, token: string) =>
+    publicRequest<PublicAccount>(publicPath("pages", slug, "account", token)),
+  accountBrief: (slug: string, token: string) =>
+    publicRequest<{ name: string; phone: string | null; unread: number }>(
+      `${publicPath("pages", slug, "account", token)}?brief=1`
+    ),
+  markAccountRead: (slug: string, token: string) =>
+    publicRequest<{ ok: true }>(publicPath("pages", slug, "account", token, "read"), {
       method: "POST",
-      body: JSON.stringify(input),
     }),
   // The customer is back from Moyasar's form with a payment id, to be checked by the server.
   confirmPayment: (token: string, paymentId: string) =>
@@ -346,12 +366,14 @@ export const publicBookingService = {
       addonIds?: string[]
       couponCode?: string | null
       giftCode?: string | null
+      accountToken?: string | null
     }
   ) =>
-    publicRequest<{ token: string | null; booking: PublicBooking | null }>(
-      publicPath("pages", slug, "bookings"),
-      { method: "POST", body: JSON.stringify(input) }
-    ),
+    publicRequest<{
+      token: string | null
+      booking: PublicBooking | null
+      accountToken?: string | null
+    }>(publicPath("pages", slug, "bookings"), { method: "POST", body: JSON.stringify(input) }),
   booking: (token: string) => publicRequest<PublicBooking>(publicPath("manage", token)),
   cancel: (token: string) =>
     publicRequest<PublicBooking>(publicPath("manage", token, "cancel"), { method: "POST" }),

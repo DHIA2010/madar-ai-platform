@@ -13,6 +13,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { publicLoyaltyService } from "../services/loyalty.service"
 import type { PublicLoyaltyCard, PublicLoyaltyProgram, PublicReward } from "../types/loyalty.types"
+import { SaveCard } from "./save-card"
 import { LoyaltyCard } from "./shell"
 
 const SHELL = "mx-auto flex min-h-dvh w-full max-w-[460px] flex-col gap-4 px-4 py-6"
@@ -255,6 +256,8 @@ export function PublicLoyaltyCardView({ token }: { token: string }) {
         <LoyaltyCard look={card} name={card.name} points={card.points} code={card.cardCode} />
       </div>
       <p className="text-center text-[12.5px] leading-5 text-[#6b7b96]">{t("showCode")}</p>
+
+      <SaveCard card={card} token={token} />
 
       {card.walletAvailable ? (
         <a

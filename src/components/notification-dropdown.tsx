@@ -17,6 +17,7 @@ import {
   ShoppingBag,
   Unplug,
   XCircle,
+  CalendarCheck,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -50,6 +51,9 @@ const TYPE_STYLE: Record<NotificationType, { icon: LucideIcon; tone: string }> =
   payment_failed: { icon: CreditCard, tone: "bg-rose-50 text-rose-600" },
   activation_approved: { icon: BadgeCheck, tone: "bg-emerald-50 text-emerald-600" },
   activation_rejected: { icon: XCircle, tone: "bg-rose-50 text-rose-600" },
+  booking_new: { icon: CalendarCheck, tone: "bg-violet-50 text-violet-600" },
+  booking_cancelled: { icon: CalendarX, tone: "bg-rose-50 text-rose-600" },
+  booking_waitlist: { icon: CalendarClock, tone: "bg-amber-50 text-amber-600" },
 }
 
 // "قبل ٥ دقائق" / "5 minutes ago", in the reader's language.
@@ -127,6 +131,8 @@ export function NotificationDropdown() {
           )
         : "",
       reason: String(p.reason ?? ""),
+      serviceName: String(p.serviceName ?? ""),
+      when: String(p.when ?? ""),
     }
     const variant =
       item.type === "subscription_ending" && p.kind === "trial"

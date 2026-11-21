@@ -39,6 +39,9 @@ export type NotificationType =
   | "payment_failed"
   | "activation_approved"
   | "activation_rejected"
+  | "booking_new"
+  | "booking_cancelled"
+  | "booking_waitlist"
 
 export interface AppNotification {
   id: string

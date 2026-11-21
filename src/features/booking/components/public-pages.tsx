@@ -7,24 +7,17 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useLocale, useTranslations } from "next-intl"
-import {
-  CalendarCheck,
-  Check,
-  ChevronLeft,
-  Clock,
-  Loader2,
-  MapPin,
-  Phone,
-  Star,
-} from "lucide-react"
+import { CalendarCheck, Check, Loader2, MapPin, Phone, Star } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
 import { addDays, dayOf, today, useBookingFormat } from "../hooks/use-booking"
+import { accountMemory } from "../services/account-memory"
 import { publicBookingService } from "../services/booking.service"
 import { removeMoyasarForm, showMoyasarForm } from "../services/moyasar-form"
 import type { BookingQuote, PublicBooking, PublicBookingPage, Slot } from "../types/booking.types"
+import { DEFAULT_ACCENT, Storefront } from "./storefront"
 import { STATUS_TINT } from "./styles"
 
 import { cairo } from "@/components/design/fonts"
@@ -33,17 +26,19 @@ import { type Locale, localeDirection } from "@/i18n/locales"
 const CARD =
   "rounded-[18px] border border-[#e4e9f2] bg-white shadow-[0_1px_3px_rgba(11,23,56,0.05)]"
 const INPUT =
-  "h-12 w-full rounded-[12px] border border-[#d5dce8] bg-white px-3.5 text-[15px] text-[#0b1738] outline-none transition placeholder:text-[#a3b0c6] focus:border-[#6d28d9] focus:ring-2 focus:ring-[#6d28d9]/15"
+  "h-12 w-full rounded-[12px] border border-[#d5dce8] bg-white px-3.5 text-[15px] text-[#0b1738] outline-none transition placeholder:text-[#a3b0c6] focus:border-[var(--bk-accent)] focus:ring-2 focus:ring-[var(--bk-accent)]/15"
 const BUTTON =
-  "inline-flex h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#6d28d9] px-5 text-[15px] font-bold text-white transition hover:bg-[#5b21b6] disabled:cursor-not-allowed disabled:opacity-60"
+  "inline-flex h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--bk-accent)] px-5 text-[15px] font-bold text-white transition hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-60"
 const ANYONE = "any"
 
-function Frame({ children }: { children: React.ReactNode }) {
+function Frame({ children, accent }: { children: React.ReactNode; accent?: string | null }) {
   const locale = useLocale() as Locale
   const t = useTranslations("booking.public")
   return (
     <div
       dir={localeDirection(locale)}
+      // The business's own colour, where it chose one.
+      style={{ "--bk-accent": accent ?? DEFAULT_ACCENT } as React.CSSProperties}
       className={cn(cairo.className, "min-h-dvh bg-[#f6f7fb] px-4 py-6 text-[#0b1738]")}
     >
       <div className="mx-auto w-full max-w-[560px] space-y-4">{children}</div>
@@ -67,7 +62,7 @@ function Business({
           className="size-14 shrink-0 rounded-[14px] object-cover"
         />
       ) : (
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-[14px] bg-[#f5f3ff] text-[#6d28d9]">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-[14px] bg-[#f5f3ff] text-[var(--bk-accent)]">
           <CalendarCheck className="size-7" />
         </span>
       )}
@@ -89,22 +84,6 @@ function Business({
         </div>
       </div>
     </div>
-  )
-}
-
-function StarRow({ rating, size = "size-4" }: { rating: number; size?: string }) {
-  return (
-    <span className="inline-flex gap-0.5" dir="ltr" aria-label={`${rating}/5`}>
-      {[1, 2, 3, 4, 5].map((value) => (
-        <Star
-          key={value}
-          className={cn(
-            size,
-            value <= Math.round(rating) ? "fill-[#f59e0b] text-[#f59e0b]" : "text-[#d5dce8]"
-          )}
-        />
-      ))}
-    </span>
   )
 }
 
@@ -201,6 +180,24 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
   const [done, setDone] = useState<{ token: string | null; booking: PublicBooking | null } | null>(
     null
   )
+  // Who this browser is on the page, once it has booked here before.
+  const [account, setAccount] = useState<{ name: string; unread: number } | null>(null)
+
+  useEffect(() => {
+    const token = accountMemory.read(slug)
+    if (!token) return
+    publicBookingService
+      .accountBrief(slug, token)
+      .then((brief) => {
+        setAccount(brief)
+        // Their name and phone are already known: the form starts filled in.
+        setName((current) => current || brief.name)
+        setPhone((current) => current || (brief.phone ?? ""))
+      })
+      .catch((error: unknown) => {
+        if ((error as { code?: string }).code === "BOOKING_NOT_FOUND") accountMemory.forget(slug)
+      })
+  }, [slug])
 
   useEffect(() => {
     publicBookingService
@@ -326,7 +323,9 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
         addonIds,
         couponCode: couponCode.trim() || null,
         giftCode: giftCode.trim() || null,
+        accountToken: accountMemory.read(slug),
       })
+      accountMemory.keep(slug, result.accountToken)
       // Something is due online: the customer's own booking page takes the payment.
       if (result.token && result.booking?.payment) {
         window.location.assign(ROUTES.publicBookingManage(result.token))
@@ -361,7 +360,7 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
 
   if (done) {
     return (
-      <Frame>
+      <Frame accent={page.accentColor}>
         <Business business={page} />
         <div className={cn(CARD, "p-6 text-center")}>
           <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-[#e7f8ee] text-[#137a41]">
@@ -380,6 +379,12 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
             {t("done.manage")}
           </Link>
         ) : null}
+        <Link
+          href={ROUTES.publicBookingAccount(slug)}
+          className="flex h-12 w-full items-center justify-center rounded-[12px] border border-[#e1e7f0] bg-white text-[15px] font-bold"
+        >
+          {t("done.account")}
+        </Link>
       </Frame>
     )
   }
@@ -389,513 +394,471 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
   )
   const chosenOption = service?.options.find((entry) => entry.id === optionId) ?? null
 
+  // Before a service is chosen the page is the business's shop front.
+  if (!service) {
+    return (
+      <Storefront
+        page={page}
+        slug={slug}
+        account={account}
+        onPick={(entry) => {
+          setServiceId(entry.id)
+          setProviderId(ANYONE)
+          setPeople(1)
+          setOptionId(entry.options[0]?.id ?? null)
+          setAddonIds([])
+          window.scrollTo({ top: 0 })
+        }}
+      />
+    )
+  }
+
   return (
-    <Frame>
+    <Frame accent={page.accentColor}>
       <Business business={page} />
-      {page.description ? (
-        <p className="px-1 text-[13.5px] leading-7 text-[#52607a]">{page.description}</p>
-      ) : null}
+      <div className={cn(CARD, "flex items-center gap-3 p-4")}>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-bold">{service.name}</p>
+          <p className="text-[12.5px] text-[#52607a]">
+            {format.duration(
+              quote?.durationMinutes ?? chosenOption?.durationMinutes ?? service.durationMinutes
+            )}
+            {" · "}
+            {format.money(quote?.subtotal ?? chosenOption?.price ?? service.price)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setServiceId(null)}
+          className="h-10 shrink-0 rounded-[10px] border border-[#e1e7f0] px-3 text-[13px] font-semibold text-[var(--bk-accent)]"
+        >
+          {t("change")}
+        </button>
+      </div>
 
-      {!service && page.reviews && page.reviews.count > 0 ? (
-        <div className="flex items-center gap-2 px-1">
-          <StarRow rating={page.reviews.average ?? 0} />
-          <span className="text-[13.5px] font-bold">{page.reviews.average?.toFixed(1)}</span>
-          <span className="text-[12.5px] text-[#6b7b96]">
-            {t("reviews.count", { count: page.reviews.count })}
-          </span>
-        </div>
-      ) : null}
-      {!service ? (
-        <div className={cn(CARD, "overflow-hidden")}>
-          <p className="px-5 pt-4 text-[15px] font-extrabold">{t("chooseService")}</p>
-          {page.services.length === 0 ? (
-            <p className="px-5 py-10 text-center text-[13.5px] text-[#6b7b96]">{t("noServices")}</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-[#eef1f6]">
-              {page.services.map((entry) => (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setServiceId(entry.id)
-                      setProviderId(ANYONE)
-                      setPeople(1)
-                      setOptionId(entry.options[0]?.id ?? null)
-                      setAddonIds([])
-                    }}
-                    className="flex w-full items-center gap-3 px-5 py-4 text-start transition hover:bg-[#faf8ff]"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-bold">{entry.name}</span>
-                      {entry.description ? (
-                        <span className="mt-0.5 block text-[12.5px] leading-5 text-[#6b7b96]">
-                          {entry.description}
-                        </span>
-                      ) : null}
-                      <span className="mt-1 inline-flex items-center gap-1 text-[12.5px] text-[#52607a]">
-                        <Clock className="size-3.5" />
-                        {format.duration(entry.durationMinutes)}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[14.5px] font-extrabold text-[#6d28d9]">
-                      {entry.options.length > 0
-                        ? t("from", {
-                            amount: format.money(
-                              Math.min(...entry.options.map((option) => option.price))
-                            ),
-                          })
-                        : format.money(entry.price)}
-                    </span>
-                    <ChevronLeft className="size-4 shrink-0 text-[#98a2b3] ltr:rotate-180" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className={cn(CARD, "flex items-center gap-3 p-4")}>
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-bold">{service.name}</p>
-              <p className="text-[12.5px] text-[#52607a]">
-                {format.duration(
-                  quote?.durationMinutes ?? chosenOption?.durationMinutes ?? service.durationMinutes
+      {service.options.length > 0 ? (
+        <div className={cn(CARD, "p-4")}>
+          <p className="text-[14px] font-extrabold">{t("chooseOption")}</p>
+          <div className="mt-2.5 space-y-2">
+            {service.options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={optionId === option.id}
+                onClick={() => setOptionId(option.id)}
+                className={cn(
+                  "flex min-h-12 w-full items-center justify-between gap-3 rounded-[12px] border px-4 py-2 text-start transition",
+                  optionId === option.id
+                    ? "border-[var(--bk-accent)] bg-[#f5f3ff]"
+                    : "border-[#e1e7f0] bg-white"
                 )}
-                {" · "}
-                {format.money(quote?.subtotal ?? chosenOption?.price ?? service.price)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setServiceId(null)}
-              className="h-10 shrink-0 rounded-[10px] border border-[#e1e7f0] px-3 text-[13px] font-semibold text-[#6d28d9]"
-            >
-              {t("change")}
-            </button>
+              >
+                <span>
+                  <span className="block text-[14px] font-bold">{option.name}</span>
+                  <span className="block text-[12.5px] text-[#52607a]">
+                    {format.duration(option.durationMinutes)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[14px] font-extrabold text-[var(--bk-accent)]">
+                  {format.money(option.price)}
+                </span>
+              </button>
+            ))}
           </div>
+        </div>
+      ) : null}
 
-          {service.options.length > 0 ? (
-            <div className={cn(CARD, "p-4")}>
-              <p className="text-[14px] font-extrabold">{t("chooseOption")}</p>
-              <div className="mt-2.5 space-y-2">
-                {service.options.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    aria-pressed={optionId === option.id}
-                    onClick={() => setOptionId(option.id)}
-                    className={cn(
-                      "flex min-h-12 w-full items-center justify-between gap-3 rounded-[12px] border px-4 py-2 text-start transition",
-                      optionId === option.id
-                        ? "border-[#6d28d9] bg-[#f5f3ff]"
-                        : "border-[#e1e7f0] bg-white"
-                    )}
-                  >
-                    <span>
-                      <span className="block text-[14px] font-bold">{option.name}</span>
-                      <span className="block text-[12.5px] text-[#52607a]">
-                        {format.duration(option.durationMinutes)}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[14px] font-extrabold text-[#6d28d9]">
-                      {format.money(option.price)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {service.addons.length > 0 ? (
-            <div className={cn(CARD, "p-4")}>
-              <p className="text-[14px] font-extrabold">{t("chooseAddons")}</p>
-              <div className="mt-2.5 space-y-2">
-                {service.addons.map((addon) => {
-                  const on = addonIds.includes(addon.id)
-                  return (
-                    <button
-                      key={addon.id}
-                      type="button"
-                      role="checkbox"
-                      aria-checked={on}
-                      onClick={() =>
-                        setAddonIds(
-                          on ? addonIds.filter((id) => id !== addon.id) : [...addonIds, addon.id]
-                        )
-                      }
-                      className={cn(
-                        "flex min-h-12 w-full items-center gap-3 rounded-[12px] border px-4 py-2 text-start transition",
-                        on ? "border-[#6d28d9] bg-[#f5f3ff]" : "border-[#e1e7f0] bg-white"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex size-5 shrink-0 items-center justify-center rounded-[6px] border",
-                          on ? "border-[#6d28d9] bg-[#6d28d9] text-white" : "border-[#c4cddb]"
-                        )}
-                      >
-                        {on ? <Check className="size-3.5" /> : null}
-                      </span>
-                      <span className="min-w-0 flex-1 text-[14px] font-semibold">{addon.name}</span>
-                      <span className="shrink-0 text-[13.5px] font-bold text-[#6d28d9]">
-                        +{format.money(addon.price)}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          {able.length > 1 ? (
-            <div className={cn(CARD, "p-4")}>
-              <p className="text-[14px] font-extrabold">{t("chooseProvider")}</p>
-              <div className="mt-2.5 flex flex-wrap gap-2">
-                {[{ id: ANYONE, name: t("anyProvider") }, ...able].map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    aria-pressed={providerId === entry.id}
-                    onClick={() => setProviderId(entry.id)}
-                    className={cn(
-                      "h-11 rounded-full border px-4 text-[13.5px] font-semibold transition",
-                      providerId === entry.id
-                        ? "border-[#6d28d9] bg-[#6d28d9] text-white"
-                        : "border-[#e1e7f0] bg-white text-[#3b4a66]"
-                    )}
-                  >
-                    {entry.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {service.capacity > 1 ? (
-            <div className={cn(CARD, "flex items-center justify-between gap-3 p-4")}>
-              <p className="text-[14px] font-extrabold">{t("people")}</p>
-              <div className="flex items-center gap-3" dir="ltr">
+      {service.addons.length > 0 ? (
+        <div className={cn(CARD, "p-4")}>
+          <p className="text-[14px] font-extrabold">{t("chooseAddons")}</p>
+          <div className="mt-2.5 space-y-2">
+            {service.addons.map((addon) => {
+              const on = addonIds.includes(addon.id)
+              return (
                 <button
+                  key={addon.id}
                   type="button"
-                  aria-label={t("fewer")}
-                  disabled={people <= 1}
-                  onClick={() => setPeople(people - 1)}
-                  className="size-11 rounded-full border border-[#e1e7f0] text-[18px] font-bold disabled:opacity-40"
-                >
-                  −
-                </button>
-                <span className="w-6 text-center text-[16px] font-extrabold">{people}</span>
-                <button
-                  type="button"
-                  aria-label={t("more")}
-                  disabled={people >= service.capacity}
-                  onClick={() => setPeople(people + 1)}
-                  className="size-11 rounded-full border border-[#e1e7f0] text-[18px] font-bold disabled:opacity-40"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className={cn(CARD, "p-4")}>
-            <p className="text-[14px] font-extrabold">{t("chooseDay")}</p>
-            <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
-              {days.map((entry) => (
-                <button
-                  key={entry}
-                  type="button"
-                  aria-pressed={date === entry}
-                  onClick={() => setDate(entry)}
+                  role="checkbox"
+                  aria-checked={on}
+                  onClick={() =>
+                    setAddonIds(
+                      on ? addonIds.filter((id) => id !== addon.id) : [...addonIds, addon.id]
+                    )
+                  }
                   className={cn(
-                    "flex h-[66px] w-[62px] shrink-0 flex-col items-center justify-center rounded-[14px] border text-center transition",
-                    date === entry
-                      ? "border-[#6d28d9] bg-[#6d28d9] text-white"
-                      : "border-[#e1e7f0] bg-white text-[#0b1738]"
+                    "flex min-h-12 w-full items-center gap-3 rounded-[12px] border px-4 py-2 text-start transition",
+                    on ? "border-[var(--bk-accent)] bg-[#f5f3ff]" : "border-[#e1e7f0] bg-white"
                   )}
                 >
-                  <span className="text-[11.5px] opacity-80">
-                    {format.weekday(new Date(`${entry}T00:00:00Z`).getUTCDay(), "short")}
-                  </span>
-                  <span className="text-[17px] font-extrabold">{Number(entry.slice(8))}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-3 text-[13px] font-semibold text-[#52607a]">{format.day(date)}</p>
-            {slots === null ? (
-              <p className="flex items-center gap-2 py-5 text-[13.5px] text-[#6b7b96]">
-                <Loader2 className="size-4 animate-spin" />
-                {t("loadingTimes")}
-              </p>
-            ) : slots.length === 0 ? (
-              <div className="mt-2 rounded-[12px] bg-[#f7f9fc] px-3 py-4 text-center">
-                <p className="text-[13.5px] text-[#52607a]">{t("noTimes")}</p>
-                {waiting === "done" ? (
-                  <p className="mt-3 text-[13.5px] font-bold text-[#137a41]">{t("wait.done")}</p>
-                ) : waiting === "closed" ? (
-                  <button
-                    type="button"
-                    className="mt-2 min-h-11 text-[13.5px] font-bold text-[#6d28d9]"
-                    onClick={() => setWaiting("open")}
-                  >
-                    {t("wait.offer")}
-                  </button>
-                ) : (
-                  <form
-                    className="mt-3 space-y-2 text-start"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      if (name.trim().length < 2 || phone.replace(/\D/g, "").length < 8) return
-                      setWaiting("sending")
-                      publicBookingService
-                        .joinWaitlist(slug, {
-                          serviceId: service.id,
-                          providerId: providerId === ANYONE ? null : providerId,
-                          customerName: name.trim(),
-                          customerPhone: phone.trim(),
-                          preferredDate: date,
-                          website: website || undefined,
-                        })
-                        .then(() => setWaiting("done"))
-                        .catch(() => setWaiting("open"))
-                    }}
-                  >
-                    <p className="text-[13px] leading-6 text-[#52607a]">{t("wait.hint")}</p>
-                    <input
-                      className={INPUT}
-                      aria-label={t("name")}
-                      placeholder={t("name")}
-                      autoComplete="name"
-                      maxLength={120}
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                    />
-                    <input
-                      className={INPUT}
-                      dir="ltr"
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      aria-label={t("phone")}
-                      placeholder="05xxxxxxxx"
-                      maxLength={30}
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                    />
-                    <button type="submit" className={BUTTON} disabled={waiting === "sending"}>
-                      {waiting === "sending" ? <Loader2 className="size-4 animate-spin" /> : null}
-                      {t("wait.join")}
-                    </button>
-                  </form>
-                )}
-              </div>
-            ) : (
-              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {slots.map((entry) => (
-                  <button
-                    key={entry.startsAt}
-                    type="button"
-                    aria-pressed={slot?.startsAt === entry.startsAt}
-                    onClick={() => setSlot(entry)}
+                  <span
                     className={cn(
-                      "h-12 rounded-[12px] border text-[14px] font-bold transition",
-                      slot?.startsAt === entry.startsAt
-                        ? "border-[#6d28d9] bg-[#6d28d9] text-white"
-                        : "border-[#e1e7f0] bg-white text-[#0b1738]"
+                      "flex size-5 shrink-0 items-center justify-center rounded-[6px] border",
+                      on
+                        ? "border-[var(--bk-accent)] bg-[var(--bk-accent)] text-white"
+                        : "border-[#c4cddb]"
                     )}
                   >
-                    {format.time(entry.startsAt)}
-                  </button>
-                ))}
-              </div>
-            )}
+                    {on ? <Check className="size-3.5" /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1 text-[14px] font-semibold">{addon.name}</span>
+                  <span className="shrink-0 text-[13.5px] font-bold text-[var(--bk-accent)]">
+                    +{format.money(addon.price)}
+                  </span>
+                </button>
+              )
+            })}
           </div>
+        </div>
+      ) : null}
 
-          {slot ? (
-            <form
-              className={cn(CARD, "space-y-3 p-4")}
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (ready) void send()
-              }}
+      {able.length > 1 ? (
+        <div className={cn(CARD, "p-4")}>
+          <p className="text-[14px] font-extrabold">{t("chooseProvider")}</p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {[{ id: ANYONE, name: t("anyProvider") }, ...able].map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                aria-pressed={providerId === entry.id}
+                onClick={() => setProviderId(entry.id)}
+                className={cn(
+                  "h-11 rounded-full border px-4 text-[13.5px] font-semibold transition",
+                  providerId === entry.id
+                    ? "border-[var(--bk-accent)] bg-[var(--bk-accent)] text-white"
+                    : "border-[#e1e7f0] bg-white text-[#3b4a66]"
+                )}
+              >
+                {entry.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {service.capacity > 1 ? (
+        <div className={cn(CARD, "flex items-center justify-between gap-3 p-4")}>
+          <p className="text-[14px] font-extrabold">{t("people")}</p>
+          <div className="flex items-center gap-3" dir="ltr">
+            <button
+              type="button"
+              aria-label={t("fewer")}
+              disabled={people <= 1}
+              onClick={() => setPeople(people - 1)}
+              className="size-11 rounded-full border border-[#e1e7f0] text-[18px] font-bold disabled:opacity-40"
             >
-              <p className="text-[14px] font-extrabold">{t("yourDetails")}</p>
-              <div>
-                <label
-                  className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
-                  htmlFor="public-name"
-                >
-                  {t("name")}
-                </label>
+              −
+            </button>
+            <span className="w-6 text-center text-[16px] font-extrabold">{people}</span>
+            <button
+              type="button"
+              aria-label={t("more")}
+              disabled={people >= service.capacity}
+              onClick={() => setPeople(people + 1)}
+              className="size-11 rounded-full border border-[#e1e7f0] text-[18px] font-bold disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={cn(CARD, "p-4")}>
+        <p className="text-[14px] font-extrabold">{t("chooseDay")}</p>
+        <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
+          {days.map((entry) => (
+            <button
+              key={entry}
+              type="button"
+              aria-pressed={date === entry}
+              onClick={() => setDate(entry)}
+              className={cn(
+                "flex h-[66px] w-[62px] shrink-0 flex-col items-center justify-center rounded-[14px] border text-center transition",
+                date === entry
+                  ? "border-[var(--bk-accent)] bg-[var(--bk-accent)] text-white"
+                  : "border-[#e1e7f0] bg-white text-[#0b1738]"
+              )}
+            >
+              <span className="text-[11.5px] opacity-80">
+                {format.weekday(new Date(`${entry}T00:00:00Z`).getUTCDay(), "short")}
+              </span>
+              <span className="text-[17px] font-extrabold">{Number(entry.slice(8))}</span>
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-[13px] font-semibold text-[#52607a]">{format.day(date)}</p>
+        {slots === null ? (
+          <p className="flex items-center gap-2 py-5 text-[13.5px] text-[#6b7b96]">
+            <Loader2 className="size-4 animate-spin" />
+            {t("loadingTimes")}
+          </p>
+        ) : slots.length === 0 ? (
+          <div className="mt-2 rounded-[12px] bg-[#f7f9fc] px-3 py-4 text-center">
+            <p className="text-[13.5px] text-[#52607a]">{t("noTimes")}</p>
+            {waiting === "done" ? (
+              <p className="mt-3 text-[13.5px] font-bold text-[#137a41]">{t("wait.done")}</p>
+            ) : waiting === "closed" ? (
+              <button
+                type="button"
+                className="mt-2 min-h-11 text-[13.5px] font-bold text-[var(--bk-accent)]"
+                onClick={() => setWaiting("open")}
+              >
+                {t("wait.offer")}
+              </button>
+            ) : (
+              <form
+                className="mt-3 space-y-2 text-start"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (name.trim().length < 2 || phone.replace(/\D/g, "").length < 8) return
+                  setWaiting("sending")
+                  publicBookingService
+                    .joinWaitlist(slug, {
+                      serviceId: service.id,
+                      providerId: providerId === ANYONE ? null : providerId,
+                      customerName: name.trim(),
+                      customerPhone: phone.trim(),
+                      preferredDate: date,
+                      website: website || undefined,
+                      accountToken: accountMemory.read(slug),
+                    })
+                    .then((joined) => {
+                      accountMemory.keep(slug, joined.accountToken)
+                      setWaiting("done")
+                    })
+                    .catch(() => setWaiting("open"))
+                }}
+              >
+                <p className="text-[13px] leading-6 text-[#52607a]">{t("wait.hint")}</p>
                 <input
-                  id="public-name"
                   className={INPUT}
+                  aria-label={t("name")}
+                  placeholder={t("name")}
                   autoComplete="name"
                   maxLength={120}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
-              </div>
-              <div>
-                <label
-                  className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
-                  htmlFor="public-phone"
-                >
-                  {t("phone")}
-                </label>
                 <input
-                  id="public-phone"
                   className={INPUT}
                   dir="ltr"
                   type="tel"
                   inputMode="tel"
                   autoComplete="tel"
-                  maxLength={30}
+                  aria-label={t("phone")}
                   placeholder="05xxxxxxxx"
+                  maxLength={30}
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
+                />
+                <button type="submit" className={BUTTON} disabled={waiting === "sending"}>
+                  {waiting === "sending" ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {t("wait.join")}
+                </button>
+              </form>
+            )}
+          </div>
+        ) : (
+          <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {slots.map((entry) => (
+              <button
+                key={entry.startsAt}
+                type="button"
+                aria-pressed={slot?.startsAt === entry.startsAt}
+                onClick={() => setSlot(entry)}
+                className={cn(
+                  "h-12 rounded-[12px] border text-[14px] font-bold transition",
+                  slot?.startsAt === entry.startsAt
+                    ? "border-[var(--bk-accent)] bg-[var(--bk-accent)] text-white"
+                    : "border-[#e1e7f0] bg-white text-[#0b1738]"
+                )}
+              >
+                {format.time(entry.startsAt)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {slot ? (
+        <form
+          className={cn(CARD, "space-y-3 p-4")}
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (ready) void send()
+          }}
+        >
+          <p className="text-[14px] font-extrabold">{t("yourDetails")}</p>
+          <div>
+            <label
+              className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
+              htmlFor="public-name"
+            >
+              {t("name")}
+            </label>
+            <input
+              id="public-name"
+              className={INPUT}
+              autoComplete="name"
+              maxLength={120}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
+              htmlFor="public-phone"
+            >
+              {t("phone")}
+            </label>
+            <input
+              id="public-phone"
+              className={INPUT}
+              dir="ltr"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={30}
+              placeholder="05xxxxxxxx"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
+              htmlFor="public-notes"
+            >
+              {t("notes")}
+            </label>
+            <textarea
+              id="public-notes"
+              rows={2}
+              maxLength={500}
+              className={cn(INPUT, "h-auto py-2.5")}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
+          </div>
+          {/* A field people never see or fill in; a filled one marks an automated sender. */}
+          <input
+            type="text"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            className="hidden"
+            value={website}
+            onChange={(event) => setWebsite(event.target.value)}
+          />
+          {codesOpen ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
+                  htmlFor="public-coupon"
+                >
+                  {t("coupon")}
+                </label>
+                <input
+                  id="public-coupon"
+                  className={INPUT}
+                  dir="ltr"
+                  maxLength={40}
+                  autoCapitalize="characters"
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value)}
                 />
               </div>
               <div>
                 <label
                   className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
-                  htmlFor="public-notes"
+                  htmlFor="public-gift"
                 >
-                  {t("notes")}
+                  {t("giftCard")}
                 </label>
-                <textarea
-                  id="public-notes"
-                  rows={2}
-                  maxLength={500}
-                  className={cn(INPUT, "h-auto py-2.5")}
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
+                <input
+                  id="public-gift"
+                  className={INPUT}
+                  dir="ltr"
+                  maxLength={40}
+                  autoCapitalize="characters"
+                  value={giftCode}
+                  onChange={(event) => setGiftCode(event.target.value)}
                 />
               </div>
-              {/* A field people never see or fill in; a filled one marks an automated sender. */}
-              <input
-                type="text"
-                name="website"
-                tabIndex={-1}
-                autoComplete="off"
-                aria-hidden="true"
-                className="hidden"
-                value={website}
-                onChange={(event) => setWebsite(event.target.value)}
-              />
-              {codesOpen ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label
-                      className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
-                      htmlFor="public-coupon"
-                    >
-                      {t("coupon")}
-                    </label>
-                    <input
-                      id="public-coupon"
-                      className={INPUT}
-                      dir="ltr"
-                      maxLength={40}
-                      autoCapitalize="characters"
-                      value={couponCode}
-                      onChange={(event) => setCouponCode(event.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="mb-1.5 block text-[13px] font-semibold text-[#344054]"
-                      htmlFor="public-gift"
-                    >
-                      {t("giftCard")}
-                    </label>
-                    <input
-                      id="public-gift"
-                      className={INPUT}
-                      dir="ltr"
-                      maxLength={40}
-                      autoCapitalize="characters"
-                      value={giftCode}
-                      onChange={(event) => setGiftCode(event.target.value)}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="min-h-11 text-[13px] font-bold text-[#6d28d9]"
-                  onClick={() => setCodesOpen(true)}
-                >
-                  {t("haveCode")}
-                </button>
-              )}
-              {codeProblem ? (
-                <p
-                  role="alert"
-                  className="rounded-[12px] bg-[#fef3f2] px-3 py-2.5 text-[13.5px] text-[#b42318]"
-                >
-                  {codeProblem}
-                </p>
-              ) : null}
-              <div className="rounded-[12px] bg-[#f5f3ff] px-3 py-2.5 text-[#5b21b6]">
-                <p className="text-[13.5px] font-semibold">
-                  {t("confirmLine", {
-                    service: service.name + (chosenOption ? ` - ${chosenOption.name}` : ""),
-                    day: format.day(date),
-                    time: format.time(slot.startsAt),
-                  })}
-                </p>
-                {quote ? (
-                  <dl className="mt-2 space-y-1 border-t border-[#ddd6fe] pt-2 text-[13px]">
-                    {quote.subtotal !== quote.total ? (
-                      <>
-                        <div className="flex justify-between">
-                          <dt>{t("price.before")}</dt>
-                          <dd>{format.money(quote.subtotal)}</dd>
-                        </div>
-                        {quote.discount > 0 ? (
-                          <div className="flex justify-between">
-                            <dt>{t("price.coupon")}</dt>
-                            <dd>−{format.money(quote.discount)}</dd>
-                          </div>
-                        ) : null}
-                        {quote.giftAmount > 0 ? (
-                          <div className="flex justify-between">
-                            <dt>{t("price.gift")}</dt>
-                            <dd>−{format.money(quote.giftAmount)}</dd>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-                    <div className="flex justify-between text-[15px] font-extrabold">
-                      <dt>{t("price.total")}</dt>
-                      <dd>{format.money(quote.total)}</dd>
-                    </div>
-                  </dl>
-                ) : null}
-              </div>
-              {problem ? (
-                <p
-                  role="alert"
-                  className="rounded-[12px] bg-[#fef3f2] px-3 py-2.5 text-[13.5px] text-[#b42318]"
-                >
-                  {problem}
-                </p>
-              ) : null}
-              <button type="submit" className={BUTTON} disabled={!ready || sending}>
-                {sending ? <Loader2 className="size-4 animate-spin" /> : null}
-                {t("book")}
-              </button>
-              {page.cancellationAllowed ? (
-                <p className="text-center text-[12px] leading-5 text-[#6b7b96]">
-                  {t("cancelNote")}
-                </p>
-              ) : null}
-            </form>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="min-h-11 text-[13px] font-bold text-[var(--bk-accent)]"
+              onClick={() => setCodesOpen(true)}
+            >
+              {t("haveCode")}
+            </button>
+          )}
+          {codeProblem ? (
+            <p
+              role="alert"
+              className="rounded-[12px] bg-[#fef3f2] px-3 py-2.5 text-[13.5px] text-[#b42318]"
+            >
+              {codeProblem}
+            </p>
           ) : null}
-        </>
-      )}
+          <div className="rounded-[12px] bg-[#f5f3ff] px-3 py-2.5 text-[#5b21b6]">
+            <p className="text-[13.5px] font-semibold">
+              {t("confirmLine", {
+                service: service.name + (chosenOption ? ` - ${chosenOption.name}` : ""),
+                day: format.day(date),
+                time: format.time(slot.startsAt),
+              })}
+            </p>
+            {quote ? (
+              <dl className="mt-2 space-y-1 border-t border-[#ddd6fe] pt-2 text-[13px]">
+                {quote.subtotal !== quote.total ? (
+                  <>
+                    <div className="flex justify-between">
+                      <dt>{t("price.before")}</dt>
+                      <dd>{format.money(quote.subtotal)}</dd>
+                    </div>
+                    {quote.discount > 0 ? (
+                      <div className="flex justify-between">
+                        <dt>{t("price.coupon")}</dt>
+                        <dd>−{format.money(quote.discount)}</dd>
+                      </div>
+                    ) : null}
+                    {quote.giftAmount > 0 ? (
+                      <div className="flex justify-between">
+                        <dt>{t("price.gift")}</dt>
+                        <dd>−{format.money(quote.giftAmount)}</dd>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+                <div className="flex justify-between text-[15px] font-extrabold">
+                  <dt>{t("price.total")}</dt>
+                  <dd>{format.money(quote.total)}</dd>
+                </div>
+              </dl>
+            ) : null}
+          </div>
+          {problem ? (
+            <p
+              role="alert"
+              className="rounded-[12px] bg-[#fef3f2] px-3 py-2.5 text-[13.5px] text-[#b42318]"
+            >
+              {problem}
+            </p>
+          ) : null}
+          <button type="submit" className={BUTTON} disabled={!ready || sending}>
+            {sending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {t("book")}
+          </button>
+          {page.cancellationAllowed ? (
+            <p className="text-center text-[12px] leading-5 text-[#6b7b96]">{t("cancelNote")}</p>
+          ) : null}
+        </form>
+      ) : null}
     </Frame>
   )
 }
@@ -992,8 +955,16 @@ export function PublicBookingManageView({ token }: { token: string }) {
   const open = booking.status === "pending" || booking.status === "confirmed"
 
   return (
-    <Frame>
+    <Frame accent={booking.business.accentColor}>
       <Business business={booking.business} />
+      {booking.business.slug ? (
+        <Link
+          href={ROUTES.publicBookingAccount(booking.business.slug)}
+          className="flex h-11 w-full items-center justify-center rounded-[12px] border border-[#e1e7f0] bg-white text-[14px] font-bold"
+        >
+          {t("allMine")}
+        </Link>
+      ) : null}
       <p className="px-1 text-[14px] font-semibold text-[#52607a]">
         {t("manage.greeting", { name: booking.customerName })}
       </p>
@@ -1158,7 +1129,7 @@ export function PublicBookingManageView({ token }: { token: string }) {
       {booking.business.slug ? (
         <Link
           href={ROUTES.publicBookingPage(booking.business.slug)}
-          className="block text-center text-[13.5px] font-bold text-[#6d28d9]"
+          className="block text-center text-[13.5px] font-bold text-[var(--bk-accent)]"
         >
           {t("manage.bookAgain")}
         </Link>

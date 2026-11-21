@@ -3,6 +3,7 @@ import { ERRORS } from "../../application/errors/IdentityError"
 import {
   availabilityQuerySchema,
   bookingActiveSchema,
+  bookingImageSchema,
   bookingCouponSchema,
   bookingCreateSchema,
   bookingGiftCardSchema,
@@ -36,6 +37,7 @@ import {
   bookingCalendarToken,
   type BookingInvoicer,
 } from "../../booking/automation"
+import type { BookingAccounts } from "../../booking/accounts"
 import type { BookingPayments } from "../../booking/payments"
 import type { BookingService } from "../../booking/service"
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
@@ -57,6 +59,10 @@ export async function handleBookingRoute(input: {
   invoicer: BookingInvoicer | null
   payments: BookingPayments | null
   database: PostgresDatabase | null
+  // Saves a picture and answers with its address; absent where files cannot be kept.
+  uploadImage:
+    | ((organizationId: string, body: Buffer, contentType: string) => Promise<string>)
+    | null
   send: Send
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
@@ -76,6 +82,21 @@ export async function handleBookingRoute(input: {
   const org = actor.organizationId
   const path = url.pathname.slice("/v1/booking".length)
   const body = () => input.readJsonBody()
+
+  // A picture for the public page or a service. Kept beside the product pictures, a folder the
+  // live storage already accepts uploads into.
+  if (method === "POST" && path === "/images") {
+    requireManage()
+    if (!input.uploadImage) {
+      return send(503, { code: "BOOKING_UPLOAD_UNAVAILABLE", message: "Uploads are unavailable." })
+    }
+    const payload = bookingImageSchema.parse(await body())
+    const buffer = Buffer.from(payload.dataBase64, "base64")
+    if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
+      return send(422, { code: "BOOKING_IMAGE_TOO_LARGE", message: "An image of up to 5 MB." })
+    }
+    return send(201, { url: await input.uploadImage(org, buffer, payload.contentType) })
+  }
 
   if (path === "/settings") {
     if (method === "GET") {
@@ -473,6 +494,8 @@ export async function handlePublicBookingRoute(input: {
   url: URL
   service: BookingService | null
   payments: BookingPayments | null
+  // The customer's own account on a page (booking/accounts.ts).
+  accounts: BookingAccounts | null
   database: PostgresDatabase | null
   send: Send
   sendRaw: (status: number, body: string, headers: Record<string, string>) => void
@@ -535,6 +558,24 @@ export async function handlePublicBookingRoute(input: {
     return false
   }
 
+  // A customer's own account on a page: their bookings and what they were told.
+  const account = path.match(/^\/pages\/([^/]+)\/account\/([^/]+)(\/read)?$/)
+  if (account && input.accounts) {
+    const [accountSlug, accountToken] = [account[1], account[2]].map(decodeURIComponent)
+    if (method === "POST" && account[3]) {
+      await input.accounts.markRead(accountSlug, accountToken)
+      return send(200, { ok: true })
+    }
+    if (method === "GET" && !account[3]) {
+      return send(
+        200,
+        url.searchParams.get("brief")
+          ? await input.accounts.brief(accountSlug, accountToken)
+          : await input.accounts.account(accountSlug, accountToken)
+      )
+    }
+  }
+
   const page = path.match(/^\/pages\/([^/]+)(\/(availability|bookings|quote|waitlist))?$/)
   if (!page) return false
   const slug = decodeURIComponent(page[1])
@@ -547,7 +588,12 @@ export async function handlePublicBookingRoute(input: {
     if (!(await input.limit("booking_public_create", 8, 10 * 60_000))) return limited()
     const payload = publicWaitlistSchema.parse(await input.readJsonBody())
     if (payload.website) return send(201, { id: null })
-    return send(201, await service.publicJoinWaitlist(slug, payload))
+    return send(
+      201,
+      input.accounts
+        ? await input.accounts.joinWaitlist(slug, payload)
+        : await service.publicJoinWaitlist(slug, payload)
+    )
   }
   if (method === "POST" && page[3] === "quote") {
     // Trying codes one after another is slowed.
@@ -562,7 +608,12 @@ export async function handlePublicBookingRoute(input: {
     const payload = publicBookingSchema.parse(await input.readJsonBody())
     // The trap field: a person never fills it in. Answer as if it worked and keep nothing.
     if (payload.website) return send(201, { token: null, booking: null })
-    return send(201, await service.publicCreate(slug, payload))
+    return send(
+      201,
+      input.accounts
+        ? await input.accounts.book(slug, payload)
+        : await service.publicCreate(slug, payload)
+    )
   }
   return false
 }

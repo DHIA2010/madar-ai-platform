@@ -306,6 +306,15 @@ describe("the Loyalty app", () => {
     await call("POST", `/v1/loyalty/redemptions/${waiting[0].id}/cancel`, token)
     expect((await call("GET", cardPath)).body).toMatchObject({ points: 60, waitingReward: null })
 
+    // The picture a phone uses for the card on its home screen.
+    const icon = await fetch(`${baseUrl}${cardPath}/icon.png`)
+    expect(icon.headers.get("content-type")).toBe("image/png")
+    expect(
+      Buffer.from(await icon.arrayBuffer())
+        .subarray(1, 4)
+        .toString()
+    ).toBe("PNG")
+
     expect((await call("GET", "/v1/public/loyalty/cards/nope")).status).toBe(404)
   })
 

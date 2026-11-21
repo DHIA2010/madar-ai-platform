@@ -117,6 +117,9 @@ export const publicLoyaltyService = {
     }),
   reviewDone: (token: string) =>
     publicRequest<PublicLoyaltyCard>(publicPath("cards", token, "review"), { method: "POST" }),
+  // The picture a phone shows for the card page once it is saved to the home screen.
+  iconUrl: (token: string) =>
+    new URL(publicPath("cards", token, "icon.png"), getClientEnvironment().API_BASE_URL).toString(),
   // The card as an Apple Wallet pass: opened by the phone itself.
   passUrl: (token: string) =>
     new URL(publicPath("cards", token, "pass"), getClientEnvironment().API_BASE_URL).toString(),

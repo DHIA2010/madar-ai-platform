@@ -6745,6 +6745,18 @@
         "activation_rejected_no_reason": {
           "title": "رُفض طلب تفعيل {application}",
           "description": "تواصل مع الدعم لمعرفة التفاصيل."
+        },
+        "booking_new": {
+          "title": "حجز جديد من صفحة الحجز: {customerName}",
+          "description": "{serviceName} — {when}"
+        },
+        "booking_cancelled": {
+          "title": "ألغى العميل حجزه: {customerName}",
+          "description": "{serviceName} — {when}"
+        },
+        "booking_waitlist": {
+          "title": "طلب جديد في قائمة الانتظار: {customerName}",
+          "description": "{serviceName} — {when}"
         }
       }
     }
@@ -11465,6 +11477,23 @@
       "messageSend": "إرسال",
       "messageSent": "أُرسلت إلى {count, number} بطاقة"
     },
+    "save": {
+      "button": "احفظ البطاقة في جوالك",
+      "title": "احفظ بطاقتك في جوالك",
+      "close": "إغلاق",
+      "homeTitle": "أضفها إلى الشاشة الرئيسية",
+      "homeHint": "تظهر كأيقونة مثل التطبيقات، وتفتح بطاقتك بضغطة واحدة برصيدك الحالي.",
+      "iosShare": "اضغط زر المشاركة أسفل المتصفح",
+      "iosAdd": "اختر «إضافة إلى الشاشة الرئيسية» ثم «إضافة»",
+      "androidMenu": "اضغط القائمة (النقاط الثلاث) أعلى المتصفح",
+      "androidAdd": "اختر «إضافة إلى الشاشة الرئيسية»",
+      "otherAdd": "افتح هذه الصفحة من جوالك لحفظها على الشاشة الرئيسية",
+      "pictureTitle": "أو احفظها كصورة",
+      "pictureNote": "صورة للبطاقة برمزها ليمسحه الموظف. الرصيد لا يظهر في الصورة لأنه يتغيّر.",
+      "pictureButton": "حفظ صورة البطاقة",
+      "pictureHint": "اعرض الرمز للموظف عند الدفع",
+      "pictureFailed": "تعذّر إنشاء الصورة. حاول مرة أخرى."
+    },
     "public": {
       "joinMissing": "برنامج الولاء غير متاح حاليًا.",
       "cardMissing": "هذه البطاقة غير موجودة.",
@@ -11502,6 +11531,59 @@
     }
   },
   "booking": {
+    "store": {
+      "myBookings": "حجوزاتي",
+      "myBookingsGuest": "حجوزاتي",
+      "bookNow": "احجز الآن",
+      "book": "احجز",
+      "from": "من {amount}",
+      "group": "حتى {count, number} أشخاص",
+      "services": "خدماتنا",
+      "serviceCount": "{count, plural, one {خدمة واحدة} two {خدمتان} few {# خدمات} other {# خدمة}}",
+      "all": "الكل",
+      "noServices": "لا توجد خدمات متاحة للحجز حاليًا.",
+      "about": "عن المكان",
+      "team": "فريقنا",
+      "reviews": "آراء العملاء",
+      "reviewCount": "{count, number} تقييم",
+      "instagram": "إنستقرام",
+      "poweredBy": "تعمل بواسطة مدار"
+    },
+    "account": {
+      "title": "حجوزاتي",
+      "bookAnother": "حجز جديد",
+      "loading": "جارٍ التحميل...",
+      "closed": "صفحة الحجز غير متاحة حاليًا.",
+      "noneTitle": "لا توجد حجوزات على هذا الجهاز",
+      "noneHint": "بعد أول حجز تقوم به من هذا الجهاز ستجد هنا حجوزاتك، وحالتها، وكل تحديث عليها.",
+      "noticesTitle": "التنبيهات",
+      "upcoming": "حجوزاتي القادمة",
+      "upcomingEmpty": "لا توجد حجوزات قادمة.",
+      "waitlist": "قائمة الانتظار",
+      "past": "حجوزات سابقة",
+      "needsPayment": "بانتظار الدفع",
+      "canReview": "قيّم زيارتك",
+      "waitStatus": {
+        "waiting": "بالانتظار",
+        "booked": "تم حجز موعد لك",
+        "removed": "أُغلق الطلب"
+      },
+      "notices": {
+        "confirmed": "تم تأكيد حجزك: {service} — {when}",
+        "cancelled": "أُلغي حجزك: {service} — {when}",
+        "rescheduled": "تغيّر موعد حجزك: {service} — الموعد الجديد {when}",
+        "completed": "شكرًا لزيارتك: {service}",
+        "waitlist_booked": "صار لك مكان: تم حجز موعد {service} — {when}",
+        "waitlist_removed": "أُغلق طلبك في قائمة الانتظار: {service} — {when}"
+      },
+      "deviceNote": "تظهر هنا الحجوزات التي تمت من هذا الجهاز وهذا المتصفح."
+    },
+    "image": {
+      "choose": "اختر صورة",
+      "replace": "تغيير الصورة",
+      "remove": "حذف الصورة",
+      "failed": "تعذّر رفع الصورة. جرّب صورة أخرى."
+    },
     "common": {
       "loading": "جارٍ التحميل...",
       "loadFailed": "تعذّر تحميل البيانات.",
@@ -11818,6 +11900,8 @@
         "shown": "الظهور"
       },
       "form": {
+        "image": "صورة الخدمة",
+        "imageHint": "تظهر على بطاقة الخدمة في صفحة الحجز.",
         "name": "اسم الخدمة",
         "namePlaceholder": "مثال: قص شعر",
         "duration": "المدة بالدقائق",
@@ -11920,6 +12004,19 @@
       }
     },
     "settings": {
+      "look": {
+        "title": "مظهر الصفحة",
+        "hint": "صورة الغلاف والشعار واللون الذي تظهر به صفحة الحجز لعملائك.",
+        "cover": "صورة الغلاف",
+        "logo": "الشعار",
+        "tagline": "سطر تعريفي تحت الاسم",
+        "taglinePlaceholder": "مثال: صالون وسبا للسيدات في حي العليا",
+        "instagram": "رابط إنستقرام",
+        "map": "رابط الموقع على الخريطة",
+        "color": "لون الصفحة",
+        "gallery": "صور المكان",
+        "galleryHint": "حتى 8 صور تظهر في قسم «عن المكان»."
+      },
       "title": "إعدادات الحجز",
       "subtitle": "صفحة الحجز الخاصة بنشاطك وقواعد الحجز عبرها.",
       "save": "حفظ الإعدادات",
@@ -12008,6 +12105,7 @@
       }
     },
     "public": {
+      "allMine": "كل حجوزاتي",
       "poweredBy": "تعمل بواسطة مدار",
       "loading": "جارٍ التحميل...",
       "closedTitle": "صفحة الحجز غير متاحة",
@@ -12038,6 +12136,7 @@
         "gift": "بطاقة الهدية غير صالحة أو لا رصيد فيها."
       },
       "done": {
+        "account": "حجوزاتي",
         "title": "تم حجز موعدك",
         "hint": "احتفظ برابط الحجز لعرضه أو إلغائه لاحقًا.",
         "pendingTitle": "استلمنا طلب حجزك",

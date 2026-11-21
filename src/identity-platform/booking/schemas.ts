@@ -12,6 +12,20 @@ const color = z
   .regex(/^#[0-9a-fA-F]{6}$/)
   .nullish()
 
+// A picture already uploaded, or a link the business typed: only ever a web address.
+const imageUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(600)
+  .regex(/^https?:\/\//)
+const link = z
+  .string()
+  .trim()
+  .url()
+  .max(400)
+  .regex(/^https?:\/\//)
+
 export const BOOKING_STATUSES = [
   "pending",
   "confirmed",
@@ -30,6 +44,16 @@ export const bookingSettingsSchema = z
       .regex(/^[a-z0-9](?:[a-z0-9-]{1,58})[a-z0-9]$/)
       .nullable(),
     onlineEnabled: z.boolean(),
+    coverUrl: imageUrl.nullable(),
+    logoUrl: imageUrl.nullable(),
+    tagline: text(140).nullable(),
+    accentColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .nullable(),
+    instagramUrl: link.nullable(),
+    mapUrl: link.nullable(),
+    gallery: z.array(imageUrl).max(8),
     displayName: text(120).nullable(),
     description: text(600).nullable(),
     phone: text(30).nullable(),
@@ -93,6 +117,7 @@ export const bookingServiceSchema = z.object({
   bufferMinutes: z.number().int().min(0).max(240).default(0),
   capacity: z.number().int().min(1).max(500).default(1),
   color,
+  imageUrl: imageUrl.nullish(),
   visibility: z.enum(["published", "internal"]).default("published"),
   isActive: z.boolean().default(true),
   options: z.array(serviceOption).max(20).default([]),
@@ -122,6 +147,8 @@ export const publicWaitlistSchema = z.object({
   customerName: text(120).min(2),
   customerPhone: text(30).min(8),
   preferredDate: day,
+  // The account this browser already has on the page, if any.
+  accountToken: z.string().max(80).nullish(),
   website: z.string().max(200).optional(),
 })
 export const bookingWaitlistCloseSchema = z.object({ status: z.enum(["booked", "removed"]) })
@@ -270,6 +297,8 @@ export const publicBookingSchema = z.object({
   customerPhone: text(30).min(8),
   partySize: z.number().int().min(1).max(500).default(1),
   notes: text(500).nullish(),
+  // The account this browser already has on the page, if any.
+  accountToken: z.string().max(80).nullish(),
   website: z.string().max(200).optional(),
   ...pricing,
 })
@@ -333,3 +362,8 @@ export const bookingPaymentKeySchema = z.object({
   secretKey: z.string().trim().max(200).nullable(),
 })
 export const publicPaymentSchema = z.object({ paymentId: z.string().trim().min(8).max(100) })
+
+export const bookingImageSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  dataBase64: z.string().min(1),
+})

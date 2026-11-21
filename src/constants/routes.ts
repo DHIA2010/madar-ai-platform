@@ -75,6 +75,8 @@ export const ROUTES = {
   publicBookingManageRoot: "/bk",
   publicBookingPage: (slug: string) => `/b/${slug}`,
   publicBookingManage: (token: string) => `/bk/${token}`,
+  // The customer's own account on a business's page.
+  publicBookingAccount: (slug: string) => `/b/${slug}/me`,
   accounting: "/accounting",
   accountingJournal: "/accounting/journal",
   accountingAccounts: "/accounting/accounts",

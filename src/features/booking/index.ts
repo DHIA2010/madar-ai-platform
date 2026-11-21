@@ -1,3 +1,4 @@
+export { PublicBookingAccountView } from "./components/account-page"
 export { BookingListPage } from "./components/bookings-page"
 export { BookingCalendarPage } from "./components/calendar-page"
 export { BookingOffersPage } from "./components/offers-page"

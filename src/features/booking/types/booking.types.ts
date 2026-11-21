@@ -14,6 +14,14 @@ export type TimeOffKind = (typeof TIME_OFF_KINDS)[number]
 export interface BookingSettings {
   slug: string | null
   onlineEnabled: boolean
+  // How the public page looks.
+  coverUrl: string | null
+  logoUrl: string | null
+  tagline: string | null
+  accentColor: string | null
+  instagramUrl: string | null
+  mapUrl: string | null
+  gallery: string[]
   displayName: string | null
   description: string | null
   phone: string | null
@@ -60,6 +68,7 @@ export interface BookingServiceItem {
   bufferMinutes: number
   capacity: number
   color: string | null
+  imageUrl: string | null
   visibility: "published" | "internal"
   isActive: boolean
   options: ServiceOption[]
@@ -341,6 +350,12 @@ export interface BookingOverview {
 export interface PublicBookingPage {
   name: string
   logoUrl: string | null
+  coverUrl: string | null
+  tagline: string | null
+  accentColor: string | null
+  instagramUrl: string | null
+  mapUrl: string | null
+  gallery: string[]
   description: string | null
   phone: string | null
   address: string | null
@@ -353,6 +368,7 @@ export interface PublicBookingPage {
     name: string
     description: string | null
     category: string | null
+    imageUrl: string | null
     durationMinutes: number
     price: number
     capacity: number
@@ -406,7 +422,53 @@ export interface PublicBooking {
     phone: string | null
     address: string | null
     slug: string | null
+    accentColor: string | null
   }
   canCancel: boolean
   cancelDeadline: string
+}
+
+// A customer's own account on a business's page.
+export type AccountNoticeKind =
+  | "confirmed"
+  | "cancelled"
+  | "rescheduled"
+  | "completed"
+  | "waitlist_booked"
+  | "waitlist_removed"
+
+export interface PublicAccountBooking {
+  token: string
+  number: number
+  status: BookingStatus
+  serviceName: string
+  providerName: string
+  startsAt: string
+  endsAt: string
+  price: number
+  needsPayment: boolean
+  canCancel: boolean
+  canReview: boolean
+}
+
+export interface PublicAccount {
+  name: string
+  phone: string | null
+  upcoming: PublicAccountBooking[]
+  past: PublicAccountBooking[]
+  waitlist: Array<{
+    id: string
+    serviceName: string
+    preferredDate: string
+    status: "waiting" | "booked" | "removed"
+    createdAt: string
+  }>
+  notices: Array<{
+    id: string
+    kind: AccountNoticeKind
+    params: { serviceName?: string; startsAt?: string | null; date?: string | null }
+    read: boolean
+    createdAt: string
+  }>
+  unread: number
 }

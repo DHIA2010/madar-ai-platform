@@ -17,11 +17,13 @@ import { AppInput, AppSwitch } from "@/components/app"
 import { useBookingAccess, useBookingError, useLoad } from "../hooks/use-booking"
 import { bookingService } from "../services/booking.service"
 import type { BookingSettings } from "../types/booking.types"
+import { ImageField } from "./image-field"
 import { BookingPage, Choice, LoadFailed, Loading } from "./shell"
 import {
   FIELD,
   FIELD_LABEL,
   MUTED,
+  PALETTE,
   PANEL,
   PRIMARY_BUTTON,
   SECONDARY_BUTTON,
@@ -162,6 +164,134 @@ export function BookingSettingsPage() {
         <Loading />
       ) : (
         <fieldset disabled={!canManage} className="grid gap-4 lg:grid-cols-2">
+          <div className={cn(PANEL, "space-y-4 p-5 lg:col-span-2")}>
+            <div>
+              <h2 className="text-[16px] font-extrabold text-[#0b1738]">{t("look.title")}</h2>
+              <p className={cn("mt-0.5 text-[13px] leading-6", MUTED)}>{t("look.hint")}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div>
+                <span className={FIELD_LABEL}>{t("look.cover")}</span>
+                <ImageField
+                  label={t("look.cover")}
+                  value={draft.coverUrl}
+                  onChange={(next) => set("coverUrl", next)}
+                />
+              </div>
+              <div>
+                <span className={FIELD_LABEL}>{t("look.logo")}</span>
+                <ImageField
+                  shape="square"
+                  label={t("look.logo")}
+                  value={draft.logoUrl}
+                  onChange={(next) => set("logoUrl", next)}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className={FIELD_LABEL} htmlFor="booking-tagline">
+                  {t("look.tagline")}
+                </label>
+                <AppInput
+                  id="booking-tagline"
+                  className={FIELD}
+                  maxLength={140}
+                  placeholder={t("look.taglinePlaceholder")}
+                  value={draft.tagline ?? ""}
+                  onChange={(event) => set("tagline", event.target.value || null)}
+                />
+              </div>
+              <div>
+                <label className={FIELD_LABEL} htmlFor="booking-instagram">
+                  {t("look.instagram")}
+                </label>
+                <AppInput
+                  id="booking-instagram"
+                  dir="ltr"
+                  className={FIELD}
+                  placeholder="https://instagram.com/..."
+                  value={draft.instagramUrl ?? ""}
+                  onChange={(event) => set("instagramUrl", event.target.value || null)}
+                />
+              </div>
+              <div>
+                <label className={FIELD_LABEL} htmlFor="booking-map">
+                  {t("look.map")}
+                </label>
+                <AppInput
+                  id="booking-map"
+                  dir="ltr"
+                  className={FIELD}
+                  placeholder="https://maps.app.goo.gl/..."
+                  value={draft.mapUrl ?? ""}
+                  onChange={(event) => set("mapUrl", event.target.value || null)}
+                />
+              </div>
+            </div>
+            <div>
+              <span className={FIELD_LABEL}>{t("look.color")}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={color}
+                    aria-pressed={(draft.accentColor ?? PALETTE[0]) === color}
+                    onClick={() => set("accentColor", color)}
+                    className={cn(
+                      "size-9 rounded-full ring-offset-2 transition",
+                      (draft.accentColor ?? PALETTE[0]) === color && "ring-2 ring-[#0b1738]"
+                    )}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+                <label className="flex h-9 cursor-pointer items-center gap-2 rounded-full border border-[#e1e7f0] bg-white px-3 text-[12px] font-semibold text-[#52607a]">
+                  <input
+                    type="color"
+                    className="size-5 cursor-pointer border-0 bg-transparent p-0"
+                    aria-label={t("look.color")}
+                    value={draft.accentColor ?? PALETTE[0]}
+                    onChange={(event) => set("accentColor", event.target.value)}
+                  />
+                  <span dir="ltr">{draft.accentColor ?? PALETTE[0]}</span>
+                </label>
+              </div>
+            </div>
+            <div>
+              <span className={FIELD_LABEL}>{t("look.gallery")}</span>
+              <p className={cn("mb-2 text-[12px] leading-5", MUTED)}>{t("look.galleryHint")}</p>
+              <div className="flex flex-wrap gap-3">
+                {draft.gallery.map((picture, index) => (
+                  <ImageField
+                    key={`${index}:${picture}`}
+                    shape="square"
+                    label={t("look.gallery")}
+                    value={picture}
+                    onChange={(next) =>
+                      set(
+                        "gallery",
+                        next
+                          ? draft.gallery.map((entry, at) => (at === index ? next : entry))
+                          : draft.gallery.filter((_, at) => at !== index)
+                      )
+                    }
+                  />
+                ))}
+                {draft.gallery.length < 8 ? (
+                  <ImageField
+                    key={`new-${draft.gallery.length}`}
+                    shape="square"
+                    label={t("look.gallery")}
+                    value={null}
+                    onChange={(next) =>
+                      next ? set("gallery", [...draft.gallery, next]) : undefined
+                    }
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
           <div className={cn(PANEL, "space-y-4 p-5")}>
             <div>
               <h2 className="text-[16px] font-extrabold text-[#0b1738]">{t("page.title")}</h2>

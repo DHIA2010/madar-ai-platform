@@ -12,7 +12,7 @@ import {
   publicJoinSchema,
 } from "../../loyalty/schemas"
 import type { LoyaltyService } from "../../loyalty/service"
-import type { LoyaltyWallet } from "../../loyalty/wallet"
+import { type LoyaltyWallet, starIcon } from "../../loyalty/wallet"
 
 type Send = (status: number, body: unknown) => void
 
@@ -269,7 +269,7 @@ export async function handlePublicLoyaltyRoute(input: {
     }
   }
 
-  const card = path.match(/^\/cards\/([^/]+)(\/(redeem|review|pass))?$/)
+  const card = path.match(/^\/cards\/([^/]+)(\/(redeem|review|pass|icon\.png))?$/)
   if (card) {
     const token = decodeURIComponent(card[1])
     if (method === "GET" && !card[2]) {
@@ -287,6 +287,15 @@ export async function handlePublicLoyaltyRoute(input: {
         ...(await service.publicReviewDone(token)),
         walletAvailable: wallet !== null,
       })
+    }
+    // The picture a phone uses when the card page is saved to its home screen.
+    if (method === "GET" && card[3] === "icon.png") {
+      const look = await service.publicCard(token)
+      input.sendRaw(200, starIcon(180, look.cardColor, look.textColor), {
+        "content-type": "image/png",
+        "cache-control": "public, max-age=3600",
+      })
+      return true
     }
     if (method === "GET" && card[3] === "pass") {
       if (!wallet) {

@@ -20,6 +20,7 @@ import type {
   ServiceAddon,
   ServiceOption,
 } from "../types/booking.types"
+import { ImageField } from "./image-field"
 import { BookingPage, Empty, LoadFailed, Loading } from "./shell"
 import {
   FIELD,
@@ -44,6 +45,7 @@ const BLANK: BookingServiceInput = {
   bufferMinutes: 0,
   capacity: 1,
   color: PALETTE[0],
+  imageUrl: null,
   visibility: "published",
   isActive: true,
   options: [],
@@ -451,6 +453,16 @@ export function BookingServicesPage() {
                 className={TEXTAREA}
                 value={draft.description ?? ""}
                 onChange={(event) => set("description", event.target.value || null)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <span className={FIELD_LABEL}>{t("form.image")}</span>
+              <p className={cn("mb-2 text-[12px] leading-5", MUTED)}>{t("form.imageHint")}</p>
+              <ImageField
+                className="max-w-[360px]"
+                label={t("form.image")}
+                value={draft.imageUrl}
+                onChange={(next) => set("imageUrl", next)}
               />
             </div>
             <div className="sm:col-span-2">

@@ -15,10 +15,18 @@ export type NotificationType =
   | "payment_failed"
   | "activation_approved"
   | "activation_rejected"
+  | "booking_new"
+  | "booking_cancelled"
+  | "booking_waitlist"
 
 // Who may see a notification: anyone holding this module permission, owners and admins ("admin"),
 // or everyone (null).
-export type NotificationAudience = "products:view" | "orders:view" | "connections:view" | "admin"
+export type NotificationAudience =
+  | "products:view"
+  | "orders:view"
+  | "connections:view"
+  | "booking:view"
+  | "admin"
 
 export interface NotifyInput {
   organizationId: string

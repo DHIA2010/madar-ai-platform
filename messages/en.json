@@ -6749,6 +6749,18 @@
         "activation_rejected_no_reason": {
           "title": "{application} activation rejected",
           "description": "Contact support for details."
+        },
+        "booking_new": {
+          "title": "New online booking: {customerName}",
+          "description": "{serviceName} — {when}"
+        },
+        "booking_cancelled": {
+          "title": "A customer cancelled: {customerName}",
+          "description": "{serviceName} — {when}"
+        },
+        "booking_waitlist": {
+          "title": "New waiting-list request: {customerName}",
+          "description": "{serviceName} — {when}"
         }
       }
     }
@@ -11469,6 +11481,23 @@
       "messageSend": "Send",
       "messageSent": "Sent to {count, number} cards"
     },
+    "save": {
+      "button": "Save the card on your phone",
+      "title": "Save your card on your phone",
+      "close": "Close",
+      "homeTitle": "Add it to your home screen",
+      "homeHint": "It appears as an icon like an app and opens your card in one tap with your current balance.",
+      "iosShare": "Tap the Share button at the bottom of the browser",
+      "iosAdd": "Choose “Add to Home Screen”, then “Add”",
+      "androidMenu": "Tap the menu (three dots) at the top of the browser",
+      "androidAdd": "Choose “Add to Home screen”",
+      "otherAdd": "Open this page on your phone to save it to the home screen",
+      "pictureTitle": "Or save it as a picture",
+      "pictureNote": "A picture of the card with its code for the staff to scan. The balance is not on the picture because it changes.",
+      "pictureButton": "Save the card picture",
+      "pictureHint": "Show the code to the staff when you pay",
+      "pictureFailed": "Could not make the picture. Try again."
+    },
     "public": {
       "joinMissing": "The loyalty programme is not available right now.",
       "cardMissing": "This card does not exist.",
@@ -11506,6 +11535,59 @@
     }
   },
   "booking": {
+    "store": {
+      "myBookings": "My bookings",
+      "myBookingsGuest": "My bookings",
+      "bookNow": "Book now",
+      "book": "Book",
+      "from": "From {amount}",
+      "group": "Up to {count, number} people",
+      "services": "Our services",
+      "serviceCount": "{count, plural, one {# service} other {# services}}",
+      "all": "All",
+      "noServices": "No services can be booked right now.",
+      "about": "About",
+      "team": "Our team",
+      "reviews": "What customers say",
+      "reviewCount": "{count, number} reviews",
+      "instagram": "Instagram",
+      "poweredBy": "Powered by Madar"
+    },
+    "account": {
+      "title": "My bookings",
+      "bookAnother": "New booking",
+      "loading": "Loading...",
+      "closed": "The booking page is not available right now.",
+      "noneTitle": "No bookings on this device",
+      "noneHint": "After your first booking from this device you will find your bookings here, their status and every update.",
+      "noticesTitle": "Notifications",
+      "upcoming": "Coming up",
+      "upcomingEmpty": "No bookings coming up.",
+      "waitlist": "Waiting list",
+      "past": "Earlier bookings",
+      "needsPayment": "Waiting for payment",
+      "canReview": "Rate your visit",
+      "waitStatus": {
+        "waiting": "Waiting",
+        "booked": "A time was booked for you",
+        "removed": "Request closed"
+      },
+      "notices": {
+        "confirmed": "Your booking is confirmed: {service} — {when}",
+        "cancelled": "Your booking was cancelled: {service} — {when}",
+        "rescheduled": "Your booking was moved: {service} — new time {when}",
+        "completed": "Thank you for your visit: {service}",
+        "waitlist_booked": "A place opened: {service} is booked for you — {when}",
+        "waitlist_removed": "Your waiting-list request was closed: {service} — {when}"
+      },
+      "deviceNote": "Bookings made from this device and this browser appear here."
+    },
+    "image": {
+      "choose": "Choose a picture",
+      "replace": "Change picture",
+      "remove": "Remove picture",
+      "failed": "The picture could not be uploaded. Try another one."
+    },
     "common": {
       "loading": "Loading...",
       "loadFailed": "Could not load the data.",
@@ -11822,6 +11904,8 @@
         "shown": "Shown"
       },
       "form": {
+        "image": "Service picture",
+        "imageHint": "Shown on the service card on the booking page.",
         "name": "Service name",
         "namePlaceholder": "For example: Haircut",
         "duration": "Length in minutes",
@@ -11924,6 +12008,19 @@
       }
     },
     "settings": {
+      "look": {
+        "title": "Page look",
+        "hint": "The cover picture, logo and colour your booking page shows your customers.",
+        "cover": "Cover picture",
+        "logo": "Logo",
+        "tagline": "A line under the name",
+        "taglinePlaceholder": "For example: a ladies' salon and spa in Olaya",
+        "instagram": "Instagram link",
+        "map": "Map link",
+        "color": "Page colour",
+        "gallery": "Pictures of the place",
+        "galleryHint": "Up to 8 pictures shown in the About section."
+      },
       "title": "Booking settings",
       "subtitle": "Your own booking page and the rules for booking through it.",
       "save": "Save settings",
@@ -12012,6 +12109,7 @@
       }
     },
     "public": {
+      "allMine": "All my bookings",
       "poweredBy": "Powered by Madar",
       "loading": "Loading...",
       "closedTitle": "This booking page is not available",
@@ -12042,6 +12140,7 @@
         "gift": "That gift card is not valid or has nothing left on it."
       },
       "done": {
+        "account": "My bookings",
         "title": "Your appointment is booked",
         "hint": "Keep the booking link to view or cancel it later.",
         "pendingTitle": "We received your booking request",

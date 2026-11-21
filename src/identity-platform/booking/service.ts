@@ -53,9 +53,38 @@ export const BOOKING_ERRORS = {
     new IdentityError(code, 409, "business", message, details),
 }
 
+// What happens to a booking or a waiting-list entry, told to whoever listens (hooks.event):
+// the staff's notification bell and the customer's own account (booking/accounts.ts).
+export type BookingEvent =
+  | { kind: "created"; organizationId: string; bookingId: string; source: "staff" | "online" }
+  | {
+      kind: "status"
+      organizationId: string
+      bookingId: string
+      from: BookingStatus
+      to: BookingStatus
+      by: "staff" | "customer"
+    }
+  | { kind: "rescheduled"; organizationId: string; bookingId: string }
+  | { kind: "waitlisted"; organizationId: string; entryId: string; source: "staff" | "online" }
+  | {
+      kind: "waitlist_closed"
+      organizationId: string
+      entryId: string
+      status: "booked" | "removed"
+    }
+
 export interface BookingSettingsView {
   slug: string | null
   onlineEnabled: boolean
+  // How the public page looks.
+  coverUrl: string | null
+  logoUrl: string | null
+  tagline: string | null
+  accentColor: string | null
+  instagramUrl: string | null
+  mapUrl: string | null
+  gallery: string[]
   displayName: string | null
   description: string | null
   phone: string | null
@@ -90,6 +119,7 @@ export interface BookingServiceView {
   bufferMinutes: number
   capacity: number
   color: string | null
+  imageUrl: string | null
   visibility: "published" | "internal"
   isActive: boolean
   options: ServiceOption[]
@@ -253,6 +283,13 @@ const clock = (minute: number) =>
 const mapSettings = (row: Row): BookingSettingsView => ({
   slug: text(row.slug),
   onlineEnabled: row.online_enabled === true,
+  coverUrl: text(row.cover_url),
+  logoUrl: text(row.logo_url),
+  tagline: text(row.tagline),
+  accentColor: text(row.accent_color),
+  instagramUrl: text(row.instagram_url),
+  mapUrl: text(row.map_url),
+  gallery: parseJsonList<string>(row.gallery),
   displayName: text(row.display_name),
   description: text(row.description),
   phone: text(row.phone),
@@ -286,6 +323,7 @@ const mapService = (row: Row): BookingServiceView => ({
   bufferMinutes: Number(row.buffer_minutes),
   capacity: Number(row.capacity),
   color: text(row.color),
+  imageUrl: text(row.image_url),
   visibility: row.visibility === "internal" ? "internal" : "published",
   isActive: row.is_active === true,
   options: parseJsonList<ServiceOption>(row.options),
@@ -331,7 +369,14 @@ export class BookingService {
   hooks: {
     confirmed?: (organizationId: string, bookingId: string) => Promise<void>
     completed?: (organizationId: string, bookingId: string, userId: string | null) => Promise<void>
+    event?: (event: BookingEvent) => Promise<void>
   } = {}
+
+  private tell(event: BookingEvent) {
+    void this.hooks
+      .event?.(event)
+      .catch((error: unknown) => console.error("booking.event_failed", { event, error }))
+  }
 
   private after(work: Promise<void> | undefined, what: string, bookingId: string) {
     void work?.catch((error: unknown) =>
@@ -420,6 +465,23 @@ export class BookingService {
         next.paymentMode,
         next.depositPercent,
         clean(next.moyasarPublishableKey),
+      ]
+    )
+    // The page's look, kept apart from the rules above.
+    await this.db.query(
+      `UPDATE booking_settings SET
+         cover_url = $2, logo_url = $3, tagline = $4, accent_color = $5, instagram_url = $6,
+         map_url = $7, gallery = $8::jsonb
+       WHERE organization_id = $1`,
+      [
+        organizationId,
+        clean(next.coverUrl),
+        clean(next.logoUrl),
+        clean(next.tagline),
+        next.accentColor ?? null,
+        clean(next.instagramUrl),
+        clean(next.mapUrl),
+        JSON.stringify(next.gallery),
       ]
     )
     return this.getSettings(organizationId)
@@ -534,9 +596,9 @@ export class BookingService {
       `INSERT INTO booking_services
          (id, organization_id, name, description, category, duration_minutes, price,
           buffer_minutes, capacity, color, visibility, is_active, options, addons,
-          bundle_service_ids)
+          bundle_service_ids, image_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb,
-               $15::jsonb)`,
+               $15::jsonb, $16)`,
       [
         id,
         organizationId,
@@ -553,6 +615,7 @@ export class BookingService {
         JSON.stringify(this.withIds(input.options)),
         JSON.stringify(this.withIds(input.addons)),
         JSON.stringify(input.bundleServiceIds),
+        clean(input.imageUrl),
       ]
     )
     await this.writeServiceResources(organizationId, id, input.resourceIds)
@@ -570,7 +633,7 @@ export class BookingService {
          name = $3, description = $4, category = $5, duration_minutes = $6, price = $7,
          buffer_minutes = $8, capacity = $9, color = $10, visibility = $11, is_active = $12,
          options = $13::jsonb, addons = $14::jsonb, bundle_service_ids = $15::jsonb,
-         updated_at = now()
+         image_url = $16, updated_at = now()
        WHERE organization_id = $1 AND id = $2`,
       [
         organizationId,
@@ -588,6 +651,7 @@ export class BookingService {
         JSON.stringify(this.withIds(input.options)),
         JSON.stringify(this.withIds(input.addons)),
         JSON.stringify(input.bundleServiceIds),
+        clean(input.imageUrl),
       ]
     )
     await this.writeServiceResources(organizationId, id, input.resourceIds)
@@ -1432,6 +1496,12 @@ export class BookingService {
     if (!(online && !settings.autoConfirm) && due === 0) {
       this.after(this.hooks.confirmed?.(organizationId, id), "confirmation", id)
     }
+    this.tell({
+      kind: "created",
+      organizationId,
+      bookingId: id,
+      source: online ? "online" : "staff",
+    })
     return this.getBooking(organizationId, id)
   }
 
@@ -1597,6 +1667,7 @@ export class BookingService {
         source,
       ]
     )
+    this.tell({ kind: "waitlisted", organizationId, entryId: id, source })
     return { id }
   }
 
@@ -1612,6 +1683,7 @@ export class BookingService {
       [organizationId, id, status]
     )
     if (result.rows.length === 0) throw BOOKING_ERRORS.notFound("Waiting list entry")
+    this.tell({ kind: "waitlist_closed", organizationId, entryId: id, status })
   }
 
   async publicJoinWaitlist(
@@ -1738,6 +1810,7 @@ export class BookingService {
         provider.id,
       ]
     )
+    this.tell({ kind: "rescheduled", organizationId, bookingId: id })
     return this.getBooking(organizationId, id)
   }
 
@@ -1805,6 +1878,14 @@ export class BookingService {
     if (status === "confirmed") {
       this.after(this.hooks.confirmed?.(organizationId, id), "confirmation", id)
     }
+    this.tell({
+      kind: "status",
+      organizationId,
+      bookingId: id,
+      from: current,
+      to: status,
+      by: options.by,
+    })
     if (status === "completed") {
       // Waited for, so the answer already carries the invoice -- but never allowed to undo the
       // completion if the invoice cannot be issued.
@@ -1952,7 +2033,13 @@ export class BookingService {
     const active = providers.filter((provider) => provider.isActive)
     return {
       name: settings.displayName ?? organization.name,
-      logoUrl: organization.logoUrl,
+      logoUrl: settings.logoUrl ?? organization.logoUrl,
+      coverUrl: settings.coverUrl,
+      tagline: settings.tagline,
+      accentColor: settings.accentColor,
+      instagramUrl: settings.instagramUrl,
+      mapUrl: settings.mapUrl,
+      gallery: settings.gallery,
       description: settings.description,
       phone: settings.phone,
       address: settings.address,
@@ -1969,6 +2056,7 @@ export class BookingService {
           name: service.name,
           description: service.description,
           category: service.category,
+          imageUrl: service.imageUrl,
           durationMinutes: service.durationMinutes,
           price: service.price,
           capacity: service.capacity,
@@ -2087,6 +2175,7 @@ export class BookingService {
         phone: settings.phone,
         address: settings.address,
         slug: settings.slug,
+        accentColor: settings.accentColor,
       },
       canCancel: open && settings.cancellationAllowed && this.now().getTime() <= deadline,
       cancelDeadline: new Date(deadline).toISOString(),

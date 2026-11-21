@@ -39,6 +39,7 @@ import {
   BookingMessenger,
   registerBookingMessenger,
 } from "../../booking/automation"
+import { BookingAccounts } from "../../booking/accounts"
 import { BookingPayments } from "../../booking/payments"
 import { BookingService } from "../../booking/service"
 import { LoyaltyService } from "../../loyalty/service"
@@ -1160,8 +1161,17 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  // The customer's own account on a booking page, and who is told about what happens to a
+  // booking: the staff's bell and that account (booking/accounts.ts).
+  const bookingAccounts =
+    container.infrastructure.database && bookingService
+      ? new BookingAccounts(container.infrastructure.database, bookingService)
+      : null
   if (bookingService) {
     bookingService.hooks = {
+      event: async (event) => {
+        await bookingAccounts?.handle(event)
+      },
       confirmed: async (organizationId, bookingId) => {
         await bookingMessenger?.confirm(organizationId, bookingId)
       },
@@ -2352,6 +2362,7 @@ export function createIdentityApiServer(
           url,
           service: bookingService,
           payments: bookingPayments,
+          accounts: bookingAccounts,
           database: container.infrastructure.database ?? null,
           send,
           sendRaw: (status, body, headers) => {
@@ -3064,6 +3075,16 @@ export function createIdentityApiServer(
           invoicer: bookingInvoicer,
           payments: bookingPayments,
           database: container.infrastructure.database ?? null,
+          uploadImage: container.infrastructure.objectStorage
+            ? (organizationId, body, contentType) => {
+                const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1]
+                return container.infrastructure.objectStorage!.uploadPublicObject({
+                  key: `products/${organizationId}/${randomUUID()}.${extension}`,
+                  body,
+                  contentType,
+                })
+              }
+            : null,
           send,
           readJsonBody: () => readJsonBody(request),
         })

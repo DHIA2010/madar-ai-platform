@@ -1052,4 +1052,137 @@ describe("the Booking app: rooms, repeating bookings and the waiting list", () =
     await call("POST", `/v1/booking/waitlist/${waiting[0].id}/close`, token, { status: "booked" })
     expect(await list()).toHaveLength(1)
   })
+
+  it("shows a storefront, keeps a customer's account and tells staff and customer what happens", async () => {
+    const { token } = await signIn("booking-store@madar.test", "Store")
+    const { haircut, sami } = await salon(token)
+    await call("PUT", `/v1/booking/services/${haircut.id}`, token, {
+      name: "قص شعر",
+      durationMinutes: 60,
+      price: 80,
+      bufferMinutes: 15,
+      description: "قص وتصفيف",
+      imageUrl: "https://files.example.test/haircut.jpg",
+    })
+    await call("PUT", "/v1/booking/settings", token, {
+      slug: "the-store",
+      onlineEnabled: true,
+      autoConfirm: false,
+      coverUrl: "https://files.example.test/cover.jpg",
+      tagline: "صالون رجالي",
+      accentColor: "#0e7490",
+      gallery: ["https://files.example.test/1.jpg"],
+    })
+    const page = "/v1/public/booking/pages/the-store"
+    const shown = (await call("GET", page)).body
+    expect(shown).toMatchObject({
+      coverUrl: "https://files.example.test/cover.jpg",
+      tagline: "صالون رجالي",
+      accentColor: "#0e7490",
+      gallery: ["https://files.example.test/1.jpg"],
+    })
+    expect(shown.services[0].imageUrl).toBe("https://files.example.test/haircut.jpg")
+    // Only a web address is taken for a picture.
+    expect(
+      (await call("PUT", "/v1/booking/settings", token, { coverUrl: "javascript:alert(1)" })).status
+    ).toBe(400)
+
+    // What is told goes out after the answer, so it is waited for.
+    const until = async <T>(read: () => Promise<T>, ready: (value: T) => boolean) => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const value = await read()
+        if (ready(value)) return value
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      return read()
+    }
+    const bell = () =>
+      call("GET", "/v1/notifications", token).then(
+        (response) =>
+          response.body.items as Array<{ type: string; params: { customerName: string } }>
+      )
+
+    // The first booking from a browser gives it an account; the next one joins it.
+    const first = (
+      await call("POST", `${page}/bookings`, undefined, {
+        serviceId: haircut.id,
+        providerId: sami.id,
+        startsAt: at("10:00"),
+        customerName: "ماجد",
+        customerPhone: "0500000009",
+        partySize: 1,
+      })
+    ).body
+    expect(first.accountToken).toMatch(/^[0-9a-f]{48}$/)
+    const second = (
+      await call("POST", `${page}/bookings`, undefined, {
+        serviceId: haircut.id,
+        providerId: sami.id,
+        startsAt: at("16:00"),
+        customerName: "ماجد",
+        customerPhone: "0500000009",
+        partySize: 1,
+        accountToken: first.accountToken,
+      })
+    ).body
+    expect(second.accountToken).toBe(first.accountToken)
+    const accountPath = `${page}/account/${first.accountToken}`
+    const mine = (await call("GET", accountPath)).body
+    expect(mine).toMatchObject({ name: "ماجد", unread: 0 })
+    expect(mine.upcoming.map((entry: { status: string }) => entry.status)).toEqual([
+      "pending",
+      "pending",
+    ])
+    // Another browser typing the same phone gets an account of its own, with nothing in it.
+    const other = (
+      await call("POST", `${page}/waitlist`, undefined, {
+        serviceId: haircut.id,
+        preferredDate: DAY,
+        customerName: "شخص آخر",
+        customerPhone: "0500000009",
+      })
+    ).body
+    expect(other.accountToken).not.toBe(first.accountToken)
+    expect((await call("GET", `${page}/account/${other.accountToken}`)).body.upcoming).toEqual([])
+    expect((await call("GET", `${page}/account/nope`)).status).toBe(404)
+
+    // The staff are told of the online bookings and the waiting-list request.
+    const told = await until(bell, (items) => items.length >= 3)
+    expect(told.map((item) => item.type).sort()).toEqual([
+      "booking_new",
+      "booking_new",
+      "booking_waitlist",
+    ])
+
+    // The staff confirm one and move it: the customer is told both, and reads them.
+    const bookings = (await call("GET", `/v1/booking/bookings?from=${DAY}&to=${DAY}`, token)).body
+      .items as Array<{ id: string; startsAt: string }>
+    const morning = bookings.find((entry) => entry.startsAt === at("10:00"))!
+    await call("POST", `/v1/booking/bookings/${morning.id}/status`, token, { status: "confirmed" })
+    await call("POST", `/v1/booking/bookings/${morning.id}/reschedule`, token, {
+      startsAt: at("11:15"),
+    })
+    const noticed = await until(
+      () => call("GET", `${accountPath}?brief=1`).then((response) => response.body),
+      (brief) => brief.unread >= 2
+    )
+    expect(noticed.unread).toBe(2)
+    const after = (await call("GET", accountPath)).body
+    expect(after.notices.map((notice: { kind: string }) => notice.kind).sort()).toEqual([
+      "confirmed",
+      "rescheduled",
+    ])
+    await call("POST", `${accountPath}/read`)
+    expect((await call("GET", `${accountPath}?brief=1`)).body.unread).toBe(0)
+
+    // The customer cancels the other: the staff are told.
+    await call("POST", `/v1/public/booking/manage/${second.token}/cancel`)
+    const cancelled = await until(bell, (items) =>
+      items.some((item) => item.type === "booking_cancelled")
+    )
+    expect(cancelled.some((item) => item.type === "booking_cancelled")).toBe(true)
+    const final = (await call("GET", accountPath)).body
+    expect(final.upcoming).toHaveLength(1)
+    expect(final.past[0].status).toBe("cancelled")
+  })
 })
