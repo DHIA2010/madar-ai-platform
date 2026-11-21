@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { PostgresOrganizationSubscriptionRepository } from "./repository"
-import { MADAR_COMPLETE, SUBSCRIPTION_APPLICATIONS, type SubscriptionPlanTier } from "./types"
+import {
+  INCLUDED_APPLICATIONS,
+  MADAR_COMPLETE,
+  SUBSCRIPTION_APPLICATIONS,
+  type SubscriptionApplication,
+  type SubscriptionPlanTier,
+} from "./types"
 
 const PLAN_TIERS = new Set(["starter", "growth", "pro", "enterprise"])
 // Every trial started before subscriptions were recorded ran for exactly this long (the fixed
@@ -22,9 +28,20 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
   const existing = await db.query<{
     organization_id: string
     application: string
+    status: string
     trial_ends_at: unknown
-  }>("SELECT organization_id, application, trial_ends_at FROM organization_subscriptions")
+  }>("SELECT organization_id, application, status, trial_ends_at FROM organization_subscriptions")
   const have = new Set(existing.rows.map((row) => `${row.organization_id}:${row.application}`))
+  // An application that came with another one's subscription (Loyalty and the cashier with
+  // Booking) is on because of that subscription: it gets no row of its own, or it would stay on
+  // after the subscription that brought it ends.
+  const broughtAlong = new Set<string>()
+  for (const row of existing.rows) {
+    if (row.status !== "trial" && row.status !== "active") continue
+    for (const app of INCLUDED_APPLICATIONS[row.application as SubscriptionApplication] ?? []) {
+      broughtAlong.add(`${row.organization_id}:${app}`)
+    }
+  }
   // When each organization's Madar Complete trial ends (or ended): the applications that trial
   // opened carry the same date and are already recorded by the bundle's own row.
   const bundleTrialEnd = new Map<string, number>()
@@ -42,6 +59,7 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
     for (const application of SUBSCRIPTION_APPLICATIONS) {
       if (settings[`${application}Enabled`] !== true) continue
       if (have.has(`${organization.id}:${application}`)) continue
+      if (broughtAlong.has(`${organization.id}:${application}`)) continue
 
       const trialEndsAt = settings[`${application}TrialEndsAt`]
       const isTrial = typeof trialEndsAt === "string" && trialEndsAt.length > 0

@@ -1117,6 +1117,16 @@ export const createInvoiceSchema = z.object({
   // The POS offline queue's client-generated uuid for this sale attempt -- see
   // PosInvoicesService.create()'s idempotency check. null/omitted for every ordinary online sale.
   idempotencyKey: z.string().uuid().nullable().optional().default(null),
+  // A loyalty reward used on this sale (see invoices-service.ts's InvoiceLoyaltyReward).
+  loyaltyReward: z
+    .object({
+      rewardId: z.string().uuid().nullable().optional(),
+      redemptionId: z.string().uuid().nullable().optional(),
+      late: z.boolean().optional(),
+    })
+    .refine((value) => Boolean(value.rewardId) !== Boolean(value.redemptionId))
+    .nullable()
+    .optional(),
 })
 
 // madar_orders/madar_order_items' money columns are all numeric(12, 2) -- max ~9,999,999,999.99.

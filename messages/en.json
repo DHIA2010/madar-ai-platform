@@ -896,9 +896,9 @@
       },
       "booking": {
         "name": "Booking",
-        "shortDescription": "Organise your appointments and let customers book by themselves on your own page.",
+        "shortDescription": "Organise your appointments and let customers book by themselves, with Loyalty and the cashier in the same package.",
         "detailDescription": "For any business that works by appointment: salons, spas, clinics, studios and workshops. Add your services and the people who provide them with their working hours and time off, and follow everything on a day calendar that prevents clashes. Open your own booking page where customers pick the service and time themselves, send them a confirmation and a reminder on WhatsApp in one press, and follow revenue, your most booked services and your busiest hours.",
-        "priceLabel": "From SAR 149 / month",
+        "priceLabel": "SAR 299 / month",
         "features": [
           "Your own booking page where customers book by themselves",
           "Services and providers, each with working hours and time off",
@@ -11303,6 +11303,7 @@
       "fromCashier": "Cashier",
       "fromBonus": "Bonuses",
       "inWallet": "Cards in Apple Wallet",
+      "withNotifications": "Customers with notifications on",
       "topTitle": "Highest balances",
       "topEmpty": "No balances yet."
     },
@@ -11476,10 +11477,10 @@
       "addPlace": "Add a branch",
       "removePlace": "Remove branch",
       "messageTitle": "A message to card holders",
-      "messageHint": "Arrives as an alert for every customer who added the card to their wallet.",
+      "messageHint": "Arrives as a notification for every customer who turned notifications on for their saved card, or added it to their wallet.",
       "messagePlaceholder": "For example: 20% off this weekend",
       "messageSend": "Send",
-      "messageSent": "Sent to {count, number} cards"
+      "messageSent": "Sent to {count, number} customers"
     },
     "save": {
       "button": "Save the card on your phone",
@@ -11497,6 +11498,46 @@
       "pictureButton": "Save the card picture",
       "pictureHint": "Show the code to the staff when you pay",
       "pictureFailed": "Could not make the picture. Try again."
+    },
+    "cashier": {
+      "title": "Loyalty",
+      "points": "Loyalty points: {count, number}",
+      "findCard": "Customer card",
+      "useReward": "Use a reward",
+      "removeReward": "Remove the reward",
+      "rewardWorth": "Reward discount: {amount}. Its points are taken when the sale is completed.",
+      "rewardNotInCart": "Add one of the reward's items to the cart for the discount to apply.",
+      "willEarn": "The customer earns {count, number} points from this sale",
+      "findTitle": "Customer card",
+      "findHint": "Scan the card's code with the reader, or type the card number or the customer's phone.",
+      "findPlaceholder": "Card number or phone",
+      "findButton": "Find",
+      "find": {
+        "missing": "No loyalty card with that number.",
+        "unlinked": "This card is not linked to a customer. Choose the customer from the customers list.",
+        "failed": "The search failed. Try again."
+      },
+      "chooseTitle": "The customer's rewards",
+      "chooseHint": "The customer has {count, number} points. Choose a reward to apply as a discount on this sale.",
+      "givesAmount": "{amount} off",
+      "givesPercent": "{percent}% off",
+      "givesFree": "Free",
+      "cost": "{count} points",
+      "heldCode": "Waiting · {code}",
+      "short": "{count, number} points short",
+      "servicesOnly": "For services only, not usable at the cashier",
+      "heldFirst": "The customer has a reward waiting; use it first"
+    },
+    "notify": {
+      "title": "Card notifications",
+      "hint": "We tell you when points are added to your card and when there is a new offer.",
+      "switchOn": "Turn on notifications",
+      "onTitle": "Notifications are on",
+      "onHint": "You will be notified about new points and offers.",
+      "switchOff": "Turn off",
+      "install": "To get notified about points and offers: save the card to your home screen with the button above, then open it from its icon and turn notifications on. If you saved it before, remove the icon and add it again.",
+      "blocked": "Notifications are blocked for this card in your phone's settings. Allow them there to hear about points and offers.",
+      "failed": "Notifications could not be turned on. Try again."
     },
     "public": {
       "joinMissing": "The loyalty programme is not available right now.",
@@ -11551,7 +11592,18 @@
       "reviews": "What customers say",
       "reviewCount": "{count, number} reviews",
       "instagram": "Instagram",
-      "poweredBy": "Powered by Madar"
+      "poweredBy": "Powered by Madar",
+      "navHome": "Home",
+      "navAbout": "About us",
+      "navContact": "Contact us",
+      "tabServices": "Services",
+      "tabAbout": "About",
+      "tabReviews": "Reviews",
+      "whatsapp": "WhatsApp",
+      "share": "Share",
+      "linkCopied": "Link copied",
+      "bookService": "Book this service",
+      "aboutEmpty": "Nothing has been added about the place yet."
     },
     "account": {
       "title": "My bookings",
@@ -11896,6 +11948,15 @@
       "awaitingPayment": "Waiting for a payment of {amount}"
     },
     "services": {
+      "import": {
+        "notice": "You have {count, plural, one {# service} other {# services}} in your products list that are not in Booking yet. Add them in one press without typing them again.",
+        "open": "Show the services",
+        "title": "Import services from products",
+        "hint": "A booking service is made for each product you choose, with its name, price and picture, and stays linked to it: a change of name or price in one shows in the other. After importing, set each service's duration and who provides it.",
+        "confirm": "Import ({count, number})",
+        "done": "{count, plural, one {# service} other {# services}} imported",
+        "linked": "Linked to a cashier product"
+      },
       "title": "Services",
       "subtitle": "What you offer: length, price, and what shows on the booking page.",
       "add": "Add service",
@@ -12072,6 +12133,21 @@
         "description": "Short description",
         "phone": "Contact number",
         "address": "Address"
+      },
+      "share": {
+        "title": "Share your page",
+        "hint": "Post the link on your accounts, or print the code and keep it at reception so customers scan it with their phone camera and book.",
+        "link": "Your booking page link",
+        "qrLabel": "Booking page code",
+        "copy": "Copy link",
+        "copied": "Link copied",
+        "whatsapp": "Send on WhatsApp",
+        "download": "Save the code as a picture",
+        "print": "Print",
+        "view": "Open the page",
+        "printLine": "Scan to book your appointment",
+        "message": "Book your appointment here:\n{link}",
+        "messageNamed": "Book your appointment with {name} here:\n{link}"
       },
       "rules": {
         "title": "Rules for booking through the page",

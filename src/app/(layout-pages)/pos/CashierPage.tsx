@@ -107,6 +107,7 @@ import {
 import { openCashDrawerIfPaired } from "@/features/pos/services/pos-hardware"
 import { fetchWithOfflineFallback } from "@/features/pos/offline/cached-data"
 import { getActiveApplications } from "@/features/applications"
+import { CashierLoyaltyBox, type CashierReward } from "@/features/loyalty"
 import {
   type AppliedPromotion,
   bestPromotionFor,
@@ -506,6 +507,7 @@ function readStoredCartPreviewOpen(): boolean {
 
 export default function CashierPage() {
   const t = useTranslations("pos.cashier")
+  const loyaltyErrors = useTranslations("loyalty.errors")
   const locale = useLocale() as Locale
   const TIME_FORMAT = useMemo(() => timeFormatter(locale), [locale])
   const DATE_FORMAT = useMemo(() => dateFormatter(locale), [locale])
@@ -1387,6 +1389,16 @@ export default function CashierPage() {
   // accountBalance for the checkout dialog's live context panel.
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null)
+  // --- Loyalty (the Loyalty app): the customer's points on the sale and a reward used as a
+  // discount. A reward belongs to the customer it was chosen for, so changing or clearing the
+  // customer drops it; it needs the server, so it is never offered offline.
+  const loyaltyEnabled = getActiveApplications(currentOrganization?.settings).includes("loyalty")
+  const [chosenLoyaltyReward, setChosenLoyaltyReward] = useState<CashierReward | null>(null)
+  const [loyaltyRefresh, setLoyaltyRefresh] = useState(0)
+  const loyaltyReward =
+    loyaltyEnabled && isOnline && chosenLoyaltyReward?.customerId === customerId
+      ? chosenLoyaltyReward
+      : null
   // Committed discount configuration -- what the sale actually uses. A percentage is always
   // equivalent whether or not it's "of the tax-inclusive total" (tax scales both sides the same
   // way), so discountIncludesTax only changes the math for a fixed SAR value: it means the typed
@@ -1594,7 +1606,7 @@ export default function CashierPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheckoutOpen])
 
-  const discount = useMemo(() => {
+  const manualDiscount = useMemo(() => {
     const raw = Number(discountValue)
     if (!raw || raw <= 0) return 0
     if (discountType === "percent") {
@@ -1604,6 +1616,45 @@ export default function CashierPage() {
     const amountOffSubtotal = discountIncludesTax ? raw / (1 + vatRate) : raw
     return Math.round(Math.min(Math.max(0, amountOffSubtotal), subtotal) * 100) / 100
   }, [discountType, discountValue, discountIncludesTax, subtotal, vatRate])
+  // What a loyalty reward takes off, as a pre-tax amount like the cashier's own discount above.
+  // A reward that names products covers only those lines: a percent is of their value, an
+  // amount is capped at it, and a free item is one unit of the cheapest covered line. An amount
+  // is what the customer sees come off the total, so it is turned back into its pre-tax part.
+  const rewardDiscount = useMemo(() => {
+    if (!loyaltyReward) return 0
+    const covered = cart
+      .filter(
+        (line) =>
+          !loyaltyReward.restricted ||
+          (line.productId !== null && loyaltyReward.productIds.includes(line.productId))
+      )
+      .map((line) => {
+        const lineSubtotal = line.unitPrice * line.quantity
+        const rate = lineTaxRate(line)
+        const net =
+          (line.priceIncludesTax ? lineSubtotal / (1 + rate) : lineSubtotal) -
+          lineTotalDiscount(line)
+        return {
+          net: Math.max(0, net),
+          gross: Math.max(0, net) * (1 + rate),
+          unit: net / line.quantity,
+        }
+      })
+    const net = covered.reduce((sum, line) => sum + line.net, 0)
+    const gross = covered.reduce((sum, line) => sum + line.gross, 0)
+    if (net <= 0) return 0
+    const worth =
+      loyaltyReward.kind === "percent"
+        ? net * (Math.min(100, Math.max(0, loyaltyReward.value)) / 100)
+        : loyaltyReward.kind === "amount"
+          ? Math.min(net, loyaltyReward.value * (net / gross))
+          : Math.max(0, Math.min(...covered.map((line) => line.unit)))
+    // Kept finer than halalas: a "10 SAR off" reward is 8.6957 before tax, and rounding that
+    // to 8.70 would take 10.01 off the total.
+    return Math.round(worth * 1e6) / 1e6
+  }, [loyaltyReward, cart, lineTaxRate, lineTotalDiscount])
+  // The order-wide discount the sale is charged with: the cashier's own plus the reward's.
+  const discount = Math.round((manualDiscount + rewardDiscount) * 1e6) / 1e6
   // What "الخصم" actually shows below -- the order-wide discount above plus every line's own, so
   // that row never reads "0.00" while a line discount is genuinely reducing the total (a cashier
   // giving only an item-level discount would otherwise see no discount reflected anywhere in this
@@ -1659,6 +1710,21 @@ export default function CashierPage() {
     }
   }, [cart, discount, lineTaxRate, lineTotalDiscount])
   const total = Math.round((taxable + tax) * 100) / 100
+  // What the reward takes off the total as the customer sees it (tax included): the reward's
+  // share of everything the order-wide discount removed.
+  const rewardWorth = useMemo(() => {
+    if (rewardDiscount <= 0) return 0
+    const lineNets = cart.map((line) => {
+      const lineSubtotal = line.unitPrice * line.quantity
+      const rate = lineTaxRate(line)
+      const net =
+        (line.priceIncludesTax ? lineSubtotal / (1 + rate) : lineSubtotal) - lineTotalDiscount(line)
+      return net * (1 + rate)
+    })
+    const undiscounted = lineNets.reduce((sum, value) => sum + value, 0)
+    const removed = Math.max(0, undiscounted - total)
+    return discount > 0 ? Math.round(removed * (rewardDiscount / discount) * 100) / 100 : 0
+  }, [rewardDiscount, discount, cart, lineTaxRate, lineTotalDiscount, total])
   // Only meaningful to show a single "(15%)"-style label when every line in the cart actually
   // shares one effective rate -- a mixed cart's real rate varies per line, so the label just
   // says "الضريبة" with no percentage rather than naming one line's rate as if it applied to all.
@@ -1920,6 +1986,12 @@ export default function CashierPage() {
             promotionDiscountAmount: promotion?.netDiscount ?? 0,
           }
         }),
+        // The reward's points are taken by the sale itself, and only when it really took
+        // something off (a free item that is not in the cart takes nothing).
+        loyaltyReward:
+          loyaltyReward && rewardDiscount > 0
+            ? { rewardId: loyaltyReward.rewardId, redemptionId: loyaltyReward.redemptionId }
+            : null,
       })
       const invoice: Invoice = result.queued
         ? buildProvisionalInvoice(result.localId, payments)
@@ -1947,6 +2019,9 @@ export default function CashierPage() {
       setCustomerId(null)
       setSelectedCustomer(null)
       setSalesPerson(null)
+      setChosenLoyaltyReward(null)
+      // The points this sale earned are added a moment after it is saved.
+      window.setTimeout(() => setLoyaltyRefresh((current) => current + 1), 1500)
       setDiscountValue("")
       setDiscountType("percent")
       setDiscountIncludesTax(true)
@@ -2008,6 +2083,14 @@ export default function CashierPage() {
           product ? t("toasts.saleOutOfStock", { product }) : t("toasts.saleOutOfStockGeneric"),
           { description: t("toasts.saleOutOfStockDescription") }
         )
+      } else if (error instanceof AppError && error.code?.startsWith("LOYALTY_")) {
+        // The reward could not be taken (points used elsewhere, or already handed over):
+        // nothing was sold. The reward comes off the sale and the points are read again.
+        toast.error(
+          loyaltyErrors.has(error.code) ? loyaltyErrors(error.code) : loyaltyErrors("generic")
+        )
+        setChosenLoyaltyReward(null)
+        setLoyaltyRefresh((current) => current + 1)
       } else {
         toast.error(t("toasts.saleFailed"))
       }
@@ -2092,6 +2175,29 @@ export default function CashierPage() {
       (customer) => customer.name.includes(query) || (customer.phone ?? "").includes(query)
     )
   }, [customers, customerSearch])
+
+  // A customer found by their loyalty card: put on the sale like one picked from the list.
+  const chooseLoyaltyCustomer = (member: {
+    customerId: string
+    name: string
+    phone: string | null
+  }) => {
+    setCustomerName(member.name)
+    setCustomerPhone(member.phone ?? "")
+    setCustomerId(member.customerId)
+    setSelectedCustomer(null)
+    // Their full record (account balance, past sales) for the payment screen.
+    void customerListService
+      .listCustomers()
+      .then((list) => {
+        const record = list.find((entry) => entry.id === member.customerId)
+        if (record) {
+          setSelectedCustomer((current) => (current === null ? record : current))
+          setCustomers(list)
+        }
+      })
+      .catch(() => undefined)
+  }
 
   // Creating a customer without leaving the cashier page -- a real row (platform: "Madar"),
   // merged into the same list a synced customer would appear in. See native-customers-service.ts.
@@ -2314,7 +2420,9 @@ export default function CashierPage() {
         workspaceId: currentWorkspace.id,
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
-        discountAmount: discount,
+        // A held order keeps the cashier's own discount; a loyalty reward is chosen again
+        // when the order is resumed.
+        discountAmount: manualDiscount,
         ...notePayload(),
         items: cart.map((line) => ({
           productId: line.productId,
@@ -3142,7 +3250,7 @@ export default function CashierPage() {
                     <Plus className="size-3.5" />
                   </button>
                 ) : null}
-                {discount > 0 ? (
+                {manualDiscount > 0 ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -3159,6 +3267,20 @@ export default function CashierPage() {
               </div>
               <span className={HEADING}>{formatAmount(totalDiscount, locale)}</span>
             </div>
+
+            {loyaltyEnabled ? (
+              <CashierLoyaltyBox
+                customerId={customerId}
+                online={isOnline}
+                applied={loyaltyReward}
+                appliedWorth={rewardWorth}
+                saleTotal={total}
+                refreshKey={loyaltyRefresh}
+                formatAmount={(value) => formatAmount(value, locale)}
+                onCustomer={chooseLoyaltyCustomer}
+                onApply={setChosenLoyaltyReward}
+              />
+            ) : null}
 
             <div className="flex items-center justify-between">
               <span className={cn("font-semibold", HEADING)}>{t("cart.totalAfterDiscount")}</span>

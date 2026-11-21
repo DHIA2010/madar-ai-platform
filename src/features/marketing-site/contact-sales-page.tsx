@@ -12,7 +12,6 @@ import { ASSETS } from "@/constants/assets"
 
 import { callDays, CallPicker } from "./call-picker"
 import { InterestPicker } from "./interest-picker"
-import { MADAR_REGISTER_URL } from "./marketing-constants"
 import type { BookedMeeting } from "./meeting-booker"
 
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
@@ -78,6 +77,8 @@ interface Pitch {
   title: string
   subtitle: string
   points: string[]
+  // Who the form is for, when it is not the usual shops and restaurants.
+  audience?: string
 }
 
 const PITCHES: Record<string, Pitch> = {
@@ -154,6 +155,17 @@ const PITCHES: Record<string, Pitch> = {
       "ورديات ومخزون وتقارير في نظام واحد",
     ],
   },
+  // The Booking ad: the page repeats its own words.
+  booking: {
+    title: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
+    subtitle: "نظام حجوزات سعودي للصالونات والسبا والعيادات والاستوديوهات والورش.",
+    points: [
+      "صفحة حجز خاصة بنشاطك يحجز منها عميلك بنفسه",
+      "تأكيد وتذكير العميل عبر واتساب",
+      "تقويم يمنع تعارض المواعيد، ومعه الكاشير وبرنامج الولاء",
+    ],
+    audience: "لأصحاب الصالونات والعيادات وكل نشاط يعمل بالمواعيد",
+  },
   "whatsapp-invoices": {
     title: "أرسل فواتير عملائك عبر واتساب",
     subtitle: "الفاتورة تصل العميل على جواله بدل الورق.",
@@ -165,8 +177,8 @@ const PITCHES: Record<string, Pitch> = {
   },
 }
 
-// madar.my's "talk to sales" page: deliberately nothing but the form -- no navigation to wander
-// off to, only the option to start a free trial instead.
+// madar.my's "talk to sales" page: deliberately nothing but the form and its one button -- no
+// navigation to wander off to and no second choice beside it.
 export function ContactSalesPage({ topic }: { topic?: string | null }) {
   const [values, setValues] = useState<Record<Field, string>>({
     companyName: "",
@@ -534,12 +546,6 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                     ? "سيتصل بك فريق المبيعات على رقم جوالك في هذا الموعد."
                     : "شكرًا لك، سيتواصل معك فريق المبيعات قريبًا."}
               </p>
-              <a
-                href={MADAR_REGISTER_URL}
-                className="mt-8 flex h-14 w-full items-center justify-center rounded-2xl border-2 border-slate-200 text-[17px] font-extrabold text-[#0b1738] transition-colors hover:bg-slate-50"
-              >
-                جرّب مجانًا الآن
-              </a>
             </div>
           ) : (
             <>
@@ -566,7 +572,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                     اترك بياناتك ونتواصل معك لعرض مجاني
                   </p>
                   <p className="mt-1 text-center text-[14px] font-semibold text-slate-500">
-                    لأصحاب المحلات والمطاعم والأنشطة التجارية
+                    {pitch.audience ?? "لأصحاب المحلات والمطاعم والأنشطة التجارية"}
                   </p>
                 </>
               ) : (
@@ -736,19 +742,6 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                   {pitch ? "اطلب عرضًا مجانيًا" : "تسجيل"}
                 </button>
               </form>
-
-              <div className="my-6 flex items-center gap-4 text-[15px] font-semibold text-slate-400">
-                <span className="h-px flex-1 bg-slate-200" />
-                أو
-                <span className="h-px flex-1 bg-slate-200" />
-              </div>
-
-              <a
-                href={MADAR_REGISTER_URL}
-                className="flex h-14 w-full items-center justify-center rounded-2xl border-2 border-slate-200 text-[17px] font-extrabold text-[#0b1738] transition-colors hover:border-slate-300 hover:bg-slate-50"
-              >
-                جرّب مجانًا الآن
-              </a>
             </>
           )}
         </div>

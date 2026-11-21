@@ -40,6 +40,13 @@ async function requestBackgroundSync(): Promise<void> {
 // Always generates a fresh idempotency key per sale attempt -- even when offline mode is off --
 // so a transient failure right after the server already committed can never double-create on a
 // client-side retry.
+// A sale that waits in the queue has already happened: the customer left with the reward's
+// discount, so the server keeps the sale even if the reward can no longer be taken.
+const queued = (payload: CreateInvoiceInput): CreateInvoiceInput =>
+  payload.loyaltyReward
+    ? { ...payload, loyaltyReward: { ...payload.loyaltyReward, late: true } }
+    : payload
+
 export function useOfflineAwareCheckout(workspaceId: string | null, offlineModeEnabled: boolean) {
   return useCallback(
     async (input: SaleInput): Promise<OfflineCheckoutResult> => {
@@ -54,7 +61,7 @@ export function useOfflineAwareCheckout(workspaceId: string | null, offlineModeE
       // Known offline already -- skip straight to queuing rather than waiting out a request that
       // cannot succeed.
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        await enqueueInvoice(idempotencyKey, workspaceId, payload)
+        await enqueueInvoice(idempotencyKey, workspaceId, queued(payload))
         void requestBackgroundSync()
         return { invoice: null, queued: true, localId: idempotencyKey }
       }
@@ -64,7 +71,7 @@ export function useOfflineAwareCheckout(workspaceId: string | null, offlineModeE
         return { invoice, queued: false, localId: idempotencyKey }
       } catch (error) {
         if (!isNetworkLevelFailure(error)) throw error
-        await enqueueInvoice(idempotencyKey, workspaceId, payload)
+        await enqueueInvoice(idempotencyKey, workspaceId, queued(payload))
         void requestBackgroundSync()
         return { invoice: null, queued: true, localId: idempotencyKey }
       }

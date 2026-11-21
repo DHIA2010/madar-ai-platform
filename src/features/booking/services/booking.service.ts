@@ -22,6 +22,7 @@ import type {
   BookingSettings,
   BookingStatus,
   BookingTimeOff,
+  LinkableProduct,
   PublicAccount,
   PublicBooking,
   PublicBookingPage,
@@ -97,6 +98,16 @@ export const bookingService = {
   updateService: (id: string, input: BookingServiceInput) =>
     client.put<BookingServiceInput, BookingServiceItem>(path("services", id), input),
   removeService: (id: string) => client.delete<{ ok: true }>(path("services", id)),
+  // "Service" products from the products list, and making booking services out of them.
+  linkableProducts: async () =>
+    (await client.get<{ items: LinkableProduct[] }>(path("services", "products"))).items,
+  importProducts: async (productIds: string[]) =>
+    (
+      await client.post<{ productIds: string[] }, { items: BookingServiceItem[] }>(
+        path("services", "import"),
+        { productIds }
+      )
+    ).items,
 
   providers: async () => (await client.get<{ items: BookingProvider[] }>(path("providers"))).items,
   createProvider: (input: BookingProviderInput) =>

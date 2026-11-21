@@ -128,6 +128,20 @@ export interface BookingServiceView {
   bundleServiceIds: string[]
   // The rooms and equipment it cannot be given without.
   resourceIds: string[]
+  // The cashier product this service is the same thing as, when it was brought in from the
+  // products list.
+  productId: string | null
+}
+
+// A "service" product of the business that no booking service has been made from yet.
+export interface LinkableProductView {
+  id: string
+  name: string
+  category: string | null
+  // What the customer pays, tax included, like every booking price.
+  price: number
+  durationMinutes: number
+  imageUrl: string | null
 }
 
 export interface BookingResourceView {
@@ -330,7 +344,29 @@ const mapService = (row: Row): BookingServiceView => ({
   addons: parseJsonList<ServiceAddon>(row.addons),
   bundleServiceIds: parseJsonList<string>(row.bundle_service_ids),
   resourceIds: [],
+  productId: text(row.product_id),
 })
+
+const cents = (value: number) => Math.round(value * 100) / 100
+
+// How long a "service" product says it takes, in minutes. The products form keeps a number and
+// a unit; anything missing or out of range becomes half an hour, which the business then edits.
+function productDuration(attributes: unknown): number {
+  const bag = (typeof attributes === "string" ? safeObject(attributes) : (attributes ?? {})) as Row
+  const amount = Number(bag.serviceDuration)
+  if (!Number.isFinite(amount) || amount <= 0) return 30
+  const unit = String(bag.serviceDurationUnit ?? "").toLowerCase()
+  const minutes = /hour|ساع/.test(unit) ? amount * 60 : /day|يوم/.test(unit) ? 12 * 60 : amount
+  return Math.min(12 * 60, Math.max(5, Math.round(minutes)))
+}
+function safeObject(value: string): Row {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === "object" ? (parsed as Row) : {}
+  } catch {
+    return {}
+  }
+}
 
 // What deciding a provider's free time needs to know about one day.
 interface DayContext {
@@ -655,7 +691,180 @@ export class BookingService {
       ]
     )
     await this.writeServiceResources(organizationId, id, input.resourceIds)
+    await this.pushToProduct(organizationId, id)
     return this.service(organizationId, id)
+  }
+
+  // ---- Services that are also cashier products ----
+
+  // The tax a product is sold with, as a fraction (0.15): its own rate, else the business's
+  // default, or none when the business does not add tax to its products.
+  private async productTaxRate(organizationId: string, product: Row): Promise<number> {
+    const organization = await this.db.query<Row>(
+      `SELECT settings FROM organizations WHERE id = $1`,
+      [organizationId]
+    )
+    const raw = organization.rows[0]?.settings
+    const settings = (typeof raw === "string" ? safeObject(raw) : (raw ?? {})) as Row
+    if (settings.taxAutoApplyToProducts === false) return 0
+    if (product.tax_rate_id) {
+      const own = await this.db.query<Row>(
+        `SELECT rate_percent FROM tax_rates
+          WHERE organization_id = $1 AND id = $2 AND is_active LIMIT 1`,
+        [organizationId, product.tax_rate_id]
+      )
+      if (own.rows[0]) return Number(own.rows[0].rate_percent) / 100
+    }
+    const usual = await this.db.query<Row>(
+      `SELECT rate_percent FROM tax_rates
+        WHERE organization_id = $1 AND is_default AND is_active LIMIT 1`,
+      [organizationId]
+    )
+    return usual.rows[0] ? Number(usual.rows[0].rate_percent) / 100 : 0.15
+  }
+
+  // What the customer pays for a product, tax included -- the way booking prices are kept.
+  private async productPrice(organizationId: string, product: Row): Promise<number> {
+    const listed = Number(product.sell_price ?? 0)
+    if (product.price_includes_tax === true) return cents(listed)
+    return cents(listed * (1 + (await this.productTaxRate(organizationId, product))))
+  }
+
+  private async linkedProductIds(organizationId: string): Promise<Set<string>> {
+    const linked = await this.db.query<Row>(
+      `SELECT product_id FROM booking_services
+        WHERE organization_id = $1 AND deleted_at IS NULL AND product_id IS NOT NULL`,
+      [organizationId]
+    )
+    return new Set(linked.rows.map((row) => String(row.product_id)))
+  }
+
+  // The business's "service" products that are not booking services yet.
+  async linkableProducts(organizationId: string): Promise<LinkableProductView[]> {
+    const [products, linked] = await Promise.all([
+      this.db.query<Row>(
+        `SELECT * FROM products
+          WHERE organization_id = $1 AND deleted_at IS NULL AND product_type = 'service'
+            AND status <> 'archived'
+          ORDER BY name LIMIT 500`,
+        [organizationId]
+      ),
+      this.linkedProductIds(organizationId),
+    ])
+    const open = products.rows.filter((row) => !linked.has(String(row.id)))
+    return Promise.all(
+      open.map(async (row) => ({
+        id: String(row.id),
+        name: String(row.name),
+        category: clean(text(row.category)),
+        price: await this.productPrice(organizationId, row),
+        durationMinutes: productDuration(row.attributes),
+        imageUrl: parseJsonList<string>(row.image_urls)[0] ?? null,
+      }))
+    )
+  }
+
+  // Makes booking services out of the chosen "service" products, each tied to its product. The
+  // business then gives each one its providers; the time comes from the product when it has one.
+  async importProducts(
+    organizationId: string,
+    productIds: string[]
+  ): Promise<BookingServiceView[]> {
+    const wanted = new Set(productIds)
+    const open = (await this.linkableProducts(organizationId)).filter((entry) =>
+      wanted.has(entry.id)
+    )
+    const made: BookingServiceView[] = []
+    for (const product of open) {
+      const details = await this.db.query<Row>(
+        `SELECT description FROM products WHERE organization_id = $1 AND id = $2`,
+        [organizationId, product.id]
+      )
+      const id = randomUUID()
+      await this.db.query(
+        `INSERT INTO booking_services
+           (id, organization_id, name, description, category, duration_minutes, price,
+            buffer_minutes, capacity, visibility, is_active, options, addons,
+            bundle_service_ids, image_url, product_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 1, 'published', true, '[]'::jsonb, '[]'::jsonb,
+                 '[]'::jsonb, $8, $9)`,
+        [
+          id,
+          organizationId,
+          product.name.slice(0, 120),
+          clean(text(details.rows[0]?.description))?.slice(0, 600) ?? null,
+          product.category?.slice(0, 60) ?? null,
+          product.durationMinutes,
+          product.price,
+          product.imageUrl,
+          product.id,
+        ]
+      )
+      made.push(await this.service(organizationId, id))
+    }
+    return made
+  }
+
+  // A product changed in the products list (or was removed): the booking service made from it
+  // takes its new name and price, or is let go of when the product is gone. The service itself
+  // stays either way.
+  async productChanged(organizationId: string, productId: string): Promise<void> {
+    const linked = await this.db.query<Row>(
+      `SELECT id FROM booking_services
+        WHERE organization_id = $1 AND product_id = $2 AND deleted_at IS NULL`,
+      [organizationId, productId]
+    )
+    if (linked.rows.length === 0) return
+    const found = await this.db.query<Row>(
+      `SELECT * FROM products WHERE organization_id = $1 AND id = $2`,
+      [organizationId, productId]
+    )
+    const product = found.rows[0]
+    if (!product || product.deleted_at || product.product_type !== "service") {
+      await this.db.query(
+        `UPDATE booking_services SET product_id = NULL, updated_at = now()
+          WHERE organization_id = $1 AND product_id = $2`,
+        [organizationId, productId]
+      )
+      return
+    }
+    await this.db.query(
+      `UPDATE booking_services SET name = $3, price = $4, updated_at = now()
+        WHERE organization_id = $1 AND product_id = $2 AND deleted_at IS NULL`,
+      [
+        organizationId,
+        productId,
+        String(product.name).slice(0, 120),
+        await this.productPrice(organizationId, product),
+      ]
+    )
+  }
+
+  // The other direction: a service edited in Booking gives its name and price to its product,
+  // kept the way that product keeps prices (with or without tax).
+  private async pushToProduct(organizationId: string, serviceId: string): Promise<void> {
+    try {
+      const service = await this.service(organizationId, serviceId)
+      if (!service.productId) return
+      const found = await this.db.query<Row>(
+        `SELECT * FROM products WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [organizationId, service.productId]
+      )
+      const product = found.rows[0]
+      if (!product) return
+      const listed =
+        product.price_includes_tax === true
+          ? service.price
+          : cents(service.price / (1 + (await this.productTaxRate(organizationId, product))))
+      await this.db.query(
+        `UPDATE products SET name = $3, sell_price = $4, updated_at = now()
+          WHERE organization_id = $1 AND id = $2`,
+        [organizationId, service.productId, service.name, listed]
+      )
+    } catch (error) {
+      // The service itself is saved; the product catches up on its next change.
+      console.error("booking.product_push_failed", { serviceId, error })
+    }
   }
 
   // An option or add-on keeps its id once it has one, so bookings made with it still name it.

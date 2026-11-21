@@ -208,6 +208,22 @@ const TIERED_PACKAGES: DefaultPackage[] = [
   }),
 ]
 
+// What the one Booking package lists. Migration 180 wrote the same lines to environments that
+// already had pricing.
+export const BOOKING_FEATURES = [
+  "صفحة حجز خاصة بنشاطك يحجز منها العميل بنفسه",
+  "خدمات ومقدمو خدمة بأوقات دوام وإجازات لكل واحد",
+  "تقويم يومي يمنع تعارض المواعيد",
+  "قائمة الانتظار والعروض والباقات وتقييمات العملاء",
+  "تأكيد وتذكير العميل عبر واتساب، ودخوله لحجوزاته برمز واتساب",
+  "تقارير الحجوزات والإيراد وأوقات الذروة",
+  "تطبيق الولاء مشمول: نقاط ومكافآت وبطاقة ولاء بإشعارات",
+  "الكاشير مشمول: بيع وفواتير معتمدة من هيئة الزكاة وورديات ومخزون",
+  "استخدام مكافآت الولاء داخل الكاشير",
+  "أدوار وصلاحيات مخصصة وتقارير مخصصة",
+  "فرع واحد (فروع إضافية بـ 99 ر.س/شهر أو 999 ر.س/سنة)",
+]
+
 const single = (name: string, monthly: number, features: string[]): DefaultPackage => ({
   ...tier("starter", name, monthly, features, { recommended: true, sellsBranches: false }),
 })
@@ -264,17 +280,18 @@ export function defaultPricingFor(application: PurchasableApplication): {
         ],
       }
     case "booking":
+      // One package with everything (decided 21 November 2026): all of Booking, with Loyalty
+      // and the cashier included (subscriptions/types.ts's INCLUDED_APPLICATIONS).
       return {
         mode: "fixed",
         packages: [
           {
-            ...single("الحجوزات", 149, [
-              "صفحة حجز خاصة بنشاطك يحجز منها العميل بنفسه",
-              "خدمات ومقدمو خدمة بأوقات دوام وإجازات لكل واحد",
-              "تقويم يومي يمنع تعارض المواعيد",
-              "تأكيد وتذكير العميل عبر واتساب بضغطة",
-              "تقارير الحجوزات والإيراد وأوقات الذروة",
-            ]),
+            ...tier("starter", "الحجوزات الشاملة", 299, BOOKING_FEATURES, {
+              recommended: true,
+              entitlements: { shiftCash: true, customRoles: true, customReports: true },
+            }),
+            // 2,999 a year rather than the usual ten months (2,990).
+            yearlyPriceHalalas: sar(2999),
             // Its own app, not a tier of the account-wide plan.
             legacyPlanTier: null,
           },

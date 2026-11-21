@@ -58,8 +58,21 @@ export interface ServiceAddon {
   extraMinutes: number
 }
 
+// A "service" product from the products list that can become a booking service.
+export interface LinkableProduct {
+  id: string
+  name: string
+  category: string | null
+  price: number
+  durationMinutes: number
+  imageUrl: string | null
+}
+
 export interface BookingServiceItem {
   id: string
+  // The cashier product this service is the same thing as, when it was brought in from the
+  // products list: their names and prices follow each other.
+  productId?: string | null
   name: string
   description: string | null
   category: string | null

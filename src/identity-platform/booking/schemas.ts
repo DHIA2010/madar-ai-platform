@@ -126,6 +126,9 @@ export const bookingServiceSchema = z.object({
   resourceIds: z.array(uuid).max(50).default([]),
 })
 
+// The "service" products to make booking services from.
+export const bookingImportSchema = z.object({ productIds: z.array(uuid).min(1).max(200) })
+
 export const bookingResourceSchema = z.object({
   name: text(120).min(1),
   kind: z.enum(["room", "equipment"]).default("room"),

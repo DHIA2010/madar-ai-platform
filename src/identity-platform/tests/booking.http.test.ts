@@ -1319,4 +1319,160 @@ describe("the Booking app: rooms, repeating bookings and the waiting list", () =
       ).status
     ).toBe(422)
   })
+
+  it("makes booking services from the cashier's service products and keeps the two in step", async () => {
+    const { token, actor } = await signIn("booking-products@madar.test", "Products")
+    await mergeOrgSettings(actor.organizationId, { posEnabled: true })
+    await call("PATCH", "/v1/pos/payment-methods/cash", token, {
+      enabled: true,
+      feePercent: 0,
+      merchantId: null,
+      apiKey: null,
+    })
+    const product = async (body: Record<string, unknown>) =>
+      (
+        await call("POST", "/v1/products", token, {
+          category: "عام",
+          description: "",
+          status: "active",
+          costPrice: null,
+          minStock: 0,
+          baseUnit: null,
+          taxRateId: null,
+          ...body,
+        })
+      ).body
+    // Priced before tax: 100 on the shelf is 115 to the customer.
+    const massage = await product({
+      productType: "service",
+      name: "مساج",
+      sku: "SRV-1",
+      sellPrice: 100,
+      priceIncludesTax: false,
+      attributes: { serviceDuration: 45, serviceDurationUnit: "minutes" },
+    })
+    expect(massage.id).toBeTruthy()
+    // Priced with tax, and no time given.
+    const facial = await product({
+      productType: "service",
+      name: "تنظيف بشرة",
+      sku: "SRV-2",
+      sellPrice: 230,
+      priceIncludesTax: true,
+    })
+    // Not a service: never offered.
+    await product({
+      productType: "simple",
+      name: "شامبو",
+      sku: "SH-1",
+      sellPrice: 40,
+      stockQuantity: 10,
+      priceIncludesTax: true,
+    })
+
+    const offered = (await call("GET", "/v1/booking/services/products", token)).body.items
+    expect(offered.map((entry: { name: string }) => entry.name).sort()).toEqual(
+      ["تنظيف بشرة", "مساج"].sort()
+    )
+    expect(offered.find((entry: { id: string }) => entry.id === massage.id)).toMatchObject({
+      price: 115,
+      durationMinutes: 45,
+    })
+    expect(offered.find((entry: { id: string }) => entry.id === facial.id)).toMatchObject({
+      price: 230,
+      durationMinutes: 30,
+    })
+
+    const made = (
+      await call("POST", "/v1/booking/services/import", token, {
+        productIds: [massage.id, facial.id],
+      })
+    ).body.items
+    expect(made).toHaveLength(2)
+    const service = made.find((entry: { productId: string }) => entry.productId === massage.id)
+    expect(service).toMatchObject({ name: "مساج", price: 115, durationMinutes: 45 })
+    // Once made, they are not offered again, and asking twice makes nothing new.
+    expect((await call("GET", "/v1/booking/services/products", token)).body.items).toEqual([])
+    expect(
+      (await call("POST", "/v1/booking/services/import", token, { productIds: [massage.id] })).body
+        .items
+    ).toEqual([])
+
+    const serviceNow = async () =>
+      (await call("GET", "/v1/booking/services", token)).body.items.find(
+        (entry: { id: string }) => entry.id === service.id
+      )
+    const productNow = async () =>
+      (
+        await database.query<{ name: string; sell_price: string }>(
+          `select name, sell_price from products where id = $1`,
+          [massage.id]
+        )
+      ).rows[0]
+
+    // The product's new name and price reach the booking service.
+    const edited = await call("PATCH", `/v1/products/${massage.id}`, token, {
+      productType: "service",
+      name: "مساج استرخاء",
+      sku: "SRV-1",
+      category: "عام",
+      description: "",
+      status: "active",
+      costPrice: null,
+      minStock: 0,
+      baseUnit: null,
+      taxRateId: null,
+      sellPrice: 120,
+      priceIncludesTax: false,
+    })
+    expect(edited.status).toBe(200)
+    await expect.poll(async () => (await serviceNow()).price).toBe(138)
+    expect((await serviceNow()).name).toBe("مساج استرخاء")
+
+    // And a service edited in Booking gives its name and price back to the product, before tax
+    // the way that product keeps it.
+    await call("PUT", `/v1/booking/services/${service.id}`, token, {
+      name: "مساج 45 دقيقة",
+      durationMinutes: 45,
+      price: 230,
+    })
+    expect(await productNow()).toMatchObject({ name: "مساج 45 دقيقة" })
+    expect(Number((await productNow()).sell_price)).toBe(200)
+
+    // A finished visit is invoiced as that product, at what the customer paid.
+    await call("PUT", "/v1/booking/settings", token, { invoiceOnCompletion: true })
+    const provider = (
+      await call("POST", "/v1/booking/providers", token, {
+        name: "نورة",
+        serviceIds: [service.id],
+        hours: [{ weekday: WEEKDAY, startMinute: 600, endMinute: 780 }],
+      })
+    ).body
+    const booking = (
+      await book(token, { serviceId: service.id, providerId: provider.id, startsAt: at("10:00") })
+    ).body
+    const done = (
+      await call("POST", `/v1/booking/bookings/${booking.id}/status`, token, {
+        status: "completed",
+      })
+    ).body
+    expect(done.invoiceNumber).toMatch(/^INV-/)
+    const lines = await database.query<{ product_id: string | null; total_amount: string }>(
+      `select i.product_id, v.total_amount from pos_invoice_items i
+         join pos_invoices v on v.id = i.invoice_id where v.organization_id = $1`,
+      [actor.organizationId]
+    )
+    expect(lines.rows).toHaveLength(1)
+    expect(lines.rows[0].product_id).toBe(massage.id)
+    expect(Number(lines.rows[0].total_amount)).toBe(230)
+
+    // The product is removed: the booking service stays, on its own.
+    const removed = await fetch(`${baseUrl}/v1/products/${massage.id}`, {
+      method: "DELETE",
+      headers: authHeaders(token),
+    })
+    expect(removed.ok).toBe(true)
+    await expect.poll(async () => (await serviceNow()).productId).toBeNull()
+    expect((await serviceNow()).name).toBe("مساج 45 دقيقة")
+  })
 })

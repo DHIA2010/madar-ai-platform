@@ -105,6 +105,8 @@ export interface LoyaltyOverview {
   members: number
   newMembers: number
   inWallet: number
+  // Members who switched notifications on for a card saved to their home screen.
+  withNotifications: number
   outstandingPoints: number
   outstandingValue: number
   earned: number
@@ -148,4 +150,21 @@ export interface PublicLoyaltyCard extends PublicLoyaltyProgram {
   onlineBonus: number | null
   activity: Array<{ points: number; kind: string; createdAt: string }>
   walletAvailable: boolean
+}
+
+// What the cashier screen shows for the customer on a sale.
+export interface CashierLoyalty {
+  isActive: boolean
+  pointsPerSar: number
+  pointValue: number
+  member: {
+    id: string
+    customerId: string | null
+    name: string
+    phone: string | null
+    points: number
+  } | null
+  rewards: LoyaltyReward[]
+  // A reward the customer already took for points and has not been handed yet.
+  waiting: LoyaltyRedemption | null
 }

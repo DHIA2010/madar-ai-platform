@@ -381,35 +381,60 @@ export class BookingInvoicer {
       throw refuse("BOOKING_INVOICE_NO_PAYMENT_METHOD", "The branch has no payment method.")
     }
 
-    const invoice = await this.invoices.create({
-      organizationId,
-      workspaceId,
-      cashierUserId: userId,
-      customerName: booking.customerName,
-      customerPhone: booking.customerPhone,
-      customerId: booking.customerId,
-      payments: [{ paymentMethodCode: method.code, amount: total }],
-      discountAmount: 0,
-      notes: `حجز رقم ${booking.number}`,
-      notesLines: null,
-      items: [
-        {
-          productId: null,
-          productName: [
-            booking.serviceName,
-            booking.optionName,
-            booking.partySize > 1 ? `× ${booking.partySize}` : null,
-          ]
-            .filter(Boolean)
-            .join(" - ")
-            .slice(0, 200),
-          unitPrice: total / (1 + rate),
-          quantity: 1,
-        },
-      ],
-      // One invoice per booking, however many times this is asked for.
-      idempotencyKey: `booking:${booking.id}`,
-    })
+    const productName = [
+      booking.serviceName,
+      booking.optionName,
+      booking.partySize > 1 ? `× ${booking.partySize}` : null,
+    ]
+      .filter(Boolean)
+      .join(" - ")
+      .slice(0, 200)
+    // A service made from a cashier product is invoiced as that product, so sales reports count
+    // the visit with what the cashier sold of it. The line's price goes in the way that product
+    // keeps prices (with or without tax).
+    const linked = row.service_id
+      ? (
+          await this.db.query<Row>(
+            `SELECT p.id, p.price_includes_tax FROM booking_services s
+               JOIN products p ON p.id = s.product_id
+              WHERE s.id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL`,
+            [row.service_id, organizationId]
+          )
+        ).rows[0]
+      : undefined
+    const issueWith = (line: { productId: string | null; unitPrice: number }) =>
+      this.invoices.create({
+        organizationId,
+        workspaceId,
+        cashierUserId: userId,
+        customerName: booking.customerName,
+        customerPhone: booking.customerPhone,
+        customerId: booking.customerId,
+        payments: [{ paymentMethodCode: method.code, amount: total }],
+        discountAmount: 0,
+        notes: `حجز رقم ${booking.number}`,
+        notesLines: null,
+        items: [{ ...line, productName, quantity: 1 }],
+        // One invoice per booking, however many times this is asked for.
+        idempotencyKey: `booking:${booking.id}`,
+      })
+    const plain = { productId: null, unitPrice: total / (1 + rate) }
+    let invoice
+    if (linked) {
+      try {
+        invoice = await issueWith({
+          productId: String(linked.id),
+          unitPrice: linked.price_includes_tax === true ? total : total / (1 + rate),
+        })
+      } catch (error) {
+        // The product's own settings (its tax rate, stock, a price floor) can refuse the line or
+        // total it differently. The visit must still be invoiced, so it goes in as plain text.
+        console.error("booking.invoice_product_line_failed", { bookingId, error })
+        invoice = await issueWith(plain)
+      }
+    } else {
+      invoice = await issueWith(plain)
+    }
     await this.db.query(
       `UPDATE bookings SET invoice_id = $3, invoice_number = $4, payment_status = 'paid',
               payment_method = $5, updated_at = now()

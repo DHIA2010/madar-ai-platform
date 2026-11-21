@@ -2,6 +2,7 @@ import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { ERRORS } from "../../application/errors/IdentityError"
 import {
   loyaltyAdjustSchema,
+  loyaltyCashierSchema,
   loyaltyMemberListSchema,
   loyaltyMemberSchema,
   loyaltyMessageSchema,
@@ -10,7 +11,10 @@ import {
   loyaltyRewardSchema,
   publicClaimSchema,
   publicJoinSchema,
+  publicPushSchema,
+  publicPushStopSchema,
 } from "../../loyalty/schemas"
+import type { LoyaltyPush } from "../../loyalty/push"
 import type { LoyaltyService } from "../../loyalty/service"
 import { type LoyaltyWallet, starIcon } from "../../loyalty/wallet"
 
@@ -29,6 +33,8 @@ export async function handleLoyaltyRoute(input: {
   service: LoyaltyService | null
   // Present only where a wallet certificate is set up.
   wallet: LoyaltyWallet | null
+  // Notifications for cards saved to a phone's home screen.
+  push: LoyaltyPush | null
   send: Send
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
@@ -69,7 +75,20 @@ export async function handleLoyaltyRoute(input: {
 
   if (method === "GET" && path === "/overview") {
     requireView()
-    return send(200, await service.overview(org))
+    return send(200, {
+      ...(await service.overview(org)),
+      withNotifications: input.push ? await input.push.memberCount(org) : 0,
+    })
+  }
+
+  // The cashier screen: the customer on the sale, their points and what they can use. Open to
+  // whoever can sell, not only to those who manage the programme.
+  if (method === "GET" && path === "/cashier") {
+    const allowed = ["pos:view", "pos:manage", "loyalty:view"]
+    if (!allowed.some((permission) => actor.modulePermissions.includes(permission))) {
+      throw ERRORS.forbidden()
+    }
+    return send(200, await service.cashierLookup(org, loyaltyCashierSchema.parse(query(url))))
   }
 
   if (method === "GET" && path === "/catalog") {
@@ -155,17 +174,20 @@ export async function handleLoyaltyRoute(input: {
     )
   }
 
-  // A message to every card kept in a phone's wallet.
+  // A message from the business: to every card kept in a phone's wallet, and to every member
+  // who switched notifications on for a card saved to their home screen.
   if (method === "POST" && path === "/wallet/message") {
     requireManage()
-    if (!input.wallet) {
+    if (!input.wallet && !input.push) {
       return send(422, {
         code: "LOYALTY_WALLET_UNAVAILABLE",
-        message: "Wallet cards are not set up.",
+        message: "Messages are not set up.",
       })
     }
     const { message } = loyaltyMessageSchema.parse(await body())
-    return send(200, { sent: await service.broadcast(org, message) })
+    const inWallets = input.wallet ? await service.broadcast(org, message) : 0
+    const notified = input.push ? await input.push.broadcast(org, message) : 0
+    return send(200, { sent: inWallets + notified })
   }
 
   return false
@@ -178,6 +200,7 @@ export async function handlePublicLoyaltyRoute(input: {
   url: URL
   service: LoyaltyService | null
   wallet: LoyaltyWallet | null
+  push: LoyaltyPush | null
   // The request's Authorization header, for the wallet routes.
   authorization: string | null
   send: Send
@@ -269,9 +292,29 @@ export async function handlePublicLoyaltyRoute(input: {
     }
   }
 
-  const card = path.match(/^\/cards\/([^/]+)(\/(redeem|review|pass|icon\.png))?$/)
+  const card = path.match(/^\/cards\/([^/]+)(\/(redeem|review|pass|push|icon\.png))?$/)
   if (card) {
     const token = decodeURIComponent(card[1])
+    // Notifications on a card saved to the home screen: the key the phone needs, then the
+    // address its push service gave it.
+    if (card[3] === "push") {
+      const push = input.push
+      if (!push) return send(404, { code: "LOYALTY_PUSH_UNAVAILABLE", message: "Not available." })
+      if (method === "GET") {
+        await service.memberByToken(token)
+        return send(200, { publicKey: await push.publicKey() })
+      }
+      if (!(await input.limit("loyalty_push", 20, 10 * 60_000))) return limited()
+      if (method === "POST") {
+        await push.subscribe(token, publicPushSchema.parse(await input.readJsonBody()))
+        return send(200, { ok: true })
+      }
+      if (method === "DELETE") {
+        const { endpoint } = publicPushStopSchema.parse(await input.readJsonBody())
+        await push.unsubscribe(token, endpoint)
+        return send(200, { ok: true })
+      }
+    }
     if (method === "GET" && !card[2]) {
       return send(200, { ...(await service.publicCard(token)), walletAvailable: wallet !== null })
     }
@@ -291,7 +334,10 @@ export async function handlePublicLoyaltyRoute(input: {
     // The picture a phone uses when the card page is saved to its home screen.
     if (method === "GET" && card[3] === "icon.png") {
       const look = await service.publicCard(token)
-      input.sendRaw(200, starIcon(180, look.cardColor, look.textColor), {
+      // 180 for an iPhone's home screen; the larger two are what Android asks for.
+      const asked = Number(url.searchParams.get("size"))
+      const size = [192, 512].includes(asked) ? asked : 180
+      input.sendRaw(200, starIcon(size, look.cardColor, look.textColor), {
         "content-type": "image/png",
         "cache-control": "public, max-age=3600",
       })

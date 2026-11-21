@@ -5,7 +5,7 @@
 
 import { useState } from "react"
 import { useTranslations } from "next-intl"
-import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react"
+import { Link2, Loader2, PackagePlus, Pencil, Plus, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -66,6 +66,27 @@ export function BookingServicesPage() {
   )
   const [removing, setRemoving] = useState<BookingServiceItem | null>(null)
   const [busy, setBusy] = useState(false)
+  // Services the business already sells from the cashier (products of the "service" kind) that
+  // are not booking services yet: brought in with one press instead of being typed again.
+  const products = useLoad(() => bookingService.linkableProducts().catch(() => []), [])
+  const [importing, setImporting] = useState(false)
+  const [chosen, setChosen] = useState<string[]>([])
+
+  const bringIn = async () => {
+    setBusy(true)
+    try {
+      const made = await bookingService.importProducts(chosen)
+      toast.success(t("import.done", { count: made.length }))
+      setImporting(false)
+      setChosen([])
+      services.reload()
+      products.reload()
+    } catch (error) {
+      toast.error(errorText(error))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const set = <K extends keyof BookingServiceInput>(key: K, value: BookingServiceInput[K]) =>
     setEditing((current) =>
@@ -183,17 +204,37 @@ export function BookingServicesPage() {
       subtitle={t("subtitle")}
       actions={
         canManage ? (
-          <button
-            type="button"
-            className={PRIMARY_BUTTON}
-            onClick={() => setEditing({ id: null, draft: BLANK })}
-          >
-            <Plus className="size-4" />
-            {t("add")}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={PRIMARY_BUTTON}
+              onClick={() => setEditing({ id: null, draft: BLANK })}
+            >
+              <Plus className="size-4" />
+              {t("add")}
+            </button>
+          </div>
         ) : null
       }
     >
+      {canManage && products.data && products.data.length > 0 ? (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-[14px] border border-[#ddd6fe] bg-[#f5f3ff] px-4 py-3">
+          <PackagePlus className="size-5 shrink-0 text-[#6d28d9]" />
+          <p className="min-w-0 flex-1 text-[13.5px] leading-6 text-[#4c1d95]">
+            {t("import.notice", { count: products.data.length })}
+          </p>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON}
+            onClick={() => {
+              setChosen((products.data ?? []).map((product) => product.id))
+              setImporting(true)
+            }}
+          >
+            {t("import.open")}
+          </button>
+        </div>
+      ) : null}
       <div className={cn(PANEL, "overflow-hidden")}>
         {services.failed ? (
           <LoadFailed onRetry={services.reload} />
@@ -225,6 +266,12 @@ export function BookingServicesPage() {
                         />
                         <span className="min-w-0">
                           <span className="block font-bold">{service.name}</span>
+                          {service.productId ? (
+                            <span className="flex items-center gap-1 text-[12px] font-semibold text-[#067647]">
+                              <Link2 className="size-3.5" />
+                              {t("import.linked")}
+                            </span>
+                          ) : null}
                           {service.category ? (
                             <span className={cn("block text-[12px]", MUTED)}>
                               {service.category}
@@ -680,6 +727,81 @@ export function BookingServicesPage() {
             </label>
           </div>
         ) : null}
+      </AppDialog>
+
+      <AppDialog
+        open={importing}
+        onOpenChange={(next) => {
+          if (!busy) setImporting(next)
+        }}
+        title={t("import.title")}
+        description={t("import.hint")}
+        contentClassName="max-w-[560px]"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className={SECONDARY_BUTTON}
+              disabled={busy}
+              onClick={() => setImporting(false)}
+            >
+              {t("cancel")}
+            </button>
+            <button
+              type="button"
+              className={PRIMARY_BUTTON}
+              disabled={busy || chosen.length === 0}
+              onClick={() => void bringIn()}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <PackagePlus className="size-4" />
+              )}
+              {t("import.confirm", { count: chosen.length })}
+            </button>
+          </div>
+        }
+      >
+        <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+          {(products.data ?? []).map((product) => {
+            const picked = chosen.includes(product.id)
+            return (
+              <li key={product.id}>
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-center gap-3 rounded-[12px] border px-3 py-2.5",
+                    picked ? "border-[#c4b5fd] bg-[#f5f3ff]" : "border-[#e1e7f0] bg-white"
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[#6d28d9]"
+                    checked={picked}
+                    onChange={() =>
+                      setChosen((current) =>
+                        picked
+                          ? current.filter((id) => id !== product.id)
+                          : [...current, product.id]
+                      )
+                    }
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-bold">{product.name}</span>
+                    <span className={cn("block text-[12px]", MUTED)}>
+                      {[product.category, format.duration(product.durationMinutes)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[13.5px] font-black text-[#6d28d9]">
+                    {format.money(product.price)}
+                  </span>
+                </label>
+              </li>
+            )
+          })}
+        </ul>
       </AppDialog>
 
       <AppConfirmDialog

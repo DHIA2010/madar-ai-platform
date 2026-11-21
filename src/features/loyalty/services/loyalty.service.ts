@@ -1,4 +1,5 @@
 import type {
+  CashierLoyalty,
   LoyaltyMember,
   LoyaltyMemberDetails,
   LoyaltyOverview,
@@ -86,7 +87,18 @@ export const loyaltyService = {
   closeRedemption: (id: string, outcome: "use" | "cancel") =>
     client.post<Record<string, never>, LoyaltyRedemption>(path("redemptions", id, outcome), {}),
 
-  // A message to every card kept in a phone's wallet.
+  // The cashier screen: the customer on the sale (or a scanned card / typed phone), their
+  // points and what they can use.
+  cashier: (input: { customerId?: string; code?: string }) => {
+    const asked = input.customerId
+      ? `?customerId=${encodeURIComponent(input.customerId)}`
+      : input.code
+        ? `?code=${encodeURIComponent(input.code)}`
+        : ""
+    return client.get<CashierLoyalty>(`${path("cashier")}${asked}`)
+  },
+
+  // A message to every card kept in a phone's wallet or with notifications on.
   sendWalletMessage: (message: string) =>
     client.post<{ message: string }, { sent: number }>(path("wallet", "message"), { message }),
 }
@@ -120,6 +132,20 @@ export const publicLoyaltyService = {
   // The picture a phone shows for the card page once it is saved to the home screen.
   iconUrl: (token: string) =>
     new URL(publicPath("cards", token, "icon.png"), getClientEnvironment().API_BASE_URL).toString(),
+  // Notifications on a card saved to the home screen: Madar's key, then the address the
+  // phone's push service gave it.
+  pushKey: (token: string) =>
+    publicRequest<{ publicKey: string }>(publicPath("cards", token, "push")),
+  pushOn: (token: string, target: PushSubscriptionJSON) =>
+    publicRequest<{ ok: true }>(publicPath("cards", token, "push"), {
+      method: "POST",
+      body: JSON.stringify({ endpoint: target.endpoint, keys: target.keys }),
+    }),
+  pushOff: (token: string, endpoint: string) =>
+    publicRequest<{ ok: true }>(publicPath("cards", token, "push"), {
+      method: "DELETE",
+      body: JSON.stringify({ endpoint }),
+    }),
   // The card as an Apple Wallet pass: opened by the phone itself.
   passUrl: (token: string) =>
     new URL(publicPath("cards", token, "pass"), getClientEnvironment().API_BASE_URL).toString(),

@@ -70,6 +70,13 @@ export const ROUTES = {
   publicLoyaltyCardRoot: "/lc",
   publicLoyaltyJoin: (code: string) => `/l/${code}`,
   publicLoyaltyCard: (token: string) => `/lc/${token}`,
+  publicLoyaltyCardManifest: (token: string) => `/lc/${token}/manifest.webmanifest`,
+  // The notifications service worker of a saved card (public/loyalty-sw.js). Each card has its
+  // own scope so two cards on one phone keep separate notifications.
+  loyaltyServiceWorker: {
+    script: "/loyalty-sw.js",
+    scope: (token: string) => `/lc/${token}/`,
+  },
   // The public pages: a business's booking page, and a customer's own booking.
   publicBookingRoot: "/b",
   publicBookingManageRoot: "/bk",

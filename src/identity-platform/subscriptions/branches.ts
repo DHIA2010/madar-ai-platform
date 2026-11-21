@@ -22,6 +22,8 @@ import type {
 export const BRANCH_APPLICATIONS: PurchasableApplication[] = [
   "madarComplete",
   "pos",
+  // Booking brings the cashier, so it sells branches the way the cashier's own packages do.
+  "booking",
   "advertising",
   "ecommerce",
 ]

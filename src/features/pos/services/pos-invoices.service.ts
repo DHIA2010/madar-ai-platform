@@ -262,6 +262,9 @@ export interface CreateInvoiceInput {
   // The offline queue's client-generated uuid for this sale attempt -- see
   // features/pos/offline/use-offline-aware-checkout.ts. Omitted/null for an ordinary online sale.
   idempotencyKey?: string | null
+  // A loyalty reward used on this sale; its discount is already inside discountAmount. late
+  // marks a sale rung up offline and only now reaching the server.
+  loyaltyReward?: { rewardId?: string | null; redemptionId?: string | null; late?: boolean } | null
 }
 
 function buildQuery(filter: InvoiceListFilter): string {

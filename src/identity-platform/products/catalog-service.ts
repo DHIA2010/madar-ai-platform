@@ -62,6 +62,19 @@ export class ProductCatalogService {
     private readonly taxRatesService: TaxRatesService
   ) {}
 
+  // Told after a product is changed or removed, so what was made from it elsewhere (a booking
+  // service made from a "service" product) can follow. Set where the server is put together;
+  // must never fail the change itself.
+  onChanged: ((organizationId: string, productId: string) => void) | null = null
+
+  private changed(organizationId: string, productId: string) {
+    try {
+      this.onChanged?.(organizationId, productId)
+    } catch (error) {
+      console.error("products.on_changed_failed", { productId, error })
+    }
+  }
+
   // A product's own tax_rate_id has to be a real rate this organization owns -- otherwise a sale
   // of this product would silently resolve to "no rate found" at checkout time instead of
   // failing loudly here, when the product is actually saved.
@@ -134,6 +147,7 @@ export class ProductCatalogService {
       product: normalized,
     })
     if (!updated) throw PRODUCT_ERRORS.notFound()
+    this.changed(input.organizationId, input.id)
     return updated
   }
 
@@ -159,6 +173,7 @@ export class ProductCatalogService {
     // regardless, so pretending to delete it would be a lie.
     const deleted = await this.repository.softDelete(organizationId, id)
     if (!deleted) throw PRODUCT_ERRORS.notFound()
+    this.changed(organizationId, id)
   }
 
   async create(input: {

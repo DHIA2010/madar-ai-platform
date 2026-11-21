@@ -20,6 +20,7 @@ import {
   bookingResourceSchema,
   bookingReviewPublishSchema,
   bookingSellPlanSchema,
+  bookingImportSchema,
   bookingServiceSchema,
   bookingSettingsSchema,
   bookingStatusSchema,
@@ -142,6 +143,16 @@ export async function handleBookingRoute(input: {
       requireManage()
       return send(201, await service.createService(org, bookingServiceSchema.parse(await body())))
     }
+  }
+  // "Service" products from the products list that can become booking services.
+  if (method === "GET" && path === "/services/products") {
+    requireView()
+    return send(200, { items: await service.linkableProducts(org) })
+  }
+  if (method === "POST" && path === "/services/import") {
+    requireManage()
+    const { productIds } = bookingImportSchema.parse(await body())
+    return send(201, { items: await service.importProducts(org, productIds) })
   }
   const serviceMatch = path.match(/^\/services\/([^/]+)$/)
   if (serviceMatch) {

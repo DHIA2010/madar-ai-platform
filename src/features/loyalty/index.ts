@@ -1,4 +1,5 @@
 export { LoyaltyCardPage } from "./components/card-page"
+export { CashierLoyaltyBox, type CashierReward } from "./components/cashier-loyalty"
 export { LoyaltyMembersPage } from "./components/members-page"
 export { LoyaltyOverviewPage } from "./components/overview-page"
 export { PublicLoyaltyCardView, PublicLoyaltyJoinView } from "./components/public-pages"

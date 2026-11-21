@@ -24,9 +24,22 @@ export const MADAR_COMPLETE = "madarComplete"
 export const PURCHASABLE_APPLICATIONS = [...SUBSCRIPTION_APPLICATIONS, MADAR_COMPLETE] as const
 export type PurchasableApplication = (typeof PURCHASABLE_APPLICATIONS)[number]
 
+// Applications that come with another application's subscription, at no extra charge: Booking
+// is sold as one package that also opens Loyalty and the cashier (decided 21 November 2026).
+// They are switched on with it, tried with its free trial, and switched off when it ends unless
+// the customer also has them some other way.
+export const INCLUDED_APPLICATIONS: Partial<
+  Record<SubscriptionApplication, SubscriptionApplication[]>
+> = {
+  booking: ["loyalty", "pos"],
+}
+
 // The organizations.settings flags a purchase of `application` switches on.
 export function enabledSettingsKeysFor(application: PurchasableApplication): string[] {
-  const applications = application === MADAR_COMPLETE ? SUBSCRIPTION_APPLICATIONS : [application]
+  const applications =
+    application === MADAR_COMPLETE
+      ? SUBSCRIPTION_APPLICATIONS
+      : [application, ...(INCLUDED_APPLICATIONS[application] ?? [])]
   return applications.map((app) => `${app}Enabled`)
 }
 

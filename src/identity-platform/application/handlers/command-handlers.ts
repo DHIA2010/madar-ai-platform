@@ -98,7 +98,11 @@ import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-rol
 import { issueSessionForMember } from "../session-issuer"
 import { permissionsForRole, type PlatformRole } from "../../platform-admin/staff-roles"
 import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../../billing/moyasar/plan-pricing"
-import { activationSettingsPatch, bundleTrialSettingsPatch } from "../../subscriptions/activation"
+import {
+  activationSettingsPatch,
+  bundleTrialSettingsPatch,
+  includedTrialSettingsPatch,
+} from "../../subscriptions/activation"
 import {
   activateFree,
   activatePaid,
@@ -1611,6 +1615,8 @@ export class IdentityCommandHandlers {
         throw ERRORS.validation({ application: "This application is already active." })
       }
       settingsPatch = {
+        // The applications that come with this one are tried along with it.
+        ...includedTrialSettingsPatch(organizationState.settings, command.application, trialEndsAt),
         [enabledKey]: true,
         [`${command.application}TrialEndsAt`]: trialEndsAt,
         [trialUsedKey]: true,

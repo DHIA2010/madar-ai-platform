@@ -15,6 +15,7 @@ import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createIdentityApiServer } from "../interfaces/rest/server"
+import { isPushAddress, noticeText, registeredLoyaltyPush } from "../loyalty/push"
 import { LoyaltyService } from "../loyalty/service"
 import { buildPass, LoyaltyWallet, passDescription, type WalletConfig } from "../loyalty/wallet"
 
@@ -448,5 +449,222 @@ describe("the Loyalty app", () => {
 
     expect(await wallet.unregister("phone-1", member.id, member.token)).toBe(true)
     expect(await wallet.pushNow(member.id)).toBe(0)
+  })
+
+  it("tells a member's phone about new points and the business's messages", async () => {
+    const { token } = await signIn("loyalty-push@madar.test", "Push")
+    const program = (await activate(token, { pointsPerSar: 1 })).body
+    const joined = await call("POST", `/v1/public/loyalty/join/${program.joinCode}`, undefined, {
+      name: "هند",
+      phone: "0500000021",
+    })
+    const card = `/v1/public/loyalty/cards/${joined.body.token}`
+
+    const push = registeredLoyaltyPush()!
+    const sent: { endpoint: string; payload: { title: string; body: string; url: string } }[] = []
+    let answer = 201
+    push.sender = async (target, payload) => {
+      sent.push({ endpoint: target.endpoint, payload: JSON.parse(payload) })
+      return answer
+    }
+
+    // The key a phone needs is the same every time, and only for a real card.
+    const key = (await call("GET", `${card}/push`)).body.publicKey
+    expect(key).toMatch(/^[A-Za-z0-9_-]{80,}$/)
+    expect((await call("GET", `${card}/push`)).body.publicKey).toBe(key)
+    expect((await call("GET", "/v1/public/loyalty/cards/nope/push")).status).toBe(404)
+
+    // Only a phone maker's push service is accepted as an address.
+    const keys = { p256dh: "p".repeat(87), auth: "a".repeat(22) }
+    expect(isPushAddress("https://web.push.apple.com/abc")).toBe(true)
+    expect(isPushAddress("https://fcm.googleapis.com/fcm/send/abc")).toBe(true)
+    expect(isPushAddress("https://jmt17.google.com/fcm/send/abc")).toBe(true)
+    expect(isPushAddress("https://mail.google.com/fcm/send/abc")).toBe(false)
+    expect(isPushAddress("http://web.push.apple.com/abc")).toBe(false)
+    expect(isPushAddress("https://push.apple.com.evil.test/abc")).toBe(false)
+    expect(
+      (await call("POST", `${card}/push`, undefined, { endpoint: "https://evil.test/x", keys }))
+        .status
+    ).toBe(422)
+    const endpoint = "https://web.push.apple.com/phone-1"
+    expect((await call("POST", `${card}/push`, undefined, { endpoint, keys })).status).toBe(200)
+    // The same phone asking again stays one entry.
+    await call("POST", `${card}/push`, undefined, { endpoint, keys })
+    expect((await call("GET", "/v1/loyalty/overview", token)).body.withNotifications).toBe(1)
+
+    // Points added by the staff reach the phone, under the business's name.
+    const member = (await call("GET", "/v1/loyalty/members", token)).body.items[0]
+    await call("POST", `/v1/loyalty/members/${member.id}/adjust`, token, { points: 50 })
+    await expect.poll(() => sent.length).toBe(1)
+    expect(sent[0].endpoint).toBe(endpoint)
+    expect(sent[0].payload.title).toBe("Push")
+    expect(sent[0].payload.body).toBe("أُضيفت 50 نقطة إلى بطاقتك. رصيدك الآن 50 نقطة.")
+    expect(sent[0].payload.url).toBe(`http://localhost:3000/lc/${joined.body.token}/`)
+
+    // A sale's points say when a reward came within reach.
+    expect(noticeText({ kind: "earned", points: 20, balance: 120, reward: "قهوة" })).toBe(
+      "حصلت على 20 نقطة. رصيدك الآن 120 نقطة، ويكفي لمكافأة: قهوة"
+    )
+    expect(noticeText({ kind: "earned", points: 20, balance: 70, reward: null })).toBe(
+      "حصلت على 20 نقطة. رصيدك الآن 70 نقطة."
+    )
+
+    // The business's own message goes to everyone with notifications on.
+    const message = await call("POST", "/v1/loyalty/wallet/message", token, {
+      message: "عرض اليوم",
+    })
+    expect(message.body.sent).toBe(1)
+    expect(sent[1].payload.body).toBe("عرض اليوم")
+
+    // A phone that no longer wants them is forgotten.
+    answer = 410
+    expect(
+      (await call("POST", "/v1/loyalty/wallet/message", token, { message: "عرض" })).body.sent
+    ).toBe(0)
+    expect((await call("GET", "/v1/loyalty/overview", token)).body.withNotifications).toBe(0)
+
+    // Switching them off from the card removes the phone too.
+    answer = 201
+    await call("POST", `${card}/push`, undefined, { endpoint, keys })
+    expect((await call("DELETE", `${card}/push`, undefined, { endpoint })).status).toBe(200)
+    expect((await call("GET", "/v1/loyalty/overview", token)).body.withNotifications).toBe(0)
+  })
+
+  it("lets the cashier find a customer's points and use a reward on a sale", async () => {
+    const { token, actor } = await signIn("loyalty-cashier@madar.test", "Cashier")
+    const org = actor.organizationId
+    await call("PATCH", "/v1/pos/payment-methods/cash", token, {
+      enabled: true,
+      feePercent: 0,
+      merchantId: null,
+      apiKey: null,
+    })
+    await activate(token, { pointsPerSar: 1 })
+    const reward = (
+      await call("POST", "/v1/loyalty/rewards", token, {
+        name: "خصم 10 ريال",
+        pointsCost: 100,
+        kind: "amount",
+        value: 10,
+        items: [],
+        isActive: true,
+      })
+    ).body
+    const buyer = await customer(org, "ريم", "0500000031")
+    const member = (
+      await call("POST", "/v1/loyalty/members", token, { name: "ريم", phone: "0500000031" })
+    ).body
+    expect(member.customerId).toBe(buyer)
+    await call("POST", `/v1/loyalty/members/${member.id}/adjust`, token, { points: 250 })
+
+    // Found by the customer on the sale, by the card's code, or by the phone however typed.
+    const byCustomer = (await call("GET", `/v1/loyalty/cashier?customerId=${buyer}`, token)).body
+    expect(byCustomer).toMatchObject({
+      isActive: true,
+      member: { id: member.id, customerId: buyer, points: 250 },
+      waiting: null,
+    })
+    expect(byCustomer.rewards.map((entry: { id: string }) => entry.id)).toEqual([reward.id])
+    for (const code of [member.cardCode, "0500000031", "+966500000031", "500 000 031"]) {
+      const found = await call("GET", `/v1/loyalty/cashier?code=${encodeURIComponent(code)}`, token)
+      expect(found.body.member?.id).toBe(member.id)
+    }
+    expect((await call("GET", "/v1/loyalty/cashier?code=0599999999", token)).body.member).toBeNull()
+    // With nobody on the sale it still says the programme is running.
+    expect((await call("GET", "/v1/loyalty/cashier", token)).body).toMatchObject({
+      isActive: true,
+      pointsPerSar: 1,
+      member: null,
+    })
+
+    // Subtotal 32, the reward's 10 off, 15% VAT on 22 -> 25.30.
+    const sale = {
+      customerName: null,
+      customerId: buyer,
+      payments: [{ paymentMethodCode: "cash", amount: 25.3 }],
+      discountAmount: 10,
+      items: [
+        { productId: null, productName: "قهوة مختصة", unitPrice: 12, quantity: 2 },
+        { productId: null, productName: "كرواسون", unitPrice: 8, quantity: 1 },
+      ],
+    }
+    const balance = async () =>
+      (await call("GET", `/v1/loyalty/cashier?customerId=${buyer}`, token)).body.member.points
+
+    // A sale that fails gives the reward's points back.
+    const failed = await call("POST", "/v1/pos/invoices", token, {
+      ...sale,
+      payments: [{ paymentMethodCode: "cash", amount: 1 }],
+      idempotencyKey: randomUUID(),
+      loyaltyReward: { rewardId: reward.id },
+    })
+    expect(failed.status).toBe(400)
+    expect(await balance()).toBe(250)
+
+    // A reward needs the customer on the sale.
+    const nobody = await call("POST", "/v1/pos/invoices", token, {
+      ...sale,
+      customerId: null,
+      idempotencyKey: randomUUID(),
+      loyaltyReward: { rewardId: reward.id },
+    })
+    expect(nobody.body.code).toBe("POS_INVOICE_LOYALTY_REQUIRES_CUSTOMER")
+
+    // The sale takes the reward's points once, even when it is sent twice, then earns its own.
+    const idempotencyKey = randomUUID()
+    const body = { ...sale, idempotencyKey, loyaltyReward: { rewardId: reward.id } }
+    const sold = await call("POST", "/v1/pos/invoices", token, body)
+    expect(sold.status).toBe(201)
+    expect(sold.body).toMatchObject({ discountAmount: 10, totalAmount: 25.3 })
+    const again = await call("POST", "/v1/pos/invoices", token, body)
+    expect(again.body.id).toBe(sold.body.id)
+    await expect.poll(balance).toBe(250 - 100 + 25)
+    const details = (await call("GET", `/v1/loyalty/members/${member.id}`, token)).body
+    expect(details.redemptions).toHaveLength(2)
+    expect(details.redemptions.map((entry: { status: string }) => entry.status).sort()).toEqual([
+      "cancelled",
+      "used",
+    ])
+
+    // A reward the customer took from their own card waits, shows at the cashier, and is
+    // closed by the sale it is used on.
+    await call("POST", `/v1/public/loyalty/cards/${member.token}/redeem`, undefined, {
+      rewardId: reward.id,
+    })
+    const waiting = (await call("GET", `/v1/loyalty/cashier?customerId=${buyer}`, token)).body
+    expect(waiting.member.points).toBe(75)
+    expect(waiting.waiting).toMatchObject({ rewardName: "خصم 10 ريال", status: "active" })
+    const held = await call("POST", "/v1/pos/invoices", token, {
+      ...sale,
+      idempotencyKey: randomUUID(),
+      loyaltyReward: { redemptionId: waiting.waiting.id },
+    })
+    expect(held.status).toBe(201)
+    expect((await call("GET", `/v1/loyalty/cashier?customerId=${buyer}`, token)).body.waiting).toBe(
+      null
+    )
+    await expect.poll(balance).toBe(100)
+
+    // Not enough points: the sale is refused, unless it was rung up offline and is only now
+    // arriving, in which case it is kept.
+    const short = await call("POST", "/v1/pos/invoices", token, {
+      ...sale,
+      idempotencyKey: randomUUID(),
+      loyaltyReward: { rewardId: reward.id },
+    })
+    expect(short.status).toBe(201)
+    await expect.poll(balance).toBe(25)
+    const refused = await call("POST", "/v1/pos/invoices", token, {
+      ...sale,
+      idempotencyKey: randomUUID(),
+      loyaltyReward: { rewardId: reward.id },
+    })
+    expect(refused.body.code).toBe("LOYALTY_POINTS_SHORT")
+    const late = await call("POST", "/v1/pos/invoices", token, {
+      ...sale,
+      idempotencyKey: randomUUID(),
+      loyaltyReward: { rewardId: reward.id, late: true },
+    })
+    expect(late.status).toBe(201)
   })
 })

@@ -263,6 +263,12 @@ export function LoyaltyOverviewPage() {
                       {format.number(data.data.overview.inWallet)}
                     </dd>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <dt className={MUTED}>{t("withNotifications")}</dt>
+                    <dd className={cn("font-bold tabular-nums", HEADING)}>
+                      {format.number(data.data.overview.withNotifications ?? 0)}
+                    </dd>
+                  </div>
                 </dl>
               </section>
 

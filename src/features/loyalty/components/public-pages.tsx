@@ -13,6 +13,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { publicLoyaltyService } from "../services/loyalty.service"
 import type { PublicLoyaltyCard, PublicLoyaltyProgram, PublicReward } from "../types/loyalty.types"
+import { CardNotifications } from "./card-notifications"
 import { SaveCard } from "./save-card"
 import { LoyaltyCard } from "./shell"
 
@@ -258,6 +259,7 @@ export function PublicLoyaltyCardView({ token }: { token: string }) {
       <p className="text-center text-[12.5px] leading-5 text-[#6b7b96]">{t("showCode")}</p>
 
       <SaveCard card={card} token={token} />
+      <CardNotifications token={token} />
 
       {card.walletAvailable ? (
         <a

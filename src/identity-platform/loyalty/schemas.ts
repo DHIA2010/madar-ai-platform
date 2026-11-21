@@ -96,8 +96,24 @@ export const loyaltyRedeemSchema = z.object({
 
 export const loyaltyMessageSchema = z.object({ message: text(120).min(1) })
 
-export const loyaltyLookupSchema = z.object({ code: text(80).min(1) })
+// The cashier's lookup: the customer already on the sale, or a scanned card / typed phone.
+// With neither, the answer is only whether the programme is running.
+export const loyaltyCashierSchema = z.object({
+  customerId: z.string().uuid().optional(),
+  code: optional(text(80)),
+})
 
 export const publicJoinSchema = z.object({ name: text(120).min(1), phone })
 
 export const publicClaimSchema = z.object({ rewardId: z.string().uuid() })
+
+// The address a phone's push service gave it, with the two keys messages to it are sealed with.
+export const publicPushSchema = z.object({
+  endpoint: z.string().url().max(2000),
+  keys: z.object({
+    p256dh: z.string().min(20).max(300),
+    auth: z.string().min(8).max(100),
+  }),
+})
+
+export const publicPushStopSchema = z.object({ endpoint: z.string().url().max(2000) })

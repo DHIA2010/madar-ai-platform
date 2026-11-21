@@ -32,6 +32,28 @@ export interface PosLoyalty {
     organizationId: string,
     input: { source: "pos"; ref: string; fraction?: number }
   ): Promise<number>
+  // A reward used on the sale, taken before the sale is saved and put back if it fails.
+  useOnSale(
+    organizationId: string,
+    input: {
+      customerId: string
+      rewardId?: string | null
+      redemptionId?: string | null
+      saleKey: string | null
+      by: string | null
+    }
+  ): Promise<{ redemptionId: string; held: boolean; fresh: boolean }>
+  undoOnSale(organizationId: string, used: { redemptionId: string; held: boolean }): Promise<void>
+}
+
+// The loyalty reward a sale uses: one the customer already holds, or one traded for their
+// points on the spot. Its discount is already inside the sale's own discountAmount. late marks
+// a sale that was rung up offline and is only now reaching the server: the customer has left
+// with the discount, so the sale is kept even if the reward can no longer be taken.
+export interface InvoiceLoyaltyReward {
+  rewardId?: string | null
+  redemptionId?: string | null
+  late?: boolean
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -64,6 +86,13 @@ const INVOICE_ERRORS = {
       400,
       "validation",
       "The payment amounts must add up to the invoice total."
+    ),
+  loyaltyRequiresCustomer: () =>
+    new IdentityError(
+      "POS_INVOICE_LOYALTY_REQUIRES_CUSTOMER",
+      400,
+      "validation",
+      "A loyalty reward needs the customer chosen on the sale."
     ),
   deferredRequiresCustomer: () =>
     new IdentityError(
@@ -213,6 +242,7 @@ export interface CreateInvoiceInput {
   // creating a second invoice. null for every online, non-offline-mode sale (today's behavior,
   // unchanged).
   idempotencyKey: string | null
+  loyaltyReward?: InvoiceLoyaltyReward | null
 }
 
 export interface InvoiceItemView extends InvoiceItemInput {
@@ -914,7 +944,44 @@ export class PosInvoicesService {
     return result.rows.map((row) => ({ userId: row.user_id, name: row.full_name }))
   }
 
+  // A sale. One that uses a loyalty reward takes the reward first, so points are never short
+  // after the customer has already been given the discount, and puts it back if the sale fails.
   async create(input: CreateInvoiceInput): Promise<InvoiceView> {
+    const reward = input.loyaltyReward
+    if (!reward || !this.loyalty) return this.createSale(input)
+    if (input.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(input.organizationId, input.idempotencyKey)
+      if (existing) return existing
+    }
+    if (!input.customerId) throw INVOICE_ERRORS.loyaltyRequiresCustomer()
+    let used: { redemptionId: string; held: boolean; fresh: boolean } | null = null
+    try {
+      used = await this.loyalty.useOnSale(input.organizationId, {
+        customerId: input.customerId,
+        rewardId: reward.rewardId ?? null,
+        redemptionId: reward.redemptionId ?? null,
+        saleKey: input.idempotencyKey,
+        by: input.cashierUserId,
+      })
+    } catch (error) {
+      if (!reward.late) throw error
+      console.error("pos.loyalty_reward_late_failed", { key: input.idempotencyKey, error })
+    }
+    try {
+      return await this.createSale(input)
+    } catch (error) {
+      if (used?.fresh) {
+        await this.loyalty
+          .undoOnSale(input.organizationId, used)
+          .catch((failure: unknown) =>
+            console.error("pos.loyalty_reward_undo_failed", { used, error: failure })
+          )
+      }
+      throw error
+    }
+  }
+
+  private async createSale(input: CreateInvoiceInput): Promise<InvoiceView> {
     // The salesperson, when picked: checked against the branch's active members, and their name
     // kept on the invoice as it is now.
     let salesPerson: { id: string; name: string } | null = null

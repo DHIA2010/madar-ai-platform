@@ -43,6 +43,7 @@ import {
 import { BookingAccounts, registerBookingAccounts } from "../../booking/accounts"
 import { BookingPayments } from "../../booking/payments"
 import { BookingService } from "../../booking/service"
+import { LoyaltyPush, registerLoyaltyPush } from "../../loyalty/push"
 import { LoyaltyService } from "../../loyalty/service"
 import { LoyaltyWallet, walletConfigFromEnv } from "../../loyalty/wallet"
 import { SalesInvoicesService } from "../../invoicing/invoices-service"
@@ -966,6 +967,19 @@ export function createIdentityApiServer(
   if (loyaltyService && loyaltyWallet) {
     loyaltyService.onCardChanged = (memberId) => loyaltyWallet.cardChanged(memberId)
   }
+  // Notifications for cards saved to a phone's home screen.
+  const loyaltyPush =
+    container.infrastructure.database && loyaltyService
+      ? new LoyaltyPush(container.infrastructure.database, loyaltyService)
+      : null
+  registerLoyaltyPush(loyaltyPush)
+  if (loyaltyService && loyaltyPush) {
+    loyaltyService.onNotice = (memberId, notice) => {
+      void loyaltyPush
+        .notify(memberId, notice)
+        .catch((error: unknown) => console.error("loyalty.push_notify_failed", { memberId, error }))
+    }
+  }
   const bookingService = container.infrastructure.database
     ? new BookingService(container.infrastructure.database, undefined, loyaltyService ?? undefined)
     : null
@@ -1225,6 +1239,16 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  // A booking service made from a "service" product follows that product's name and price.
+  if (productCatalogService && bookingService) {
+    productCatalogService.onChanged = (organizationId, productId) => {
+      void bookingService
+        .productChanged(organizationId, productId)
+        .catch((error: unknown) =>
+          console.error("booking.product_changed_failed", { productId, error })
+        )
+    }
+  }
   const salesLeadService = container.infrastructure.database
     ? new SalesLeadService(
         container.infrastructure.database,
@@ -2352,6 +2376,7 @@ export function createIdentityApiServer(
           url,
           service: loyaltyService,
           wallet: loyaltyWallet,
+          push: loyaltyPush,
           authorization: request.headers.authorization ?? null,
           send,
           sendRaw: (status, body, headers) => {
@@ -3074,6 +3099,7 @@ export function createIdentityApiServer(
           actor,
           service: loyaltyService,
           wallet: loyaltyWallet,
+          push: loyaltyPush,
           send,
           readJsonBody: () => readJsonBody(request),
         })
@@ -5794,6 +5820,7 @@ export function createIdentityApiServer(
               notesLines: payload.notesLines,
               items: payload.items,
               idempotencyKey: payload.idempotencyKey,
+              loyaltyReward: payload.loyaltyReward ?? null,
             })
           )
         }

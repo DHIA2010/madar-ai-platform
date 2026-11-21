@@ -164,6 +164,30 @@ const mapRedemption = (row: Row): RedemptionView => ({
   closedAt: row.closed_at ? iso(row.closed_at) : null,
 })
 
+// What a member is told on their phone.
+export type LoyaltyNotice =
+  // Points from a sale or a visit. reward is one they can now afford and could not before.
+  | { kind: "earned"; points: number; balance: number; reward: string | null }
+  // Points the staff added by hand.
+  | { kind: "added"; points: number; balance: number }
+
+// What the cashier screen shows for the customer on a sale.
+export interface CashierLoyaltyView {
+  isActive: boolean
+  pointsPerSar: number
+  pointValue: number
+  member: {
+    id: string
+    customerId: string | null
+    name: string
+    phone: string | null
+    points: number
+  } | null
+  rewards: RewardView[]
+  // A reward the customer already took for points and has not been handed yet.
+  waiting: RedemptionView | null
+}
+
 // Letters and digits that are not mistaken for one another when read aloud or typed.
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 const randomCode = (length: number) =>
@@ -182,6 +206,18 @@ export class LoyaltyService {
   // Told after a member's card changes (balance or message), so a card kept in a phone's
   // wallet can be refreshed. Set where the server is put together. Must not fail the change.
   onCardChanged: ((memberId: string) => void) | null = null
+
+  // Told when something happens that the member would want to hear about on their phone
+  // (points added, a message from the business). Set where the server is put together.
+  onNotice: ((memberId: string, notice: LoyaltyNotice) => void) | null = null
+
+  private tell(memberId: string, notice: LoyaltyNotice) {
+    try {
+      this.onNotice?.(memberId, notice)
+    } catch (error) {
+      console.error("loyalty.notice_failed", { memberId, error })
+    }
+  }
 
   private changed(memberId: string) {
     try {
@@ -749,6 +785,20 @@ export class LoyaltyService {
       ref: input.ref,
       earned: true,
     })
+    if (points + bonus > 0) {
+      const before = Number(member.points)
+      const balance = before + points + bonus
+      const reached = (await this.listRewards(organizationId))
+        .filter((reward) => reward.isActive)
+        .filter((reward) => reward.pointsCost > before && reward.pointsCost <= balance)
+        .sort((a, b) => b.pointsCost - a.pointsCost)[0]
+      this.tell(memberId, {
+        kind: "earned",
+        points: points + bonus,
+        balance,
+        reward: reached?.name ?? null,
+      })
+    }
     return points + bonus
   }
 
@@ -833,7 +883,7 @@ export class LoyaltyService {
     input: { points: number; note?: string | null },
     by: string | null
   ) {
-    await this.memberRow(organizationId, memberId)
+    const member = await this.memberRow(organizationId, memberId)
     if (input.points > 0) {
       await this.post(organizationId, memberId, {
         points: input.points,
@@ -842,6 +892,11 @@ export class LoyaltyService {
         note: input.note,
         by,
         earned: true,
+      })
+      this.tell(memberId, {
+        kind: "added",
+        points: input.points,
+        balance: Number(member.points) + input.points,
       })
     } else {
       await this.take(organizationId, memberId, {
@@ -863,7 +918,12 @@ export class LoyaltyService {
     organizationId: string,
     memberId: string,
     rewardId: string,
-    options: { by: string | null; source: "staff" | "customer"; handOver: boolean }
+    options: {
+      by: string | null
+      source: "staff" | "customer" | "pos"
+      handOver: boolean
+      saleKey?: string | null
+    }
   ): Promise<RedemptionView> {
     const [program, reward] = await Promise.all([
       this.programRow(organizationId),
@@ -895,8 +955,8 @@ export class LoyaltyService {
     await this.db.query(
       `INSERT INTO loyalty_redemptions
          (id, organization_id, member_id, reward_id, reward_name, points_cost, kind, value,
-          items, code, status, created_by, closed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13)`,
+          items, code, status, created_by, closed_at, sale_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14)`,
       [
         id,
         organizationId,
@@ -911,6 +971,7 @@ export class LoyaltyService {
         options.handOver ? "used" : "active",
         options.by,
         options.handOver ? this.now() : null,
+        options.saleKey ?? null,
       ]
     )
     return this.redemption(organizationId, id)
@@ -969,6 +1030,162 @@ export class LoyaltyService {
       memberName: String(byId.get(String(row.member_id))?.name ?? ""),
       memberPhone: text(byId.get(String(row.member_id))?.phone),
     }))
+  }
+
+  // ---- The cashier ----
+
+  // The customer on a sale, found by the one already chosen there or by what the staff scan or
+  // type: the card's code (its QR) or the phone number. Shows their points and what they can
+  // use now.
+  async cashierLookup(
+    organizationId: string,
+    input: { customerId?: string | null; code?: string | null }
+  ): Promise<CashierLoyaltyView> {
+    const program = await this.programRow(organizationId)
+    let member: Row | null = null
+    if (input.customerId) {
+      member = await this.memberOfCustomer(organizationId, input.customerId)
+    } else if (input.code) {
+      const typed = input.code.replace(/[\s-]/g, "")
+      const forms = [typed]
+      // A Saudi mobile typed any of the usual ways.
+      const digits = typed.replace(/^\+/, "")
+      if (/^05\d{8}$/.test(digits)) forms.push(`+966${digits.slice(1)}`, `966${digits.slice(1)}`)
+      if (/^9665\d{8}$/.test(digits)) forms.push(`+${digits}`, digits, `0${digits.slice(3)}`)
+      if (/^5\d{8}$/.test(digits)) forms.push(`0${digits}`, `+966${digits}`, `966${digits}`)
+      const unique = [...new Set(forms)]
+      const marks = unique.map((_, index) => `$${index + 2}`).join(", ")
+      const found = await this.db.query<Row>(
+        `SELECT * FROM loyalty_members
+          WHERE organization_id = $1 AND (card_code IN (${marks}) OR phone IN (${marks}))
+          ORDER BY created_at LIMIT 1`,
+        [organizationId, ...unique]
+      )
+      member = found.rows[0] ?? null
+      // A sale is tied to a customer of the business, so a member without one gets one now.
+      if (member && !member.customer_id && member.phone) {
+        const customerId = await this.customerFor(
+          organizationId,
+          String(member.name),
+          String(member.phone)
+        )
+        if (customerId) {
+          const taken = await this.memberOfCustomer(organizationId, customerId)
+          if (!taken) {
+            await this.db.query(
+              `UPDATE loyalty_members SET customer_id = $2 WHERE id = $1 AND customer_id IS NULL`,
+              [member.id, customerId]
+            )
+            member = await this.memberRow(organizationId, String(member.id))
+          }
+        }
+      }
+    }
+    const waiting = member
+      ? await this.db.query<Row>(
+          `SELECT * FROM loyalty_redemptions WHERE member_id = $1 AND status = 'active' LIMIT 1`,
+          [member.id]
+        )
+      : null
+    return {
+      isActive: program.is_active === true,
+      pointsPerSar: Number(program.points_per_sar),
+      pointValue: Number(program.point_value),
+      member: member
+        ? {
+            id: String(member.id),
+            customerId: text(member.customer_id),
+            name: String(member.name),
+            phone: text(member.phone),
+            points: Number(member.points),
+          }
+        : null,
+      rewards:
+        program.is_active === true
+          ? (await this.listRewards(organizationId)).filter((reward) => reward.isActive)
+          : [],
+      waiting: waiting?.rows[0] ? mapRedemption(waiting.rows[0]) : null,
+    }
+  }
+
+  // A reward used on a cashier sale, taken before the sale is saved: one the customer already
+  // holds (redemptionId), or one traded for their points on the spot (rewardId). saleKey is
+  // the sale's own attempt key, so the same sale sent twice uses the reward once.
+  async useOnSale(
+    organizationId: string,
+    input: {
+      customerId: string
+      rewardId?: string | null
+      redemptionId?: string | null
+      saleKey: string | null
+      by: string | null
+    }
+  ): Promise<{ redemptionId: string; held: boolean; fresh: boolean }> {
+    if (input.saleKey) {
+      const before = await this.db.query<Row>(
+        `SELECT id FROM loyalty_redemptions
+          WHERE organization_id = $1 AND sale_key = $2 AND status = 'used' LIMIT 1`,
+        [organizationId, input.saleKey]
+      )
+      if (before.rows[0]) {
+        return { redemptionId: String(before.rows[0].id), held: false, fresh: false }
+      }
+    }
+    const member = await this.memberOfCustomer(organizationId, input.customerId)
+    if (!member) {
+      throw LOYALTY_ERRORS.invalid("LOYALTY_POINTS_SHORT", "The customer has no points.")
+    }
+    const memberId = String(member.id)
+    if (input.redemptionId) {
+      const held = await this.redemption(organizationId, input.redemptionId)
+      if (held.memberId !== memberId) throw LOYALTY_ERRORS.notFound("Reward")
+      const closed = await this.db.query(
+        `UPDATE loyalty_redemptions SET status = 'used', closed_at = $3, sale_key = $4
+          WHERE organization_id = $1 AND id = $2 AND status = 'active'`,
+        [organizationId, held.id, this.now(), input.saleKey]
+      )
+      if ((closed.rowCount ?? 0) === 0) {
+        throw LOYALTY_ERRORS.conflict("LOYALTY_REWARD_CLOSED", "That reward is already closed.")
+      }
+      return { redemptionId: held.id, held: true, fresh: true }
+    }
+    if (!input.rewardId) throw LOYALTY_ERRORS.notFound("Reward")
+    const made = await this.redeem(organizationId, memberId, input.rewardId, {
+      by: input.by,
+      source: "pos",
+      handOver: true,
+      saleKey: input.saleKey,
+    })
+    return { redemptionId: made.id, held: false, fresh: true }
+  }
+
+  // The sale did not go through: a reward the customer held waits again, and one traded on
+  // the spot is called off with its points given back.
+  async undoOnSale(
+    organizationId: string,
+    used: { redemptionId: string; held: boolean }
+  ): Promise<void> {
+    const current = await this.redemption(organizationId, used.redemptionId)
+    if (current.status !== "used") return
+    const reopened = await this.db.query(
+      `UPDATE loyalty_redemptions SET status = $3, closed_at = $4, sale_key = NULL
+        WHERE organization_id = $1 AND id = $2 AND status = 'used'`,
+      [
+        organizationId,
+        used.redemptionId,
+        used.held ? "active" : "cancelled",
+        used.held ? null : this.now(),
+      ]
+    )
+    if ((reopened.rowCount ?? 0) > 0 && !used.held) {
+      await this.post(organizationId, current.memberId, {
+        points: current.pointsCost,
+        kind: "redeem_return",
+        source: "pos",
+        ref: used.redemptionId,
+        note: current.rewardName,
+      })
+    }
   }
 
   // ---- The numbers ----

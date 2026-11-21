@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useTranslations } from "next-intl"
-import { Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react"
+import { Copy, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -18,6 +18,7 @@ import { useBookingAccess, useBookingError, useLoad } from "../hooks/use-booking
 import { bookingService } from "../services/booking.service"
 import type { BookingSettings } from "../types/booking.types"
 import { ImageField } from "./image-field"
+import { ShareBox } from "./share-box"
 import { BookingPage, Choice, LoadFailed, Loading } from "./shell"
 import {
   FIELD,
@@ -330,30 +331,7 @@ export function BookingSettingsPage() {
               hint={t("page.openHint")}
             />
             {savedLink ? (
-              <div className="rounded-[12px] bg-[#f5f3ff] p-3">
-                <p className="text-[12.5px] font-semibold text-[#5b21b6]">{t("page.link")}</p>
-                <p className="mt-1 text-[13px] break-all text-[#0b1738]" dir="ltr">
-                  {savedLink}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={SECONDARY_BUTTON}
-                    onClick={() => {
-                      void navigator.clipboard
-                        .writeText(savedLink)
-                        .then(() => toast.success(t("page.copied")))
-                    }}
-                  >
-                    <Copy className="size-4" />
-                    {t("page.copy")}
-                  </button>
-                  <a href={savedLink} target="_blank" rel="noreferrer" className={SECONDARY_BUTTON}>
-                    <ExternalLink className="size-4" />
-                    {t("page.view")}
-                  </a>
-                </div>
-              </div>
+              <ShareBox link={savedLink} businessName={loaded.data?.displayName ?? null} />
             ) : null}
             <div>
               <label className={FIELD_LABEL} htmlFor="booking-display-name">

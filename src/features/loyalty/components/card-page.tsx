@@ -381,7 +381,7 @@ export function LoyaltyCardPage() {
                 <button
                   type="button"
                   className={PRIMARY_BUTTON}
-                  disabled={sending || !message.trim() || !draft.walletAvailable}
+                  disabled={sending || !message.trim()}
                   onClick={() => void send()}
                 >
                   {sending ? (
