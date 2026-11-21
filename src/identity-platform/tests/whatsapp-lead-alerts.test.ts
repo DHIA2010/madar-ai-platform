@@ -299,6 +299,7 @@ describe("WhatsAppLeadAlertsService", () => {
       "madar_account_alert",
       "madar_booking_confirmation",
       "madar_booking_reminder",
+      "madar_login_code",
     ])
     expect(statuses.find((entry) => entry.name === "madar_new_lead")).toMatchObject({
       status: "APPROVED",

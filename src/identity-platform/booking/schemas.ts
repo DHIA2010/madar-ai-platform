@@ -367,3 +367,17 @@ export const bookingImageSchema = z.object({
   contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   dataBase64: z.string().min(1),
 })
+
+// Signing in to the customer's account on a page by phone (booking/accounts.ts).
+export const publicSignInSchema = z.object({ phone: text(30).min(8) }).strict()
+export const publicSignInCodeSchema = z
+  .object({
+    phone: text(30).min(8),
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/),
+    // The account this browser already has on the page, if any.
+    accountToken: z.string().max(80).nullish(),
+  })
+  .strict()

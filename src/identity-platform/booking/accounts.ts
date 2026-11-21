@@ -1,18 +1,23 @@
 // The customer's own side of a business's booking page, and who is told what.
 //
-// An account belongs to the browser it was made on: the first booking (or waiting-list request)
+// An account starts with the browser it was made on: the first booking (or waiting-list request)
 // from a phone makes one and hands that browser its secret, and everything booked from there
-// afterwards is listed under it. A phone number that was merely typed opens nothing -- there is
-// no message sent to prove whose number it is, so the secret is the only key.
+// afterwards is listed under it. A phone number that was merely typed opens nothing.
+//
+// Signing in by phone proves the number: a code goes to it on WhatsApp, and typing the code back
+// gives the browser a proved account. A proved account shows every booking made for its number
+// at this business -- from any device, and the ones the staff made too.
 //
 // The same events feed two places: the staff's notification bell (a booking made online, a
 // customer cancelling, someone joining the waiting list) and the customer's account (a booking
 // confirmed, moved or cancelled by the business, a place found from the waiting list).
 
-import { randomBytes, randomUUID } from "node:crypto"
+import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto"
 
+import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { notify } from "../notifications/service"
+import { toWhatsAppNumber } from "../whatsapp/phone"
 import { BOOKING_ERRORS, type BookingEvent, type BookingService } from "./service"
 
 type Row = Record<string, unknown>
@@ -39,12 +44,255 @@ const iso = (value: unknown) =>
 const day = (value: unknown) =>
   value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10)
 
+// Whatever sends the sign-in code (booking/automation.ts on the server, a stand-in in tests).
+export interface SignInCodeSender {
+  ready(organizationId: string): Promise<boolean>
+  send(organizationId: string, to: string, code: string): Promise<void>
+}
+
+// A code lasts ten minutes and five wrong tries; a number gets one a minute and five an hour;
+// a business's page sends a hundred a day at most.
+const CODE_LIFE_MS = 10 * 60_000
+const CODE_TRIES = 5
+const CODE_GAP_MS = 60_000
+const CODES_PER_HOUR = 5
+const CODES_PER_DAY_PER_BUSINESS = 100
+
+const SIGN_IN_ERRORS = {
+  phone: () =>
+    new IdentityError("BOOKING_PHONE_INVALID", 422, "business", "That phone number is not valid."),
+  unavailable: () =>
+    new IdentityError(
+      "BOOKING_SIGN_IN_UNAVAILABLE",
+      409,
+      "business",
+      "Signing in by phone is not available right now."
+    ),
+  wait: () =>
+    new IdentityError(
+      "BOOKING_CODE_WAIT",
+      429,
+      "business",
+      "A code was sent a moment ago. Wait a little before asking for another."
+    ),
+  wrong: () =>
+    new IdentityError("BOOKING_CODE_WRONG", 422, "business", "That code is wrong or has expired."),
+}
+
+// The ways one number is written in the bookings (staff type it as they like): the forms it is
+// looked up by. A number saved with spaces or dashes in it is not found.
+const phoneForms = (key: string): string[] => {
+  const forms = [key, `+${key}`, `00${key}`]
+  if (/^9665\d{8}$/.test(key)) forms.push(`0${key.slice(3)}`, key.slice(3))
+  return forms
+}
+const marks = (count: number, from: number) =>
+  Array.from({ length: count }, (_, index) => `$${from + index}`).join(", ")
+const hashCode = (id: string, code: string) =>
+  createHash("sha256").update(`${id}:${code}`).digest("hex")
+
 export class BookingAccounts {
+  // Set where the server is put together. Without it nobody can sign in by phone.
+  codeSender: SignInCodeSender | null = null
+
   constructor(
     private readonly db: PostgresDatabase,
     private readonly bookings: BookingService,
     private readonly now: () => Date = () => new Date()
   ) {}
+
+  // ---- Signing in by phone ----
+
+  private async businessOf(slug: string): Promise<string> {
+    const found = await this.db.query<Row>(
+      `SELECT organization_id FROM booking_settings WHERE slug = $1`,
+      [slug.trim().toLowerCase()]
+    )
+    if (!found.rows[0]) throw BOOKING_ERRORS.notFound("Page")
+    return String(found.rows[0].organization_id)
+  }
+
+  // Whether this business has ever seen the number: a booking, a waiting-list request or an
+  // account. A code is only sent to a number it knows, so the page cannot be used to message
+  // strangers.
+  private async known(organizationId: string, key: string): Promise<boolean> {
+    const forms = phoneForms(key)
+    const [booked, waiting, accounts] = await Promise.all([
+      this.db.query<Row>(
+        `SELECT id FROM bookings
+          WHERE organization_id = $1 AND customer_phone IN (${marks(forms.length, 2)}) LIMIT 1`,
+        [organizationId, ...forms]
+      ),
+      this.db.query<Row>(
+        `SELECT id FROM booking_waitlist
+          WHERE organization_id = $1 AND customer_phone IN (${marks(forms.length, 2)}) LIMIT 1`,
+        [organizationId, ...forms]
+      ),
+      this.db.query<Row>(
+        `SELECT id FROM booking_accounts WHERE organization_id = $1 AND phone_key = $2 LIMIT 1`,
+        [organizationId, key]
+      ),
+    ])
+    return booked.rows.length + waiting.rows.length + accounts.rows.length > 0
+  }
+
+  // Whether the page offers signing in by phone at all.
+  async signInOffered(slug: string): Promise<boolean> {
+    if (!this.codeSender) return false
+    return this.codeSender.ready(await this.businessOf(slug))
+  }
+
+  // Sends a code to the number, if this business knows it. The answer is the same either way,
+  // so the page does not tell anyone whose numbers have booked here.
+  async startSignIn(
+    slug: string,
+    phone: string
+  ): Promise<{ sent: true; expiresInMinutes: number }> {
+    const organizationId = await this.businessOf(slug)
+    const key = toWhatsAppNumber(phone)
+    if (!key) throw SIGN_IN_ERRORS.phone()
+    if (!this.codeSender || !(await this.codeSender.ready(organizationId))) {
+      throw SIGN_IN_ERRORS.unavailable()
+    }
+    const answer = { sent: true as const, expiresInMinutes: CODE_LIFE_MS / 60_000 }
+    const nowMs = this.now().getTime()
+    const recent = await this.db.query<Row>(
+      `SELECT phone_key, created_at FROM booking_sign_in_codes
+        WHERE organization_id = $1 AND created_at > $2`,
+      [organizationId, new Date(nowMs - 24 * 60 * 60_000)]
+    )
+    const mine = recent.rows
+      .filter((row) => String(row.phone_key) === key)
+      .map((row) => new Date(iso(row.created_at)).getTime())
+    if (mine.some((at) => nowMs - at < CODE_GAP_MS)) throw SIGN_IN_ERRORS.wait()
+    if (mine.filter((at) => nowMs - at < 60 * 60_000).length >= CODES_PER_HOUR) {
+      throw SIGN_IN_ERRORS.wait()
+    }
+    if (recent.rows.length >= CODES_PER_DAY_PER_BUSINESS) throw SIGN_IN_ERRORS.unavailable()
+    if (!(await this.known(organizationId, key))) return answer
+
+    const id = randomUUID()
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0")
+    await this.db.query(
+      `INSERT INTO booking_sign_in_codes
+         (id, organization_id, phone_key, code_hash, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, organizationId, key, hashCode(id, code), new Date(nowMs + CODE_LIFE_MS), this.now()]
+    )
+    try {
+      await this.codeSender.send(organizationId, key, code)
+    } catch (error) {
+      // A number that is not on WhatsApp, say. The page is told the same as ever.
+      console.error("booking.sign_in_code_failed", error)
+    }
+    return answer
+  }
+
+  // The code typed back. Right: the browser gets a proved account for that number -- its own
+  // account if it already has one for the number, the number's proved account if there is one,
+  // or a new one.
+  async finishSignIn(
+    slug: string,
+    input: { phone: string; code: string; accountToken?: string | null }
+  ): Promise<{ accountToken: string }> {
+    const organizationId = await this.businessOf(slug)
+    const key = toWhatsAppNumber(input.phone)
+    if (!key) throw SIGN_IN_ERRORS.phone()
+    const codes = await this.db.query<Row>(
+      `SELECT * FROM booking_sign_in_codes
+        WHERE organization_id = $1 AND phone_key = $2 AND used_at IS NULL
+        ORDER BY created_at DESC LIMIT 1`,
+      [organizationId, key]
+    )
+    const sent = codes.rows[0]
+    if (
+      !sent ||
+      new Date(iso(sent.expires_at)).getTime() < this.now().getTime() ||
+      Number(sent.attempts) >= CODE_TRIES
+    ) {
+      throw SIGN_IN_ERRORS.wrong()
+    }
+    const given = Buffer.from(hashCode(String(sent.id), input.code.trim()))
+    const kept = Buffer.from(String(sent.code_hash))
+    if (given.length !== kept.length || !timingSafeEqual(given, kept)) {
+      await this.db.query(
+        `UPDATE booking_sign_in_codes SET attempts = attempts + $2 WHERE id = $1`,
+        [sent.id, 1]
+      )
+      throw SIGN_IN_ERRORS.wrong()
+    }
+    await this.db.query(`UPDATE booking_sign_in_codes SET used_at = $2 WHERE id = $1`, [
+      sent.id,
+      this.now(),
+    ])
+
+    // This browser's own account, when it is for the same number: it becomes the proved one.
+    if (input.accountToken) {
+      const own = await this.db.query<Row>(
+        `SELECT id, token, phone FROM booking_accounts WHERE token = $1 AND organization_id = $2`,
+        [input.accountToken, organizationId]
+      )
+      const row = own.rows[0]
+      if (row && row.phone && toWhatsAppNumber(String(row.phone)) === key) {
+        await this.db.query(
+          `UPDATE booking_accounts SET phone_key = $2, verified_at = $3, last_seen_at = $3
+            WHERE id = $1`,
+          [row.id, key, this.now()]
+        )
+        return { accountToken: String(row.token) }
+      }
+    }
+    const proved = await this.db.query<Row>(
+      `SELECT id, token FROM booking_accounts
+        WHERE organization_id = $1 AND phone_key = $2 AND verified_at IS NOT NULL
+        ORDER BY created_at LIMIT 1`,
+      [organizationId, key]
+    )
+    if (proved.rows[0]) {
+      await this.db.query(`UPDATE booking_accounts SET last_seen_at = $2 WHERE id = $1`, [
+        proved.rows[0].id,
+        this.now(),
+      ])
+      return { accountToken: String(proved.rows[0].token) }
+    }
+    // A new proved account, named as the number's latest booking has it.
+    const forms = phoneForms(key)
+    const named = await this.db.query<Row>(
+      `SELECT customer_name, customer_phone FROM bookings
+        WHERE organization_id = $1 AND customer_phone IN (${marks(forms.length, 2)})
+        ORDER BY created_at DESC LIMIT 1`,
+      [organizationId, ...forms]
+    )
+    const id = randomUUID()
+    const secret = randomBytes(24).toString("hex")
+    await this.db.query(
+      `INSERT INTO booking_accounts
+         (id, organization_id, token, name, phone, phone_key, verified_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        id,
+        organizationId,
+        secret,
+        String(named.rows[0]?.customer_name ?? `+${key}`),
+        String(named.rows[0]?.customer_phone ?? `+${key}`),
+        key,
+        this.now(),
+      ]
+    )
+    return { accountToken: secret }
+  }
+
+  // The proved accounts for a number at a business: they are told about its bookings too.
+  private async provedFor(organizationId: string, phone: unknown): Promise<string[]> {
+    const key = phone ? toWhatsAppNumber(String(phone)) : null
+    if (!key) return []
+    const found = await this.db.query<Row>(
+      `SELECT id FROM booking_accounts
+        WHERE organization_id = $1 AND phone_key = $2 AND verified_at IS NOT NULL`,
+      [organizationId, key]
+    )
+    return found.rows.map((row) => String(row.id))
+  }
 
   // ---- Accounts ----
 
@@ -56,13 +304,22 @@ export class BookingAccounts {
   ): Promise<{ id: string; token: string }> {
     if (token) {
       const found = await this.db.query<Row>(
-        `SELECT id, token FROM booking_accounts WHERE token = $1 AND organization_id = $2`,
+        `SELECT id, token, name, phone, verified_at FROM booking_accounts
+          WHERE token = $1 AND organization_id = $2`,
         [token, organizationId]
       )
       if (found.rows[0]) {
+        // A proved account keeps its own name and number: a booking made from it for someone
+        // else does not rename it.
+        const proved = Boolean(found.rows[0].verified_at)
         await this.db.query(
           `UPDATE booking_accounts SET name = $2, phone = $3, last_seen_at = $4 WHERE id = $1`,
-          [found.rows[0].id, person.name, person.phone, this.now()]
+          [
+            found.rows[0].id,
+            proved ? found.rows[0].name : person.name,
+            proved ? found.rows[0].phone : person.phone,
+            this.now(),
+          ]
         )
         return { id: String(found.rows[0].id), token: String(found.rows[0].token) }
       }
@@ -163,6 +420,7 @@ export class BookingAccounts {
     return {
       name: String(account.name),
       phone: account.phone ? String(account.phone) : null,
+      verified: Boolean(account.verified_at),
       unread: notices.filter((notice) => !notice.read).length,
     }
   }
@@ -172,21 +430,48 @@ export class BookingAccounts {
     const account = await this.accountRow(slug, token)
     const accountId = String(account.id)
     const organizationId = String(account.organization_id)
-    const [booked, waiting, services, notices] = await Promise.all([
+    // A proved account also lists whatever was booked for its number elsewhere: on another
+    // device, or by the staff.
+    const forms =
+      account.verified_at && account.phone_key ? phoneForms(String(account.phone_key)) : []
+    const none = { rows: [] as Row[] }
+    const [booked, bookedByPhone, waiting, waitingByPhone, services, notices] = await Promise.all([
       this.db.query<Row>(
-        `SELECT public_token FROM bookings WHERE account_id = $1
+        `SELECT id, public_token, starts_at FROM bookings WHERE account_id = $1
           ORDER BY starts_at DESC LIMIT 40`,
         [accountId]
       ),
+      forms.length > 0
+        ? this.db.query<Row>(
+            `SELECT id, public_token, starts_at FROM bookings
+              WHERE organization_id = $1 AND customer_phone IN (${marks(forms.length, 2)})
+              ORDER BY starts_at DESC LIMIT 40`,
+            [organizationId, ...forms]
+          )
+        : none,
       this.db.query<Row>(
         `SELECT * FROM booking_waitlist WHERE account_id = $1 ORDER BY created_at DESC LIMIT 20`,
         [accountId]
       ),
+      forms.length > 0
+        ? this.db.query<Row>(
+            `SELECT * FROM booking_waitlist
+              WHERE organization_id = $1 AND customer_phone IN (${marks(forms.length, 2)})
+              ORDER BY created_at DESC LIMIT 20`,
+            [organizationId, ...forms]
+          )
+        : none,
       this.bookings.listServices(organizationId),
       this.notices(accountId),
     ])
+    const together = (rows: Row[], stamp: string, limit: number) =>
+      [...new Map(rows.map((row) => [String(row.id), row])).values()]
+        .sort((a, b) => iso(b[stamp]).localeCompare(iso(a[stamp])))
+        .slice(0, limit)
+    const bookedRows = together([...booked.rows, ...bookedByPhone.rows], "starts_at", 40)
+    const waitingRows = together([...waiting.rows, ...waitingByPhone.rows], "created_at", 20)
     const bookings = []
-    for (const row of booked.rows) {
+    for (const row of bookedRows) {
       const view = await this.bookings.publicBooking(String(row.public_token))
       bookings.push({
         token: String(row.public_token),
@@ -207,13 +492,14 @@ export class BookingAccounts {
     return {
       name: String(account.name),
       phone: account.phone ? String(account.phone) : null,
+      verified: Boolean(account.verified_at),
       upcoming: bookings
         .filter((entry) => open(entry.status) && new Date(entry.endsAt).getTime() >= nowMs)
         .reverse(),
       past: bookings.filter(
         (entry) => !(open(entry.status) && new Date(entry.endsAt).getTime() >= nowMs)
       ),
-      waitlist: waiting.rows.map((row) => ({
+      waitlist: waitingRows.map((row) => ({
         id: String(row.id),
         serviceName: services.find((service) => service.id === String(row.service_id))?.name ?? "",
         preferredDate: day(row.preferred_date),
@@ -235,18 +521,20 @@ export class BookingAccounts {
 
   // ---- Who is told what ----
 
+  // `accounts`: the account the booking was made from, and the proved accounts for its number.
   private async tellCustomer(
-    accountId: unknown,
+    accounts: unknown[],
     kind: AccountNoticeKind,
     bookingId: string | null,
     params: Record<string, unknown>
   ) {
-    if (!accountId) return
-    await this.db.query(
-      `INSERT INTO booking_account_notices (id, account_id, kind, booking_id, params)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [randomUUID(), accountId, kind, bookingId, JSON.stringify(params)]
-    )
+    for (const accountId of new Set(accounts.filter(Boolean).map(String))) {
+      await this.db.query(
+        `INSERT INTO booking_account_notices (id, account_id, kind, booking_id, params)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [randomUUID(), accountId, kind, bookingId, JSON.stringify(params)]
+      )
+    }
   }
 
   private async bookingFacts(organizationId: string, bookingId: string) {
@@ -254,7 +542,13 @@ export class BookingAccounts {
       this.bookings.getBooking(organizationId, bookingId),
       this.db.query<Row>(`SELECT account_id FROM bookings WHERE id = $1`, [bookingId]),
     ])
-    return { view, accountId: row.rows[0]?.account_id ?? null }
+    return {
+      view,
+      accounts: [
+        row.rows[0]?.account_id ?? null,
+        ...(await this.provedFor(organizationId, view.customerPhone)),
+      ] as unknown[],
+    }
   }
 
   // Set as the booking service's event hook where the server is put together.
@@ -278,7 +572,7 @@ export class BookingAccounts {
       return
     }
     if (event.kind === "status") {
-      const { view, accountId } = await this.bookingFacts(organizationId, event.bookingId)
+      const { view, accounts } = await this.bookingFacts(organizationId, event.bookingId)
       const params = { serviceName: view.serviceName, startsAt: view.startsAt }
       if (event.to === "cancelled" && event.by === "customer") {
         await notify(this.db, {
@@ -296,17 +590,17 @@ export class BookingAccounts {
         return
       }
       if (event.to === "confirmed") {
-        await this.tellCustomer(accountId, "confirmed", event.bookingId, params)
+        await this.tellCustomer(accounts, "confirmed", event.bookingId, params)
       } else if (event.to === "cancelled") {
-        await this.tellCustomer(accountId, "cancelled", event.bookingId, params)
+        await this.tellCustomer(accounts, "cancelled", event.bookingId, params)
       } else if (event.to === "completed") {
-        await this.tellCustomer(accountId, "completed", event.bookingId, params)
+        await this.tellCustomer(accounts, "completed", event.bookingId, params)
       }
       return
     }
     if (event.kind === "rescheduled") {
-      const { view, accountId } = await this.bookingFacts(organizationId, event.bookingId)
-      await this.tellCustomer(accountId, "rescheduled", event.bookingId, {
+      const { view, accounts } = await this.bookingFacts(organizationId, event.bookingId)
+      await this.tellCustomer(accounts, "rescheduled", event.bookingId, {
         serviceName: view.serviceName,
         startsAt: view.startsAt,
       })
@@ -339,9 +633,13 @@ export class BookingAccounts {
       })
       return
     }
-    if (!entry.account_id) return
+    const waiters: unknown[] = [
+      entry.account_id,
+      ...(await this.provedFor(organizationId, entry.customer_phone)),
+    ]
+    if (!waiters.some(Boolean)) return
     if (event.status === "removed") {
-      await this.tellCustomer(entry.account_id, "waitlist_removed", null, {
+      await this.tellCustomer(waiters, "waitlist_removed", null, {
         serviceName,
         date: day(entry.preferred_date),
       })
@@ -360,16 +658,23 @@ export class BookingAccounts {
         )
       : { rows: [] as Row[] }
     const made = recent.rows.find((row) => new Date(iso(row.created_at)) >= since)
-    if (made) {
+    if (made && entry.account_id) {
       await this.db.query(`UPDATE bookings SET account_id = $2 WHERE id = $1`, [
         made.id,
         entry.account_id,
       ])
     }
-    await this.tellCustomer(entry.account_id, "waitlist_booked", made ? String(made.id) : null, {
+    await this.tellCustomer(waiters, "waitlist_booked", made ? String(made.id) : null, {
       serviceName,
       startsAt: made ? iso(made.starts_at) : null,
       date: day(entry.preferred_date),
     })
   }
 }
+
+// The one made where the server is put together, for whoever needs to reach it afterwards.
+let registeredAccounts: BookingAccounts | null = null
+export const registerBookingAccounts = (accounts: BookingAccounts | null) => {
+  registeredAccounts = accounts
+}
+export const registeredBookingAccounts = () => registeredAccounts

@@ -13,6 +13,7 @@ import type { WhatsAppPlatformService, WhatsAppSendingContext } from "../whatsap
 import {
   BOOKING_CONFIRMATION_TEMPLATE,
   BOOKING_REMINDER_TEMPLATE,
+  LOGIN_CODE_TEMPLATE,
   type WhatsAppTemplatesService,
 } from "../whatsapp/templates"
 import { type BookingService, type BookingView, dayOf } from "./service"
@@ -109,7 +110,8 @@ export class BookingMessenger {
       const { context, own } = await this.sender(organizationId, template)
       if (!own) {
         const sent = await this.db.query<Row>(
-          `SELECT id FROM whatsapp_messages WHERE organization_id = $1 AND created_at > $2`,
+          `SELECT id FROM whatsapp_messages
+            WHERE organization_id = $1 AND created_at > $2 AND kind <> 'booking_sign_in'`,
           [organizationId, new Date(Date.now() - 24 * HOUR).toISOString()]
         )
         if (sent.rows.length >= DAILY_MESSAGES_PER_ORGANIZATION) return "limit"
@@ -219,6 +221,78 @@ export class BookingMessenger {
       }
     }
     return { sent, skipped }
+  }
+}
+
+// The sign-in code for a customer's account on a booking page (booking/accounts.ts), sent on
+// WhatsApp: from the business's own number where the code template is approved there, otherwise
+// from Madar's.
+export class BookingCodeSender {
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly platform: WhatsAppPlatformService,
+    private readonly templates: WhatsAppTemplatesService,
+    private readonly merchantConnections: WhatsAppMerchantConnectionService | null
+  ) {}
+
+  private async sender(organizationId: string): Promise<WhatsAppSendingContext> {
+    const own = (await this.merchantConnections?.sendingContext(organizationId)) ?? null
+    if (own) {
+      try {
+        await this.templates.requireApproved(LOGIN_CODE_TEMPLATE, own)
+        return own
+      } catch {
+        // Not approved on the business's own number: Madar's number carries it instead.
+      }
+    }
+    const context = await this.platform.sendingContext()
+    await this.templates.requireApproved(LOGIN_CODE_TEMPLATE, context)
+    return context
+  }
+
+  // Whether a code can be sent at all right now (WhatsApp set up, the template approved).
+  async ready(organizationId: string): Promise<boolean> {
+    try {
+      await this.sender(organizationId)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // `to` is in WhatsApp's form already. Throws when Meta refuses the message.
+  async send(organizationId: string, to: string, code: string): Promise<void> {
+    let wamid: string | null = null
+    let error: string | null = null
+    try {
+      const context = await this.sender(organizationId)
+      wamid = await sendTemplateMessage(context.auth, context.phoneNumberId, {
+        to,
+        templateName: LOGIN_CODE_TEMPLATE.name,
+        language: LOGIN_CODE_TEMPLATE.language,
+        bodyParameters: [code],
+        codeButton: code,
+      })
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message.slice(0, 500) : String(caught)
+    }
+    await this.db
+      .query(
+        `INSERT INTO whatsapp_messages
+           (id, organization_id, kind, to_phone, template_name, wa_message_id, status, error)
+         VALUES ($1, $2, 'booking_sign_in', $3, $4, $5, $6, $7)`,
+        [
+          randomUUID(),
+          organizationId,
+          to,
+          LOGIN_CODE_TEMPLATE.name,
+          wamid,
+          wamid ? "sent" : "failed",
+          error,
+        ]
+      )
+      .catch((logError: unknown) => console.error("booking.message_log_failed", logError))
+    if (!wamid) throw new Error(error ?? "The sign-in code was not sent.")
   }
 }
 

@@ -16,6 +16,8 @@ import {
   CircleCheck,
   Hourglass,
   Loader2,
+  LogOut,
+  Smartphone,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -30,6 +32,7 @@ import type {
   PublicAccountBooking,
   PublicBookingPage,
 } from "../types/booking.types"
+import { AccountSignIn } from "./account-sign-in"
 import { DEFAULT_ACCENT } from "./storefront"
 import { STATUS_TINT } from "./styles"
 
@@ -98,6 +101,9 @@ export function PublicBookingAccountView({ slug }: { slug: string }) {
   const [account, setAccount] = useState<PublicAccount | null>(null)
   // loading, then: ready (an account is shown), none (this browser has no account), closed.
   const [state, setState] = useState<"loading" | "ready" | "none" | "closed">("loading")
+  // Whether the page can send a sign-in code on WhatsApp, and whether its form is open.
+  const [signInOffered, setSignInOffered] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
   const load = useCallback(async () => {
     const token = accountMemory.read(slug)
@@ -122,6 +128,10 @@ export function PublicBookingAccountView({ slug }: { slug: string }) {
       .page(slug)
       .then(setPage)
       .catch(() => setState("closed"))
+    publicBookingService
+      .signInOffered(slug)
+      .then((answer) => setSignInOffered(answer.offered))
+      .catch(() => {})
     // Asked for a moment after the page is up, then again every so often for news.
     const first = setTimeout(() => void load(), 0)
     const timer = setInterval(() => void load(), REFRESH_MS)
@@ -178,10 +188,17 @@ export function PublicBookingAccountView({ slug }: { slug: string }) {
             <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-[#f1f4f9] text-[#52607a]">
               <CalendarCheck className="size-7" />
             </span>
-            <p className="mt-3 text-[17px] font-extrabold">{t("noneTitle")}</p>
-            <p className="mx-auto mt-1.5 max-w-[420px] text-[13.5px] leading-7 text-[#52607a]">
-              {t("noneHint")}
+            <p className="mt-3 text-[17px] font-extrabold">
+              {signInOffered ? t("signIn.title") : t("noneTitle")}
             </p>
+            <p className="mx-auto mt-1.5 max-w-[420px] text-[13.5px] leading-7 text-[#52607a]">
+              {signInOffered ? t("signIn.hint") : t("noneHint")}
+            </p>
+            {signInOffered ? (
+              <div className="mt-5">
+                <AccountSignIn slug={slug} onSignedIn={() => void load()} />
+              </div>
+            ) : null}
           </div>
         ) : (
           <>
@@ -198,6 +215,44 @@ export function PublicBookingAccountView({ slug }: { slug: string }) {
                 ) : null}
               </span>
             </div>
+
+            {signInOffered && !account.verified ? (
+              <div className={cn(CARD, "p-4")}>
+                <div className="flex items-start gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e7f8ee] text-[#137a41]">
+                    <Smartphone className="size-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-extrabold">
+                      {t("signIn.confirmTitle")}
+                    </span>
+                    <span className="block text-[13px] leading-6 text-[#52607a]">
+                      {t("signIn.confirmHint")}
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-3">
+                  {signingIn ? (
+                    <AccountSignIn
+                      slug={slug}
+                      phone={account.phone}
+                      onSignedIn={() => {
+                        setSigningIn(false)
+                        void load()
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSigningIn(true)}
+                      className="inline-flex h-11 w-full items-center justify-center rounded-full border border-[var(--bk-accent)] px-5 text-[14px] font-bold text-[var(--bk-accent)]"
+                    >
+                      {t("signIn.confirmButton")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             {account.notices.length > 0 ? (
               <section className={cn(CARD, "overflow-hidden")}>
@@ -303,8 +358,22 @@ export function PublicBookingAccountView({ slug }: { slug: string }) {
             ) : null}
 
             <p className="px-2 text-center text-[12px] leading-6 text-[#98a2b3]">
-              {t("deviceNote")}
+              {account.verified ? t("signIn.verifiedNote") : t("deviceNote")}
             </p>
+            {account.verified ? (
+              <button
+                type="button"
+                onClick={() => {
+                  accountMemory.forget(slug)
+                  setAccount(null)
+                  setState("none")
+                }}
+                className="mx-auto flex items-center gap-1.5 text-[13px] font-bold text-[#52607a] underline-offset-4 hover:underline"
+              >
+                <LogOut className="size-4" />
+                {t("signIn.signOut")}
+              </button>
+            ) : null}
           </>
         )}
       </div>

@@ -8,6 +8,7 @@ import type { AddressInfo } from "node:net"
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
+import { registeredBookingAccounts } from "../booking/accounts"
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
@@ -1184,5 +1185,138 @@ describe("the Booking app: rooms, repeating bookings and the waiting list", () =
     const final = (await call("GET", accountPath)).body
     expect(final.upcoming).toHaveLength(1)
     expect(final.past[0].status).toBe("cancelled")
+  })
+
+  it("signs a customer in by phone with a code sent on WhatsApp", async () => {
+    const { token } = await signIn("booking-code@madar.test", "Codes")
+    const { haircut, sami } = await salon(token)
+    await call("PUT", "/v1/booking/settings", token, { slug: "codes", onlineEnabled: true })
+    const page = "/v1/public/booking/pages/codes"
+    const accounts = registeredBookingAccounts()!
+
+    // Nothing can send a code: the page does not offer it.
+    accounts.codeSender = null
+    expect((await call("GET", `${page}/sign-in`)).body).toEqual({ offered: false })
+    const closed = await call("POST", `${page}/sign-in`, undefined, { phone: "0500000009" })
+    expect(closed.status).toBe(409)
+    expect(closed.body.code).toBe("BOOKING_SIGN_IN_UNAVAILABLE")
+
+    const sent: Array<{ to: string; code: string }> = []
+    accounts.codeSender = {
+      ready: async () => true,
+      send: async (_organizationId, to, code) => {
+        sent.push({ to, code })
+      },
+    }
+    expect((await call("GET", `${page}/sign-in`)).body).toEqual({ offered: true })
+
+    // The staff book one visit for the number; the customer books another from their phone.
+    await book(token, {
+      serviceId: haircut.id,
+      providerId: sami.id,
+      startsAt: at("10:00"),
+      customerName: "ماجد",
+      customerPhone: "+966500000009",
+    })
+    const online = (
+      await call("POST", `${page}/bookings`, undefined, {
+        serviceId: haircut.id,
+        providerId: sami.id,
+        startsAt: at("16:00"),
+        customerName: "ماجد",
+        customerPhone: "0500000009",
+        partySize: 1,
+      })
+    ).body
+    const browser = (await call("GET", `${page}/account/${online.accountToken}`)).body
+    expect(browser.verified).toBe(false)
+    expect(browser.upcoming).toHaveLength(1)
+
+    // A number this business has never seen is answered the same, and gets nothing.
+    expect(
+      (await call("POST", `${page}/sign-in`, undefined, { phone: "0511111111" })).body
+    ).toEqual({ sent: true, expiresInMinutes: 10 })
+    expect(sent).toHaveLength(0)
+    expect((await call("POST", `${page}/sign-in`, undefined, { phone: "12" })).status).toBe(400)
+    expect((await call("POST", `${page}/sign-in`, undefined, { phone: "0412345678" })).status).toBe(
+      422
+    )
+
+    // A known number gets a six-digit code, and not a second one straight away.
+    expect((await call("POST", `${page}/sign-in`, undefined, { phone: "0500000009" })).status).toBe(
+      200
+    )
+    expect(sent).toHaveLength(1)
+    expect(sent[0].to).toBe("966500000009")
+    expect(sent[0].code).toMatch(/^\d{6}$/)
+    const again = await call("POST", `${page}/sign-in`, undefined, { phone: "0500000009" })
+    expect(again.status).toBe(429)
+    expect(again.body.code).toBe("BOOKING_CODE_WAIT")
+
+    // A wrong code opens nothing; the right one, from another device, opens everything booked
+    // for the number -- the staff's booking included.
+    const wrong = sent[0].code === "000000" ? "000001" : "000000"
+    const refused = await call("POST", `${page}/sign-in/verify`, undefined, {
+      phone: "0500000009",
+      code: wrong,
+    })
+    expect(refused.status).toBe(422)
+    expect(refused.body.code).toBe("BOOKING_CODE_WRONG")
+    const opened = await call("POST", `${page}/sign-in/verify`, undefined, {
+      phone: "0500000009",
+      code: sent[0].code,
+    })
+    expect(opened.status).toBe(200)
+    expect(opened.body.accountToken).toMatch(/^[0-9a-f]{48}$/)
+    expect(opened.body.accountToken).not.toBe(online.accountToken)
+    const mine = (await call("GET", `${page}/account/${opened.body.accountToken}`)).body
+    expect(mine).toMatchObject({ name: "ماجد", verified: true })
+    expect(mine.upcoming.map((entry: { startsAt: string }) => entry.startsAt)).toEqual([
+      at("10:00"),
+      at("16:00"),
+    ])
+    // The code works once.
+    expect(
+      (
+        await call("POST", `${page}/sign-in/verify`, undefined, {
+          phone: "0500000009",
+          code: sent[0].code,
+        })
+      ).status
+    ).toBe(422)
+
+    // The staff cancel the other booking: the signed-in customer is told.
+    const bookings = (await call("GET", `/v1/booking/bookings?from=${DAY}&to=${DAY}`, token)).body
+      .items as Array<{ id: string; startsAt: string; status: string }>
+    const evening = bookings.find((entry) => entry.startsAt === at("16:00"))!
+    await call("POST", `/v1/booking/bookings/${evening.id}/status`, token, { status: "cancelled" })
+    let unread = 0
+    for (let attempt = 0; attempt < 40 && unread === 0; attempt += 1) {
+      unread = (await call("GET", `${page}/account/${opened.body.accountToken}?brief=1`)).body
+        .unread
+      if (unread === 0) await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    expect(unread).toBe(1)
+
+    // Five wrong tries use a code up, even for the right code afterwards.
+    await database.query(`UPDATE booking_sign_in_codes SET created_at = $1`, [
+      new Date(Date.now() - 5 * 60_000),
+    ])
+    await call("POST", `${page}/sign-in`, undefined, { phone: "0500000009" })
+    expect(sent).toHaveLength(2)
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await call("POST", `${page}/sign-in/verify`, undefined, {
+        phone: "0500000009",
+        code: sent[1].code === "999999" ? "999998" : "999999",
+      })
+    }
+    expect(
+      (
+        await call("POST", `${page}/sign-in/verify`, undefined, {
+          phone: "0500000009",
+          code: sent[1].code,
+        })
+      ).status
+    ).toBe(422)
   })
 })

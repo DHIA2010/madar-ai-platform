@@ -11580,7 +11580,31 @@
         "waitlist_booked": "A place opened: {service} is booked for you — {when}",
         "waitlist_removed": "Your waiting-list request was closed: {service} — {when}"
       },
-      "deviceNote": "Bookings made from this device and this browser appear here."
+      "deviceNote": "Bookings made from this device and this browser appear here.",
+      "signIn": {
+        "title": "Sign in with your mobile number",
+        "hint": "Enter the mobile number you booked with and we will send a code on WhatsApp so you can see your bookings.",
+        "phoneLabel": "Mobile number",
+        "send": "Send the code on WhatsApp",
+        "codeHint": "If this number has bookings here, a 6-digit code is on its way on WhatsApp:",
+        "codeLabel": "Verification code",
+        "enter": "Sign in",
+        "changePhone": "Change number",
+        "resend": "Send the code again",
+        "resendIn": "Send again in {seconds, number}s",
+        "confirmTitle": "See your bookings on any device",
+        "confirmHint": "Confirm your mobile number with a code on WhatsApp, and every booking under it shows on any device.",
+        "confirmButton": "Confirm my number",
+        "verifiedNote": "Every booking under your mobile number is shown here.",
+        "signOut": "Sign out",
+        "errors": {
+          "phone": "That mobile number is not valid.",
+          "code": "That code is wrong or has expired.",
+          "wait": "A code was sent a moment ago. Wait a minute and try again.",
+          "unavailable": "Signing in by mobile number is not available right now.",
+          "other": "That did not work. Please try again."
+        }
+      }
     },
     "image": {
       "choose": "Choose a picture",

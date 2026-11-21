@@ -336,6 +336,22 @@ export const publicBookingService = {
     publicRequest<{ name: string; phone: string | null; unread: number }>(
       `${publicPath("pages", slug, "account", token)}?brief=1`
     ),
+  // Signing in to that account by phone: a code on WhatsApp, then the code typed back.
+  signInOffered: (slug: string) =>
+    publicRequest<{ offered: boolean }>(publicPath("pages", slug, "sign-in")),
+  startSignIn: (slug: string, phone: string) =>
+    publicRequest<{ sent: true; expiresInMinutes: number }>(publicPath("pages", slug, "sign-in"), {
+      method: "POST",
+      body: JSON.stringify({ phone }),
+    }),
+  finishSignIn: (
+    slug: string,
+    input: { phone: string; code: string; accountToken?: string | null }
+  ) =>
+    publicRequest<{ accountToken: string }>(publicPath("pages", slug, "sign-in", "verify"), {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   markAccountRead: (slug: string, token: string) =>
     publicRequest<{ ok: true }>(publicPath("pages", slug, "account", token, "read"), {
       method: "POST",

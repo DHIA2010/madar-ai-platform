@@ -30,6 +30,8 @@ import {
   publicPaymentSchema,
   publicQuoteSchema,
   publicReviewSchema,
+  publicSignInCodeSchema,
+  publicSignInSchema,
   publicWaitlistSchema,
 } from "../../booking/schemas"
 import {
@@ -572,6 +574,31 @@ export async function handlePublicBookingRoute(input: {
         url.searchParams.get("brief")
           ? await input.accounts.brief(accountSlug, accountToken)
           : await input.accounts.account(accountSlug, accountToken)
+      )
+    }
+  }
+
+  // Signing in to that account by phone: a code on WhatsApp, then the code typed back.
+  const signIn = path.match(/^\/pages\/([^/]+)\/sign-in(\/verify)?$/)
+  if (signIn && input.accounts) {
+    const signInSlug = decodeURIComponent(signIn[1])
+    if (method === "GET" && !signIn[2]) {
+      return send(200, { offered: await input.accounts.signInOffered(signInSlug) })
+    }
+    if (method === "POST" && !signIn[2]) {
+      if (!(await input.limit("booking_public_sign_in", 10, 10 * 60_000))) return limited()
+      const { phone } = publicSignInSchema.parse(await input.readJsonBody())
+      return send(200, await input.accounts.startSignIn(signInSlug, phone))
+    }
+    if (method === "POST" && signIn[2]) {
+      // Guessing codes is slowed (each code also allows only a few wrong tries).
+      if (!(await input.limit("booking_public_sign_in_code", 20, 10 * 60_000))) return limited()
+      return send(
+        200,
+        await input.accounts.finishSignIn(
+          signInSlug,
+          publicSignInCodeSchema.parse(await input.readJsonBody())
+        )
       )
     }
   }

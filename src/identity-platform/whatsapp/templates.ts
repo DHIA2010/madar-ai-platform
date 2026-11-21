@@ -253,6 +253,17 @@ export const BOOKING_REMINDER_TEMPLATE: TemplateDefinition = {
   footer: "أُرسلت عبر مدار",
 }
 
+// The sign-in code a business's customer gets on a booking page (booking/accounts.ts). Meta's
+// own fixed wording for codes; the code lasts as long as the server keeps it.
+export const LOGIN_CODE_TEMPLATE: TemplateDefinition = {
+  name: "madar_login_code",
+  language: "ar",
+  category: "AUTHENTICATION",
+  body: "{{1}} هو رمز التحقق الخاص بك. حرصًا على أمانك، لا تشارك هذا الرمز.",
+  bodyExamples: ["123456"],
+  code: { expiresMinutes: 10, buttonText: "نسخ الرمز" },
+}
+
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
@@ -261,6 +272,7 @@ export const MADAR_TEMPLATES: TemplateDefinition[] = [
   SIGNUP_ALERT_TEMPLATE,
   BOOKING_CONFIRMATION_TEMPLATE,
   BOOKING_REMINDER_TEMPLATE,
+  LOGIN_CODE_TEMPLATE,
 ]
 
 // The sample document Meta reviews with a document-header template.

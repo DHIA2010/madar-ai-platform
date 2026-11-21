@@ -58,6 +58,8 @@ export interface TemplateMessage {
   language: string
   document?: { mediaId: string; filename: string }
   bodyParameters: string[]
+  // A sign-in code template: the code goes in the body and again in its "copy code" button.
+  codeButton?: string
 }
 
 // Sends an approved template; returns WhatsApp's message id (wamid...).
@@ -82,6 +84,14 @@ export async function sendTemplateMessage(
     components.push({
       type: "body",
       parameters: message.bodyParameters.map((text) => ({ type: "text", text })),
+    })
+  }
+  if (message.codeButton) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: message.codeButton }],
     })
   }
   const path = `/${encodeURIComponent(phoneNumberId)}/messages`
@@ -219,12 +229,16 @@ async function uploadTemplateSample(
 export interface TemplateDefinition {
   name: string
   language: string
-  category: "UTILITY" | "MARKETING"
+  category: "UTILITY" | "MARKETING" | "AUTHENTICATION"
   // Body text with {{1}}, {{2}}... and one example value for each.
   body: string
   bodyExamples: string[]
   footer?: string
   documentHeader?: boolean
+  // A sign-in code (category AUTHENTICATION). Meta writes these itself, in the template's
+  // language: "<code> is your verification code", a line not to share it, how long it lasts
+  // and a "copy code" button. `body` is only what Madar Admin shows for it.
+  code?: { expiresMinutes: number; buttonText: string }
 }
 
 export async function submitTemplate(
@@ -236,6 +250,26 @@ export async function submitTemplate(
     sampleDocument?: { bytes: Buffer; filename: string }
   }
 ): Promise<{ id: string; status: string }> {
+  if (input.template.code) {
+    return graphRequest<{ id: string; status: string }>(
+      "POST",
+      `/${encodeURIComponent(input.wabaId)}/message_templates`,
+      auth,
+      {
+        name: input.template.name,
+        language: input.template.language,
+        category: input.template.category,
+        components: [
+          { type: "BODY", add_security_recommendation: true },
+          { type: "FOOTER", code_expiration_minutes: input.template.code.expiresMinutes },
+          {
+            type: "BUTTONS",
+            buttons: [{ type: "OTP", otp_type: "COPY_CODE", text: input.template.code.buttonText }],
+          },
+        ],
+      }
+    )
+  }
   const components: unknown[] = []
   if (input.template.documentHeader) {
     if (!input.sampleDocument) throw new Error("A document header template needs a sample file.")

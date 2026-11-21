@@ -454,6 +454,8 @@ export interface PublicAccountBooking {
 export interface PublicAccount {
   name: string
   phone: string | null
+  // The number was proved with a code: the account shows every booking made for it.
+  verified: boolean
   upcoming: PublicAccountBooking[]
   past: PublicAccountBooking[]
   waitlist: Array<{

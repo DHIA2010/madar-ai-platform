@@ -36,10 +36,11 @@ import { handleInvoicingRoute, handlePublicInvoicingRoute } from "./invoicing-ro
 import { AccountingService } from "../../accounting/service"
 import {
   BookingInvoicer,
+  BookingCodeSender,
   BookingMessenger,
   registerBookingMessenger,
 } from "../../booking/automation"
-import { BookingAccounts } from "../../booking/accounts"
+import { BookingAccounts, registerBookingAccounts } from "../../booking/accounts"
 import { BookingPayments } from "../../booking/payments"
 import { BookingService } from "../../booking/service"
 import { LoyaltyService } from "../../loyalty/service"
@@ -1167,6 +1168,21 @@ export function createIdentityApiServer(
     container.infrastructure.database && bookingService
       ? new BookingAccounts(container.infrastructure.database, bookingService)
       : null
+  registerBookingAccounts(bookingAccounts)
+  // Signing in to that account by phone needs WhatsApp to send the code.
+  if (
+    bookingAccounts &&
+    container.infrastructure.database &&
+    whatsAppPlatformService &&
+    whatsAppTemplatesService
+  ) {
+    bookingAccounts.codeSender = new BookingCodeSender(
+      container.infrastructure.database,
+      whatsAppPlatformService,
+      whatsAppTemplatesService,
+      whatsAppMerchantConnections
+    )
+  }
   if (bookingService) {
     bookingService.hooks = {
       event: async (event) => {
