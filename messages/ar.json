@@ -11867,8 +11867,8 @@
       "copyLink": "نسخ رابط الحجز",
       "linkCopied": "تم نسخ الرابط",
       "noPhone": "لا يوجد رقم جوال صالح لهذا العميل.",
-      "whatsappConfirm": "مرحبًا {name}،\nتم تأكيد حجزك لدى {business}:\n{service} مع {provider}\n{day} الساعة {time}\n\nلعرض الحجز أو إلغائه:\n{link}",
-      "whatsappRemind": "مرحبًا {name}،\nنذكّرك بموعدك لدى {business}:\n{service} مع {provider}\n{day} الساعة {time}\n\nلعرض الحجز أو إلغائه:\n{link}",
+      "whatsappConfirm": "مرحبًا {name} 👋\n\n✅ *تم تأكيد حجزك لدى {business}*\n\n📌 الخدمة: {service}\n👤 مع: {provider}\n📅 اليوم: {day}\n🕒 الوقت: {time}\n\nلعرض تفاصيل الحجز أو إلغائه:\n{link}\n\nنسعد بزيارتك 🌷",
+      "whatsappRemind": "مرحبًا {name} 👋\n\n⏰ *تذكير بموعدك لدى {business}*\n\n📌 الخدمة: {service}\n👤 مع: {provider}\n📅 اليوم: {day}\n🕒 الوقت: {time}\n\nلعرض تفاصيل الحجز أو إلغائه:\n{link}\n\nبانتظارك 🌷",
       "priceHow": "تفاصيل السعر",
       "before": "قبل الخصم {amount}",
       "byPlan": "مشمول بالباقة",
@@ -12411,7 +12411,7 @@
       "customerName": "اسم العميل",
       "customerPhone": "رقم الجوال",
       "note": "ملاحظة (اختياري)",
-      "whatsapp": "مرحبًا {name}،\nتوفر موعد لخدمة {service} يوم {day} الساعة {time}.\nاحجزه قبل أن يُحجز:\n{link}"
+      "whatsapp": "مرحبًا {name} 👋\n\n🎉 *توفّر موعد لك*\n\n📌 الخدمة: {service}\n📅 اليوم: {day}\n🕒 الوقت: {time}\n\nاحجزه الآن قبل أن يُحجز:\n{link}"
     }
   },
   "accounting": {

@@ -11871,8 +11871,8 @@
       "copyLink": "Copy booking link",
       "linkCopied": "Link copied",
       "noPhone": "This customer has no valid mobile number.",
-      "whatsappConfirm": "Hello {name},\nYour booking at {business} is confirmed:\n{service} with {provider}\n{day} at {time}\n\nTo view or cancel it:\n{link}",
-      "whatsappRemind": "Hello {name},\nA reminder of your appointment at {business}:\n{service} with {provider}\n{day} at {time}\n\nTo view or cancel it:\n{link}",
+      "whatsappConfirm": "Hello {name} 👋\n\n✅ *Your booking at {business} is confirmed*\n\n📌 Service: {service}\n👤 With: {provider}\n📅 Day: {day}\n🕒 Time: {time}\n\nTo view or cancel your booking:\n{link}\n\nWe look forward to seeing you 🌷",
+      "whatsappRemind": "Hello {name} 👋\n\n⏰ *A reminder of your appointment at {business}*\n\n📌 Service: {service}\n👤 With: {provider}\n📅 Day: {day}\n🕒 Time: {time}\n\nTo view or cancel your booking:\n{link}\n\nSee you soon 🌷",
       "priceHow": "How the price was reached",
       "before": "Before {amount}",
       "byPlan": "Covered by a package",
@@ -12415,7 +12415,7 @@
       "customerName": "Customer name",
       "customerPhone": "Mobile number",
       "note": "Note (optional)",
-      "whatsapp": "Hello {name},\nA time has opened for {service} on {day} at {time}.\nBook it before it is taken:\n{link}"
+      "whatsapp": "Hello {name} 👋\n\n🎉 *A time has opened for you*\n\n📌 Service: {service}\n📅 Day: {day}\n🕒 Time: {time}\n\nBook it now before it is taken:\n{link}"
     }
   },
   "accounting": {
