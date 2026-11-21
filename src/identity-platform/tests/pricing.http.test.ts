@@ -542,8 +542,14 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     await grant("advertising", "growth")
     expect((await entitlements()).maxAdPlatforms).toBeNull()
 
-    // E-commerce أساسي: one store.
-    await grant("ecommerce", "starter")
+    // E-commerce is one package with everything: no limit on stores.
+    await grant("ecommerce", "pro")
+    expect((await entitlements()).maxStores).toBeNull()
+    // A limit staff put on the package afterwards is kept to.
+    await database.query(
+      `update platform_packages set entitlements = '{"maxStores": 1}'::jsonb
+        where application = 'ecommerce' and legacy_plan_tier = 'pro'`
+    )
     expect((await entitlements()).maxStores).toBe(1)
     await database.query(
       `insert into salla_oauth_connections (id, organization_id, project_id, status,
@@ -557,8 +563,6 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
       {}
     )
     expect(secondStore).toMatchObject({ status: 403, body: { code: "PLAN_FEATURE_NOT_INCLUDED" } })
-    await grant("ecommerce", "growth")
-    expect((await entitlements()).maxStores).toBe(3)
   })
 
   it("stops selling and trialling an application staff hid, until it's shown again", async () => {
@@ -865,7 +869,9 @@ describe("coupons", () => {
     const growth = (application: string) =>
       pricing.body
         .find((entry) => entry.application === application)!
-        .packages.find((pkg) => pkg.legacyPlanTier === "growth")!
+        .packages.find(
+          (pkg) => pkg.legacyPlanTier === (application === "ecommerce" ? "pro" : "growth")
+        )!
 
     const created = await call<{ code: string; status: string }>(
       "POST",

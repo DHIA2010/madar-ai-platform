@@ -169,38 +169,27 @@ const ADVERTISING_PACKAGES: DefaultPackage[] = [
   ),
 ]
 
+// One package with everything (the user's decision, 21 November 2026): every store, custom roles
+// and reports, one workspace, more workspaces as the usual add-on. Migration 178 moved an
+// environment that already had the three earlier packages onto it.
 const ECOMMERCE_PACKAGES: DefaultPackage[] = [
   tier(
-    "starter",
-    "أساسي",
-    79,
-    ["مساحة عمل واحدة (مساحات إضافية بـ 99 ر.س/شهر)", "متجر واحد", "التقارير الجاهزة"],
-    { entitlements: { maxStores: 1 } }
-  ),
-  tier(
-    "growth",
-    "نمو",
-    149,
-    [
-      "كل مزايا الأساسي",
-      "مساحتان عمل (مساحات إضافية بـ 99 ر.س/شهر)",
-      "حتى 3 متاجر",
-      "الأدوار والصلاحيات المخصصة",
-    ],
-    { recommended: true, includedBranches: 2, entitlements: { customRoles: true, maxStores: 3 } }
-  ),
-  tier(
     "pro",
-    "احترافي",
+    "الباقة الشاملة",
     299,
     [
-      "كل مزايا النمو",
-      "3 مساحات عمل (مساحات إضافية بـ 99 ر.س/شهر)",
+      "ربط متجرك بضغطة واحدة (سلة، زد، Shopify وغيرها)",
       "متاجر غير محدودة",
-      "التقارير المخصصة",
+      "لوحة مبيعات المتجر: الطلبات والإيرادات ومتوسط قيمة الطلب",
+      "متابعة المنتجات والطلبات والعملاء",
+      "الزوار المباشرون على المتجر",
+      "تتبع مصدر كل طلب (UTM ومعرّفات النقر)",
+      "التقارير الجاهزة والتقارير المخصصة",
+      "أدوار وصلاحيات مخصصة لفريقك",
+      "مساحة عمل واحدة (مساحات إضافية بـ 99 ر.س/شهر أو 999 ر.س/سنة)",
       "دعم بأولوية",
     ],
-    { includedBranches: 3, entitlements: { customRoles: true, customReports: true } }
+    { recommended: true, entitlements: { customRoles: true, customReports: true } }
   ),
 ]
 
