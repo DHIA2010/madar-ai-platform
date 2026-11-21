@@ -43,6 +43,7 @@ import {
 import { BookingAccounts, registerBookingAccounts } from "../../booking/accounts"
 import { BookingPayments } from "../../booking/payments"
 import { BookingService } from "../../booking/service"
+import { LoyaltyCampaigns, registerLoyaltyCampaigns } from "../../loyalty/campaigns"
 import { LoyaltyPush, registerLoyaltyPush } from "../../loyalty/push"
 import { LoyaltyService } from "../../loyalty/service"
 import { LoyaltyWallet, walletConfigFromEnv } from "../../loyalty/wallet"
@@ -973,6 +974,12 @@ export function createIdentityApiServer(
       ? new LoyaltyPush(container.infrastructure.database, loyaltyService)
       : null
   registerLoyaltyPush(loyaltyPush)
+  // Internal campaigns: messages to a chosen group of members, sent now or at a set time.
+  const loyaltyCampaigns =
+    container.infrastructure.database && loyaltyPush
+      ? new LoyaltyCampaigns(container.infrastructure.database, loyaltyPush)
+      : null
+  registerLoyaltyCampaigns(loyaltyCampaigns)
   if (loyaltyService && loyaltyPush) {
     loyaltyService.onNotice = (memberId, notice) => {
       void loyaltyPush
@@ -3100,6 +3107,7 @@ export function createIdentityApiServer(
           service: loyaltyService,
           wallet: loyaltyWallet,
           push: loyaltyPush,
+          campaigns: loyaltyCampaigns,
           send,
           readJsonBody: () => readJsonBody(request),
         })

@@ -63,6 +63,7 @@ export const ROUTES = {
   loyalty: "/loyalty",
   loyaltyMembers: "/loyalty/members",
   loyaltyRewards: "/loyalty/rewards",
+  loyaltyCampaigns: "/loyalty/campaigns",
   loyaltyCard: "/loyalty/card",
   loyaltySettings: "/loyalty/settings",
   // The public pages: joining a business's loyalty programme, and a member's own card.

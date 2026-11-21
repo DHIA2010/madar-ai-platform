@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
-import { CheckCircle2, Gift, Loader2, Star, Wallet } from "lucide-react"
+import { Bell, CheckCircle2, Gift, Loader2, Megaphone, Star, Wallet } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -221,12 +221,35 @@ export function PublicLoyaltyCardView({ token }: { token: string }) {
   const [asking, setAsking] = useState<PublicReward | null>(null)
   const [reviewOpened, setReviewOpened] = useState(false)
   const [problem, setProblem] = useState(false)
+  const [allNotices, setAllNotices] = useState(false)
 
   useEffect(() => {
-    publicLoyaltyService
-      .card(token)
-      .then(setCard)
-      .catch(() => setMissing(true))
+    let cancelled = false
+    const load = (first: boolean) =>
+      publicLoyaltyService
+        .card(token)
+        .then((loaded) => {
+          if (cancelled) return
+          setCard(loaded)
+          // What was waiting is shown as new this once, and counts as read from now on.
+          if (loaded.notices?.some((notice) => !notice.read)) {
+            void publicLoyaltyService.noticesSeen(token).catch(() => undefined)
+          }
+        })
+        .catch(() => {
+          if (!cancelled && first) setMissing(true)
+        })
+    void load(true)
+    // A notification tapped while the card is already open brings it back to the front: read
+    // it again so the message it announced is there.
+    const onShow = () => {
+      if (document.visibilityState === "visible") void load(false)
+    }
+    document.addEventListener("visibilitychange", onShow)
+    return () => {
+      cancelled = true
+      document.removeEventListener("visibilitychange", onShow)
+    }
   }, [token])
 
   if (missing) return <Missing text={t("cardMissing")} />
@@ -257,6 +280,65 @@ export function PublicLoyaltyCardView({ token }: { token: string }) {
         <LoyaltyCard look={card} name={card.name} points={card.points} code={card.cardCode} />
       </div>
       <p className="text-center text-[12.5px] leading-5 text-[#6b7b96]">{t("showCode")}</p>
+
+      {card.notices && card.notices.length > 0 ? (
+        <section className={BOX}>
+          <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-[#0b1738]">
+            <Bell className="size-[18px]" />
+            {t("noticesTitle")}
+            {card.notices.some((notice) => !notice.read) ? (
+              <span className="rounded-full bg-[#e11d48] px-2 py-0.5 text-[11px] font-black text-white">
+                {t("noticesNew", {
+                  count: card.notices.filter((notice) => !notice.read).length,
+                })}
+              </span>
+            ) : null}
+          </h2>
+          <ul className="mt-2 divide-y divide-[#eef1f6]">
+            {(allNotices ? card.notices : card.notices.slice(0, 3)).map((notice) => (
+              <li key={notice.id} className="flex items-start gap-3 py-2.5">
+                <span
+                  className={cn(
+                    "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
+                    notice.kind === "message"
+                      ? "bg-[#eef4ff] text-[#1d4fd8]"
+                      : "bg-[#ecfdf3] text-[#067647]"
+                  )}
+                >
+                  {notice.kind === "message" ? (
+                    <Megaphone className="size-4" />
+                  ) : (
+                    <Gift className="size-4" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      "block text-[13.5px] leading-6 text-[#0b1738]",
+                      notice.read ? "font-medium" : "font-bold"
+                    )}
+                  >
+                    {notice.text}
+                  </span>
+                  <span className="block text-[12px] text-[#6b7b96]">{date(notice.createdAt)}</span>
+                </span>
+                {notice.read ? null : (
+                  <span className="mt-2 size-2 shrink-0 rounded-full bg-[#e11d48]" />
+                )}
+              </li>
+            ))}
+          </ul>
+          {card.notices.length > 3 ? (
+            <button
+              type="button"
+              className="mt-1 h-10 w-full rounded-full border border-[#e1e7f0] text-[13px] font-bold text-[#0b1738]"
+              onClick={() => setAllNotices((current) => !current)}
+            >
+              {allNotices ? t("noticesLess") : t("noticesAll", { count: card.notices.length })}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
       <SaveCard card={card} token={token} />
       <CardNotifications token={token} />

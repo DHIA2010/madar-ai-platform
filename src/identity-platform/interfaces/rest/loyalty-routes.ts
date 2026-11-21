@@ -2,6 +2,8 @@ import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { ERRORS } from "../../application/errors/IdentityError"
 import {
   loyaltyAdjustSchema,
+  loyaltyCampaignPreviewSchema,
+  loyaltyCampaignSchema,
   loyaltyCashierSchema,
   loyaltyMemberListSchema,
   loyaltyMemberSchema,
@@ -14,6 +16,7 @@ import {
   publicPushSchema,
   publicPushStopSchema,
 } from "../../loyalty/schemas"
+import type { LoyaltyCampaigns } from "../../loyalty/campaigns"
 import type { LoyaltyPush } from "../../loyalty/push"
 import type { LoyaltyService } from "../../loyalty/service"
 import { type LoyaltyWallet, starIcon } from "../../loyalty/wallet"
@@ -35,6 +38,8 @@ export async function handleLoyaltyRoute(input: {
   wallet: LoyaltyWallet | null
   // Notifications for cards saved to a phone's home screen.
   push: LoyaltyPush | null
+  // Internal campaigns: messages to a chosen group of members, and what came of them.
+  campaigns: LoyaltyCampaigns | null
   send: Send
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
@@ -174,6 +179,48 @@ export async function handleLoyaltyRoute(input: {
     )
   }
 
+  // Internal campaigns (loyalty/campaigns.ts).
+  if (path === "/campaigns" || path.startsWith("/campaigns/")) {
+    const campaigns = input.campaigns
+    if (!campaigns) return send(503, unavailable)
+    if (path === "/campaigns") {
+      if (method === "GET") {
+        requireView()
+        return send(200, { items: await campaigns.list(org) })
+      }
+      if (method === "POST") {
+        requireManage()
+        return send(
+          201,
+          await campaigns.create(org, loyaltyCampaignSchema.parse(await body()), actor.userId)
+        )
+      }
+    }
+    if (method === "POST" && path === "/campaigns/preview") {
+      requireView()
+      const { audience } = loyaltyCampaignPreviewSchema.parse(await body())
+      return send(200, await campaigns.preview(org, audience))
+    }
+    const campaign = path.match(/^\/campaigns\/([0-9a-f-]{36})(\/(send|cancel))?$/)
+    if (campaign) {
+      if (method === "GET" && !campaign[2]) {
+        requireView()
+        return send(200, await campaigns.get(org, campaign[1]))
+      }
+      requireManage()
+      if (method === "POST" && campaign[3] === "send") {
+        return send(200, await campaigns.send(org, campaign[1]))
+      }
+      if (method === "POST" && campaign[3] === "cancel") {
+        return send(200, await campaigns.cancel(org, campaign[1]))
+      }
+      if (method === "DELETE" && !campaign[2]) {
+        await campaigns.remove(org, campaign[1])
+        return send(200, { ok: true })
+      }
+    }
+  }
+
   // A message from the business: to every card kept in a phone's wallet, and to every member
   // who switched notifications on for a card saved to their home screen.
   if (method === "POST" && path === "/wallet/message") {
@@ -292,7 +339,7 @@ export async function handlePublicLoyaltyRoute(input: {
     }
   }
 
-  const card = path.match(/^\/cards\/([^/]+)(\/(redeem|review|pass|push|icon\.png))?$/)
+  const card = path.match(/^\/cards\/([^/]+)(\/(redeem|review|pass|push|seen|icon\.png))?$/)
   if (card) {
     const token = decodeURIComponent(card[1])
     // Notifications on a card saved to the home screen: the key the phone needs, then the
@@ -324,6 +371,10 @@ export async function handlePublicLoyaltyRoute(input: {
         ...(await service.publicRedeem(token, rewardId)),
         walletAvailable: wallet !== null,
       })
+    }
+    if (method === "POST" && card[3] === "seen") {
+      await service.publicNoticesSeen(token)
+      return send(200, { ok: true })
     }
     if (method === "POST" && card[3] === "review") {
       return send(200, {

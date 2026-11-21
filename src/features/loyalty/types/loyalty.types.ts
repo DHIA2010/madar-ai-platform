@@ -148,6 +148,14 @@ export interface PublicLoyaltyCard extends PublicLoyaltyProgram {
   waitingReward: { name: string; code: string } | null
   review: { url: string; points: number; done: boolean } | null
   onlineBonus: number | null
+  // What the member was told (new points, the business's messages), newest first.
+  notices?: Array<{
+    id: string
+    kind: "points" | "message"
+    text: string
+    createdAt: string
+    read: boolean
+  }>
   activity: Array<{ points: number; kind: string; createdAt: string }>
   walletAvailable: boolean
 }
@@ -167,4 +175,73 @@ export interface CashierLoyalty {
   rewards: LoyaltyReward[]
   // A reward the customer already took for points and has not been handed yet.
   waiting: LoyaltyRedemption | null
+}
+
+// ---- Internal campaigns ----
+
+export type CampaignAudienceKind =
+  | "all"
+  | "inactive"
+  | "recent"
+  | "new"
+  | "never"
+  | "points"
+  | "members"
+
+// Who a campaign goes to: one plain rule, worked out when it is sent.
+export interface CampaignAudience {
+  kind: CampaignAudienceKind
+  days?: number | null
+  minPoints?: number | null
+  memberIds?: string[]
+}
+
+export interface CampaignResults {
+  recipients: number
+  // Had the notification delivered to a phone.
+  delivered: number
+  // Opened their card and saw it.
+  seen: number
+  // Bought within the counted days, how many times, and what they paid.
+  buyers: number
+  purchases: number
+  revenue: number
+  // Still inside the counted days.
+  tracking: boolean
+}
+
+export interface LoyaltyCampaign {
+  id: string
+  name: string
+  message: string
+  channel: "card"
+  audience: CampaignAudience
+  status: "draft" | "scheduled" | "sending" | "sent" | "cancelled"
+  scheduledAt: string | null
+  sentAt: string | null
+  trackDays: number
+  createdAt: string
+  results: CampaignResults
+}
+
+export interface CampaignDetails extends LoyaltyCampaign {
+  recipientList: Array<{
+    memberId: string
+    name: string
+    phone: string | null
+    delivered: boolean
+    seen: boolean
+    purchases: number
+    spent: number
+  }>
+}
+
+export interface CampaignInput {
+  name: string
+  message: string
+  audience: CampaignAudience
+  // now: sent at once. later: at scheduledAt. draft: only saved.
+  when: "now" | "later" | "draft"
+  scheduledAt: string | null
+  trackDays: number
 }

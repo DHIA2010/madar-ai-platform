@@ -15,6 +15,7 @@ import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createIdentityApiServer } from "../interfaces/rest/server"
+import { registeredLoyaltyCampaigns } from "../loyalty/campaigns"
 import { isPushAddress, noticeText, registeredLoyaltyPush } from "../loyalty/push"
 import { LoyaltyService } from "../loyalty/service"
 import { buildPass, LoyaltyWallet, passDescription, type WalletConfig } from "../loyalty/wallet"
@@ -528,6 +529,34 @@ describe("the Loyalty app", () => {
     await call("POST", `${card}/push`, undefined, { endpoint, keys })
     expect((await call("DELETE", `${card}/push`, undefined, { endpoint })).status).toBe(200)
     expect((await call("GET", "/v1/loyalty/overview", token)).body.withNotifications).toBe(0)
+
+    // Everything the member was told stays on the card, newest first and new until it is seen:
+    // the points, and each of the business's messages even when no phone took it.
+    const kept = (await call("GET", card)).body.notices
+    expect(kept.map((notice: { text: string }) => notice.text)).toEqual([
+      "عرض",
+      "عرض اليوم",
+      "أُضيفت 50 نقطة إلى بطاقتك. رصيدك الآن 50 نقطة.",
+    ])
+    expect(kept.map((notice: { kind: string }) => notice.kind)).toEqual([
+      "message",
+      "message",
+      "points",
+    ])
+    expect(kept.every((notice: { read: boolean }) => !notice.read)).toBe(true)
+    expect((await call("POST", `${card}/seen`)).status).toBe(200)
+    const seen = (await call("GET", card)).body.notices
+    expect(seen.every((notice: { read: boolean }) => notice.read)).toBe(true)
+
+    // A member who never switched notifications on still finds the message on their card.
+    const quiet = await call("POST", `/v1/public/loyalty/join/${program.joinCode}`, undefined, {
+      name: "سلمى",
+      phone: "0500000022",
+    })
+    const told = await call("POST", "/v1/loyalty/wallet/message", token, { message: "أهلًا" })
+    expect(told.body.sent).toBe(0)
+    const quietCard = (await call("GET", `/v1/public/loyalty/cards/${quiet.body.token}`)).body
+    expect(quietCard.notices).toMatchObject([{ text: "أهلًا", kind: "message", read: false }])
   })
 
   it("lets the cashier find a customer's points and use a reward on a sale", async () => {
@@ -666,5 +695,223 @@ describe("the Loyalty app", () => {
       loyaltyReward: { rewardId: reward.id, late: true },
     })
     expect(late.status).toBe(201)
+  })
+
+  it("sends a campaign to a chosen group, now or at a set time, and follows what came of it", async () => {
+    const { token, actor } = await signIn("loyalty-campaigns@madar.test", "Campaigns")
+    const org = actor.organizationId
+    const program = (await activate(token, { pointsPerSar: 1 })).body
+    const service = new LoyaltyService(database)
+    const join = async (name: string, phone: string) =>
+      (
+        await call("POST", `/v1/public/loyalty/join/${program.joinCode}`, undefined, {
+          name,
+          phone,
+        })
+      ).body.token as string
+    const cards = {
+      // Takes notifications, never bought.
+      amal: await join("أمل", "0500000041"),
+      // Bought long ago.
+      badr: await join("بدر", "0500000042"),
+      // Joined, never bought.
+      dana: await join("دانة", "0500000043"),
+      // Bought today.
+      faris: await join("فارس", "0500000044"),
+    }
+    const members = (await call("GET", "/v1/loyalty/members", token)).body.items as Array<{
+      id: string
+      name: string
+      customerId: string
+    }>
+    const member = (name: string) => members.find((entry) => entry.name === name)!
+    await service.earn(org, {
+      customerId: member("بدر").customerId,
+      amount: 60,
+      source: "pos",
+      ref: "old-sale",
+    })
+    await database.query(`update loyalty_ledger set created_at = $2 where ref = $1`, [
+      "old-sale",
+      new Date(Date.now() - 40 * 24 * 60 * 60_000),
+    ])
+    await service.earn(org, {
+      customerId: member("فارس").customerId,
+      amount: 30,
+      source: "pos",
+      ref: "today-sale",
+    })
+
+    const push = registeredLoyaltyPush()!
+    const sent: string[] = []
+    push.sender = async (target, payload) => {
+      sent.push(`${target.endpoint}|${JSON.parse(payload).body}`)
+      return 201
+    }
+    await call("POST", `/v1/public/loyalty/cards/${cards.amal}/push`, undefined, {
+      endpoint: "https://web.push.apple.com/amal",
+      keys: { p256dh: "p".repeat(87), auth: "a".repeat(22) },
+    })
+
+    // Each rule reaches who it says, and says how many of them take notifications.
+    const reach = async (audience: Record<string, unknown>) =>
+      (await call("POST", "/v1/loyalty/campaigns/preview", token, { audience })).body
+    expect(await reach({ kind: "all" })).toEqual({ members: 4, withNotifications: 1 })
+    expect(await reach({ kind: "inactive", days: 30 })).toEqual({
+      members: 1,
+      withNotifications: 0,
+    })
+    expect(await reach({ kind: "recent", days: 30 })).toEqual({ members: 1, withNotifications: 0 })
+    expect(await reach({ kind: "never" })).toEqual({ members: 2, withNotifications: 1 })
+    expect(await reach({ kind: "new", days: 7 })).toEqual({ members: 4, withNotifications: 1 })
+    expect(await reach({ kind: "points", minPoints: 50 })).toEqual({
+      members: 1,
+      withNotifications: 0,
+    })
+    expect(await reach({ kind: "members", memberIds: [member("أمل").id] })).toEqual({
+      members: 1,
+      withNotifications: 1,
+    })
+    expect((await reach({ kind: "points" })).code).toBe("VALIDATION_ERROR")
+
+    // Sent at once to those who stopped coming: kept on the card of each, counted as it goes.
+    const winBack = (
+      await call("POST", "/v1/loyalty/campaigns", token, {
+        name: "اشتقنا لك",
+        message: "اشتقنا لك! خصم 15٪ على زيارتك القادمة",
+        audience: { kind: "inactive", days: 30 },
+        when: "now",
+        trackDays: 7,
+      })
+    ).body
+    expect(winBack).toMatchObject({
+      status: "sent",
+      results: { recipients: 1, delivered: 0, seen: 0, buyers: 0, revenue: 0, tracking: true },
+    })
+    const badrCard = `/v1/public/loyalty/cards/${cards.badr}`
+    expect((await call("GET", badrCard)).body.notices).toMatchObject([
+      { text: "اشتقنا لك! خصم 15٪ على زيارتك القادمة", kind: "message", read: false },
+    ])
+    expect((await call("GET", `/v1/public/loyalty/cards/${cards.faris}`)).body.notices).toEqual([])
+
+    // He opens his card, then comes back and buys: the campaign shows both.
+    await call("POST", `${badrCard}/seen`)
+    await service.earn(org, {
+      customerId: member("بدر").customerId,
+      amount: 80.5,
+      source: "pos",
+      ref: "return-sale",
+    })
+    // Someone the campaign never went to buys too: not counted.
+    await service.earn(org, {
+      customerId: member("فارس").customerId,
+      amount: 500,
+      source: "pos",
+      ref: "other-sale",
+    })
+    const followed = (await call("GET", `/v1/loyalty/campaigns/${winBack.id}`, token)).body
+    expect(followed.results).toMatchObject({
+      recipients: 1,
+      seen: 1,
+      buyers: 1,
+      purchases: 1,
+      revenue: 80.5,
+    })
+    expect(followed.recipientList).toMatchObject([
+      { name: "بدر", delivered: false, seen: true, purchases: 1, spent: 80.5 },
+    ])
+    // A purchase after the counted days is no longer the campaign's.
+    await database.query(`update loyalty_campaigns set sent_at = $2 where id = $1`, [
+      winBack.id,
+      new Date(Date.now() - 8 * 24 * 60 * 60_000),
+    ])
+    expect(
+      (await call("GET", `/v1/loyalty/campaigns/${winBack.id}`, token)).body.results
+    ).toMatchObject({ buyers: 0, revenue: 0, tracking: false })
+    // What was sent is kept: it cannot be sent again or removed.
+    expect((await call("POST", `/v1/loyalty/campaigns/${winBack.id}/send`, token)).body.code).toBe(
+      "LOYALTY_CAMPAIGN_CLOSED"
+    )
+    expect((await call("DELETE", `/v1/loyalty/campaigns/${winBack.id}`, token)).body.code).toBe(
+      "LOYALTY_CAMPAIGN_CLOSED"
+    )
+
+    // To one customer whose phone takes notifications: delivered, and counted as delivered.
+    const direct = (
+      await call("POST", "/v1/loyalty/campaigns", token, {
+        name: "رسالة إلى أمل",
+        message: "طلبك جاهز",
+        audience: { kind: "members", memberIds: [member("أمل").id] },
+        when: "now",
+      })
+    ).body
+    expect(direct.results).toMatchObject({ recipients: 1, delivered: 1 })
+    expect(sent).toEqual(["https://web.push.apple.com/amal|طلبك جاهز"])
+
+    // Set for a time: it waits, goes out once that time has come, and only once.
+    const past = await call("POST", "/v1/loyalty/campaigns", token, {
+      name: "فات وقتها",
+      message: "عرض",
+      audience: { kind: "all" },
+      when: "later",
+      scheduledAt: new Date(Date.now() - 60_000).toISOString(),
+    })
+    expect(past.body.code).toBe("LOYALTY_CAMPAIGN_TIME")
+    const friday = (
+      await call("POST", "/v1/loyalty/campaigns", token, {
+        name: "عرض الجمعة",
+        message: "عرض الجمعة: قهوة مجانية",
+        audience: { kind: "all" },
+        when: "later",
+        scheduledAt: new Date(Date.now() + 3 * 60 * 60_000).toISOString(),
+      })
+    ).body
+    expect(friday).toMatchObject({ status: "scheduled", results: { recipients: 0 } })
+    const campaigns = registeredLoyaltyCampaigns()!
+    expect(await campaigns.runDue()).toEqual({ sent: 0, failed: 0 })
+    const later = new Date(Date.now() + 4 * 60 * 60_000)
+    expect(await campaigns.runDue(later)).toEqual({ sent: 1, failed: 0 })
+    expect(await campaigns.runDue(later)).toEqual({ sent: 0, failed: 0 })
+    expect((await call("GET", `/v1/loyalty/campaigns/${friday.id}`, token)).body).toMatchObject({
+      status: "sent",
+      results: { recipients: 4, delivered: 1 },
+    })
+
+    // A draft waits until it is sent by hand; a scheduled one can be called off and removed.
+    const draft = (
+      await call("POST", "/v1/loyalty/campaigns", token, {
+        name: "مسودة",
+        message: "قريبًا",
+        audience: { kind: "new", days: 7 },
+        when: "draft",
+      })
+    ).body
+    expect(draft.status).toBe("draft")
+    expect(
+      (await call("POST", `/v1/loyalty/campaigns/${draft.id}/send`, token)).body
+    ).toMatchObject({ status: "sent", results: { recipients: 4 } })
+    const calledOff = (
+      await call("POST", "/v1/loyalty/campaigns", token, {
+        name: "ستُلغى",
+        message: "عرض",
+        audience: { kind: "all" },
+        when: "later",
+        scheduledAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      })
+    ).body
+    expect(
+      (await call("POST", `/v1/loyalty/campaigns/${calledOff.id}/cancel`, token)).body.status
+    ).toBe("cancelled")
+    expect(await campaigns.runDue(later)).toEqual({ sent: 0, failed: 0 })
+    expect((await call("DELETE", `/v1/loyalty/campaigns/${calledOff.id}`, token)).status).toBe(200)
+
+    // The list, newest first.
+    const listed = (await call("GET", "/v1/loyalty/campaigns", token)).body.items
+    expect(listed.map((entry: { name: string }) => entry.name)).toEqual([
+      "مسودة",
+      "عرض الجمعة",
+      "رسالة إلى أمل",
+      "اشتقنا لك",
+    ])
   })
 })

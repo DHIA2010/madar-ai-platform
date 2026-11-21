@@ -96,6 +96,7 @@
       "loyaltyMembers": "Members",
       "loyaltyRewards": "Rewards",
       "loyaltyCard": "Card and wallet",
+      "loyaltyCampaigns": "Campaigns",
       "loyaltySettings": "Points settings",
       "booking": "Booking",
       "bookingOverview": "Overview",
@@ -11251,6 +11252,8 @@
       "LOYALTY_REWARD_UNAVAILABLE": "That reward is not available now. Check the programme is on and the reward is offered.",
       "LOYALTY_REWARD_WAITING": "The customer has a reward not yet handed over. Hand it over or cancel it first.",
       "LOYALTY_REWARD_CLOSED": "That reward was already closed.",
+      "LOYALTY_CAMPAIGN_TIME": "Choose a time that is still ahead.",
+      "LOYALTY_CAMPAIGN_CLOSED": "This campaign was already sent and cannot be changed.",
       "LOYALTY_WALLET_UNAVAILABLE": "Wallet cards are not switched on yet.",
       "VALIDATION_ERROR": "Check what you entered."
     },
@@ -11477,7 +11480,7 @@
       "addPlace": "Add a branch",
       "removePlace": "Remove branch",
       "messageTitle": "A message to card holders",
-      "messageHint": "Arrives as a notification for every customer who turned notifications on for their saved card, or added it to their wallet.",
+      "messageHint": "Kept in the notifications list on every customer's card, and arrives as a notification for those who turned notifications on for their saved card.",
       "messagePlaceholder": "For example: 20% off this weekend",
       "messageSend": "Send",
       "messageSent": "Sent to {count, number} customers"
@@ -11498,6 +11501,197 @@
       "pictureButton": "Save the card picture",
       "pictureHint": "Show the code to the staff when you pay",
       "pictureFailed": "Could not make the picture. Try again."
+    },
+    "campaigns": {
+      "title": "Campaigns",
+      "subtitle": "Send a message to a group of your customers, and see who came back and bought.",
+      "add": "New campaign",
+      "emptyTitle": "No campaigns yet",
+      "emptyHint": "Create your first campaign: choose the customers, write the message, and send it now or at a time you set.",
+      "details": "Details",
+      "sendNow": "Send now",
+      "cancelSchedule": "Cancel the schedule",
+      "remove": "Delete",
+      "totals": {
+        "sent": "Campaigns sent",
+        "reached": "Customers reached",
+        "buyers": "Came back and bought",
+        "revenue": "Sales after campaigns"
+      },
+      "channels": {
+        "title": "Channels",
+        "card": "Loyalty card",
+        "whatsapp": "WhatsApp",
+        "sms": "SMS",
+        "soon": "Soon"
+      },
+      "status": {
+        "draft": "Draft",
+        "scheduled": "Scheduled",
+        "sending": "Sending",
+        "sent": "Sent",
+        "cancelled": "Cancelled"
+      },
+      "note": {
+        "draft": "Saved as a draft. It is sent when you press “Send now”.",
+        "scheduled": "Sent by itself at its time, to whoever fits the rule then.",
+        "sending": "Being sent now.",
+        "cancelled": "Cancelled before it was sent."
+      },
+      "when": {
+        "sentAt": "Sent {date}",
+        "scheduledFor": "Set for {date}",
+        "createdAt": "Created {date}"
+      },
+      "results": {
+        "recipients": "Recipients",
+        "delivered": "Notified",
+        "seen": "Saw it",
+        "buyers": "Bought",
+        "revenue": "Sales from those who came back",
+        "purchases": "Number of purchases",
+        "tracking": "Purchases count for {days, number} days after sending",
+        "closed": "The counting period has ended ({days, number} days)"
+      },
+      "recipients": {
+        "member": "Customer",
+        "delivered": "Notification",
+        "seen": "Saw it",
+        "bought": "Bought after",
+        "cardOnly": "On the card only"
+      },
+      "audience": {
+        "all": {
+          "title": "All members",
+          "hint": "Everyone with a loyalty card"
+        },
+        "inactive": {
+          "title": "Stopped coming",
+          "hint": "Bought before, then stopped",
+          "daysBefore": "Has not bought for"
+        },
+        "recent": {
+          "title": "Active customers",
+          "hint": "Bought recently",
+          "daysBefore": "Bought in the last"
+        },
+        "new": {
+          "title": "New members",
+          "hint": "Joined recently",
+          "daysBefore": "Joined in the last"
+        },
+        "never": {
+          "title": "Not bought yet",
+          "hint": "Joined and never bought"
+        },
+        "points": {
+          "title": "Points holders",
+          "hint": "Balance at or above a level you set",
+          "before": "Balance of at least"
+        },
+        "members": {
+          "title": "Chosen customers",
+          "hint": "One customer or a few"
+        },
+        "label": {
+          "all": "All members",
+          "inactive": "Have not bought for {days, number} days",
+          "recent": "Bought in the last {days, number} days",
+          "new": "Joined in the last {days, number} days",
+          "never": "Not bought yet",
+          "points": "Balance of {count, number} points or more",
+          "members": "{count, plural, one {# customer} other {# customers}}"
+        }
+      },
+      "reach": {
+        "counting": "Counting the customers...",
+        "none": "No customers fit this rule right now.",
+        "chooseMembers": "Choose at least one customer.",
+        "line": "Reaches {members, plural, one {# customer} other {# customers}}; {phones, number} of them get the notification on their phone. The rest find it on their card."
+      },
+      "form": {
+        "title": "New campaign",
+        "hint": "Choose the customers and write the message. It arrives as a phone notification and is kept on each customer's card.",
+        "ideas": "Ready ideas",
+        "name": "Campaign name",
+        "namePlaceholder": "Only you see it, e.g. Weekend offer",
+        "message": "Message",
+        "messagePlaceholder": "e.g. We miss you! 15% off your next visit",
+        "audience": "Who gets it?",
+        "days": "days",
+        "pointsUnit": "points",
+        "memberSearch": "Search by name or phone",
+        "noMembers": "No matching members.",
+        "picked": "Chosen: {count, number}",
+        "when": "When is it sent?",
+        "whenOptions": {
+          "now": "Now",
+          "later": "At a set time",
+          "draft": "Save as draft"
+        },
+        "track": "How long to follow the results",
+        "trackDays": "{days, number} days",
+        "trackHint": "Any purchase by the customer in this period after sending counts for the campaign.",
+        "cancel": "Cancel",
+        "submit": {
+          "now": "Send now",
+          "later": "Schedule the campaign",
+          "draft": "Save the draft"
+        }
+      },
+      "ideas": {
+        "winBack": {
+          "name": "We miss you",
+          "message": "We miss you! 15% off your next visit this week"
+        },
+        "welcome": {
+          "name": "Welcome new members",
+          "message": "Welcome! Collect points on every visit and trade them for rewards"
+        },
+        "weekend": {
+          "name": "Weekend offer",
+          "message": "Weekend offer: 20% off Thursday and Friday"
+        },
+        "points": {
+          "name": "Your points are waiting",
+          "message": "Your points are enough for a reward. Visit us and use them today"
+        }
+      },
+      "preview": {
+        "placeholder": "Your message shows here",
+        "lockScreen": "The customer's phone",
+        "now": "now",
+        "cardList": "Notifications on their card",
+        "hint": "This is how the customer sees it: a notification on their phone, and kept on their card.",
+        "business": "Your business"
+      },
+      "saved": {
+        "now": "Campaign sent",
+        "later": "Campaign scheduled",
+        "draft": "Draft saved"
+      },
+      "done": {
+        "send": "Campaign sent",
+        "cancel": "Schedule cancelled",
+        "remove": "Campaign deleted"
+      },
+      "confirm": {
+        "send": {
+          "title": "Send “{name}” now?",
+          "hint": "It goes at once to everyone who fits its rule now, and cannot be taken back.",
+          "yes": "Send"
+        },
+        "cancel": {
+          "title": "Cancel the schedule of “{name}”?",
+          "hint": "It will not be sent at its time. It stays in the list as cancelled.",
+          "yes": "Cancel the schedule"
+        },
+        "remove": {
+          "title": "Delete “{name}”?",
+          "hint": "It is removed for good. Sent campaigns are never deleted.",
+          "yes": "Delete"
+        }
+      }
     },
     "cashier": {
       "title": "Loyalty",
@@ -11572,7 +11766,11 @@
       "online": "Book online",
       "bonus": "+{count, number} points",
       "activity": "Latest activity",
-      "keepLink": "Save this page on your phone to open your card any time."
+      "keepLink": "Save this page on your phone to open your card any time.",
+      "noticesTitle": "Notifications",
+      "noticesNew": "{count, number} new",
+      "noticesAll": "Show all notifications ({count, number})",
+      "noticesLess": "Show less"
     }
   },
   "booking": {

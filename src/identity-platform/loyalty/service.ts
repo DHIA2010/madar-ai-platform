@@ -653,13 +653,15 @@ export class LoyaltyService {
       note?: string | null
       by?: string | null
       earned?: boolean
+      // What the customer paid on the sale or visit behind the points.
+      amount?: number | null
     }
   ): Promise<void> {
     if (line.points === 0) return
     await this.db.query(
       `INSERT INTO loyalty_ledger
-         (id, organization_id, member_id, points, kind, source, ref, note, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         (id, organization_id, member_id, points, kind, source, ref, note, created_by, amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         randomUUID(),
         organizationId,
@@ -670,6 +672,7 @@ export class LoyaltyService {
         line.ref ?? null,
         clean(line.note),
         line.by ?? null,
+        line.amount ?? null,
       ]
     )
     await this.db.query(
@@ -777,6 +780,7 @@ export class LoyaltyService {
       source: input.source,
       ref: input.ref,
       earned: true,
+      amount: Math.round(Math.max(0, input.amount) * 100) / 100,
     })
     await this.post(organizationId, memberId, {
       points: bonus,
@@ -1364,11 +1368,15 @@ export class LoyaltyService {
     const member = await this.memberByToken(token)
     const organizationId = String(member.organization_id)
     const memberId = String(member.id)
-    const [program, rewards, ledger, waiting] = await Promise.all([
+    const [program, rewards, ledger, notices, waiting] = await Promise.all([
       this.getProgram(organizationId),
       this.listRewards(organizationId),
       this.db.query<Row>(
         `SELECT * FROM loyalty_ledger WHERE member_id = $1 ORDER BY created_at DESC LIMIT 15`,
+        [memberId]
+      ),
+      this.db.query<Row>(
+        `SELECT * FROM loyalty_notices WHERE member_id = $1 ORDER BY created_at DESC LIMIT 30`,
         [memberId]
       ),
       this.db.query<Row>(
@@ -1400,12 +1408,29 @@ export class LoyaltyService {
         program.onlineBonusEnabled && program.onlineBonusPoints > 0
           ? program.onlineBonusPoints
           : null,
+      // What the member was told, newest first: found here after the notification is gone.
+      notices: notices.rows.map((row) => ({
+        id: String(row.id),
+        kind: row.kind === "message" ? "message" : "points",
+        text: String(row.body),
+        createdAt: iso(row.created_at),
+        read: row.read_at !== null && row.read_at !== undefined,
+      })),
       activity: ledger.rows.map(mapLedger).map(({ points: moved, kind, createdAt }) => ({
         points: moved,
         kind,
         createdAt,
       })),
     }
+  }
+
+  // The member opened their card and saw what was waiting there.
+  async publicNoticesSeen(token: string): Promise<void> {
+    const member = await this.memberByToken(token)
+    await this.db.query(
+      `UPDATE loyalty_notices SET read_at = $2 WHERE member_id = $1 AND read_at IS NULL`,
+      [member.id, this.now()]
+    )
   }
 
   async publicRedeem(token: string, rewardId: string) {

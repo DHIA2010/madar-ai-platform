@@ -10,6 +10,7 @@ import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
 import { registeredAdsReportService } from "./whatsapp/ads-report"
 import { registeredBookingMessenger } from "./booking/automation"
+import { registeredLoyaltyCampaigns } from "./loyalty/campaigns"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
@@ -149,6 +150,22 @@ if (bookingMessenger && bookingReminderMinutes > 0) {
       .catch((error: unknown) => console.error("booking.reminder_pass_failed", error))
   setTimeout(runBookingReminders, 160_000).unref()
   setInterval(runBookingReminders, bookingReminderMinutes * 60_000).unref()
+}
+
+// The Loyalty app's scheduled campaigns: each one is sent once its time has come. A campaign
+// is claimed before it is sent, so two tasks never send it twice.
+const loyaltyCampaignMinutes = Number(process.env.LOYALTY_CAMPAIGN_INTERVAL_MINUTES ?? "2")
+const loyaltyCampaigns = registeredLoyaltyCampaigns()
+if (loyaltyCampaigns && loyaltyCampaignMinutes > 0) {
+  const runLoyaltyCampaigns = () =>
+    loyaltyCampaigns
+      .runDue()
+      .then((result) => {
+        if (result.sent + result.failed > 0) console.log("loyalty.campaign_pass", result)
+      })
+      .catch((error: unknown) => console.error("loyalty.campaign_pass_failed", error))
+  setTimeout(runLoyaltyCampaigns, 170_000).unref()
+  setInterval(runLoyaltyCampaigns, loyaltyCampaignMinutes * 60_000).unref()
 }
 
 const adsReports = registeredAdsReportService()

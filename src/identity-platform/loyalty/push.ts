@@ -159,11 +159,62 @@ export class LoyaltyPush {
 
   // How many members of a business have notifications on.
   async memberCount(organizationId: string): Promise<number> {
-    const result = await this.db.query<Row>(
+    return (await this.subscribedMemberIds(organizationId)).size
+  }
+
+  // Kept on the member's card, whether or not their phone takes notifications: the card's own
+  // list is where a message is found again after the notification is gone.
+  private async keep(
+    members: Row[],
+    kind: "points" | "message",
+    text: string,
+    campaignId: string | null = null
+  ): Promise<void> {
+    for (let start = 0; start < members.length; start += 200) {
+      const batch = members.slice(start, start + 200)
+      const values: unknown[] = []
+      const rows = batch.map((member, index) => {
+        values.push(randomUUID(), member.organization_id, member.id, kind, text, campaignId)
+        const at = index * 6
+        return [1, 2, 3, 4, 5, 6].map((step) => "$" + String(at + step)).join(", ")
+      })
+      await this.db.query(
+        `INSERT INTO loyalty_notices (id, organization_id, member_id, kind, body, campaign_id)
+         VALUES ` + rows.map((row) => "(" + row + ")").join(", "),
+        values
+      )
+    }
+  }
+
+  // The members of a business whose phones take notifications.
+  async subscribedMemberIds(organizationId: string): Promise<Set<string>> {
+    const wanted = await this.db.query<Row>(
       `SELECT DISTINCT member_id FROM loyalty_push_subscriptions WHERE organization_id = $1`,
       [organizationId]
     )
-    return result.rows.length
+    return new Set(wanted.rows.map((row) => String(row.member_id)))
+  }
+
+  // A message from the business to a chosen group of its members: kept on each one's card, and
+  // sent as a notification to those with notifications on. Answers with the members whose
+  // phones took it. campaignId ties the kept lines to the campaign that sent them.
+  async sendMessage(
+    organizationId: string,
+    members: Row[],
+    message: string,
+    campaignId: string | null = null
+  ): Promise<Set<string>> {
+    const reached = new Set<string>()
+    if (members.length === 0) return reached
+    await this.keep(members, "message", message, campaignId)
+    const wanted = await this.subscribedMemberIds(organizationId)
+    const program = await this.service.getProgram(organizationId)
+    for (const member of members) {
+      const memberId = String(member.id)
+      if (!wanted.has(memberId)) continue
+      if ((await this.sendTo(member, program.businessName, message)) > 0) reached.add(memberId)
+    }
+    return reached
   }
 
   // Sends one text to every phone of a member. Returns how many phones took it.
@@ -212,28 +263,19 @@ export class LoyaltyPush {
     const member = found.rows[0]
     if (!member) return 0
     const program = await this.service.getProgram(String(member.organization_id))
-    return this.sendTo(member, program.businessName, noticeText(notice))
+    const text = noticeText(notice)
+    await this.keep([member], "points", text)
+    return this.sendTo(member, program.businessName, text)
   }
 
-  // A message from the business to every member with notifications on. Returns how many
-  // members it reached.
+  // A message from the business: kept on every member's card, and sent as a notification to
+  // those with notifications on. Returns how many members the notification reached.
   async broadcast(organizationId: string, message: string): Promise<number> {
     const members = await this.db.query<Row>(
       `SELECT * FROM loyalty_members WHERE organization_id = $1`,
       [organizationId]
     )
-    const wanted = await this.db.query<Row>(
-      `SELECT DISTINCT member_id FROM loyalty_push_subscriptions WHERE organization_id = $1`,
-      [organizationId]
-    )
-    const ids = new Set(wanted.rows.map((row) => String(row.member_id)))
-    const program = await this.service.getProgram(organizationId)
-    let reached = 0
-    for (const member of members.rows) {
-      if (!ids.has(String(member.id))) continue
-      if ((await this.sendTo(member, program.businessName, message)) > 0) reached += 1
-    }
-    return reached
+    return (await this.sendMessage(organizationId, members.rows, message)).size
   }
 }
 

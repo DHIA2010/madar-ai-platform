@@ -117,3 +117,32 @@ export const publicPushSchema = z.object({
 })
 
 export const publicPushStopSchema = z.object({ endpoint: z.string().url().max(2000) })
+
+// A campaign: its message, who it goes to, and when. when: now sends it at once, later sets it
+// for scheduledAt, draft only saves it.
+const campaignAudience = z
+  .object({
+    kind: z.enum(["all", "inactive", "recent", "new", "never", "points", "members"]),
+    days: z.number().int().min(1).max(730).nullable().optional(),
+    minPoints: z.number().int().min(1).max(10_000_000).nullable().optional(),
+    memberIds: z.array(z.string().uuid()).max(500).optional(),
+  })
+  .superRefine((audience, context) => {
+    if (audience.kind === "members" && !audience.memberIds?.length) {
+      context.addIssue({ code: "custom", path: ["memberIds"], message: "Choose who it goes to." })
+    }
+    if (audience.kind === "points" && !audience.minPoints) {
+      context.addIssue({ code: "custom", path: ["minPoints"], message: "Points are required." })
+    }
+  })
+
+export const loyaltyCampaignPreviewSchema = z.object({ audience: campaignAudience })
+
+export const loyaltyCampaignSchema = z.object({
+  name: text(80).min(1),
+  message: text(120).min(1),
+  audience: campaignAudience,
+  when: z.enum(["now", "later", "draft"]),
+  scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
+  trackDays: z.number().int().min(1).max(60).default(7),
+})

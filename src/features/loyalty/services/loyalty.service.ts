@@ -1,5 +1,9 @@
 import type {
+  CampaignAudience,
+  CampaignDetails,
+  CampaignInput,
   CashierLoyalty,
+  LoyaltyCampaign,
   LoyaltyMember,
   LoyaltyMemberDetails,
   LoyaltyOverview,
@@ -98,6 +102,22 @@ export const loyaltyService = {
     return client.get<CashierLoyalty>(`${path("cashier")}${asked}`)
   },
 
+  // Internal campaigns: a message to a chosen group of members, and what came of it.
+  campaigns: async () => (await client.get<{ items: LoyaltyCampaign[] }>(path("campaigns"))).items,
+  campaign: (id: string) => client.get<CampaignDetails>(path("campaigns", id)),
+  campaignReach: (audience: CampaignAudience) =>
+    client.post<{ audience: CampaignAudience }, { members: number; withNotifications: number }>(
+      path("campaigns", "preview"),
+      { audience }
+    ),
+  createCampaign: (input: CampaignInput) =>
+    client.post<CampaignInput, LoyaltyCampaign>(path("campaigns"), input),
+  sendCampaign: (id: string) =>
+    client.post<Record<string, never>, LoyaltyCampaign>(path("campaigns", id, "send"), {}),
+  cancelCampaign: (id: string) =>
+    client.post<Record<string, never>, LoyaltyCampaign>(path("campaigns", id, "cancel"), {}),
+  removeCampaign: (id: string) => client.delete<{ ok: true }>(path("campaigns", id)),
+
   // A message to every card kept in a phone's wallet or with notifications on.
   sendWalletMessage: (message: string) =>
     client.post<{ message: string }, { sent: number }>(path("wallet", "message"), { message }),
@@ -127,6 +147,9 @@ export const publicLoyaltyService = {
       method: "POST",
       body: JSON.stringify({ rewardId }),
     }),
+  // The card was opened: what was waiting in its list counts as read.
+  noticesSeen: (token: string) =>
+    publicRequest<{ ok: true }>(publicPath("cards", token, "seen"), { method: "POST" }),
   reviewDone: (token: string) =>
     publicRequest<PublicLoyaltyCard>(publicPath("cards", token, "review"), { method: "POST" }),
   // The picture a phone shows for the card page once it is saved to the home screen.
