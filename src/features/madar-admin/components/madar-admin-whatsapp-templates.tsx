@@ -21,6 +21,8 @@ const TEMPLATE_LABEL: Record<string, string> = {
   madar_account_alert: "تنبيه تسجيل حساب جديد (لفريق مدار)",
   madar_booking_confirmation: "تأكيد الحجز (لعملاء التاجر)",
   madar_booking_reminder: "تذكير بالموعد (لعملاء التاجر)",
+  madar_login_code: "رمز الدخول لصفحة الحجز",
+  madar_gift_card: "بطاقة هدية (للمُهدى إليه)",
 }
 
 const STATUS: Record<string, { label: string; tint: string }> = {

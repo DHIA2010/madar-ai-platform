@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useTranslations } from "next-intl"
-import { CalendarCheck, Copy, ExternalLink, Gift, Loader2, MessageCircle } from "lucide-react"
+import { CalendarCheck, Copy, ExternalLink, Gift, Loader2, MessageCircle, Send } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -16,7 +16,7 @@ import { ROUTES } from "@/constants/routes"
 import { AppDialog, AppInput } from "@/components/app"
 
 import { useBookingFormat } from "../hooks/use-booking"
-import { publicBookingService } from "../services/booking.service"
+import { bookingService, publicBookingService } from "../services/booking.service"
 import { whatsAppNumber } from "../services/whatsapp-number"
 import type { BookingGiftCard, PublicGift } from "../types/booking.types"
 import { FIELD, FIELD_LABEL, MUTED, PRIMARY_BUTTON, SECONDARY_BUTTON } from "./styles"
@@ -294,6 +294,21 @@ function GiftSendBox({ gift, onClose }: { gift: BookingGiftCard; onClose: () => 
       "noopener"
     )
   const copy = () => void navigator.clipboard.writeText(link).then(() => toast.success(t("copied")))
+  // From Madar's number, by itself, to the number saved on the card.
+  const [sendingAuto, setSendingAuto] = useState(false)
+  const sendAuto = () => {
+    setSendingAuto(true)
+    bookingService
+      .sendGiftWhatsApp(gift.id)
+      .then((outcome) => {
+        if (outcome === "sent") {
+          toast.success(t("autoSent"))
+          onClose()
+        } else toast.error(t(outcome === "no_phone" ? "autoNoPhone" : "autoFailed"))
+      })
+      .catch(() => toast.error(t("autoFailed")))
+      .finally(() => setSendingAuto(false))
+  }
 
   return (
     <AppDialog
@@ -314,6 +329,21 @@ function GiftSendBox({ gift, onClose }: { gift: BookingGiftCard; onClose: () => 
             <ExternalLink className="size-4" />
             {t("open")}
           </a>
+          {gift.recipientPhone ? (
+            <button
+              type="button"
+              className={SECONDARY_BUTTON}
+              disabled={sendingAuto}
+              onClick={sendAuto}
+            >
+              {sendingAuto ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              {t("auto")}
+            </button>
+          ) : null}
           <button
             type="button"
             className={cn(PRIMARY_BUTTON, "bg-[#16a34a] hover:bg-[#15803d]")}

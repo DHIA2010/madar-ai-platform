@@ -39,6 +39,7 @@ import {
   bookingCalendarFeed,
   bookingCalendarToken,
   type BookingInvoicer,
+  registeredBookingMessenger,
 } from "../../booking/automation"
 import type { BookingAccounts } from "../../booking/accounts"
 import type { BookingPayments } from "../../booking/payments"
@@ -345,11 +346,29 @@ export async function handleBookingRoute(input: {
     }
     if (method === "POST") {
       requireManage()
-      return send(
-        201,
-        await service.extras.createGiftCard(org, bookingGiftCardSchema.parse(await body()))
-      )
+      const { sendWhatsApp, ...details } = bookingGiftCardSchema.parse(await body())
+      const card = await service.extras.createGiftCard(org, details)
+      // How the automatic message went, when one was asked for: the business sends the card by
+      // hand whenever this is anything but "sent".
+      const whatsapp = sendWhatsApp
+        ? ((await registeredBookingMessenger()
+            ?.gift(org, card)
+            .catch(() => "failed" as const)) ?? "failed")
+        : null
+      return send(201, { ...card, whatsapp })
     }
+  }
+  const giftSend = path.match(/^\/gift-cards\/([^/]+)\/whatsapp$/)
+  if (giftSend && method === "POST") {
+    requireManage()
+    const card = (await service.extras.listGiftCards(org)).find((entry) => entry.id === giftSend[1])
+    if (!card) return send(404, { code: "BOOKING_NOT_FOUND", message: "Gift card not found." })
+    return send(200, {
+      whatsapp:
+        (await registeredBookingMessenger()
+          ?.gift(org, card)
+          .catch(() => "failed" as const)) ?? "failed",
+    })
   }
   const giftMatch = path.match(/^\/gift-cards\/([^/]+)\/active$/)
   if (giftMatch && method === "POST") {

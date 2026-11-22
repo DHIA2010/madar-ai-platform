@@ -195,7 +195,12 @@ export function BookingDetails({
             </span>
           ) : null}
         </Line>
-        <Line label={t("provider")}>{booking.providerName}</Line>
+        <Line label={t("provider")}>
+          {booking.providerName}
+          {booking.providerUnchosen ? (
+            <span className={cn("block text-[12px]", MUTED)}>{t("providerUnchosen")}</span>
+          ) : null}
+        </Line>
         <Line label={t("when")}>
           {format.day(dayOf(booking.startsAt))}
           <span className="block text-[12.5px] font-normal text-[#52607a]">

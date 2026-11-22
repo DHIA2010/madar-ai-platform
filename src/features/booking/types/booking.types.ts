@@ -137,6 +137,7 @@ export interface BookingProvider {
   title: string | null
   phone: string | null
   color: string | null
+  imageUrl: string | null
   isActive: boolean
   commissionRate: number
   serviceIds: string[]
@@ -144,7 +145,15 @@ export interface BookingProvider {
 }
 export type BookingProviderInput = Pick<
   BookingProvider,
-  "name" | "title" | "phone" | "color" | "isActive" | "commissionRate" | "serviceIds" | "hours"
+  | "name"
+  | "title"
+  | "phone"
+  | "color"
+  | "imageUrl"
+  | "isActive"
+  | "commissionRate"
+  | "serviceIds"
+  | "hours"
 >
 
 export interface BookingTimeOff {
@@ -164,6 +173,8 @@ export interface Booking {
   serviceColor: string | null
   providerId: string
   providerName: string
+  // The customer left the choice of provider open online; the system picked this one.
+  providerUnchosen: boolean
   customerId: string | null
   customerName: string
   customerPhone: string | null
@@ -273,6 +284,9 @@ export interface BookingGiftCard {
   createdAt: string
   shareToken: string
 }
+
+// How sending a gift card on WhatsApp by itself went.
+export type GiftWhatsApp = "sent" | "no_phone" | "limit" | "failed"
 
 // A gift card as the person it is for sees it, on the page behind their link.
 export interface PublicGift {
@@ -409,7 +423,7 @@ export interface PublicBookingPage {
     addons: Array<Required<ServiceAddon> & { id: string }>
     providerIds: string[]
   }>
-  providers: Array<{ id: string; name: string; title: string | null }>
+  providers: Array<{ id: string; name: string; title: string | null; imageUrl: string | null }>
   reviews: {
     average: number | null
     count: number
@@ -427,7 +441,8 @@ export interface PublicBooking {
   number: number
   status: BookingStatus
   serviceName: string
-  providerName: string
+  // Empty when the customer chose "anyone available": decided on arrival.
+  providerName: string | null
   customerName: string
   partySize: number
   startsAt: string
@@ -475,7 +490,7 @@ export interface PublicAccountBooking {
   number: number
   status: BookingStatus
   serviceName: string
-  providerName: string
+  providerName: string | null
   startsAt: string
   endsAt: string
   price: number

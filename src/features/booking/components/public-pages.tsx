@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useLocale, useTranslations } from "next-intl"
-import { CalendarCheck, Check, Loader2, MapPin, Phone, Star } from "lucide-react"
+import { CalendarCheck, Check, Loader2, MapPin, Phone, Star, Users } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -116,7 +116,7 @@ function Summary({ booking }: { booking: PublicBooking }) {
     ],
     [t("summary.day"), format.day(dayOf(booking.startsAt))],
     [t("summary.time"), `${format.time(booking.startsAt)} – ${format.time(booking.endsAt)}`],
-    [t("summary.provider"), booking.providerName],
+    [t("summary.provider"), booking.providerName ?? t("providerOnArrival")],
     ...(booking.reduction > 0
       ? ([[t("summary.reduction"), `−${format.money(booking.reduction)}`]] as Array<
           [string, string]
@@ -522,23 +522,58 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
       {able.length > 1 ? (
         <div className={cn(CARD, "p-4")}>
           <p className="text-[14px] font-extrabold">{t("chooseProvider")}</p>
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {[{ id: ANYONE, name: t("anyProvider") }, ...able].map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                aria-pressed={providerId === entry.id}
-                onClick={() => setProviderId(entry.id)}
-                className={cn(
-                  "h-11 rounded-full border px-4 text-[13.5px] font-semibold transition",
-                  providerId === entry.id
-                    ? "border-[var(--bk-accent)] bg-[var(--bk-accent)] text-white"
-                    : "border-[#e1e7f0] bg-white text-[#3b4a66]"
-                )}
-              >
-                {entry.name}
-              </button>
-            ))}
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {[
+              { id: ANYONE, name: t("anyProvider"), title: t("anyProviderHint"), imageUrl: null },
+              ...able,
+            ].map((entry) => {
+              const picked = providerId === entry.id
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  aria-pressed={picked}
+                  onClick={() => setProviderId(entry.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-[16px] border p-3 text-start transition",
+                    picked
+                      ? "border-[var(--bk-accent)] bg-[color-mix(in_srgb,var(--bk-accent)_8%,white)]"
+                      : "border-[#e1e7f0] bg-white hover:border-[#c4cddb]"
+                  )}
+                >
+                  <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--bk-accent)_14%,white)] text-[16px] font-extrabold text-[var(--bk-accent)]">
+                    {entry.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- the provider's own uploaded picture
+                      <img src={entry.imageUrl} alt="" className="size-full object-cover" />
+                    ) : entry.id === ANYONE ? (
+                      <Users className="size-5" />
+                    ) : (
+                      entry.name.trim().charAt(0)
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-extrabold text-[#0b1738]">
+                      {entry.name}
+                    </span>
+                    {entry.title ? (
+                      <span className="block truncate text-[12.5px] text-[#6b7b96]">
+                        {entry.title}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                      picked
+                        ? "border-[var(--bk-accent)] bg-[var(--bk-accent)] text-white"
+                        : "border-[#c4cddb]"
+                    )}
+                  >
+                    {picked ? <Check className="size-3.5" /> : null}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
       ) : null}

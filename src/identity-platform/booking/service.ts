@@ -185,6 +185,7 @@ export interface BookingProviderView {
   title: string | null
   phone: string | null
   color: string | null
+  imageUrl: string | null
   isActive: boolean
   // The share of a completed booking this provider earns, in percent.
   commissionRate: number
@@ -209,6 +210,9 @@ export interface BookingView {
   serviceColor: string | null
   providerId: string
   providerName: string
+  // The customer chose "anyone available" online: the provider was picked for them, and they
+  // are told it is decided on arrival, so the staff may hand the visit to whoever is free.
+  providerUnchosen: boolean
   customerId: string | null
   customerName: string
   customerPhone: string | null
@@ -912,6 +916,7 @@ export class BookingService {
       title: text(row.title),
       phone: text(row.phone),
       color: text(row.color),
+      imageUrl: text(row.image_url),
       isActive: row.is_active === true,
       commissionRate: Number(row.commission_rate ?? 0),
       serviceIds: links.rows
@@ -982,8 +987,8 @@ export class BookingService {
     await this.db.query(
       `INSERT INTO booking_providers
          (id, organization_id, workspace_id, user_id, name, title, phone, color, is_active,
-          commission_rate)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          commission_rate, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         id,
         organizationId,
@@ -995,6 +1000,7 @@ export class BookingService {
         input.color ?? null,
         input.isActive,
         input.commissionRate,
+        input.imageUrl ?? null,
       ]
     )
     await this.writeProviderLinks(organizationId, id, input)
@@ -1011,7 +1017,7 @@ export class BookingService {
     await this.db.query(
       `UPDATE booking_providers SET
          user_id = $3, name = $4, title = $5, phone = $6, color = $7, is_active = $8,
-         commission_rate = $9, updated_at = now()
+         commission_rate = $9, image_url = $10, updated_at = now()
        WHERE organization_id = $1 AND id = $2`,
       [
         organizationId,
@@ -1023,6 +1029,7 @@ export class BookingService {
         input.color ?? null,
         input.isActive,
         input.commissionRate,
+        input.imageUrl ?? null,
       ]
     )
     await this.writeProviderLinks(organizationId, id, input)
@@ -1397,6 +1404,7 @@ export class BookingService {
       serviceColor: text(service.get(String(row.service_id))?.color),
       providerId: String(row.provider_id),
       providerName: provider.get(String(row.provider_id)) ?? "",
+      providerUnchosen: row.provider_unchosen === true,
       customerId: text(row.customer_id),
       customerName: String(row.customer_name),
       customerPhone: text(row.customer_phone),
@@ -2282,6 +2290,7 @@ export class BookingService {
         id: provider.id,
         name: provider.name,
         title: provider.title,
+        imageUrl: provider.imageUrl,
       })),
       reviews: settings.reviewsEnabled ? await this.extras.publicReviews(organizationId) : null,
     }
@@ -2349,7 +2358,8 @@ export class BookingService {
       number: booking.number,
       status: booking.status,
       serviceName: booking.serviceName,
-      providerName: booking.providerName,
+      // Nobody named when the customer left the choice open: it is decided on arrival.
+      providerName: booking.providerUnchosen ? null : booking.providerName,
       customerName: booking.customerName,
       partySize: booking.partySize,
       startsAt: booking.startsAt,
@@ -2433,6 +2443,12 @@ export class BookingService {
       },
       { source: "online", userId: null, workspaceId: null }
     )
+    if (!input.providerId) {
+      await this.db.query(
+        `UPDATE bookings SET provider_unchosen = true WHERE organization_id = $1 AND id = $2`,
+        [organizationId, booking.id]
+      )
+    }
     const view = await this.publicView(await this.bookingRow(organizationId, booking.id))
     return { token: booking.publicToken, booking: view }
   }

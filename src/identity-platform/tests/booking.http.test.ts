@@ -479,6 +479,24 @@ describe("the Booking app", () => {
       .items
     expect(listed).toHaveLength(1)
     expect(listed[0]).toMatchObject({ source: "online", customerNotes: "أول زيارة", number: 1 })
+    // The customer named the provider, so they are shown the name. One who leaves it open gets
+    // a real provider on the calendar (the staff are told the choice was open) and is told
+    // nobody by name: it is decided on arrival.
+    expect(listed[0].providerUnchosen).toBe(false)
+    expect(made.body.booking.providerName).toBe(listed[0].providerName)
+    const leftOpen = await call("POST", "/v1/public/booking/pages/my-spa/bookings", undefined, {
+      ...request,
+      providerId: null,
+      startsAt: at("12:00"),
+      customerPhone: "0544000333",
+    })
+    expect(leftOpen.status).toBe(201)
+    expect(leftOpen.body.booking.providerName).toBeNull()
+    const openListed = (
+      await call("GET", `/v1/booking/bookings?from=${DAY}&to=${DAY}`, token)
+    ).body.items.find((entry: { providerUnchosen: boolean }) => entry.providerUnchosen)
+    expect(openListed.providerName).not.toBe("")
+    await call("POST", `/v1/public/booking/manage/${leftOpen.body.token}/cancel`)
 
     // The customer's own link shows it and cancels it; the time opens again.
     const mine = await call("GET", `/v1/public/booking/manage/${made.body.token}`)
@@ -606,6 +624,19 @@ describe("the Booking app: what a booking costs and what follows it", () => {
       })
     ).body
     expect(sent.shareToken).toMatch(/^[0-9a-f]{32}$/)
+    // Not asked to go out by itself: nothing is said about WhatsApp. Asked for where WhatsApp
+    // cannot send (as here): the card is still made, and the answer says it did not go.
+    expect(sent.whatsapp).toBeNull()
+    const auto = await call("POST", "/v1/booking/gift-cards", token, {
+      amount: 75,
+      recipientPhone: "0500000322",
+      sendWhatsApp: true,
+    })
+    expect(auto.status).toBe(201)
+    expect(auto.body).toMatchObject({ initialAmount: 75, whatsapp: "failed" })
+    expect(
+      (await call("POST", `/v1/booking/gift-cards/${auto.body.id}/whatsapp`, token, {})).body
+    ).toEqual({ whatsapp: "failed" })
     expect((await call("GET", `/v1/public/booking/gifts/${sent.code}`)).status).toBe(404)
     expect((await call("GET", `/v1/public/booking/gifts/${sent.shareToken}`)).body).toMatchObject({
       recipientName: "نورة",

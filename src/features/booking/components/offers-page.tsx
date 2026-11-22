@@ -48,6 +48,8 @@ const BLANK_GIFT = {
   recipientPhone: "",
   purchaserName: "",
   message: "",
+  // Send it to the person on WhatsApp by itself, once made.
+  auto: true,
 }
 // A number field that may be left empty ("no limit").
 const optional = (value: string) => (value.trim() === "" ? null : Math.max(0, Number(value) || 0))
@@ -547,6 +549,7 @@ export function BookingOffersPage() {
               disabled={busy || !gift || gift.amount <= 0}
               onClick={() => {
                 if (!gift) return
+                const auto = gift.auto && gift.recipientPhone.trim() !== ""
                 void act(
                   () =>
                     bookingService
@@ -556,9 +559,18 @@ export function BookingOffersPage() {
                         recipientPhone: gift.recipientPhone.trim() || null,
                         purchaserName: gift.purchaserName.trim() || null,
                         message: gift.message.trim() || null,
+                        sendWhatsApp: auto,
                       })
-                      // Made: straight on to sending it.
-                      .then(setSendingGift),
+                      .then((made) => {
+                        // Gone out by itself: nothing more to do. Otherwise straight on to
+                        // sending it by hand.
+                        if (made.whatsapp === "sent") {
+                          toast.success(t("gifts.autoSent"))
+                          return
+                        }
+                        if (auto) toast.info(t("gifts.autoFailed"))
+                        setSendingGift(made)
+                      }),
                   t("gifts.created"),
                   () => setGift(null)
                 )
@@ -638,6 +650,21 @@ export function BookingOffersPage() {
                 onChange={(event) => setGift({ ...gift, message: event.target.value })}
               />
             </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-[12px] bg-[#f0fdf4] px-3.5 py-3 sm:col-span-2">
+              <AppSwitch
+                checked={gift.auto}
+                aria-label={t("gifts.auto")}
+                onCheckedChange={(on) => setGift({ ...gift, auto: on })}
+              />
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-bold text-[#166534]">
+                  {t("gifts.auto")}
+                </span>
+                <span className="block text-[12.5px] leading-5 text-[#3f6212]">
+                  {t("gifts.autoHint")}
+                </span>
+              </span>
+            </label>
           </div>
         ) : null}
       </AppDialog>

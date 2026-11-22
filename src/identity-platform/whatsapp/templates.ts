@@ -264,6 +264,25 @@ export const LOGIN_CODE_TEMPLATE: TemplateDefinition = {
   code: { expiresMinutes: 10, buttonText: "نسخ الرمز" },
 }
 
+// A gift card sent to the person it is for (booking/automation.ts), when the business asks for
+// it to go out by itself. Plain facts and the card's own link, like the booking messages: who
+// it is from, where, how much, and where to open it.
+export const GIFT_CARD_TEMPLATE: TemplateDefinition = {
+  name: "madar_gift_card",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "مرحباً {{1}}،",
+    "وصلتك بطاقة هدية لدى {{2}}.",
+    "من: {{3}}",
+    "قيمة البطاقة: {{4}}",
+    "بطاقتك ورمز استخدامها: {{5}}",
+    "نسعد بخدمتك.",
+  ].join("\n"),
+  bodyExamples: ["نورة", "صالون نور", "سارة", "300 ر.س", "https://app.madar.my/bk/gift/abc123"],
+  footer: "أُرسلت عبر مدار",
+}
+
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
@@ -273,6 +292,7 @@ export const MADAR_TEMPLATES: TemplateDefinition[] = [
   BOOKING_CONFIRMATION_TEMPLATE,
   BOOKING_REMINDER_TEMPLATE,
   LOGIN_CODE_TEMPLATE,
+  GIFT_CARD_TEMPLATE,
 ]
 
 // The sample document Meta reviews with a document-header template.

@@ -14,8 +14,10 @@ import {
   BOOKING_CONFIRMATION_TEMPLATE,
   BOOKING_REMINDER_TEMPLATE,
   LOGIN_CODE_TEMPLATE,
+  GIFT_CARD_TEMPLATE,
   type WhatsAppTemplatesService,
 } from "../whatsapp/templates"
+import type { GiftCardView } from "./extras"
 import { type BookingService, type BookingView, dayOf } from "./service"
 
 // What the Booking app does on its own, once a business switches it on in its booking settings:
@@ -152,6 +154,65 @@ export class BookingMessenger {
       )
       .catch((logError: unknown) => console.error("booking.message_log_failed", logError))
     if (!wamid) console.error("booking.message_failed", { kind, bookingId: booking.id, error })
+    return wamid ? "sent" : "failed"
+  }
+
+  // A gift card, sent to the person it is for from Madar's number (or the business's own): who
+  // it is from, the amount and the card's link. Asked for by the business, card by card.
+  async gift(
+    organizationId: string,
+    card: GiftCardView
+  ): Promise<"sent" | "no_phone" | "limit" | "failed"> {
+    const to = card.recipientPhone ? toWhatsAppNumber(card.recipientPhone) : null
+    if (!to) return "no_phone"
+    const template = GIFT_CARD_TEMPLATE
+    let wamid: string | null = null
+    let error: string | null = null
+    try {
+      const { context, own } = await this.sender(organizationId, template)
+      if (!own) {
+        const sent = await this.db.query<Row>(
+          `SELECT id FROM whatsapp_messages
+            WHERE organization_id = $1 AND created_at > $2 AND kind <> 'booking_sign_in'`,
+          [organizationId, new Date(Date.now() - 24 * HOUR).toISOString()]
+        )
+        if (sent.rows.length >= DAILY_MESSAGES_PER_ORGANIZATION) return "limit"
+      }
+      const business = await this.businessName(organizationId)
+      wamid = await sendTemplateMessage(context.auth, context.phoneNumberId, {
+        to,
+        templateName: template.name,
+        language: template.language,
+        bodyParameters: [
+          param(card.recipientName ?? "عميلنا العزيز", 40),
+          param(business, 50),
+          param(card.purchaserName ?? business, 40),
+          `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(card.initialAmount)} ر.س`,
+          `${appUrl()}/bk/gift/${card.shareToken}`,
+        ],
+      })
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message.slice(0, 500) : String(caught)
+    }
+    await this.db
+      .query(
+        `INSERT INTO whatsapp_messages
+           (id, organization_id, kind, reference_id, to_phone, template_name, wa_message_id,
+            status, error)
+         VALUES ($1, $2, 'booking_gift', $3, $4, $5, $6, $7, $8)`,
+        [
+          randomUUID(),
+          organizationId,
+          card.id,
+          to,
+          template.name,
+          wamid,
+          wamid ? "sent" : "failed",
+          error,
+        ]
+      )
+      .catch((logError: unknown) => console.error("booking.message_log_failed", logError))
+    if (!wamid) console.error("booking.gift_message_failed", { giftCardId: card.id, error })
     return wamid ? "sent" : "failed"
   }
 

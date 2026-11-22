@@ -32,11 +32,13 @@ function stubMeta() {
     const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
     if (url.pathname.endsWith("/message_templates")) {
       return json({
-        data: ["madar_booking_confirmation", "madar_booking_reminder"].map((name) => ({
-          name,
-          language: "ar",
-          status: "APPROVED",
-        })),
+        data: ["madar_booking_confirmation", "madar_booking_reminder", "madar_gift_card"].map(
+          (name) => ({
+            name,
+            language: "ar",
+            status: "APPROVED",
+          })
+        ),
       })
     }
     if (url.pathname.endsWith("/messages")) {
@@ -185,6 +187,42 @@ describe("booking WhatsApp messages", () => {
     await bookings.updateSettings(ORG, { whatsappConfirmation: true })
     await messenger.confirm(ORG, (await make(52, 0, null)).id)
     expect(sent).toHaveLength(1)
+  })
+
+  it("sends a gift card to the person it is for, with who it is from and its link", async () => {
+    const sent = stubMeta()
+    const card = await bookings.extras.createGiftCard(ORG, {
+      amount: 300,
+      purchaserName: "سارة",
+      recipientName: "نورة",
+      recipientPhone: "0501234567",
+    })
+    expect(await messenger.gift(ORG, card)).toBe("sent")
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ to: "966501234567", template: "madar_gift_card" })
+    expect(sent[0].values).toEqual([
+      "نورة",
+      "صالون نور",
+      "سارة",
+      "300 ر.س",
+      `https://app.madar.test/bk/gift/${card.shareToken}`,
+    ])
+    const logged = await database.query<{ kind: string; status: string }>(
+      `select kind, status from whatsapp_messages where reference_id = $1`,
+      [card.id]
+    )
+    expect(logged.rows).toEqual([{ kind: "booking_gift", status: "sent" }])
+
+    // No giver named: the business itself is who it is from. No usable number: nothing goes.
+    const plain = await bookings.extras.createGiftCard(ORG, {
+      amount: 50,
+      recipientPhone: "0501234567",
+    })
+    expect(await messenger.gift(ORG, plain)).toBe("sent")
+    expect(sent[1].values.slice(0, 3)).toEqual(["عميلنا العزيز", "صالون نور", "صالون نور"])
+    const nowhere = await bookings.extras.createGiftCard(ORG, { amount: 50 })
+    expect(await messenger.gift(ORG, nowhere)).toBe("no_phone")
+    expect(sent).toHaveLength(2)
   })
 
   it("reminds once, only inside the window, and not a booking made inside it", async () => {

@@ -22,6 +22,7 @@ import type {
   BookingSettings,
   BookingStatus,
   BookingTimeOff,
+  GiftWhatsApp,
   LinkableProduct,
   PublicAccount,
   PublicBooking,
@@ -171,7 +172,19 @@ export const bookingService = {
     recipientPhone?: string | null
     message?: string | null
     expiresOn?: string | null
-  }) => client.post<typeof input, BookingGiftCard>(path("gift-cards"), input),
+    sendWhatsApp?: boolean
+  }) =>
+    client.post<typeof input, BookingGiftCard & { whatsapp: GiftWhatsApp | null }>(
+      path("gift-cards"),
+      input
+    ),
+  sendGiftWhatsApp: async (id: string) =>
+    (
+      await client.post<Record<string, never>, { whatsapp: GiftWhatsApp }>(
+        path("gift-cards", id, "whatsapp"),
+        {}
+      )
+    ).whatsapp,
   setGiftCardActive: (id: string, isActive: boolean) =>
     client.post<{ isActive: boolean }, BookingGiftCard>(path("gift-cards", id, "active"), {
       isActive,

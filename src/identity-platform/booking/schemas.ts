@@ -177,6 +177,8 @@ export const bookingProviderSchema = z.object({
   title: text(120).nullish(),
   phone: text(30).nullish(),
   color,
+  // Their picture on the booking page.
+  imageUrl: imageUrl.nullish(),
   userId: uuid.nullish(),
   isActive: z.boolean().default(true),
   commissionRate: z.number().min(0).max(100).default(0),
@@ -328,6 +330,8 @@ export const bookingGiftCardSchema = z.object({
   recipientPhone: text(30).nullish(),
   message: text(300).nullish(),
   expiresOn: day.nullish(),
+  // Send the card to the person it is for on WhatsApp, by itself, as soon as it is made.
+  sendWhatsApp: z.boolean().default(false),
 })
 
 export const bookingActiveSchema = z.object({ isActive: z.boolean() })

@@ -33,6 +33,7 @@ import {
   type TimeOffKind,
   type WorkingPeriod,
 } from "../types/booking.types"
+import { ImageField } from "./image-field"
 import { BookingPage, Choice, DateField, Empty, LoadFailed, Loading, TimeField } from "./shell"
 import {
   FIELD,
@@ -56,6 +57,7 @@ const BLANK: BookingProviderInput = {
   name: "",
   title: null,
   phone: null,
+  imageUrl: null,
   color: PALETTE[1],
   isActive: true,
   commissionRate: 0,
@@ -249,10 +251,15 @@ export function BookingProvidersPage() {
                 <article key={provider.id} className={cn(PANEL, "flex flex-col gap-3 p-4")}>
                   <div className="flex items-start gap-3">
                     <span
-                      className="flex size-11 shrink-0 items-center justify-center rounded-full text-[15px] font-extrabold text-white"
+                      className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full text-[15px] font-extrabold text-white"
                       style={{ backgroundColor: provider.color ?? "#6d28d9" }}
                     >
-                      {provider.name.trim().charAt(0)}
+                      {provider.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- the provider's own uploaded picture
+                        <img src={provider.imageUrl} alt="" className="size-full object-cover" />
+                      ) : (
+                        provider.name.trim().charAt(0)
+                      )}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[15px] font-extrabold text-[#0b1738]">
@@ -275,6 +282,7 @@ export function BookingProvidersPage() {
                                 name: provider.name,
                                 title: provider.title,
                                 phone: provider.phone,
+                                imageUrl: provider.imageUrl,
                                 color: provider.color,
                                 isActive: provider.isActive,
                                 commissionRate: provider.commissionRate,
@@ -414,6 +422,16 @@ export function BookingProvidersPage() {
       >
         {draft ? (
           <div className="space-y-5">
+            <div>
+              <span className={FIELD_LABEL}>{t("form.photo")}</span>
+              <p className={cn("mb-2 text-[12px] leading-5", MUTED)}>{t("form.photoHint")}</p>
+              <ImageField
+                shape="square"
+                label={t("form.photo")}
+                value={draft.imageUrl}
+                onChange={(next) => setDraft((current) => ({ ...current, imageUrl: next }))}
+              />
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={FIELD_LABEL} htmlFor="provider-name">

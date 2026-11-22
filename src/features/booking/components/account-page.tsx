@@ -56,6 +56,7 @@ const NOTICE_LOOK: Record<AccountNoticeKind, { icon: typeof Bell; tone: string }
 function BookingRow({ booking }: { booking: PublicAccountBooking }) {
   const t = useTranslations("booking.account")
   const status = useTranslations("booking.status")
+  const page = useTranslations("booking.public")
   const format = useBookingFormat()
   return (
     <Link
@@ -76,7 +77,7 @@ function BookingRow({ booking }: { booking: PublicAccountBooking }) {
         </span>
         <span className="mt-0.5 block text-[13px] text-[#52607a]">
           {format.day(dayOf(booking.startsAt))} · {format.time(booking.startsAt)} ·{" "}
-          {booking.providerName}
+          {booking.providerName ?? page("providerOnArrival")}
         </span>
         {booking.needsPayment ? (
           <span className="mt-1 inline-block rounded-full bg-[#fff7e6] px-2.5 py-0.5 text-[12px] font-bold text-[#b54708]">
