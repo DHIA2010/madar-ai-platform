@@ -1,6 +1,7 @@
 export { PublicBookingAccountView } from "./components/account-page"
 export { BookingListPage } from "./components/bookings-page"
 export { BookingCalendarPage } from "./components/calendar-page"
+export { PublicGiftView } from "./components/gift-card"
 export { BookingOffersPage } from "./components/offers-page"
 export { BookingOverviewPage } from "./components/overview-page"
 export { BookingPlansPage } from "./components/plans-page"

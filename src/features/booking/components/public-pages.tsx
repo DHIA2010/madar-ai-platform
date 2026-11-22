@@ -183,6 +183,14 @@ export function PublicBookingPageView({ slug }: { slug: string }) {
   // Who this browser is on the page, once it has booked here before.
   const [account, setAccount] = useState<{ name: string; unread: number } | null>(null)
 
+  // Coming from a gift card's page: its code is already written in.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("gift")
+    if (!code) return
+    setGiftCode(code.slice(0, 40))
+    setCodesOpen(true)
+  }, [])
+
   useEffect(() => {
     const token = accountMemory.read(slug)
     if (!token) return

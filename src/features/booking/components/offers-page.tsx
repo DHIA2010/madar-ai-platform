@@ -5,7 +5,7 @@
 
 import { useState } from "react"
 import { useTranslations } from "next-intl"
-import { Copy, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
+import { Copy, Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -14,7 +14,8 @@ import { AppDialog, AppInput, AppSwitch } from "@/components/app"
 
 import { useBookingAccess, useBookingError, useBookingFormat, useLoad } from "../hooks/use-booking"
 import { bookingService } from "../services/booking.service"
-import type { BookingCoupon, BookingCouponInput } from "../types/booking.types"
+import type { BookingCoupon, BookingCouponInput, BookingGiftCard } from "../types/booking.types"
+import { GiftSendDialog } from "./gift-card"
 import { BookingPage, Choice, DateField, Empty, LoadFailed, Loading } from "./shell"
 import {
   FIELD,
@@ -68,6 +69,8 @@ export function BookingOffersPage() {
     null
   )
   const [gift, setGift] = useState<typeof BLANK_GIFT | null>(null)
+  // The card being sent to the person it is for.
+  const [sendingGift, setSendingGift] = useState<BookingGiftCard | null>(null)
   const [busy, setBusy] = useState(false)
 
   const setDraft = <K extends keyof BookingCouponInput>(key: K, value: BookingCouponInput[K]) =>
@@ -303,7 +306,16 @@ export function BookingOffersPage() {
                       )}
                     </td>
                     <td className={TD}>
-                      <span className="flex justify-end">
+                      <span className="flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          className={ICON_BUTTON}
+                          aria-label={t("gifts.send")}
+                          title={t("gifts.send")}
+                          onClick={() => setSendingGift(entry)}
+                        >
+                          <Send className="size-4" />
+                        </button>
                         <button
                           type="button"
                           className={ICON_BUTTON}
@@ -537,13 +549,16 @@ export function BookingOffersPage() {
                 if (!gift) return
                 void act(
                   () =>
-                    bookingService.createGiftCard({
-                      amount: gift.amount,
-                      recipientName: gift.recipientName.trim() || null,
-                      recipientPhone: gift.recipientPhone.trim() || null,
-                      purchaserName: gift.purchaserName.trim() || null,
-                      message: gift.message.trim() || null,
-                    }),
+                    bookingService
+                      .createGiftCard({
+                        amount: gift.amount,
+                        recipientName: gift.recipientName.trim() || null,
+                        recipientPhone: gift.recipientPhone.trim() || null,
+                        purchaserName: gift.purchaserName.trim() || null,
+                        message: gift.message.trim() || null,
+                      })
+                      // Made: straight on to sending it.
+                      .then(setSendingGift),
                   t("gifts.created"),
                   () => setGift(null)
                 )
@@ -626,6 +641,7 @@ export function BookingOffersPage() {
           </div>
         ) : null}
       </AppDialog>
+      <GiftSendDialog gift={sendingGift} onClose={() => setSendingGift(null)} />
     </BookingPage>
   )
 }

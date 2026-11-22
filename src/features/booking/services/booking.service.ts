@@ -26,6 +26,7 @@ import type {
   PublicAccount,
   PublicBooking,
   PublicBookingPage,
+  PublicGift,
   Slot,
   TimeOffKind,
   WaitlistEntry,
@@ -285,6 +286,7 @@ async function publicRequest<T>(target: string, init?: RequestInit): Promise<T> 
 
 export const publicBookingService = {
   page: (slug: string) => publicRequest<PublicBookingPage>(publicPath("pages", slug)),
+  gift: (token: string) => publicRequest<PublicGift>(publicPath("gifts", token)),
   availability: async (
     slug: string,
     params: {

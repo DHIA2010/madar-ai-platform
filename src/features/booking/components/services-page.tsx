@@ -66,11 +66,26 @@ export function BookingServicesPage() {
   )
   const [removing, setRemoving] = useState<BookingServiceItem | null>(null)
   const [busy, setBusy] = useState(false)
-  // Services the business already sells from the cashier (products of the "service" kind) that
-  // are not booking services yet: brought in with one press instead of being typed again.
+  // What the business already sells from the cashier and is not a booking service yet: brought in
+  // with one press instead of being typed again. Products saved as "service" are suggested; the
+  // rest can be picked by hand, since many businesses keep their services as ordinary products.
   const products = useLoad(() => bookingService.linkableProducts().catch(() => []), [])
   const [importing, setImporting] = useState(false)
   const [chosen, setChosen] = useState<string[]>([])
+  const [search, setSearch] = useState("")
+  const offered = products.data ?? []
+  const suggested = offered.filter((product) => product.isService)
+  const wanted = search.trim().toLowerCase()
+  const shown = wanted
+    ? offered.filter((product) =>
+        [product.name, product.category ?? ""].some((value) => value.toLowerCase().includes(wanted))
+      )
+    : offered
+  const openImport = () => {
+    setChosen(suggested.map((product) => product.id))
+    setSearch("")
+    setImporting(true)
+  }
 
   const bringIn = async () => {
     setBusy(true)
@@ -213,24 +228,23 @@ export function BookingServicesPage() {
               <Plus className="size-4" />
               {t("add")}
             </button>
+            {offered.length > 0 ? (
+              <button type="button" className={SECONDARY_BUTTON} onClick={openImport}>
+                <PackagePlus className="size-4" />
+                {t("import.button")}
+              </button>
+            ) : null}
           </div>
         ) : null
       }
     >
-      {canManage && products.data && products.data.length > 0 ? (
+      {canManage && suggested.length > 0 ? (
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-[14px] border border-[#ddd6fe] bg-[#f5f3ff] px-4 py-3">
           <PackagePlus className="size-5 shrink-0 text-[#6d28d9]" />
           <p className="min-w-0 flex-1 text-[13.5px] leading-6 text-[#4c1d95]">
-            {t("import.notice", { count: products.data.length })}
+            {t("import.notice", { count: suggested.length })}
           </p>
-          <button
-            type="button"
-            className={PRIMARY_BUTTON}
-            onClick={() => {
-              setChosen((products.data ?? []).map((product) => product.id))
-              setImporting(true)
-            }}
-          >
+          <button type="button" className={PRIMARY_BUTTON} onClick={openImport}>
             {t("import.open")}
           </button>
         </div>
@@ -763,8 +777,19 @@ export function BookingServicesPage() {
           </div>
         }
       >
-        <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-          {(products.data ?? []).map((product) => {
+        <AppInput
+          className="mb-3"
+          maxLength={80}
+          placeholder={t("import.search")}
+          aria-label={t("import.search")}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        {shown.length === 0 ? (
+          <p className={cn("py-6 text-center text-[13px]", MUTED)}>{t("import.none")}</p>
+        ) : null}
+        <ul className="flex max-h-[46vh] min-h-0 flex-col gap-2 overflow-y-auto">
+          {shown.map((product) => {
             const picked = chosen.includes(product.id)
             return (
               <li key={product.id}>
@@ -789,7 +814,10 @@ export function BookingServicesPage() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-bold">{product.name}</span>
                     <span className={cn("block text-[12px]", MUTED)}>
-                      {[product.category, format.duration(product.durationMinutes)]
+                      {[
+                        product.category,
+                        product.isService ? format.duration(product.durationMinutes) : null,
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>

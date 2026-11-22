@@ -100,6 +100,8 @@ export interface GiftCardView {
   expiresOn: string | null
   isActive: boolean
   createdAt: string
+  // Opens the card's own page (the link sent to the person it is for).
+  shareToken: string
 }
 
 export interface PlanView {
@@ -210,6 +212,7 @@ const mapGift = (row: Row): GiftCardView => ({
   expiresOn: dayText(row.expires_on),
   isActive: row.is_active === true,
   createdAt: new Date(String(row.created_at)).toISOString(),
+  shareToken: text(row.share_token) ?? "",
 })
 
 const mapPlan = (row: Row): PlanView => ({
@@ -326,7 +329,31 @@ export class BookingExtras {
       `SELECT * FROM booking_gift_cards WHERE organization_id = $1 ORDER BY created_at DESC`,
       [organizationId]
     )
+    // Cards made before links existed get theirs the first time they are listed.
+    for (const row of result.rows) {
+      if (text(row.share_token)) continue
+      row.share_token = randomUUID().replaceAll("-", "")
+      await this.db.query(
+        `UPDATE booking_gift_cards SET share_token = $3
+          WHERE organization_id = $1 AND id = $2 AND share_token IS NULL`,
+        [organizationId, row.id, row.share_token]
+      )
+    }
     return result.rows.map(mapGift)
+  }
+
+  // The card behind a link, with the organization it belongs to.
+  async giftCardByShareToken(
+    token: string
+  ): Promise<{ organizationId: string; card: GiftCardView } | null> {
+    const wanted = token.trim()
+    if (!wanted) return null
+    const result = await this.db.query<Row>(
+      `SELECT * FROM booking_gift_cards WHERE share_token = $1`,
+      [wanted]
+    )
+    const row = result.rows[0]
+    return row ? { organizationId: String(row.organization_id), card: mapGift(row) } : null
   }
 
   async createGiftCard(
@@ -347,8 +374,8 @@ export class BookingExtras {
     await this.db.query(
       `INSERT INTO booking_gift_cards
          (id, organization_id, code, initial_amount, balance, purchaser_name, recipient_name,
-          recipient_phone, message, expires_on)
-       VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9)`,
+          recipient_phone, message, expires_on, share_token)
+       VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9, $10)`,
       [
         id,
         organizationId,
@@ -359,6 +386,7 @@ export class BookingExtras {
         clean(input.recipientPhone),
         clean(input.message),
         input.expiresOn ?? null,
+        randomUUID().replaceAll("-", ""),
       ]
     )
     const created = (await this.listGiftCards(organizationId)).find((entry) => entry.id === id)

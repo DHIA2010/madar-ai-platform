@@ -83,6 +83,8 @@ export const ROUTES = {
   publicBookingManageRoot: "/bk",
   publicBookingPage: (slug: string) => `/b/${slug}`,
   publicBookingManage: (token: string) => `/bk/${token}`,
+  // A gift card's own page, from the link sent to the person it is for.
+  publicBookingGift: (token: string) => `/bk/gift/${token}`,
   // The customer's own account on a business's page.
   publicBookingAccount: (slug: string) => `/b/${slug}/me`,
   accounting: "/accounting",

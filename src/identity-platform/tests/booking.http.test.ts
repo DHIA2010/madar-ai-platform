@@ -595,6 +595,32 @@ describe("the Booking app: what a booking costs and what follows it", () => {
     ).toBe("BOOKING_CODE_TAKEN")
     const gift = (await call("POST", "/v1/booking/gift-cards", token, { amount: 50 })).body
     expect(gift.code).toMatch(/^GIFT-/)
+    // The card has its own page behind a private link, which is not the code.
+    const sent = (
+      await call("POST", "/v1/booking/gift-cards", token, {
+        amount: 200,
+        purchaserName: "سارة",
+        recipientName: "نورة",
+        recipientPhone: "0500000321",
+        message: "كل عام وأنتِ بخير",
+      })
+    ).body
+    expect(sent.shareToken).toMatch(/^[0-9a-f]{32}$/)
+    expect((await call("GET", `/v1/public/booking/gifts/${sent.code}`)).status).toBe(404)
+    expect((await call("GET", `/v1/public/booking/gifts/${sent.shareToken}`)).body).toMatchObject({
+      recipientName: "نورة",
+      purchaserName: "سارة",
+      message: "كل عام وأنتِ بخير",
+      amount: 200,
+      balance: 200,
+      code: sent.code,
+      state: "ready",
+    })
+    await call("POST", `/v1/booking/gift-cards/${sent.id}/active`, token, { isActive: false })
+    expect((await call("GET", `/v1/public/booking/gifts/${sent.shareToken}`)).body).toMatchObject({
+      state: "stopped",
+      code: null,
+    })
 
     const customer = { customerName: "منى", customerPhone: "0500000777" }
     const quote = await call("POST", "/v1/booking/quote", token, {
@@ -624,7 +650,10 @@ describe("the Booking app: what a booking costs and what follows it", () => {
       })
     ).body
     expect(first).toMatchObject({ price: 10, discount: 20, giftAmount: 50, couponCode: "WELCOME" })
-    const cards = async () => (await call("GET", "/v1/booking/gift-cards", token)).body.items[0]
+    const cards = async () =>
+      (await call("GET", "/v1/booking/gift-cards", token)).body.items.find(
+        (entry: { id: string }) => entry.id === gift.id
+      )
     expect((await cards()).balance).toBe(0)
     // Once per customer.
     expect(
@@ -1360,8 +1389,8 @@ describe("the Booking app: rooms, repeating bookings and the waiting list", () =
       sellPrice: 230,
       priceIncludesTax: true,
     })
-    // Not a service: never offered.
-    await product({
+    // Not a service: offered after the services, and not marked as one.
+    const shampoo = await product({
       productType: "simple",
       name: "شامبو",
       sku: "SH-1",
@@ -1371,9 +1400,14 @@ describe("the Booking app: rooms, repeating bookings and the waiting list", () =
     })
 
     const offered = (await call("GET", "/v1/booking/services/products", token)).body.items
-    expect(offered.map((entry: { name: string }) => entry.name).sort()).toEqual(
-      ["تنظيف بشرة", "مساج"].sort()
-    )
+    expect(
+      offered
+        .filter((entry: { isService: boolean }) => entry.isService)
+        .map((entry: { name: string }) => entry.name)
+        .sort()
+    ).toEqual(["تنظيف بشرة", "مساج"].sort())
+    expect(offered).toHaveLength(3)
+    expect(offered[2]).toMatchObject({ id: shampoo.id, isService: false, price: 40 })
     expect(offered.find((entry: { id: string }) => entry.id === massage.id)).toMatchObject({
       price: 115,
       durationMinutes: 45,
@@ -1392,7 +1426,11 @@ describe("the Booking app: rooms, repeating bookings and the waiting list", () =
     const service = made.find((entry: { productId: string }) => entry.productId === massage.id)
     expect(service).toMatchObject({ name: "مساج", price: 115, durationMinutes: 45 })
     // Once made, they are not offered again, and asking twice makes nothing new.
-    expect((await call("GET", "/v1/booking/services/products", token)).body.items).toEqual([])
+    expect(
+      (await call("GET", "/v1/booking/services/products", token)).body.items.map(
+        (entry: { id: string }) => entry.id
+      )
+    ).toEqual([shampoo.id])
     expect(
       (await call("POST", "/v1/booking/services/import", token, { productIds: [massage.id] })).body
         .items

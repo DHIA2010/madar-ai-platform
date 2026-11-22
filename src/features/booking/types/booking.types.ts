@@ -58,10 +58,11 @@ export interface ServiceAddon {
   extraMinutes: number
 }
 
-// A "service" product from the products list that can become a booking service.
+// A product from the products list that can become a booking service.
 export interface LinkableProduct {
   id: string
   name: string
+  isService: boolean
   category: string | null
   price: number
   durationMinutes: number
@@ -270,6 +271,25 @@ export interface BookingGiftCard {
   expiresOn: string | null
   isActive: boolean
   createdAt: string
+  shareToken: string
+}
+
+// A gift card as the person it is for sees it, on the page behind their link.
+export interface PublicGift {
+  business: {
+    name: string
+    logoUrl: string | null
+    accentColor: string | null
+    slug: string | null
+  }
+  recipientName: string | null
+  purchaserName: string | null
+  message: string | null
+  amount: number
+  balance: number
+  code: string | null
+  expiresOn: string | null
+  state: "ready" | "used" | "expired" | "stopped"
 }
 
 export interface BookingPlan {

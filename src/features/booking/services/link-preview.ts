@@ -76,3 +76,23 @@ export async function bookingLinkPreview(
     page?.logoUrl || page?.coverUrl
   )
 }
+
+// A gift card's link: the business's name and logo, and who the gift is from -- never the amount
+// or the code, which only the opened page shows.
+export async function giftLinkPreview(
+  token: string,
+  fallback: { title: string; description: string }
+): Promise<Metadata> {
+  const gift = await ask<{
+    business: { name: string; logoUrl: string | null }
+    purchaserName: string | null
+  }>("gifts", token)
+  if (!gift) return plainPreview(fallback.title, fallback.description)
+  return plainPreview(
+    gift.business.name ? `${fallback.title} | ${gift.business.name}` : fallback.title,
+    gift.purchaserName
+      ? `هدية لك من ${gift.purchaserName}. افتحها لترى التفاصيل.`
+      : fallback.description,
+    gift.business.logoUrl
+  )
+}

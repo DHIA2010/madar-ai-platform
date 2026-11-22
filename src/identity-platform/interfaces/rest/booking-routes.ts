@@ -546,6 +546,11 @@ export async function handlePublicBookingRoute(input: {
     return true
   }
 
+  const gift = path.match(/^\/gifts\/([^/]+)$/)
+  if (gift && method === "GET") {
+    return send(200, await service.publicGift(decodeURIComponent(gift[1])))
+  }
+
   const manage = path.match(/^\/manage\/([^/]+)(\/(cancel|review|payment))?$/)
   if (manage) {
     const token = decodeURIComponent(manage[1])

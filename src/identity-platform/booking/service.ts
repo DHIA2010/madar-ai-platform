@@ -137,6 +137,8 @@ export interface BookingServiceView {
 export interface LinkableProductView {
   id: string
   name: string
+  // Saved in the products list as a "service": these come first and are the ones suggested.
+  isService: boolean
   category: string | null
   // What the customer pays, tax included, like every booking price.
   price: number
@@ -739,14 +741,14 @@ export class BookingService {
     return new Set(linked.rows.map((row) => String(row.product_id)))
   }
 
-  // The business's "service" products that are not booking services yet.
+  // The business's products that are not booking services yet, "service" ones first. Every kind
+  // is offered, because many businesses keep their services as ordinary products.
   async linkableProducts(organizationId: string): Promise<LinkableProductView[]> {
     const [products, linked] = await Promise.all([
       this.db.query<Row>(
         `SELECT * FROM products
-          WHERE organization_id = $1 AND deleted_at IS NULL AND product_type = 'service'
-            AND status <> 'archived'
-          ORDER BY name LIMIT 500`,
+          WHERE organization_id = $1 AND deleted_at IS NULL AND status <> 'archived'
+          ORDER BY (product_type = 'service') DESC, name LIMIT 500`,
         [organizationId]
       ),
       this.linkedProductIds(organizationId),
@@ -756,6 +758,7 @@ export class BookingService {
       open.map(async (row) => ({
         id: String(row.id),
         name: String(row.name),
+        isService: row.product_type === "service",
         category: clean(text(row.category)),
         price: await this.productPrice(organizationId, row),
         durationMinutes: productDuration(row.attributes),
@@ -2449,6 +2452,42 @@ export class BookingService {
 
   async publicBooking(token: string) {
     return this.publicView(await this.rowByToken(token))
+  }
+
+  // The gift card's own page, opened from the link sent to the person it is for: who it is from,
+  // the message, what is left on it and the code to use when booking.
+  async publicGift(token: string) {
+    const found = await this.extras.giftCardByShareToken(token)
+    if (!found) throw BOOKING_ERRORS.notFound("Gift card")
+    const organization = await this.appIsOn(found.organizationId)
+    const settings = await this.getSettings(found.organizationId)
+    const { card } = found
+    const expired = card.expiresOn !== null && card.expiresOn < dayOf(this.now().getTime())
+    const state: "ready" | "used" | "expired" | "stopped" = !card.isActive
+      ? "stopped"
+      : expired
+        ? "expired"
+        : card.balance <= 0
+          ? "used"
+          : "ready"
+    return {
+      business: {
+        name: settings.displayName ?? organization.name,
+        logoUrl: settings.logoUrl ?? organization.logoUrl,
+        accentColor: settings.accentColor,
+        // Where to book with it, when the business takes bookings online.
+        slug: settings.onlineEnabled ? settings.slug : null,
+      },
+      recipientName: card.recipientName,
+      purchaserName: card.purchaserName,
+      message: card.message,
+      amount: card.initialAmount,
+      balance: card.balance,
+      // A stopped card's code is of no use to anyone, so it is not shown.
+      code: state === "stopped" ? null : card.code,
+      expiresOn: card.expiresOn,
+      state,
+    }
   }
 
   async publicReview(token: string, input: { rating: number; comment?: string | null }) {
