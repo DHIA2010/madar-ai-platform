@@ -187,6 +187,29 @@ describe("Salla App Store install (app.store.authorize webhook + connect-intent 
     mock.mockRestore()
   })
 
+  it("keeps the install when Salla refuses the store's details, named by the webhook's own store", async () => {
+    const nativeFetch = globalThis.fetch
+    const mock = vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.includes("/store/info")) return new Response('{"error":"refused"}', { status: 403 })
+      if (url.includes("/oauth2/user/info")) return new Response("{}", { status: 401 })
+      if (url.startsWith(SALLA_API_BASE_URL)) return new Response("{}", { status: 404 })
+      return nativeFetch(rawInput, init)
+    })
+
+    expect((await appStoreAuthorizeWebhook("445566")).status).toBe(200)
+    const rows = await database.query<{
+      status: string
+      salla_store_name: string | null
+      encrypted_access_token: string | null
+    }>(`select * from salla_marketplace_installs where salla_store_external_id = $1`, ["445566"])
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0]).toMatchObject({ status: "unclaimed", salla_store_name: null })
+    expect(rows.rows[0]?.encrypted_access_token).toBeTruthy()
+
+    mock.mockRestore()
+  })
+
   it("connect-intent: waits with zero candidates, surfaces the one that arrives after it was created, and lets the owning org claim it", async () => {
     const { login } = await registerAndLogin("salla-install-owner@madar.test", "Install Owner Org")
 

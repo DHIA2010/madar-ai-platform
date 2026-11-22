@@ -371,7 +371,13 @@ async function fetchStoreInfo(config: SallaOAuthServiceConfig, accessToken: stri
   })
 
   if (!response.ok) {
-    throw new Error("SALLA_OAUTH_ACCOUNT_DISCOVERY_FAILED")
+    // Salla's own status and words go with the error (never the token), so a refusal can be
+    // told apart in the log: an access policy, a missing scope, a store that is closed.
+    const detail = (await response.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300)
+    throw Object.assign(new Error("SALLA_OAUTH_ACCOUNT_DISCOVERY_FAILED"), {
+      status: response.status,
+      detail,
+    })
   }
 
   const body = (await response.json()) as { data?: SallaStoreInfo } | SallaStoreInfo
@@ -395,7 +401,14 @@ async function fetchMerchantUserInfo(
     const response = await fetch(`${new URL(config.tokenUrl).origin}/oauth2/user/info`, {
       headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
     })
-    if (!response.ok) return null
+    if (!response.ok) {
+      // Without the merchant's e-mail no account can be made for them, so say why it is missing.
+      console.error("salla.merchant_user_info_failed", {
+        status: response.status,
+        detail: (await response.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300),
+      })
+      return null
+    }
     const body = (await response.json()) as { data?: { name?: string; email?: string } }
     return { name: body.data?.name ?? null, email: body.data?.email ?? null }
   } catch {
@@ -700,15 +713,20 @@ export class SallaOAuthService {
       (data.expires as number | undefined) ?? (data.expires_in as number | undefined) ?? undefined
     const scopeRaw = (data.scope as string | undefined) ?? undefined
 
+    // The store's details are asked for, but an install is never thrown away for want of them
+    // (it was, and the merchant then got no account and no welcome e-mail): the webhook itself
+    // names the store, and its name and address are filled in by the first sync.
     let store: SallaStoreInfo
     try {
       store = await fetchStoreInfo(config, accessToken)
     } catch (error) {
+      const refusal = error as { status?: number; detail?: string }
       console.error("salla.app_store_authorize_store_info_failed", {
         merchant: payload.merchant,
-        error,
+        status: refusal.status ?? null,
+        detail: refusal.detail ?? String(error),
       })
-      return null
+      store = { id: payload.merchant }
     }
 
     const installId = randomUUID()
