@@ -1,9 +1,9 @@
 // @vitest-environment node
 //
-// Booking is sold as one package that also opens Loyalty and the cashier (migration 180,
-// subscriptions/types.ts's INCLUDED_APPLICATIONS): they are switched on with it, tried with its
-// free trial, switched off with it unless the customer has them some other way, and never given
-// a subscription of their own for being on.
+// Booking is sold as one package that also opens Loyalty (migration 180, subscriptions/types.ts's
+// INCLUDED_APPLICATIONS): it is switched on with it, tried with its free trial, switched off with
+// it unless the customer has it some other way, and never given a subscription of its own for
+// being on. From the cashier it gets only the invoices side (migration 185, app-access.ts).
 
 import { randomUUID } from "node:crypto"
 
@@ -25,26 +25,20 @@ import { reconcileSubscriptionsFromSettings } from "../subscriptions/reconcile"
 import { enabledSettingsKeysFor } from "../subscriptions/types"
 
 describe("the Booking package", () => {
-  it("covers Loyalty and the cashier, and only Booking does", () => {
-    expect(applicationsCoveredBy("booking")).toEqual(["booking", "loyalty", "pos"])
+  it("covers Loyalty but not the cashier, and only Booking brings anything", () => {
+    expect(applicationsCoveredBy("booking")).toEqual(["booking", "loyalty"])
     expect(applicationsCoveredBy("pos")).toEqual(["pos"])
     expect(applicationsCoveredBy("loyalty")).toEqual(["loyalty"])
-    expect(enabledSettingsKeysFor("booking")).toEqual([
-      "bookingEnabled",
-      "loyaltyEnabled",
-      "posEnabled",
-    ])
+    expect(enabledSettingsKeysFor("booking")).toEqual(["bookingEnabled", "loyaltyEnabled"])
     expect(BRANCH_APPLICATIONS).toContain("booking")
   })
 
-  it("switches the three on when paid, clearing any trial marker", () => {
+  it("switches both on when paid, clearing any trial marker", () => {
     expect(activationSettingsPatch("booking", null)).toEqual({
       bookingEnabled: true,
       bookingTrialEndsAt: "",
       loyaltyEnabled: true,
       loyaltyTrialEndsAt: "",
-      posEnabled: true,
-      posTrialEndsAt: "",
     })
   })
 
@@ -52,27 +46,22 @@ describe("the Booking package", () => {
     expect(deactivationSettingsPatch("booking", new Set())).toEqual({
       bookingEnabled: false,
       loyaltyEnabled: false,
-      posEnabled: false,
     })
-    // They also pay for the cashier on its own: it stays.
-    expect(deactivationSettingsPatch("booking", new Set(["pos"] as const))).toEqual({
+    // They also pay for Loyalty on its own: it stays.
+    expect(deactivationSettingsPatch("booking", new Set(["loyalty"] as const))).toEqual({
       bookingEnabled: false,
-      loyaltyEnabled: false,
     })
   })
 
-  it("tries Loyalty and the cashier along with a Booking trial", () => {
+  it("tries Loyalty along with a Booking trial, and leaves the cashier alone", () => {
     const endsAt = "2026-12-01T00:00:00.000Z"
     expect(includedTrialSettingsPatch({}, "booking", endsAt)).toEqual({
       loyaltyEnabled: true,
       loyaltyTrialEndsAt: endsAt,
       loyaltyTrialUsed: true,
-      posEnabled: true,
-      posTrialEndsAt: endsAt,
-      posTrialUsed: true,
     })
-    // A cashier they pay for is left alone; a Loyalty trial ending later is not cut short, one
-    // ending sooner runs to the Booking trial's end.
+    // A Loyalty trial ending later is not cut short; one ending sooner runs to the Booking
+    // trial's end.
     expect(
       includedTrialSettingsPatch(
         { posEnabled: true, loyaltyEnabled: true, loyaltyTrialEndsAt: "2026-12-05T00:00:00.000Z" },
@@ -86,12 +75,12 @@ describe("the Booking package", () => {
         "booking",
         endsAt
       )
-    ).toMatchObject({ loyaltyTrialEndsAt: endsAt, posTrialEndsAt: endsAt })
+    ).toEqual({ loyaltyEnabled: true, loyaltyTrialEndsAt: endsAt, loyaltyTrialUsed: true })
     // No other app brings anything with it.
     expect(includedTrialSettingsPatch({}, "pos", endsAt)).toEqual({})
   })
 
-  it("is one package at 299 a month and 2,999 a year, with the cashier's extras", () => {
+  it("is one package at 299 a month and 2,999 a year, without the cashier's extras", () => {
     const { mode, packages } = defaultPricingFor("booking")
     expect(mode).toBe("fixed")
     expect(packages).toHaveLength(1)
@@ -102,7 +91,7 @@ describe("the Booking package", () => {
       includedBranches: 1,
       extraBranchMonthlyHalalas: 9900,
       extraBranchYearlyHalalas: 99900,
-      entitlements: { shiftCash: true, customRoles: true, customReports: true },
+      entitlements: { customRoles: true, customReports: true },
       legacyPlanTier: null,
     })
   })
@@ -170,8 +159,8 @@ describe("the Booking package in the database", () => {
       .map((row) => row.application)
       .sort()
 
-  it("gives the cashier and Loyalty no subscription of their own for coming with Booking", async () => {
-    const on = { bookingEnabled: true, loyaltyEnabled: true, posEnabled: true }
+  it("gives Loyalty no subscription of its own for coming with Booking", async () => {
+    const on = { bookingEnabled: true, loyaltyEnabled: true }
     const withBooking = await organization(on)
     await subscription(withBooking, "booking", "active")
     // Switched on some older way, with nothing recorded: these still get their rows.
@@ -183,11 +172,11 @@ describe("the Booking package in the database", () => {
     expect(await applicationsOf(older)).toEqual(["loyalty", "pos"])
   })
 
-  it("opens the cashier's extras during a Booking trial", async () => {
+  it("opens roles and reports, not the cashier's extras, during a Booking trial", async () => {
     const trying = await organization({ bookingEnabled: true })
     await subscription(trying, "booking", "trial")
     expect(await loadOrganizationEntitlements(database, trying)).toMatchObject({
-      shiftCash: true,
+      shiftCash: false,
       customRoles: true,
       customReports: true,
       invoicing: false,
@@ -207,8 +196,8 @@ describe("the Booking package in the database", () => {
     // the change is never applied a second time.
     expect(stored.rows.length).toBeLessThanOrEqual(1)
     const revision = await database.query(
-      "select id from platform_pricing_revisions where id = '2026-11-booking-complete'"
+      "select id from platform_pricing_revisions where id in ('2026-11-booking-complete', '2026-11-booking-invoices-only')"
     )
-    expect(revision.rows).toHaveLength(1)
+    expect(revision.rows).toHaveLength(2)
   })
 })

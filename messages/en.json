@@ -897,7 +897,7 @@
       },
       "booking": {
         "name": "Booking",
-        "shortDescription": "Organise your appointments and let customers book by themselves, with Loyalty and the cashier in the same package.",
+        "shortDescription": "Organise your appointments and let customers book by themselves, with Loyalty and ZATCA invoices in the same package.",
         "detailDescription": "For any business that works by appointment: salons, spas, clinics, studios and workshops. Add your services and the people who provide them with their working hours and time off, and follow everything on a day calendar that prevents clashes. Open your own booking page where customers pick the service and time themselves, send them a confirmation and a reminder on WhatsApp in one press, and follow revenue, your most booked services and your busiest hours.",
         "priceLabel": "SAR 299 / month",
         "features": [
@@ -12133,6 +12133,10 @@
       "invoice": "Invoice",
       "issueInvoice": "Issue invoice",
       "openInvoice": "Open invoice",
+      "invoiceReady": "Invoice issued:",
+      "invoiceReadyHint": "Print it for the customer or send it to them on WhatsApp.",
+      "printInvoice": "Print invoice",
+      "sendInvoice": "Send on WhatsApp",
       "autoConfirmSent": "Confirmation sent automatically",
       "autoReminderSent": "Reminder sent automatically",
       "series": "Repeat",

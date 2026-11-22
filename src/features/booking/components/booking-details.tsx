@@ -2,7 +2,8 @@
 
 // One booking, opened from the calendar or the list: what it is, and everything that can be done
 // with it -- confirm, finish, mark a no-show, cancel, bring back, move, record payment, and send
-// the customer a confirmation or a reminder on WhatsApp from the staff's own phone.
+// the customer a confirmation or a reminder on WhatsApp from the staff's own phone. Finishing a
+// visit issues its tax invoice, and the box that then appears prints it or sends it on WhatsApp.
 
 import { useEffect, useState } from "react"
 import { useTranslations } from "next-intl"
@@ -14,6 +15,8 @@ import {
   FileText,
   Loader2,
   MessageCircle,
+  Printer,
+  ReceiptText,
   RotateCcw,
   UserX,
   X,
@@ -25,6 +28,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppDialog } from "@/components/app"
 
+import { posInvoicesService } from "@/features/pos"
 import { useWorkspace } from "@/features/workspace"
 
 import { dayOf, useBookingAccess, useBookingError, useBookingFormat } from "../hooks/use-booking"
@@ -114,6 +118,44 @@ export function BookingDetails({
       "_blank",
       "noopener"
     )
+  }
+
+  // The visit's invoice, once it has one. Both open their window inside the press itself (a
+  // browser blocks one opened later) and point it at the invoice once the server has answered.
+  const printInvoice = () => {
+    const sheet = window.open("", "_blank")
+    setBusy("print")
+    bookingService
+      .issueInvoice(booking.id)
+      .then((invoiced) => {
+        onChanged(invoiced)
+        if (!invoiced.invoiceUrl) return sheet?.close()
+        if (sheet && !sheet.closed) sheet.location.href = invoiced.invoiceUrl
+        else window.location.assign(invoiced.invoiceUrl)
+      })
+      .catch((error: unknown) => {
+        sheet?.close()
+        toast.error(errorText(error))
+      })
+      .finally(() => setBusy(null))
+  }
+  const sendInvoice = () => {
+    if (!booking.invoiceId) return
+    const chat = window.open("", "_blank")
+    setBusy("send")
+    posInvoicesService
+      .getInvoiceWhatsAppLink(booking.invoiceId)
+      .then((ready) => {
+        // With no usable number on the booking, WhatsApp asks which chat to send it in.
+        const target = `https://wa.me/${number ?? ""}?text=${encodeURIComponent(ready.message)}`
+        if (chat && !chat.closed) chat.location.href = target
+        else window.location.assign(target)
+      })
+      .catch((error: unknown) => {
+        chat?.close()
+        toast.error(errorText(error))
+      })
+      .finally(() => setBusy(null))
   }
 
   const open = booking.status === "pending" || booking.status === "confirmed"
@@ -302,6 +344,38 @@ export function BookingDetails({
             />
           </div>
 
+          {booking.status === "completed" && booking.invoiceId ? (
+            <div className="mt-4 rounded-[14px] border border-[#bbf7d0] bg-[#f0fdf4] p-3.5">
+              <p className="flex items-center gap-2 text-[14px] font-extrabold text-[#166534]">
+                <ReceiptText className="size-[18px] shrink-0" />
+                <span>
+                  {t("invoiceReady")} <span dir="ltr">{booking.invoiceNumber}</span>
+                </span>
+              </p>
+              <p className="mt-1 text-[12.5px] leading-5 text-[#3f6212]">{t("invoiceReadyHint")}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={cn(PRIMARY_BUTTON, "bg-[#16a34a] hover:bg-[#15803d]")}
+                  disabled={busy !== null}
+                  onClick={printInvoice}
+                >
+                  {spinner("print") ?? <Printer className="size-4" />}
+                  {t("printInvoice")}
+                </button>
+                <button
+                  type="button"
+                  className={SECONDARY_BUTTON}
+                  disabled={busy !== null}
+                  onClick={sendInvoice}
+                >
+                  {spinner("send") ?? <MessageCircle className="size-4" />}
+                  {t("sendInvoice")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {cancelling ? (
             <div className="mt-3 rounded-[12px] bg-[#fef3f2] p-3">
               <label
@@ -382,7 +456,7 @@ export function BookingDetails({
                 {spinner("payment") ?? <CircleDollarSign className="size-4" />}
                 {booking.paymentStatus === "paid" ? t("markUnpaid") : t("markPaid")}
               </button>
-              {booking.status === "completed" && !booking.customerPlanId ? (
+              {booking.status === "completed" && !booking.customerPlanId && !booking.invoiceId ? (
                 <button
                   type="button"
                   className={SECONDARY_BUTTON}
@@ -402,7 +476,7 @@ export function BookingDetails({
                   }}
                 >
                   {spinner("invoice") ?? <FileText className="size-4" />}
-                  {booking.invoiceNumber ? t("openInvoice") : t("issueInvoice")}
+                  {t("issueInvoice")}
                 </button>
               ) : null}
               {booking.status === "confirmed" ? (

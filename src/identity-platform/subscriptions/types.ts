@@ -25,13 +25,16 @@ export const PURCHASABLE_APPLICATIONS = [...SUBSCRIPTION_APPLICATIONS, MADAR_COM
 export type PurchasableApplication = (typeof PURCHASABLE_APPLICATIONS)[number]
 
 // Applications that come with another application's subscription, at no extra charge: Booking
-// is sold as one package that also opens Loyalty and the cashier (decided 21 November 2026).
-// They are switched on with it, tried with its free trial, and switched off when it ends unless
-// the customer also has them some other way.
+// is sold as one package that also opens Loyalty. It is switched on with it, tried with its free
+// trial, and switched off when it ends unless the customer also has it some other way.
+//
+// The cashier does not come with Booking (decided 22 November 2026, after a day of it doing so):
+// Booking gets only the invoices side of it -- a finished visit's tax invoice, the invoices list
+// and returns -- which subscriptions/app-access.ts opens to Booking directly.
 export const INCLUDED_APPLICATIONS: Partial<
   Record<SubscriptionApplication, SubscriptionApplication[]>
 > = {
-  booking: ["loyalty", "pos"],
+  booking: ["loyalty"],
 }
 
 // The organizations.settings flags a purchase of `application` switches on.

@@ -58,8 +58,7 @@ const TRIAL_GRANTS: Record<string, EntitlementSwitch[]> = {
   ],
   advertising: ["customRoles", "customReports"],
   ecommerce: ["customRoles", "customReports"],
-  // Booking brings the cashier with it, so its trial shows the cashier's own extras too.
-  booking: ["shiftCash", "customRoles", "customReports"],
+  booking: ["customRoles", "customReports"],
 }
 const LIMIT_SOURCES: Record<"maxAdPlatforms" | "maxStores", string[]> = {
   maxAdPlatforms: ["advertising", "madarComplete"],

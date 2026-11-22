@@ -283,7 +283,8 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       url: ROUTES.invoices,
       icon: <FileText className="text-blue-600" />,
       permission: "pos:view",
-      applications: ["ecommerce", "pos"],
+      // Booking too: a finished visit's invoice lands here, with its returns.
+      applications: ["ecommerce", "pos", "booking"],
     },
     // Invoicing & Quotations -- its own subscription (invoicingEnabled), enforced server-side by
     // subscriptions/app-access.ts on every /v1/invoicing/ route.

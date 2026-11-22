@@ -218,8 +218,8 @@ export const BOOKING_FEATURES = [
   "تأكيد وتذكير العميل عبر واتساب، ودخوله لحجوزاته برمز واتساب",
   "تقارير الحجوزات والإيراد وأوقات الذروة",
   "تطبيق الولاء مشمول: نقاط ومكافآت وبطاقة ولاء بإشعارات",
-  "الكاشير مشمول: بيع وفواتير معتمدة من هيئة الزكاة وورديات ومخزون",
-  "استخدام مكافآت الولاء داخل الكاشير",
+  "فاتورة ضريبية معتمدة من هيئة الزكاة تصدر تلقائيًا عند إتمام الخدمة",
+  "طباعة الفاتورة أو إرسالها للعميل عبر واتساب، مع المرتجعات",
   "أدوار وصلاحيات مخصصة وتقارير مخصصة",
   "فرع واحد (فروع إضافية بـ 99 ر.س/شهر أو 999 ر.س/سنة)",
 ]
@@ -288,7 +288,7 @@ export function defaultPricingFor(application: PurchasableApplication): {
           {
             ...tier("starter", "الحجوزات الشاملة", 299, BOOKING_FEATURES, {
               recommended: true,
-              entitlements: { shiftCash: true, customRoles: true, customReports: true },
+              entitlements: { customRoles: true, customReports: true },
             }),
             // 2,999 a year rather than the usual ten months (2,990).
             yearlyPriceHalalas: sar(2999),

@@ -32,8 +32,7 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
     trial_ends_at: unknown
   }>("SELECT organization_id, application, status, trial_ends_at FROM organization_subscriptions")
   const have = new Set(existing.rows.map((row) => `${row.organization_id}:${row.application}`))
-  // An application that came with another one's subscription (Loyalty and the cashier with
-  // Booking) is on because of that subscription: it gets no row of its own, or it would stay on
+  // An application that came with another one's subscription (Loyalty with Booking) is on because of that subscription: it gets no row of its own, or it would stay on
   // after the subscription that brought it ends.
   const broughtAlong = new Set<string>()
   for (const row of existing.rows) {

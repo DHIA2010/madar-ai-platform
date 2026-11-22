@@ -30,12 +30,14 @@ interface AccessRule {
 
 // Most specific prefixes first: the first match decides.
 const RULES: AccessRule[] = [
-  // Shared by the invoices page (POS and E-commerce).
-  { prefix: "/v1/pos/invoices", applications: ["pos", "ecommerce"] },
-  { prefix: "/v1/pos/payment-methods", applications: ["pos", "ecommerce"] },
-  { prefix: "/v1/pos/settings", applications: ["pos", "ecommerce"] },
+  // Shared by the invoices page (POS and E-commerce). Booking has it too: a finished visit is
+  // invoiced through the same invoices, so its business sees them, returns them and links its
+  // ZATCA device -- without the cashier itself, which stays behind "/v1/pos/" below.
+  { prefix: "/v1/pos/invoices", applications: ["pos", "ecommerce", "booking"] },
+  { prefix: "/v1/pos/payment-methods", applications: ["pos", "ecommerce", "booking"] },
+  { prefix: "/v1/pos/settings", applications: ["pos", "ecommerce", "booking"] },
   { prefix: "/v1/pos/", applications: ["pos"] },
-  { prefix: "/v1/zatca/", applications: ["pos", "ecommerce", "invoicing"] },
+  { prefix: "/v1/zatca/", applications: ["pos", "ecommerce", "invoicing", "booking"] },
   { prefix: "/v1/customers", applications: ["pos", "ecommerce", "invoicing", "booking"] },
   // Purchases need the product list and stock too; quotations and invoices pick products.
   { prefix: "/v1/products", applications: ["pos", "ecommerce", "procurement", "invoicing"] },

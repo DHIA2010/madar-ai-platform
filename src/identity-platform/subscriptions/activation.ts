@@ -8,7 +8,7 @@ import {
 } from "./types"
 
 // The applications a purchase covers: the application itself with the ones that come with it
-// (Booking brings Loyalty and the cashier), or every application for the Madar Complete bundle.
+// (Booking brings Loyalty), or every application for the Madar Complete bundle.
 export function applicationsCoveredBy(
   application: PurchasableApplication
 ): SubscriptionApplication[] {

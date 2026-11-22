@@ -53,7 +53,7 @@ const SECTIONS: SettingsSection[] = [
   { key: "workspaces", href: ROUTES.settingsWorkspaces },
   { key: "payments", href: ROUTES.settingsPayments },
   { key: "tax", href: ROUTES.settingsTaxes },
-  { key: "zatca", href: ROUTES.settingsZatca, applications: ["pos", "invoicing"] },
+  { key: "zatca", href: ROUTES.settingsZatca, applications: ["pos", "invoicing", "booking"] },
   { key: "whatsapp", href: ROUTES.settingsWhatsApp, applications: ["pos", "ecommerce"] },
   // التقارير المجدولة على واتساب -- every package includes the free daily report.
   { key: "scheduledReports", href: ROUTES.settingsScheduledReports },

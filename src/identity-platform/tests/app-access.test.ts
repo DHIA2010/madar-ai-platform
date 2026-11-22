@@ -52,7 +52,11 @@ const allowed = async (path: string) =>
 describe("applicationsForPath", () => {
   it("maps each route to the apps that may use it", () => {
     expect(applicationsForPath("/v1/pos/shifts")).toEqual(["pos"])
-    expect(applicationsForPath("/v1/pos/invoices/abc/returns")).toEqual(["pos", "ecommerce"])
+    expect(applicationsForPath("/v1/pos/invoices/abc/returns")).toEqual([
+      "pos",
+      "ecommerce",
+      "booking",
+    ])
     expect(applicationsForPath("/v1/products")).toEqual([
       "pos",
       "ecommerce",
@@ -99,6 +103,18 @@ describe("ApplicationAccessService", () => {
     await setSettings({ procurementEnabled: true })
     expect(await allowed("/v1/products")).toBe(true)
     expect(await allowed("/v1/pos/invoices")).toBe(false)
+
+    // Booking alone: the invoices side of the cashier (invoices, returns, the ZATCA device) --
+    // not the cashier itself, its shifts or the product list.
+    await setSettings({ bookingEnabled: true })
+    expect(await allowed("/v1/booking/services")).toBe(true)
+    expect(await allowed("/v1/pos/invoices")).toBe(true)
+    expect(await allowed("/v1/pos/invoices/abc/returns")).toBe(true)
+    expect(await allowed("/v1/pos/payment-methods")).toBe(true)
+    expect(await allowed("/v1/zatca/status")).toBe(true)
+    expect(await allowed("/v1/pos/shifts")).toBe(false)
+    expect(await allowed("/v1/pos/held-orders")).toBe(false)
+    expect(await allowed("/v1/products")).toBe(false)
   })
 
   it("treats a lapsed trial as not subscribed", async () => {
