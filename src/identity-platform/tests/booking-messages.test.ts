@@ -32,13 +32,15 @@ function stubMeta() {
     const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
     if (url.pathname.endsWith("/message_templates")) {
       return json({
-        data: ["madar_booking_confirmation", "madar_booking_reminder", "madar_gift_card"].map(
-          (name) => ({
-            name,
-            language: "ar",
-            status: "APPROVED",
-          })
-        ),
+        data: [
+          "madar_booking_confirmation",
+          "madar_booking_reminder",
+          "madar_gift_card_notice",
+        ].map((name) => ({
+          name,
+          language: "ar",
+          status: "APPROVED",
+        })),
       })
     }
     if (url.pathname.endsWith("/messages")) {
@@ -199,7 +201,7 @@ describe("booking WhatsApp messages", () => {
     })
     expect(await messenger.gift(ORG, card)).toBe("sent")
     expect(sent).toHaveLength(1)
-    expect(sent[0]).toMatchObject({ to: "966501234567", template: "madar_gift_card" })
+    expect(sent[0]).toMatchObject({ to: "966501234567", template: "madar_gift_card_notice" })
     expect(sent[0].values).toEqual([
       "نورة",
       "صالون نور",

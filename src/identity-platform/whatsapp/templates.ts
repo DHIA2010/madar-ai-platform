@@ -265,12 +265,15 @@ export const LOGIN_CODE_TEMPLATE: TemplateDefinition = {
 }
 
 // A gift card sent to the person it is for (booking/automation.ts), when the business asks for
-// it to go out by itself. Plain facts and the card's own link, like the booking messages: who
-// it is from, where, how much, and where to open it.
+// it to go out by itself: who it is from, where, how much, and where to open it. Filed as
+// marketing: Meta refused it as a utility message (INCORRECT_CATEGORY, 22 November 2026), since
+// the person receiving it has asked the business for nothing. A refused name cannot be submitted
+// again, hence the "_notice" name. Marketing messages are capped per recipient by Meta, so one
+// may be held back (error 131049); the business then sends the card by hand.
 export const GIFT_CARD_TEMPLATE: TemplateDefinition = {
-  name: "madar_gift_card",
+  name: "madar_gift_card_notice",
   language: "ar",
-  category: "UTILITY",
+  category: "MARKETING",
   body: [
     "مرحباً {{1}}،",
     "وصلتك بطاقة هدية لدى {{2}}.",
