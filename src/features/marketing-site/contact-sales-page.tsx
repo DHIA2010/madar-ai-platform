@@ -70,128 +70,34 @@ function validate(values: Record<Field, string>) {
 const INPUT =
   "h-14 w-full rounded-2xl border-2 bg-white px-5 text-[17px] font-semibold text-[#0b1738] outline-none transition-colors placeholder:font-normal placeholder:text-slate-400 focus:border-[#2878ff]"
 
-// What an ad promised, repeated above the form so the visitor lands on the thing they tapped
-// for instead of a bare form. Chosen by the link's `lp` parameter; without it the page is the
-// plain "talk to sales" form.
-interface Pitch {
-  title: string
-  subtitle: string
-  points: string[]
-  // Who the form is for, when it is not the usual shops and restaurants.
-  audience?: string
+// The one page every ad opens: short enough that the whole form and its button fit on a phone
+// screen without scrolling (labels sit inside the fields, which keep their full height). What
+// follows the headline is the same for everyone.
+const PAGE = {
+  title: "نظام واحد يدير نشاطك كله",
+  subtitle: "كاشير وفواتير معتمدة من هيئة الزكاة، وحجوزات وولاء لعملائك.",
+  points: ["فواتير عبر واتساب", "حجوزات أونلاين", "تقرير يومي على جوالك"],
 }
 
-const PITCHES: Record<string, Pitch> = {
-  pos: {
-    title: "كاشير متكامل لمحلك وفروعك",
-    subtitle: "البيع والورديات والمخزون والفوترة الإلكترونية في نظام واحد.",
-    points: [
-      "شاشة كاشير سريعة تعمل حتى بدون إنترنت",
-      "فواتير متوافقة مع هيئة الزكاة والضريبة",
-      "تقرير يومي بمبيعاتك على واتساب",
-    ],
-  },
-  cashier: {
-    title: "كاشير سريع وسهل لمحلك",
-    subtitle: "ابدأ البيع من أي كمبيوتر أو تابلت خلال دقائق.",
-    points: [
-      "باركود وبحث فوري وطلبات معلقة",
-      "نقدي ومدى وأكثر من وسيلة دفع في الفاتورة",
-      "يعمل حتى بدون إنترنت",
-    ],
-  },
-  zatca: {
-    title: "فواتيرك الإلكترونية جاهزة للهيئة",
-    subtitle: "مدار متوافق مع المرحلة الثانية للفوترة الإلكترونية.",
-    points: [
-      "فاتورة ضريبية برمز QR مع كل عملية بيع",
-      "ربط مباشر مع منصة «فاتورة» وإبلاغ تلقائي",
-      "إقرار ضريبي جاهز من مبيعاتك ومشترياتك",
-    ],
-  },
-  shifts: {
-    title: "اضبط ورديات الكاشير ونقدية الدرج",
-    subtitle: "اعرف كل ريال دخل الدرج أو خرج منه.",
-    points: [
-      "فتح وإغلاق الوردية برصيد افتتاحي",
-      "مطابقة النقدية: مطابق أو زيادة أو عجز",
-      "تقرير لكل وردية ولكل كاشير",
-    ],
-  },
-  inventory: {
-    title: "مخزون دقيق في كل فرع",
-    subtitle: "كل بيع يخصم من المخزون وكل شراء يضيف إليه.",
-    points: [
-      "تنبيه عند انخفاض المخزون أو نفاده",
-      "جرد وتحويلات بين الفروع",
-      "تكلفة البضاعة وقيمة المخزون أمامك",
-    ],
-  },
-  "daily-report": {
-    title: "تقرير مبيعاتك اليومي على واتساب",
-    subtitle: "تابع محلك وفروعك من جوالك دون أن تفتح النظام.",
-    points: [
-      "المبيعات والمصروفات والمرتجعات كل يوم",
-      "الورديات ووسائل الدفع والأكثر مبيعًا",
-      "تنبيه بالمنتجات منخفضة المخزون",
-    ],
-  },
-  // The two price ads: the page repeats the price the ad showed.
-  "offer-monthly": {
-    title: "كاشير سعودي ذكي بـ 149 ريال شهريًا",
-    subtitle: "متوافق مع هيئة الزكاة والضريبة والجمارك، وتجربة مجانية 7 أيام.",
-    points: [
-      "فواتير إلكترونية برمز QR مع كل عملية بيع",
-      "ورديات ومخزون وتقارير في نظام واحد",
-      "يعمل حتى بدون إنترنت",
-    ],
-  },
-  "offer-yearly": {
-    title: "سنتان بـ 1,699 ريال فقط",
-    subtitle: "كاشير سعودي ذكي بعرض السنتين: 1,699 ريال بدل 2,980.",
-    points: [
-      "متوافق مع هيئة الزكاة والضريبة والجمارك",
-      "فواتير إلكترونية برمز QR مع كل عملية بيع",
-      "ورديات ومخزون وتقارير في نظام واحد",
-    ],
-  },
-  // The restaurants and cafes ad: the page repeats its three lines. The kitchen copy is printed
-  // by the Madar app (madar-mobile: a printer given the kitchen role gets an items-only ticket
-  // with every sale); the browser cashier does not print one.
-  restaurant: {
-    title: "كاشير للمطاعم والكافيهات",
-    subtitle: "نظام كاشير سعودي سريع لمطعمك أو مقهاك، متوافق مع هيئة الزكاة والضريبة.",
-    points: [
-      "طلبات سريعة وقت الزحمة",
-      "نسخة للمطبخ مع كل طلب من تطبيق مدار",
-      "ورديات الكاشير ومراجعة المبيعات",
-    ],
-    audience: "لأصحاب المطاعم والمقاهي والكافيهات",
-  },
-  // The Booking ad: the page repeats its own words.
-  booking: {
-    title: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
-    subtitle: "نظام حجوزات سعودي للصالونات والسبا والعيادات والاستوديوهات والورش.",
-    points: [
-      "صفحة حجز خاصة بنشاطك يحجز منها عميلك بنفسه",
-      "تأكيد وتذكير العميل عبر واتساب",
-      "تقويم يمنع تعارض المواعيد، ومعه الكاشير وبرنامج الولاء",
-    ],
-    audience: "لأصحاب الصالونات والعيادات وكل نشاط يعمل بالمواعيد",
-  },
-  "whatsapp-invoices": {
-    title: "أرسل فواتير عملائك عبر واتساب",
-    subtitle: "الفاتورة تصل العميل على جواله بدل الورق.",
-    points: [
-      "رابط الفاتورة يُرسل مباشرة بعد البيع",
-      "فاتورة ضريبية برمز QR",
-      "ورقية أو واتساب أو الاثنان معًا",
-    ],
-  },
+// The headline alone follows the ad: the link's `lp` parameter names the ad's topic, so the
+// visitor lands on the thing they tapped for. Without it (or with one not listed) the page
+// carries its own headline.
+const HEADLINES: Record<string, string> = {
+  pos: "كاشير متكامل لمحلك وفروعك",
+  cashier: "كاشير سريع وسهل لمحلك",
+  zatca: "فواتيرك الإلكترونية جاهزة للهيئة",
+  shifts: "اضبط ورديات الكاشير ونقدية الدرج",
+  inventory: "مخزون دقيق في كل فرع",
+  "daily-report": "تقرير مبيعاتك اليومي على واتساب",
+  "offer-monthly": "كاشير سعودي ذكي بـ 149 ريال شهريًا",
+  "offer-yearly": "سنتان بـ 1,699 ريال فقط",
+  restaurant: "كاشير للمطاعم والكافيهات",
+  booking: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
+  "whatsapp-invoices": "أرسل فواتير عملائك عبر واتساب",
 }
 
-// madar.my's "talk to sales" page: deliberately nothing but the form and its one button -- no
-// navigation to wander off to and no second choice beside it.
+// madar.my's "talk to sales" page, and the landing page of every ad: deliberately nothing but
+// the form and its one button -- no navigation to wander off to and no second choice beside it.
 export function ContactSalesPage({ topic }: { topic?: string | null }) {
   const [values, setValues] = useState<Record<Field, string>>({
     companyName: "",
@@ -200,10 +106,10 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
     businessType: "",
   })
   const [website, setWebsite] = useState("")
-  // The ad's topic, if the link names one (?lp=). The server reads it from the address and
-  // passes it in, so the ad's own headline is part of the page as sent -- not swapped in after
-  // the page's code has loaded.
-  const pitch: Pitch | null = topic ? (PITCHES[topic] ?? null) : null
+  // The ad's headline, if the link names its topic (?lp=). The server reads it from the address
+  // and passes it in, so the headline is part of the page as sent -- not swapped in after the
+  // page's code has loaded.
+  const title = (topic ? HEADLINES[topic] : null) ?? PAGE.title
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
   // After the form: choose (meeting or call) → booking (calendar) or calling (day and time).
   const [status, setStatus] = useState<
@@ -357,7 +263,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
       dir="rtl"
       className={cn(
         "relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f5f8fd] px-4",
-        status === "booking" ? "py-4" : "py-12"
+        status === "booking" ? "py-4" : "py-5"
       )}
     >
       <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -377,14 +283,14 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
             width={778}
             height={325}
             priority
-            className="h-14 w-auto"
+            className="h-10 w-auto"
           />
         </div>
 
         <div
           className={cn(
             "rounded-[32px] bg-white shadow-[0_30px_80px_-30px_rgba(11,23,56,0.35)] ring-1 ring-slate-100",
-            status === "booking" ? "p-4 sm:p-6" : "mt-8 p-7 sm:p-10"
+            status === "booking" ? "p-4 sm:p-6" : "mt-4 p-5 sm:p-8"
           )}
         >
           {status === "booking" ? (
@@ -562,65 +468,37 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
             </div>
           ) : (
             <>
-              {pitch ? (
-                <>
-                  <h1 className="text-center text-[28px] leading-tight font-black text-[#0b1738]">
-                    {pitch.title}
-                  </h1>
-                  <p className="mt-3 text-center text-[17px] leading-8 text-slate-600">
-                    {pitch.subtitle}
-                  </p>
-                  <ul className="mt-5 space-y-2.5 rounded-2xl bg-[#f3f7ff] px-5 py-4">
-                    {pitch.points.map((point) => (
-                      <li
-                        key={point}
-                        className="flex items-start gap-2.5 text-[16px] leading-7 font-semibold text-[#0b1738]"
-                      >
-                        <CheckCircle2 className="mt-1 size-5 shrink-0 text-[#2878ff]" />
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-6 text-center text-[18px] font-extrabold text-[#0b1738]">
-                    اترك بياناتك ونتواصل معك لعرض مجاني
-                  </p>
-                  <p className="mt-1 text-center text-[14px] font-semibold text-slate-500">
-                    {pitch.audience ?? "لأصحاب المحلات والمطاعم والأنشطة التجارية"}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h1 className="text-center text-[30px] leading-tight font-black text-[#0b1738]">
-                    تحدث مع فريق المبيعات
-                  </h1>
-                  <p className="mt-3 text-center text-[17px] leading-8 text-slate-600">
-                    اترك بياناتك وسنتواصل معك قريبًا.
-                  </p>
-                  <p className="mt-1 text-center text-[14px] font-semibold text-slate-500">
-                    لأصحاب المحلات والمطاعم والأنشطة التجارية
-                  </p>
-                </>
-              )}
-
-              <form
-                onSubmit={submit}
-                noValidate
-                className={cn("space-y-5", pitch ? "mt-5" : "mt-8")}
-              >
-                <div>
-                  <label
-                    htmlFor="companyName"
-                    className="mb-2 block text-[16px] font-bold text-[#0b1738]"
+              <h1 className="text-center text-[24px] leading-tight font-black text-[#0b1738]">
+                {title}
+              </h1>
+              <p className="mt-2 text-center text-[15px] leading-7 text-slate-600">
+                {PAGE.subtitle}
+              </p>
+              <ul className="mt-3 flex flex-wrap justify-center gap-2">
+                {PAGE.points.map((point) => (
+                  <li
+                    key={point}
+                    className="flex items-center gap-1.5 rounded-full bg-[#f3f7ff] px-3 py-1.5 text-[13px] font-bold text-[#0b1738]"
                   >
-                    اسم الشركة <span className="text-rose-500">*</span>
-                  </label>
+                    <CheckCircle2 className="size-4 shrink-0 text-[#2878ff]" />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-center text-[16px] font-extrabold text-[#0b1738]">
+                اترك بياناتك ونتواصل معك لعرض مجاني
+              </p>
+
+              <form onSubmit={submit} noValidate className="mt-3 space-y-3">
+                <div>
                   <input
                     id="companyName"
                     name="companyName"
                     autoComplete="organization"
                     value={values.companyName}
                     onChange={update("companyName")}
-                    placeholder="مثال: مؤسسة الريم التجارية"
+                    placeholder="اسم الشركة أو النشاط *"
+                    aria-label="اسم الشركة أو النشاط"
                     aria-invalid={Boolean(errors.companyName)}
                     className={cn(
                       INPUT,
@@ -628,17 +506,55 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                     )}
                   />
                   {errors.companyName ? (
-                    <p className="mt-1.5 text-[14px] font-semibold text-rose-600">
+                    <p className="mt-1 text-[13px] font-semibold text-rose-600">
                       {errors.companyName}
                     </p>
                   ) : null}
                 </div>
 
                 <div>
-                  <p className="mb-2 block text-[16px] font-bold text-[#0b1738]">
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={values.phone}
+                    onChange={update("phone")}
+                    placeholder="رقم الجوال * (05XXXXXXXX)"
+                    aria-label="رقم الجوال"
+                    aria-invalid={Boolean(errors.phone)}
+                    className={cn(INPUT, errors.phone ? "border-rose-300" : "border-slate-200")}
+                  />
+                  {errors.phone ? (
+                    <p className="mt-1 text-[13px] font-semibold text-rose-600">{errors.phone}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    value={values.email}
+                    onChange={update("email")}
+                    placeholder="البريد الإلكتروني (اختياري)"
+                    aria-label="البريد الإلكتروني"
+                    aria-invalid={Boolean(errors.email)}
+                    className={cn(INPUT, errors.email ? "border-rose-300" : "border-slate-200")}
+                  />
+                  {errors.email ? (
+                    <p className="mt-1 text-[13px] font-semibold text-rose-600">{errors.email}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[14px] font-bold text-[#0b1738]">
                     نوع نشاطك <span className="text-rose-500">*</span>
                   </p>
-                  <div role="radiogroup" aria-label="نوع نشاطك" className="flex flex-wrap gap-2">
+                  <div role="radiogroup" aria-label="نوع نشاطك" className="flex flex-wrap gap-1.5">
                     {BUSINESS_TYPES.map(([id, label]) => {
                       const picked = values.businessType === id
                       return (
@@ -652,7 +568,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                             setErrors((current) => ({ ...current, businessType: undefined }))
                           }}
                           className={cn(
-                            "h-11 rounded-full border-2 px-4 text-[15px] font-bold transition-colors",
+                            "h-10 rounded-full border-2 px-3.5 text-[14px] font-bold transition-colors",
                             picked
                               ? "border-[#2878ff] bg-[#eef4ff] text-[#1d4fd8]"
                               : "border-slate-200 bg-white text-[#0b1738] hover:border-slate-300"
@@ -664,67 +580,9 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                     })}
                   </div>
                   {errors.businessType ? (
-                    <p className="mt-1.5 text-[14px] font-semibold text-rose-600">
+                    <p className="mt-1 text-[13px] font-semibold text-rose-600">
                       {errors.businessType}
                     </p>
-                  ) : null}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="phone"
-                    className="mb-2 block text-[16px] font-bold text-[#0b1738]"
-                  >
-                    رقم الجوال <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    dir="ltr"
-                    value={values.phone}
-                    onChange={update("phone")}
-                    placeholder="05XXXXXXXX"
-                    aria-invalid={Boolean(errors.phone)}
-                    className={cn(
-                      INPUT,
-                      "text-right",
-                      errors.phone ? "border-rose-300" : "border-slate-200"
-                    )}
-                  />
-                  {errors.phone ? (
-                    <p className="mt-1.5 text-[14px] font-semibold text-rose-600">{errors.phone}</p>
-                  ) : null}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="mb-2 block text-[16px] font-bold text-[#0b1738]"
-                  >
-                    البريد الإلكتروني <span className="font-medium text-slate-400">(اختياري)</span>
-                  </label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    dir="ltr"
-                    value={values.email}
-                    onChange={update("email")}
-                    placeholder="name@company.com"
-                    aria-invalid={Boolean(errors.email)}
-                    className={cn(
-                      INPUT,
-                      "text-right",
-                      errors.email ? "border-rose-300" : "border-slate-200"
-                    )}
-                  />
-                  {errors.email ? (
-                    <p className="mt-1.5 text-[14px] font-semibold text-rose-600">{errors.email}</p>
                   ) : null}
                 </div>
 
@@ -752,7 +610,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                   className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#2878ff] text-[18px] font-extrabold text-white shadow-[0_14px_30px_rgba(40,120,255,0.35)] transition-all hover:bg-[#1f63d6] disabled:opacity-70"
                 >
                   {status === "sending" ? <Loader2 className="size-5 animate-spin" /> : null}
-                  {pitch ? "اطلب عرضًا مجانيًا" : "تسجيل"}
+                  اطلب عرضًا مجانيًا
                 </button>
               </form>
             </>

@@ -13,7 +13,7 @@
 // near the bottom of this file), not the page itself, so printing an already-completed invoice
 // from here produces the same real 80mm receipt a customer would have gotten at the till.
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import QRCode from "qrcode"
@@ -249,7 +249,11 @@ export default function InvoicesPage() {
     [workspaceFilter, statusFilter, paymentMethodFilter, dateRange]
   )
 
+  // Each load is numbered, and only the latest one's answer is shown: a slower, older answer
+  // (the filters changed while it was on its way) is dropped instead of overwriting newer rows.
+  const latestLoad = useRef(0)
   const load = async () => {
+    const mine = (latestLoad.current += 1)
     setLoading(true)
     setLoadError(null)
     try {
@@ -257,13 +261,15 @@ export default function InvoicesPage() {
         posInvoicesService.list({ ...backendFilter, search: search.trim() || undefined }),
         posInvoicesService.summary(backendFilter),
       ])
+      if (mine !== latestLoad.current) return
       setInvoices(items)
       setSummary(stats)
     } catch (error) {
+      if (mine !== latestLoad.current) return
       const status = error instanceof AppError ? error.status : undefined
       setLoadError(status === 403 ? t("page.loadError.forbidden") : t("page.loadError.generic"))
     } finally {
-      setLoading(false)
+      if (mine === latestLoad.current) setLoading(false)
     }
   }
 
@@ -274,7 +280,12 @@ export default function InvoicesPage() {
 
   // Search is debounced against a fresh request rather than filtered client-side over `invoices`
   // -- the table only ever holds the current page's worth of real matches, not everything.
+  // Not on opening the page: the effect above has just loaded it, and a second load a moment
+  // later made the page visibly load twice.
+  const loadedSearch = useRef(search)
   useEffect(() => {
+    if (loadedSearch.current === search) return
+    loadedSearch.current = search
     const timeout = setTimeout(() => void load(), 350)
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
