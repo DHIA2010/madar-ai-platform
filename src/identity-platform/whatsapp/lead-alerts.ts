@@ -34,11 +34,16 @@ export interface LeadAlert {
   // Set when this alert is about the time the lead then picked: a phone call, or a booked demo.
   // It goes out as a second message, since the time is chosen after the form is sent.
   appointment?: { type: "call" | "meeting"; at: string } | null
+  // Set when this alert is about a lead the team already has who tapped "interested" in a
+  // WhatsApp message sent from the CRM: the name of that message.
+  interestedIn?: string | null
 }
 
 const APPOINTMENT_LABEL = { call: "موعد مكالمة", meeting: "موعد اجتماع" } as const
 const NEW_LEAD_HEADING = "🔔 *عميل محتمل جديد في مدار*"
 const APPOINTMENT_HEADING = "📅 *موعد مع عميل محتمل*"
+const INTEREST_HEADING = "🟢 *عميل مهتم: اتصل به الآن*"
+const INTEREST_LABEL = "مهتم: ضغط «مهتم» في رسالة واتساب"
 
 // "الاثنين 16 نوفمبر، 12:00 م", in Riyadh's time whatever the server's clock.
 export function appointmentTime(at: string): string {
@@ -145,16 +150,19 @@ export function sourceLabel(attribution: LeadAttribution | null | undefined): st
 // The template's five body parameters, in order.
 export function leadAlertParameters(lead: LeadAlert): string[] {
   return [
-    // The approved template has no field of its own for a time, so it rides in the "type" one.
-    lead.appointment
-      ? param(
-          `${APPOINTMENT_LABEL[lead.appointment.type]}: ${appointmentTime(lead.appointment.at)}`
-        )
-      : KIND_LABEL[lead.kind],
+    // The approved template has no field of its own for a time or for "interested", so either
+    // rides in the "type" one.
+    lead.interestedIn
+      ? INTEREST_LABEL
+      : lead.appointment
+        ? param(
+            `${APPOINTMENT_LABEL[lead.appointment.type]}: ${appointmentTime(lead.appointment.at)}`
+          )
+        : KIND_LABEL[lead.kind],
     param(lead.name),
     param(lead.phone),
     param(lead.email),
-    param(sourceLabel(lead.attribution)),
+    param(lead.interestedIn ? `واتساب / ${lead.interestedIn}` : sourceLabel(lead.attribution)),
   ]
 }
 
@@ -171,7 +179,12 @@ export class WhatsAppLeadAlertsService {
     try {
       const phones = await this.platform.leadAlertPhones()
       if (phones.length > 0) {
-        await this.send(phones, leadAlertParameters(lead), lead.kind, Boolean(lead.appointment))
+        await this.send(
+          phones,
+          leadAlertParameters(lead),
+          lead.kind,
+          lead.interestedIn ? INTEREST_HEADING : lead.appointment ? APPOINTMENT_HEADING : null
+        )
       }
     } catch (error) {
       console.error("whatsapp.lead_alert_failed", {
@@ -357,7 +370,7 @@ export class WhatsAppLeadAlertsService {
     phones: string[],
     parameters: string[],
     kind: LeadAlert["kind"],
-    appointment = false
+    heading: string | null = null
   ): Promise<LeadAlertSendResult> {
     const context = await this.platform.sendingContext()
     const open = await this.openWindows(new Date())
@@ -366,7 +379,7 @@ export class WhatsAppLeadAlertsService {
       parameters
     )
     // A direct message can say what it is; the template's own heading can't be changed.
-    const text = appointment ? filled.replace(NEW_LEAD_HEADING, APPOINTMENT_HEADING) : filled
+    const text = heading ? filled.replace(NEW_LEAD_HEADING, heading) : filled
     // Direct ones first: they need no template, so one Meta hasn't approved can't hold them up.
     const ordered = [
       ...phones.filter((phone) => open.has(phone)),

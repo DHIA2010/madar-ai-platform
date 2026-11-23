@@ -259,7 +259,13 @@ describe("WhatsApp outreach from the CRM", () => {
     expect(notes.rows).toHaveLength(1)
     expect(
       (await outreach.list(actor)).find((entry) => entry.id === campaign.id)?.stats
-    ).toMatchObject({ sent: 1, stopped: 1 })
+    ).toMatchObject({ sent: 1, stopped: 1, clicked: 1, clicks: 1 })
+    // Moved to "not interested", and found under the "stopped" filter only.
+    expect(await stageOf(reem)).toBe("not_interested")
+    const stoppedOnly = await outreach.leads(actor, campaign.id, { status: "stopped" })
+    expect(stoppedOnly.items.map((item) => item.leadId)).toEqual([reem])
+    expect(stoppedOnly.items[0].send?.stoppedAt).toBeTruthy()
+    expect((await outreach.leads(actor, campaign.id, { status: "interested" })).items).toEqual([])
 
     // Shown as stopped where the message went; not offered for any other message; refused if
     // someone tries anyway.
@@ -276,7 +282,12 @@ describe("WhatsApp outreach from the CRM", () => {
   })
 
   it("marks a lead who taps the interested link, once, with a follow-up to call them", async () => {
-    const outreach = new CrmOutreach(database, () => now)
+    const alerts: unknown[] = []
+    const outreach = new CrmOutreach(
+      database,
+      () => now,
+      (alert) => alerts.push(alert)
+    )
     const campaign = await outreach.create(actor, {
       ...CAMPAIGN,
       dailyLimit: 20,
@@ -300,7 +311,17 @@ describe("WhatsApp outreach from the CRM", () => {
     expect(await outreach.recordInterest(code)).toBe(true)
     expect(await outreach.recordInterest("nosuchcode")).toBe(false)
 
-    expect(await stageOf(reem)).toBe("contacted")
+    expect(await stageOf(reem)).toBe("interested")
+    // The team is told once, however many times the link is tapped.
+    expect(alerts).toEqual([
+      {
+        kind: "website",
+        name: "الريم",
+        phone: "0553334444",
+        email: null,
+        interestedIn: campaign.name,
+      },
+    ])
     const tasks = await database.query<{ title: string; assignee_user_id: string | null }>(
       `select title, assignee_user_id from crm_tasks where lead_id = $1`,
       [reem]
@@ -318,7 +339,12 @@ describe("WhatsApp outreach from the CRM", () => {
       interested: 1,
       advanced: 1,
       stopped: 0,
+      clicked: 1,
+      clicks: 1,
     })
+    const interestedOnly = await outreach.leads(actor, campaign.id, { status: "interested" })
+    expect(interestedOnly.items.map((item) => item.leadId)).toEqual([reem])
+    expect((await outreach.leads(actor, campaign.id, { status: "stopped" })).items).toEqual([])
     const row = (await outreach.leads(actor, campaign.id, { status: "sent" })).items[0]
     expect(row.send?.interestedAt).toBeTruthy()
 

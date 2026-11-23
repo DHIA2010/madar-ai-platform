@@ -4,6 +4,7 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { requirePlatformPermission } from "../platform-admin/guard"
+import { type LeadAlert, registeredLeadAlertsService } from "../whatsapp/lead-alerts"
 import { addActivity, setStage } from "./service"
 
 // WhatsApp outreach sent by hand (Madar Admin -> CRM -> "رسائل واتساب"). One message is written
@@ -14,13 +15,28 @@ import { addActivity, setStage } from "./service"
 //     strangers at once is the kind WhatsApp restricts);
 //   - counts taps on the lead's link;
 //   - stops messaging a lead who taps the message's "stop" link;
-//   - marks a lead who taps "interested" as contacted, with a follow-up to call them.
+//   - moves a lead who taps "stop" to the "not interested" stage;
+//   - moves a lead who taps "interested" to the "interested" stage, with a follow-up to call
+//     them, and alerts Madar's team on WhatsApp (the numbers that get the new-lead alerts).
 //
 // What can and cannot be known: WhatsApp tells nothing about a message sent by hand -- not
 // delivered, not read. A tap on the link can be counted because the link is Madar's. A reply
 // arrives in the salesperson's WhatsApp, so they mark it here with one press.
 
 export const OUTREACH_STAGE = "whatsapp_sent"
+// Where a tap on "interested" and a tap on "stop" put a lead. Ordinary custom stages, like the
+// one above: made the first time they are needed.
+export const INTERESTED_STAGE = "interested"
+export const NOT_INTERESTED_STAGE = "not_interested"
+const OUTREACH_STAGES: Record<string, { label: string; color: string; position: number }> = {
+  [OUTREACH_STAGE]: { label: "أُرسلت رسالة واتساب", color: "teal", position: 150 },
+  [INTERESTED_STAGE]: { label: "مهتم", color: "emerald", position: 250 },
+  [NOT_INTERESTED_STAGE]: { label: "غير مهتم", color: "slate", position: 900 },
+}
+// The stages a tap may move a lead out of: one with a meeting booked, on trial, won or lost
+// stays where it is.
+const EARLY_STAGES = ["new", OUTREACH_STAGE, "contacted"]
+export type OutreachStatus = "pending" | "sent" | "interested" | "stopped" | "all"
 const SITE_URL = "https://www.madar.my"
 const NAME = "{الاسم}"
 const BUSINESS = "{النشاط}"
@@ -104,6 +120,8 @@ export interface OutreachLeadView {
     lastClickedAt: string | null
     repliedAt: string | null
     interestedAt: string | null
+    // They tapped "stop" in this very message.
+    stoppedAt: string | null
   } | null
 }
 
@@ -115,7 +133,12 @@ const tagsOf = (value: unknown): string[] => {
 export class CrmOutreach {
   constructor(
     private readonly db: PostgresDatabase,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    // Tells Madar's team on WhatsApp that a lead tapped "interested". Never awaited and never
+    // throws: the lead's tap is recorded whether or not the alert goes out.
+    private readonly alertTeam: (lead: LeadAlert) => void = (lead) => {
+      void registeredLeadAlertsService()?.notify(lead)
+    }
   ) {}
 
   private async campaignRow(id: string): Promise<Row> {
@@ -127,15 +150,17 @@ export class CrmOutreach {
     return result.rows[0]
   }
 
-  // The "message sent" stage, between "new" (100) and "contacted" (200): an ordinary custom
-  // stage the team can rename or recolour. Made the first time it is needed, and again if it
-  // was removed since.
-  private async ensureStage(): Promise<void> {
+  // One of this feature's stages ("message sent" between "new" and "contacted", "interested"
+  // after "contacted", "not interested" near the end): an ordinary custom stage the team can
+  // rename, recolour or move. Made the first time it is needed, and again if it was removed
+  // since.
+  private async ensureStage(key: string): Promise<void> {
+    const stage = OUTREACH_STAGES[key]
     await this.db.query(
       `INSERT INTO crm_stages (key, label, color, position)
-       VALUES ($1, 'أُرسلت رسالة واتساب', 'teal', 150)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (key) DO NOTHING`,
-      [OUTREACH_STAGE]
+      [key, stage.label, stage.color, stage.position]
     )
   }
 
@@ -148,7 +173,7 @@ export class CrmOutreach {
       [row.id]
     )
     const today = startOfRiyadhDay(this.now()).getTime()
-    const advancedStages = new Set(["contacted", "meeting", "trial", "won"])
+    const advancedStages = new Set(["contacted", INTERESTED_STAGE, "meeting", "trial", "won"])
     return {
       id: String(row.id),
       name: String(row.name),
@@ -240,11 +265,13 @@ export class CrmOutreach {
   }
 
   // The leads a campaign can go to, with what has already happened for each. Narrowed by tag
-  // and source; "pending" leaves out the ones already sent, "sent" keeps only those.
+  // and source; "pending" leaves out the ones already sent, "sent" keeps only those,
+  // "interested" only those who tapped "interested" and "stopped" only those who asked for no
+  // more messages.
   async leads(
     actor: AuthenticatedActor,
     id: string,
-    filter: { tag?: string | null; source?: string | null; status?: "pending" | "sent" | "all" }
+    filter: { tag?: string | null; source?: string | null; status?: OutreachStatus }
   ): Promise<{ items: OutreachLeadView[]; tags: string[]; pending: number }> {
     requirePlatformPermission(actor, "crm:manage")
     await this.campaignRow(id)
@@ -255,7 +282,7 @@ export class CrmOutreach {
       ),
       this.db.query<Row>(
         `SELECT s.lead_id, s.sent_at, s.clicks, s.last_clicked_at, s.replied_at, s.interested_at,
-                u.full_name
+                s.stopped_at, u.full_name
            FROM crm_outreach_sends s
            LEFT JOIN users u ON u.id = s.sent_by
           WHERE s.campaign_id = $1`,
@@ -279,6 +306,8 @@ export class CrmOutreach {
       if (!send) pending += 1
       const status = filter.status ?? "all"
       if ((status === "pending" && send) || (status === "sent" && !send)) continue
+      if (status === "interested" && !send?.interested_at) continue
+      if (status === "stopped" && !(send && (send.stopped_at || stopped))) continue
       items.push({
         leadId: String(lead.id),
         companyName: String(lead.company_name),
@@ -297,6 +326,7 @@ export class CrmOutreach {
               lastClickedAt: iso(send.last_clicked_at),
               repliedAt: iso(send.replied_at),
               interestedAt: iso(send.interested_at),
+              stoppedAt: iso(send.stopped_at),
             }
           : null,
       })
@@ -359,7 +389,7 @@ export class CrmOutreach {
       })
       // Only a brand-new lead moves: one already further along stays where it is.
       if (lead.stage === "new") {
-        await this.ensureStage()
+        await this.ensureStage(OUTREACH_STAGE)
         await setStage(this.db, { id: leadId, stage: "new" }, OUTREACH_STAGE, {
           actorUserId: actor.userId,
         })
@@ -473,33 +503,38 @@ export class CrmOutreach {
   }
 
   // A tap on the message's "interested" link, reported by its page once open in a person's
-  // browser. Done once: the lead becomes "contacted" (if it was still new or only messaged), it
-  // is written on their timeline, and whoever owns the lead gets a follow-up to call them now.
+  // browser. The lead moves to "interested" (if it was still new, only messaged or contacted).
+  // The first time, it is also counted as a tap on the link, written on their timeline, and
+  // whoever owns the lead gets a follow-up to call them now.
   async recordInterest(code: string): Promise<boolean> {
     const found = await this.db.query<Row>(
-      `SELECT s.id, s.lead_id, s.interested_at, s.sent_by, l.stage, l.owner_user_id
+      `SELECT s.id, s.lead_id, s.interested_at, s.sent_by, l.stage, l.owner_user_id,
+              l.company_name, l.contact_name, l.phone, l.email, c.name AS campaign_name
          FROM crm_outreach_sends s
          JOIN crm_leads l ON l.id = s.lead_id
+         JOIN crm_outreach_campaigns c ON c.id = s.campaign_id
         WHERE s.code = $1`,
       [code]
     )
     const row = found.rows[0]
     if (!row) return false
-    if (row.interested_at) return true
     const at = this.now().toISOString()
     const leadId = String(row.lead_id)
+    if (EARLY_STAGES.includes(String(row.stage))) {
+      await this.ensureStage(INTERESTED_STAGE)
+      await setStage(this.db, { id: leadId, stage: String(row.stage) }, INTERESTED_STAGE)
+    }
+    if (row.interested_at) return true
     await this.db.query(`UPDATE crm_outreach_sends SET interested_at = $2 WHERE id = $1`, [
       row.id,
       at,
     ])
+    await this.recordClick(code)
     await addActivity(this.db, {
       leadId,
       kind: "note",
       body: "مهتم: ضغط رابط «مهتم» في رسالة واتساب.",
     })
-    if (row.stage === "new" || row.stage === OUTREACH_STAGE) {
-      await setStage(this.db, { id: leadId, stage: String(row.stage) }, "contacted")
-    }
     await this.db.query(
       `INSERT INTO crm_tasks (id, lead_id, title, due_at, assignee_user_id, created_by_user_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -512,15 +547,24 @@ export class CrmOutreach {
         row.sent_by ?? null,
       ]
     )
+    const contact = text(row.contact_name)
+    this.alertTeam({
+      kind: "website",
+      name: contact ? `${String(row.company_name)} (${contact})` : String(row.company_name),
+      phone: text(row.phone),
+      email: text(row.email),
+      interestedIn: String(row.campaign_name),
+    })
     return true
   }
 
   // A tap on the message's "stop" link, reported by its page once open in a person's browser.
-  // The lead is tagged so nothing more is sent to them, and it is written on their timeline.
-  // Tapped twice, it is done once.
+  // The lead is tagged so nothing more is sent to them, moves to "not interested" (unless a
+  // meeting, a trial or a closed deal already put it further along), and it is written on
+  // their timeline. Tapped twice, it is counted and written once.
   async recordStop(code: string): Promise<boolean> {
     const found = await this.db.query<Row>(
-      `SELECT s.id, s.lead_id, s.stopped_at, l.tags
+      `SELECT s.id, s.lead_id, s.stopped_at, l.tags, l.stage
          FROM crm_outreach_sends s
          JOIN crm_leads l ON l.id = s.lead_id
         WHERE s.code = $1`,
@@ -533,6 +577,15 @@ export class CrmOutreach {
         row.id,
         this.now().toISOString(),
       ])
+      await this.recordClick(code)
+    }
+    if ([...EARLY_STAGES, INTERESTED_STAGE].includes(String(row.stage))) {
+      await this.ensureStage(NOT_INTERESTED_STAGE)
+      await setStage(
+        this.db,
+        { id: String(row.lead_id), stage: String(row.stage) },
+        NOT_INTERESTED_STAGE
+      )
     }
     const tags = tagsOf(row.tags)
     if (!tags.includes(STOPPED_TAG)) {

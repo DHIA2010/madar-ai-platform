@@ -45,6 +45,8 @@ const BLANK: OutreachCampaignInput = {
 const STATUS_TABS: { key: OutreachStatus; label: string }[] = [
   { key: "pending", label: "بانتظار الإرسال" },
   { key: "sent", label: "أُرسلت" },
+  { key: "interested", label: "مهتمون" },
+  { key: "stopped", label: "طلبوا الإيقاف" },
   { key: "all", label: "الكل" },
 ]
 const SELECT =
@@ -404,6 +406,8 @@ export function MadarAdminCrmOutreach() {
                     >
                       {tab.label}
                       {tab.key === "pending" && leads ? ` (${leads.pending})` : ""}
+                      {tab.key === "interested" ? ` (${selected.stats.interested})` : ""}
+                      {tab.key === "stopped" ? ` (${selected.stats.stopped})` : ""}
                     </button>
                   ))}
                 </div>
@@ -481,7 +485,12 @@ export function MadarAdminCrmOutreach() {
                             )}
                             {lead.send.interestedAt ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">
-                                مهتم
+                                ضغط «مهتم»
+                              </span>
+                            ) : null}
+                            {lead.send.stoppedAt ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 font-bold text-rose-700">
+                                ضغط «إيقاف الرسائل»
                               </span>
                             ) : null}
                             {lead.send.repliedAt ? (
