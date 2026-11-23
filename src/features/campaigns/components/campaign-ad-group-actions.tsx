@@ -36,6 +36,11 @@ import {
   CAMPAIGN_SELECT_ITEM_CLASSNAME,
   CAMPAIGN_SELECT_TRIGGER_CLASSNAME,
 } from "./campaign-select-styles"
+import {
+  CampaignTrackingFields,
+  resolveTracking,
+  type TrackingEdits,
+} from "./campaign-tracking-fields"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
@@ -147,6 +152,9 @@ function AddAdForm({
     platform === "snapchat" ? "MORE" : "LEARN_MORE"
   )
   const [url, setUrl] = useState("")
+  // The link's tracking words: the ad group's name as the campaign, the ad's own as the content.
+  const [trackingEdits, setTrackingEdits] = useState<TrackingEdits>({})
+  const trackingDefaults = { campaign: row.name, content: name }
   const [headlines, setHeadlines] = useState(["", "", ""])
   const [descriptions, setDescriptions] = useState(["", ""])
   const [busy, setBusy] = useState(false)
@@ -203,12 +211,14 @@ function AddAdForm({
           ? {
               name: name.trim(),
               url: url.trim(),
+              tracking: resolveTracking(platform, trackingDefaults, trackingEdits),
               headlines: filled(headlines),
               descriptions: filled(descriptions),
             }
           : {
               name: name.trim(),
               url: url.trim(),
+              tracking: resolveTracking(platform, trackingDefaults, trackingEdits),
               creativeId,
               headline: headline.trim(),
               callToAction,
@@ -450,6 +460,14 @@ function AddAdForm({
         />
         <p className={HINT}>{p("ad.urlHint")}</p>
       </div>
+
+      <CampaignTrackingFields
+        platform={platform}
+        url={url}
+        defaults={trackingDefaults}
+        edits={trackingEdits}
+        onChange={setTrackingEdits}
+      />
 
       {error ? (
         <p className="rounded-xl border border-[#fecdca] bg-[#fffbfa] px-4 py-3 text-[13px] font-semibold leading-6 text-[#b42318]">

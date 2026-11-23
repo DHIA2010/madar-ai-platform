@@ -77,6 +77,8 @@ interface PublishCommonInput {
   maxAge?: number | null
   gender: "all" | "male" | "female"
   url: string
+  // The tracking words for the link, when the form's boxes were sent.
+  tracking?: LinkTracking | null
   startActive: boolean
 }
 
@@ -237,6 +239,10 @@ export interface PublishingPlatforms {
   google?: { api: GooglePublisher }
 }
 
+// The oldest exact ages Snapchat's targeting takes (see publishOn).
+export const SNAPCHAT_MIN_AGE_TOP = 45
+export const SNAPCHAT_MAX_AGE_TOP = 49
+
 // Snapchat's floor is 5 US dollars a day; 20 covers it in riyals and the neighbouring currencies.
 export const MIN_DAILY_BUDGET = 20
 // Each platform's own floor for a day's budget, in riyals (TikTok's is 20 US dollars for an ad
@@ -341,25 +347,54 @@ const TRACKING_SOURCE: Record<PublishPlatform, { source: string; medium: string 
   google: { source: "google", medium: "cpc" },
 }
 
-// The landing page's address with the campaign named in it, so Madar's own reports (and the
-// merchant's analytics) can tell which campaign a visit came from. An address that already
-// carries utm_source is left as written.
-export function withCampaignTracking(
-  url: string,
-  campaignName: string,
-  platform: PublishPlatform = "snapchat"
-): string {
-  const parsed = new URL(url)
-  if (parsed.searchParams.has("utm_source")) return parsed.toString()
-  const slug =
-    campaignName
+// The tracking words on a link, as the form's own boxes hold them (utm_source, utm_medium,
+// utm_campaign, utm_content). A box left empty is left off the link.
+export interface LinkTracking {
+  source?: string | null
+  medium?: string | null
+  campaign?: string | null
+  content?: string | null
+}
+
+// A name as a tracking word: lower case, letters and digits, the rest as underscores.
+export function trackingSlug(name: string, fallback = "campaign"): string {
+  return (
+    name
       .toLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, "_")
       .replace(/^_+|_+$/g, "")
-      .slice(0, 60) || "campaign"
+      .slice(0, 60) || fallback
+  )
+}
+
+// The landing page's address with the campaign named in it, so Madar's own reports (and the
+// merchant's analytics) can tell which campaign a visit came from.
+//   With `tracking` (the form's own boxes): exactly those words are written on the link.
+//   Without it: Madar's own words are added, unless the address already carries utm_source.
+export function withCampaignTracking(
+  url: string,
+  campaignName: string,
+  platform: PublishPlatform = "snapchat",
+  tracking?: LinkTracking | null
+): string {
+  const parsed = new URL(url)
+  if (tracking) {
+    for (const [key, value] of [
+      ["utm_source", tracking.source],
+      ["utm_medium", tracking.medium],
+      ["utm_campaign", tracking.campaign],
+      ["utm_content", tracking.content],
+    ] as const) {
+      const word = value?.trim()
+      if (word) parsed.searchParams.set(key, word)
+      else parsed.searchParams.delete(key)
+    }
+    return parsed.toString()
+  }
+  if (parsed.searchParams.has("utm_source")) return parsed.toString()
   parsed.searchParams.set("utm_source", TRACKING_SOURCE[platform].source)
   parsed.searchParams.set("utm_medium", TRACKING_SOURCE[platform].medium)
-  parsed.searchParams.set("utm_campaign", slug)
+  parsed.searchParams.set("utm_campaign", trackingSlug(campaignName))
   return parsed.toString()
 }
 
@@ -593,7 +628,7 @@ export class CampaignPublishingService {
     try {
       const parsed = new URL(input.url)
       if (parsed.protocol !== "https:") throw new Error("not https")
-      url = withCampaignTracking(input.url, input.name, input.platform)
+      url = withCampaignTracking(input.url, input.name, input.platform, input.tracking)
     } catch {
       throw invalid("PUBLISH_INVALID_URL", "The website address has to start with https://.")
     }
@@ -790,8 +825,12 @@ export class CampaignPublishingService {
         callToAction: input.callToAction,
       })
     }
+    // Snapchat takes an exact youngest age up to 45 and an exact oldest age up to 49; anything
+    // above that is "and older", which is said by leaving the oldest age out.
     return this.snapchat.publish({
       ...shown,
+      minAge: Math.min(shown.minAge, SNAPCHAT_MIN_AGE_TOP),
+      maxAge: shown.maxAge && shown.maxAge <= SNAPCHAT_MAX_AGE_TOP ? shown.maxAge : null,
       accessToken: await this.snapchatAccess.resolveAccessToken(input.connectionId),
       adAccountId: input.adAccountId,
       brandName: input.brandName.trim(),

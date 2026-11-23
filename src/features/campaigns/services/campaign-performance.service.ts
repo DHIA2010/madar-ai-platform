@@ -261,6 +261,13 @@ const CONTROL_ENDPOINT = {
 export interface CampaignAddAdInput {
   name: string
   url: string
+  // The link's tracking words (utm_source, utm_medium, utm_campaign, utm_content).
+  tracking?: {
+    source?: string | null
+    medium?: string | null
+    campaign?: string | null
+    content?: string | null
+  } | null
   creativeId?: string
   brandName?: string
   headline?: string

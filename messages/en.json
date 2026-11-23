@@ -8211,6 +8211,16 @@
         "cancel": "Cancel",
         "removed": "The campaign was deleted",
         "removeFailed": "The campaign could not be deleted. Try again."
+      },
+      "tracking": {
+        "title": "Link tracking",
+        "hint": "Madar fills these boxes itself, so you can tell which campaign and ad each visitor came from. Change them if you like; an empty box is left off the link.",
+        "source": "Source (utm_source)",
+        "medium": "Medium (utm_medium)",
+        "campaign": "Campaign (utm_campaign)",
+        "content": "Ad (utm_content)",
+        "preview": "The link as the platform will get it",
+        "previewEmpty": "Write your website link first"
       }
     },
     "metrics": {

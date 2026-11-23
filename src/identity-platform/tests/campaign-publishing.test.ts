@@ -503,6 +503,17 @@ describe("the creative library and the publish record", () => {
     expect(withCampaignTracking("https://shop.sa/?utm_source=mine", "x")).toBe(
       "https://shop.sa/?utm_source=mine"
     )
+    // The form's own boxes: exactly those words, an empty box left off, an old word replaced.
+    expect(
+      withCampaignTracking("https://shop.sa/offers?utm_source=old&utm_content=old", "x", "tiktok", {
+        source: "tiktok",
+        medium: "paid_social",
+        campaign: "winter_2026",
+        content: "",
+      })
+    ).toBe(
+      "https://shop.sa/offers?utm_source=tiktok&utm_medium=paid_social&utm_campaign=winter_2026"
+    )
   })
 
   function service(snap = fakeSnapchat(), now = new Date("2026-01-15T06:00:00Z")) {
@@ -930,6 +941,23 @@ describe("the creative library and the publish record", () => {
     }
     expect(snap.calls).toEqual([])
     expect(await publishing.list(ORG)).toEqual([])
+  })
+
+  it("takes any adult age, and hands Snapchat the nearest ages it can target", async () => {
+    const { publishing, snap } = service()
+    const creative = await upload()
+    // 55 to 65: above Snapchat's exact ages, so it is asked for "45 and older".
+    await publishing.publish(actor, request(creative.id, { minAge: 55, maxAge: 65 }))
+    await publishing.settled()
+    const adSquad = snap.calls.find(
+      (call) => call.method === "POST" && call.path.endsWith("/adsquads")
+    )?.body as { adsquads: Array<{ targeting: { demographics: Array<Record<string, string>> } }> }
+    expect(adSquad.adsquads[0].targeting.demographics[0]).toEqual({
+      min_age: "45",
+      operation: "INCLUDE",
+    })
+    // The record keeps what was asked for.
+    expect((await publishing.list(ORG))[0].targeting).toMatchObject({ minAge: 55, maxAge: 65 })
   })
 
   it("records Snapchat's reason when a publish fails, and what was cut short", async () => {

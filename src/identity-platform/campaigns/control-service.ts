@@ -21,6 +21,7 @@ import {
   creativeProblemFor,
   MIN_DAILY_BUDGETS,
   withCampaignTracking,
+  type LinkTracking,
   type PublishPlatform,
 } from "./publishing/service"
 import {
@@ -129,6 +130,8 @@ export interface GoogleAdder {
 export interface AddAdInput {
   name: string
   url: string
+  // The tracking words for the link, when the form's boxes were sent.
+  tracking?: LinkTracking | null
   creativeId?: string | null
   brandName?: string | null
   headline?: string | null
@@ -667,7 +670,7 @@ export class CampaignControlService {
     let url: string
     try {
       if (new URL(input.url).protocol !== "https:") throw new Error("not https")
-      url = withCampaignTracking(input.url, name, platform)
+      url = withCampaignTracking(input.url, name, platform, input.tracking)
     } catch {
       throw new IdentityError(
         "PUBLISH_INVALID_URL",

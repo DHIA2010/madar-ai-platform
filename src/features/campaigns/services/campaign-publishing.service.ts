@@ -114,7 +114,16 @@ export interface PublishOptions {
   }
 }
 
+// The tracking words on an ad's link (utm_source, utm_medium, utm_campaign, utm_content).
+export interface LinkTracking {
+  source?: string | null
+  medium?: string | null
+  campaign?: string | null
+  content?: string | null
+}
+
 interface PublishCommonInput {
+  tracking?: LinkTracking | null
   connectionId: string
   adAccountId: string
   name: string

@@ -542,7 +542,18 @@ export const renameCreativeSchema = z.object({ name: z.string().trim().min(1).ma
 // A campaign to publish to an ad platform (campaigns/publishing/service.ts). What every platform
 // takes is shared; the text limits are each platform's own. Google is a search campaign: text
 // and keywords instead of a creative.
+// The tracking words the form's own boxes hold for the link (utm_source and the rest).
+const trackingWord = z.string().trim().max(100).nullish()
+const linkTrackingSchema = z
+  .object({
+    source: trackingWord,
+    medium: trackingWord,
+    campaign: trackingWord,
+    content: trackingWord,
+  })
+  .nullish()
 const publishCommon = {
+  tracking: linkTrackingSchema,
   connectionId: z.string().uuid(),
   adAccountId: z.string().min(1).max(100),
   name: z.string().trim().min(2).max(120),
@@ -551,8 +562,9 @@ const publishCommon = {
   startDate: dateOnlySchema,
   endDate: dateOnlySchema.nullish(),
   countryCode: z.enum(["sa", "ae", "kw", "qa", "bh", "om", "eg", "jo"]),
-  minAge: z.number().int().min(18).max(49),
-  maxAge: z.number().int().min(19).max(49).nullish(),
+  // Any adult age. Each platform's own narrower limits are applied when it is published to.
+  minAge: z.number().int().min(18).max(65),
+  maxAge: z.number().int().min(19).max(65).nullish(),
   gender: z.enum(["all", "male", "female"]),
   url: z.string().trim().url().max(1000),
   startActive: z.boolean(),
@@ -618,6 +630,7 @@ export const campaignControlAddAdSchema = z.object({
   id: z.string().min(1).max(300),
   name: z.string().trim().min(2).max(120),
   url: z.string().trim().url().max(1000),
+  tracking: linkTrackingSchema,
   creativeId: z.string().uuid().nullish(),
   brandName: z.string().trim().max(40).nullish(),
   headline: z.string().trim().max(100).nullish(),

@@ -69,6 +69,11 @@ import {
   CAMPAIGN_SELECT_ITEM_CLASSNAME,
   CAMPAIGN_SELECT_TRIGGER_CLASSNAME,
 } from "./campaign-select-styles"
+import {
+  CampaignTrackingFields,
+  resolveTracking,
+  type TrackingEdits,
+} from "./campaign-tracking-fields"
 
 import { PlatformBadge } from "@/components/platform-badge"
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -80,9 +85,13 @@ const FIELD =
   "h-12 rounded-xl border-[#d5dce8] bg-white px-4 text-[14px] font-medium text-[#0b1738] placeholder:text-[#98a2b3]"
 
 const STEPS = ["basics", "audience", "ad", "review"] as const
-const AGES = [18, 21, 25, 30, 35, 40, 45] as const
-// Snapchat's oldest selectable age; above it means "and older".
-const MAX_AGES = [24, 29, 34, 39, 44, 49] as const
+// Every age can be picked as the youngest or the oldest. Snapchat takes an exact youngest age
+// up to 45 and an exact oldest age up to 49 (above that is "and older"); TikTok and Meta go to 65.
+const YOUNGEST_AGE = 18
+const ageLimits = (platform: PublishPlatform) =>
+  platform === "snapchat" ? { minTop: 45, maxTop: 49 } : { minTop: 65, maxTop: 65 }
+const agesBetween = (from: number, to: number) =>
+  Array.from({ length: Math.max(0, to - from + 1) }, (_, index) => from + index)
 const NO_MAX_AGE = "none"
 const PLATFORM_BADGE = {
   snapchat: "Snapchat",
@@ -129,6 +138,8 @@ interface Draft {
   keywords: string
   callToAction: AnyCallToAction
   url: string
+  // What was typed over Madar's own tracking words for the link.
+  tracking: TrackingEdits
   startActive: boolean
 }
 
@@ -256,6 +267,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     keywords: "",
     callToAction: "MORE",
     url: "",
+    tracking: {},
     startActive: false,
   }))
 
@@ -362,6 +374,12 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
         dailyBudget: String(
           Math.max(Number(current.dailyBudget) || 0, options.limits.minDailyBudgets[platform])
         ),
+        // Ages the new platform cannot take exactly fall back to its nearest choice.
+        minAge: Math.min(current.minAge, ageLimits(platform).minTop),
+        maxAge:
+          current.maxAge !== NO_MAX_AGE && Number(current.maxAge) > ageLimits(platform).maxTop
+            ? NO_MAX_AGE
+            : current.maxAge,
       }
     })
     setErrors({})
@@ -482,6 +500,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       maxAge: isGoogle || draft.maxAge === NO_MAX_AGE ? null : Number(draft.maxAge),
       gender: isGoogle ? ("all" as const) : draft.gender,
       url: draft.url.trim(),
+      tracking: resolveTracking(draft.platform, { campaign: draft.name }, draft.tracking),
       startActive: draft.startActive,
     }
     const creativeId = creative?.id ?? ""
@@ -972,14 +991,32 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               <Field label={t("audience.minAge")}>
                 {selectField(
                   String(draft.minAge),
-                  (value) => set("minAge", Number(value)),
-                  AGES.map((age) => ({ value: String(age), label: String(age) }))
+                  (value) => {
+                    const minAge = Number(value)
+                    setDraft((current) => ({
+                      ...current,
+                      minAge,
+                      maxAge:
+                        current.maxAge !== NO_MAX_AGE && Number(current.maxAge) <= minAge
+                          ? NO_MAX_AGE
+                          : current.maxAge,
+                    }))
+                    setErrors((current) => ({ ...current, maxAge: undefined }))
+                  },
+                  agesBetween(YOUNGEST_AGE, ageLimits(draft.platform).minTop).map((age) => ({
+                    value: String(age),
+                    label: String(age),
+                  }))
                 )}
               </Field>
               <Field label={t("audience.maxAge")} error={errors.maxAge}>
                 {selectField(draft.maxAge, (value) => set("maxAge", value), [
                   { value: NO_MAX_AGE, label: t("audience.noMaxAge") },
-                  ...MAX_AGES.map((age) => ({ value: String(age), label: String(age) })),
+                  // Only ages above the youngest one chosen.
+                  ...agesBetween(draft.minAge + 1, ageLimits(draft.platform).maxTop).map((age) => ({
+                    value: String(age),
+                    label: String(age),
+                  })),
                 ])}
               </Field>
             </div>
@@ -1130,6 +1167,14 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                 onChange={(event) => set("url", event.target.value)}
               />
             </Field>
+
+            <CampaignTrackingFields
+              platform={draft.platform}
+              url={draft.url}
+              defaults={{ campaign: draft.name }}
+              edits={draft.tracking}
+              onChange={(tracking) => set("tracking", tracking)}
+            />
 
             {/* The ad roughly as a Google search result shows it. */}
             <div>
@@ -1306,6 +1351,14 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   onChange={(event) => set("url", event.target.value)}
                 />
               </Field>
+
+              <CampaignTrackingFields
+                platform={draft.platform}
+                url={draft.url}
+                defaults={{ campaign: draft.name }}
+                edits={draft.tracking}
+                onChange={(tracking) => set("tracking", tracking)}
+              />
             </div>
 
             {/* The ad roughly as Snapchat shows it: the creative full-screen, the brand and
