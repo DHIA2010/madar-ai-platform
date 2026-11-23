@@ -12,7 +12,8 @@ import { addActivity, setStage } from "./service"
 //   - moves a new lead to the "message sent" stage and writes the send on its timeline;
 //   - counts the day's sends against the campaign's daily limit (a number that messages many
 //     strangers at once is the kind WhatsApp restricts);
-//   - counts taps on the lead's link.
+//   - counts taps on the lead's link;
+//   - stops messaging a lead who taps the message's "stop" link.
 //
 // What can and cannot be known: WhatsApp tells nothing about a message sent by hand -- not
 // delivered, not read. A tap on the link can be counted because the link is Madar's. A reply
@@ -23,6 +24,11 @@ const SITE_URL = "https://www.madar.my"
 const NAME = "{الاسم}"
 const BUSINESS = "{النشاط}"
 const LINK = "{الرابط}"
+// A link that stops further messages with one tap, for the lead who does not want them.
+const STOP = "{إيقاف}"
+// The tag a lead carries once they asked for no more messages. Every list and every send here
+// leaves such a lead out, whichever message they stopped from.
+export const STOPPED_TAG = "أوقف الرسائل"
 
 type Row = Record<string, unknown>
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null)
@@ -69,6 +75,8 @@ export interface OutreachCampaignView extends Required<OutreachCampaignInput> {
     replied: number
     // Leads now past the "message sent" stage: contacted, meeting, trial or won.
     advanced: number
+    // Leads who tapped "stop" in this message.
+    stopped: number
   }
 }
 
@@ -82,6 +90,8 @@ export interface OutreachLeadView {
   stage: string
   source: string
   tags: string[]
+  // They asked for no more messages (from this message or another): nothing can be sent.
+  stopped: boolean
   send: {
     sentAt: string
     sentBy: string | null
@@ -125,7 +135,7 @@ export class CrmOutreach {
 
   private async view(row: Row): Promise<OutreachCampaignView> {
     const sends = await this.db.query<Row>(
-      `SELECT s.sent_at, s.clicks, s.replied_at, l.stage
+      `SELECT s.sent_at, s.clicks, s.replied_at, s.stopped_at, l.stage
          FROM crm_outreach_sends s
          LEFT JOIN crm_leads l ON l.id = s.lead_id
         WHERE s.campaign_id = $1`,
@@ -151,6 +161,7 @@ export class CrmOutreach {
         clicks: sends.rows.reduce((sum, send) => sum + Number(send.clicks), 0),
         replied: sends.rows.filter((send) => send.replied_at).length,
         advanced: sends.rows.filter((send) => advancedStages.has(String(send.stage))).length,
+        stopped: sends.rows.filter((send) => send.stopped_at).length,
       },
     }
   }
@@ -253,8 +264,10 @@ export class CrmOutreach {
       if (filter.tag && !tags.includes(filter.tag)) continue
       if (filter.source && lead.source !== filter.source) continue
       const send = sentTo.get(String(lead.id)) ?? null
-      // A lead already won or lost is nobody to open a conversation with.
-      if (!send && (lead.stage === "won" || lead.stage === "lost")) continue
+      // A lead already won or lost is nobody to open a conversation with, and one who asked
+      // for no more messages is never offered again.
+      const stopped = tags.includes(STOPPED_TAG)
+      if (!send && (stopped || lead.stage === "won" || lead.stage === "lost")) continue
       if (!send) pending += 1
       const status = filter.status ?? "all"
       if ((status === "pending" && send) || (status === "sent" && !send)) continue
@@ -267,6 +280,7 @@ export class CrmOutreach {
         stage: String(lead.stage),
         source: String(lead.source),
         tags,
+        stopped,
         send: send
           ? {
               sentAt: iso(send.sent_at) as string,
@@ -294,6 +308,9 @@ export class CrmOutreach {
     const lead = (await this.db.query<Row>(`SELECT * FROM crm_leads WHERE id = $1`, [leadId]))
       .rows[0]
     if (!lead) throw refuse("CRM_OUTREACH_LEAD_NOT_FOUND", 404, "Lead not found.")
+    if (tagsOf(lead.tags).includes(STOPPED_TAG)) {
+      throw refuse("CRM_OUTREACH_STOPPED", 409, "This lead asked for no more messages.")
+    }
     const phone = whatsAppNumber(text(lead.phone))
     if (!phone) {
       throw refuse("CRM_OUTREACH_NO_PHONE", 422, "This lead has no number WhatsApp can open.")
@@ -346,9 +363,11 @@ export class CrmOutreach {
       .join(name)
       .split(BUSINESS)
       .join(String(lead.company_name))
-    message = message.includes(LINK)
-      ? message.split(LINK).join(trackedUrl)
-      : `${message.trim()}\n${trackedUrl}`
+    // The stop link goes in first: where the message has no {الرابط}, the lead's link is added
+    // at the very end, after it.
+    const hadLink = message.includes(LINK)
+    message = message.split(STOP).join(`${trackedUrl}/stop`)
+    message = hadLink ? message.split(LINK).join(trackedUrl) : `${message.trim()}\n${trackedUrl}`
     return {
       message,
       phone,
@@ -438,6 +457,40 @@ export class CrmOutreach {
       imageUrl: text(row.image_url),
       target,
     }
+  }
+
+  // A tap on the message's "stop" link, reported by its page once open in a person's browser.
+  // The lead is tagged so nothing more is sent to them, and it is written on their timeline.
+  // Tapped twice, it is done once.
+  async recordStop(code: string): Promise<boolean> {
+    const found = await this.db.query<Row>(
+      `SELECT s.id, s.lead_id, s.stopped_at, l.tags
+         FROM crm_outreach_sends s
+         JOIN crm_leads l ON l.id = s.lead_id
+        WHERE s.code = $1`,
+      [code]
+    )
+    const row = found.rows[0]
+    if (!row) return false
+    if (!row.stopped_at) {
+      await this.db.query(`UPDATE crm_outreach_sends SET stopped_at = $2 WHERE id = $1`, [
+        row.id,
+        this.now().toISOString(),
+      ])
+    }
+    const tags = tagsOf(row.tags)
+    if (!tags.includes(STOPPED_TAG)) {
+      await this.db.query(
+        `UPDATE crm_leads SET tags = $2::jsonb, updated_at = now() WHERE id = $1`,
+        [row.lead_id, JSON.stringify([...tags, STOPPED_TAG])]
+      )
+      await addActivity(this.db, {
+        leadId: String(row.lead_id),
+        kind: "note",
+        body: "طلب إيقاف رسائل واتساب (ضغط رابط الإيقاف في الرسالة).",
+      })
+    }
+    return true
   }
 
   // A tap on the link, reported by the page once it is open in a person's browser (the chat

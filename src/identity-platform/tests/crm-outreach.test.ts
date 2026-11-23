@@ -222,6 +222,59 @@ describe("WhatsApp outreach from the CRM", () => {
     expect(row.send?.lastClickedAt).toBeTruthy()
   })
 
+  it("stops messaging a lead who taps the stop link, in this message and every other", async () => {
+    const outreach = new CrmOutreach(database, () => now)
+    const campaign = await outreach.create(actor, {
+      ...CAMPAIGN,
+      dailyLimit: 20,
+      message: "مرحبًا {الاسم}\n{الرابط}\nلإيقاف الرسائل: {إيقاف}",
+    })
+    const other = await outreach.create(actor, { ...CAMPAIGN, dailyLimit: 20, name: "رسالة أخرى" })
+    const reem = await lead({ company: "الريم", phone: "0553334444", tags: ["قائمة المعرض"] })
+
+    const sent = await outreach.send(actor, campaign.id, reem)
+    expect(sent.message).toBe(
+      `مرحبًا الريم\n${sent.trackedUrl}\nلإيقاف الرسائل: ${sent.trackedUrl}/stop`
+    )
+    const code = sent.trackedUrl.split("/").pop() as string
+
+    expect(await outreach.recordStop(code)).toBe(true)
+    // Tapped again: still done once.
+    expect(await outreach.recordStop(code)).toBe(true)
+    expect(await outreach.recordStop("nosuchcode")).toBe(false)
+
+    const row = await database.query<{ tags: unknown }>(
+      `select tags from crm_leads where id = $1`,
+      [reem]
+    )
+    const tags = row.rows[0].tags
+    expect(typeof tags === "string" ? JSON.parse(tags) : tags).toEqual([
+      "قائمة المعرض",
+      "أوقف الرسائل",
+    ])
+    const notes = await database.query<{ body: string }>(
+      `select body from crm_activities where lead_id = $1 and kind = 'note'`,
+      [reem]
+    )
+    expect(notes.rows).toHaveLength(1)
+    expect(
+      (await outreach.list(actor)).find((entry) => entry.id === campaign.id)?.stats
+    ).toMatchObject({ sent: 1, stopped: 1 })
+
+    // Shown as stopped where the message went; not offered for any other message; refused if
+    // someone tries anyway.
+    const here = await outreach.leads(actor, campaign.id, { status: "all" })
+    expect(here.items.find((item) => item.leadId === reem)).toMatchObject({ stopped: true })
+    const elsewhere = await outreach.leads(actor, other.id, { status: "all" })
+    expect(elsewhere.items.find((item) => item.leadId === reem)).toBeUndefined()
+    await expect(outreach.send(actor, other.id, reem)).rejects.toMatchObject({
+      code: "CRM_OUTREACH_STOPPED",
+    })
+    await expect(outreach.send(actor, campaign.id, reem)).rejects.toMatchObject({
+      code: "CRM_OUTREACH_STOPPED",
+    })
+  })
+
   it("is for the sales team only, and puts numbers in WhatsApp's form", async () => {
     const outreach = new CrmOutreach(database, () => now)
     const outsider = { ...actor, platformPermissions: [] } as AuthenticatedActor

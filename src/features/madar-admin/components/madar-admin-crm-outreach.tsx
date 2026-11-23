@@ -31,11 +31,11 @@ import {
 } from "../services/crm-outreach.service"
 import { SOURCE_LABEL, StageBadge } from "./crm-ui"
 
-const VARIABLES = ["{الاسم}", "{النشاط}", "{الرابط}"]
+const VARIABLES = ["{الاسم}", "{النشاط}", "{الرابط}", "{إيقاف}"]
 const BLANK: OutreachCampaignInput = {
   name: "",
   message:
-    "مرحبًا {الاسم}،\nمعك فريق مدار. نساعد {النشاط} على إدارة المبيعات والفواتير المعتمدة من هيئة الزكاة من نظام واحد.\nتفاصيل أكثر من هنا:\n{الرابط}",
+    "مرحبًا {الاسم} 👋\nمعك فريق مدار. نظام سعودي واحد يدير لك البيع والمخزون والحجوزات وتقارير يومك، بدل برامج متفرقة.\n\nجرّبه مجانًا وشوف الفرق:\n{الرابط}\n\nما تبي رسائل منا؟ اضغط هنا: {إيقاف}",
   linkUrl: "https://www.madar.my/contact-sales/",
   linkTitle: "مدار",
   linkDescription: "نظام واحد يدير نشاطك كله",
@@ -216,6 +216,8 @@ export function MadarAdminCrmOutreach() {
           toast.error(
             `وصلت حد اليوم (${failure.details?.limit ?? selected.dailyLimit}). أكمل غدًا.`
           )
+        } else if (failure.code === "CRM_OUTREACH_STOPPED") {
+          toast.error("هذا العميل طلب إيقاف الرسائل.")
         } else if (failure.code === "CRM_OUTREACH_NO_PHONE") {
           toast.error("لا يوجد لهذا العميل رقم يفتحه واتساب.")
         } else toast.error("تعذر تجهيز الرسالة.")
@@ -348,7 +350,7 @@ export function MadarAdminCrmOutreach() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
                     <Tile
                       label="أُرسلت اليوم"
                       value={`${selected.stats.sentToday} / ${selected.dailyLimit}`}
@@ -361,6 +363,11 @@ export function MadarAdminCrmOutreach() {
                       hint={`${selected.stats.clicks} ضغطة`}
                     />
                     <Tile label="ردّوا" value={String(selected.stats.replied)} hint="تحدده أنت" />
+                    <Tile
+                      label="أوقفوا الرسائل"
+                      value={String(selected.stats.stopped)}
+                      hint="ضغطوا رابط الإيقاف"
+                    />
                     <Tile
                       label="تقدّموا في المسار"
                       value={String(selected.stats.advanced)}
@@ -478,7 +485,11 @@ export function MadarAdminCrmOutreach() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {!lead.reachable ? (
+                        {lead.stopped ? (
+                          <span className="rounded-full bg-rose-50 px-3 py-1 text-[12.5px] font-bold text-rose-700">
+                            طلب إيقاف الرسائل
+                          </span>
+                        ) : !lead.reachable ? (
                           <span className="text-[12.5px] text-muted-foreground">
                             لا يوجد رقم واتساب
                           </span>
@@ -632,7 +643,8 @@ export function MadarAdminCrmOutreach() {
                 </div>
                 <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                   {"{الاسم}"} اسم المسؤول (أو النشاط إن لم يوجد)، {"{النشاط}"} اسم النشاط،{" "}
-                  {"{الرابط}"} رابط العميل الخاص. إن لم تكتب {"{الرابط}"} يُضاف في آخر الرسالة.
+                  {"{الرابط}"} رابط العميل الخاص. إن لم تكتب {"{الرابط}"} يُضاف في آخر الرسالة.{" "}
+                  {"{إيقاف}"} رابط يضغطه العميل ليوقف الرسائل: يُعلَّم في النظام ولا يُرسل له بعدها.
                 </p>
               </div>
               <label className="block text-sm">
