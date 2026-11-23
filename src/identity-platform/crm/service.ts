@@ -34,6 +34,7 @@ import {
   stageRank,
 } from "./stages"
 import type { LeadAttribution } from "../schemas"
+import type { CrmLeadImportInput } from "./import-schema"
 import { type FieldValue, type FilterCondition, matchesAll, withinDays } from "./filters"
 
 type LeadRow = {
@@ -958,6 +959,82 @@ export class CrmService {
       actorUserId: actor.userId,
     })
     return this.getLead(actor, id)
+  }
+
+  // Leads brought in from a file. A row needs a name (the company's, else the person's) and a
+  // phone or an e-mail. One already in the CRM -- or earlier in the same file -- by the same
+  // phone or e-mail is passed over, so importing a file twice adds nothing. Each lead made
+  // carries the file's tag and belongs to whoever imported it.
+  async importLeads(
+    actor: AuthenticatedActor,
+    input: CrmLeadImportInput
+  ): Promise<{ created: number; duplicates: number; invalid: number }> {
+    requirePlatformPermission(actor, "crm:manage")
+    const phoneKey = (value: string | null) => {
+      const digits = (value ?? "")
+        .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+        .replace(/\D/g, "")
+      if (digits.length < 7) return null
+      // Saudi mobiles in one form, however they were written: 05X, 5X, 9665X, 009665X.
+      const local = digits.replace(/^(00966|966|0)/, "")
+      return /^5\d{8}$/.test(local) ? `966${local}` : digits
+    }
+    const emailKey = (value: string | null) => {
+      const email = (value ?? "").trim().toLowerCase()
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
+    }
+    const existing = await this.db.query<{ phone: string | null; email: string | null }>(
+      "SELECT phone, email FROM crm_leads"
+    )
+    const seen = new Set<string>()
+    for (const row of existing.rows) {
+      const phone = phoneKey(row.phone)
+      const email = emailKey(row.email)
+      if (phone) seen.add(`p:${phone}`)
+      if (email) seen.add(`e:${email}`)
+    }
+    let created = 0
+    let duplicates = 0
+    let invalid = 0
+    for (const row of input.rows) {
+      const name = row.companyName ?? row.contactName
+      const phone = phoneKey(row.phone)
+      const email = emailKey(row.email)
+      if (!name || name.length < 2 || (!phone && !email)) {
+        invalid += 1
+        continue
+      }
+      if ((phone && seen.has(`p:${phone}`)) || (email && seen.has(`e:${email}`))) {
+        duplicates += 1
+        continue
+      }
+      if (phone) seen.add(`p:${phone}`)
+      if (email) seen.add(`e:${email}`)
+      const id = randomUUID()
+      await this.db.query(
+        `INSERT INTO crm_leads
+           (id, company_name, contact_name, phone, email, source, stage, owner_user_id,
+            created_by_user_id, tags)
+         VALUES ($1, $2, $3, $4, $5, 'manual', 'new', $6, $6, $7::jsonb)`,
+        [
+          id,
+          name,
+          row.companyName ? row.contactName : null,
+          phone ? `+${phone}` : null,
+          email,
+          actor.userId,
+          JSON.stringify([input.tag]),
+        ]
+      )
+      await addActivity(this.db, {
+        leadId: id,
+        kind: "created",
+        meta: { source: "import", tag: input.tag },
+        actorUserId: actor.userId,
+      })
+      created += 1
+    }
+    return { created, duplicates, invalid }
   }
 
   async updateLead(

@@ -529,6 +529,68 @@ describe("CRM", () => {
     expect(dashboard.body).toMatchObject({ won: 1, wonValue: 299, newLeads: 2, winRate: 100 })
   })
 
+  it("imports a file of leads once: duplicates and rows nobody can be reached by are passed over", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    // Already in the CRM, written the local way.
+    await call("POST", staff.token, "/crm/leads", {
+      companyName: "Old Bakery",
+      phone: "0551112222",
+    })
+    const rows = [
+      {
+        companyName: "مطعم الريم",
+        contactName: "سارة",
+        phone: "0553334444",
+        email: "reem@example.com",
+      },
+      // The same business as "Old Bakery", its number written with the country code.
+      { companyName: "Old Bakery again", phone: "+966 55 111 2222" },
+      // The same number as the first row, in Arabic digits.
+      { companyName: "مطعم الريم فرع 2", phone: "٠٥٥٣٣٣٤٤٤٤" },
+      // No company name: the person's name stands in. Reached by e-mail only.
+      { contactName: "خالد", email: "Khalid@Example.com" },
+      // Nobody to reach, and no name.
+      { companyName: "بلا وسيلة تواصل" },
+      { phone: "0557778888" },
+    ]
+    const first = await call<{ created: number; duplicates: number; invalid: number }>(
+      "POST",
+      staff.token,
+      "/crm/leads/import",
+      { tag: "قائمة المعرض", rows }
+    )
+    expect(first.status).toBe(200)
+    expect(first.body).toEqual({ created: 2, duplicates: 2, invalid: 2 })
+
+    const listed = await call<{ items: Array<Record<string, unknown>> }>(
+      "GET",
+      staff.token,
+      "/crm/leads"
+    )
+    const reem = listed.body.items.find((lead) => lead.companyName === "مطعم الريم")
+    expect(reem).toMatchObject({
+      contactName: "سارة",
+      phone: "+966553334444",
+      email: "reem@example.com",
+      source: "manual",
+      stage: "new",
+      tags: ["قائمة المعرض"],
+    })
+    expect(listed.body.items.find((lead) => lead.companyName === "خالد")).toMatchObject({
+      email: "khalid@example.com",
+      phone: null,
+    })
+
+    // The same file again adds nothing.
+    const again = await call<{ created: number; duplicates: number; invalid: number }>(
+      "POST",
+      staff.token,
+      "/crm/leads/import",
+      { tag: "قائمة المعرض", rows }
+    )
+    expect(again.body).toEqual({ created: 0, duplicates: 4, invalid: 2 })
+  })
+
   it("adds leads by hand, logs calls, moves stages and tracks follow-ups", async () => {
     const staff = await signIn(STAFF_EMAIL, "Madar HQ")
     const created = await call<LeadDetail>("POST", staff.token, "/crm/leads", {

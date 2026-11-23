@@ -58,6 +58,7 @@ import {
   crmTaskListQuerySchema,
 } from "../../crm/schemas"
 import type { SalesDocumentsService } from "../../crm/sales-documents"
+import { crmLeadImportSchema } from "../../crm/import-schema"
 import type { CrmService } from "../../crm/service"
 import { requirePlatformPermission } from "../../platform-admin/guard"
 import type { PlatformGovernanceService } from "../../platform-admin/governance-service"
@@ -563,6 +564,9 @@ async function handleCrmRoute(input: {
   }
   if (method === "POST" && route === "/leads") {
     return send(201, await crm.createLead(actor, crmLeadInputSchema.parse(await readJsonBody())))
+  }
+  if (method === "POST" && route === "/leads/import") {
+    return send(200, await crm.importLeads(actor, crmLeadImportSchema.parse(await readJsonBody())))
   }
   if (method === "GET" && route === "/tasks") {
     return send(200, await crm.listTasks(actor, crmTaskListQuerySchema.parse(query)))

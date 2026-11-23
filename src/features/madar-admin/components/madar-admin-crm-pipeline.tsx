@@ -13,6 +13,7 @@ import {
   Plus,
   Rows3,
   Settings2,
+  Upload,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -57,6 +58,7 @@ import {
   SavedViews,
   useCrmCustomFields,
 } from "./crm-filters"
+import { LeadImportDialog } from "./crm-lead-import-dialog"
 import { StageManagerDialog } from "./crm-stages-dialog"
 import {
   formatDateTime,
@@ -349,6 +351,7 @@ export function MadarAdminCrmPipeline() {
   const [boardLeads, setBoardLeads] = useState<CrmLead[] | null>(null)
   const [reload, setReload] = useState(0)
   const [creating, setCreating] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [losing, setLosing] = useState<CrmLead | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const dragged = useRef<{ lead: CrmLead; from: string } | null>(null)
@@ -492,13 +495,23 @@ export function MadarAdminCrmPipeline() {
             ) : null}
           </p>
         </div>
-        <AppButton
-          icon={<Plus className="size-4" />}
-          className="h-10 gap-2 rounded-[10px]"
-          onClick={() => setCreating(true)}
-        >
-          إضافة عميل محتمل
-        </AppButton>
+        <div className="flex flex-wrap gap-2">
+          <AppButton
+            variant="outline"
+            icon={<Upload className="size-4" />}
+            className="h-10 gap-2 rounded-[10px]"
+            onClick={() => setImporting(true)}
+          >
+            استيراد من ملف
+          </AppButton>
+          <AppButton
+            icon={<Plus className="size-4" />}
+            className="h-10 gap-2 rounded-[10px]"
+            onClick={() => setCreating(true)}
+          >
+            إضافة عميل محتمل
+          </AppButton>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
@@ -853,6 +866,11 @@ export function MadarAdminCrmPipeline() {
           toast.success("أُضيف العميل المحتمل.")
           router.push(ROUTES.madarAdminCrmLead(created.lead.id))
         }}
+      />
+      <LeadImportDialog
+        open={importing}
+        onClose={() => setImporting(false)}
+        onImported={() => setReload((key) => key + 1)}
       />
       <StageManagerDialog open={managingStages} onClose={() => setManagingStages(false)} />
       <LostReasonDialog
