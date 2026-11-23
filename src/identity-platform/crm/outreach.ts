@@ -13,7 +13,8 @@ import { addActivity, setStage } from "./service"
 //   - counts the day's sends against the campaign's daily limit (a number that messages many
 //     strangers at once is the kind WhatsApp restricts);
 //   - counts taps on the lead's link;
-//   - stops messaging a lead who taps the message's "stop" link.
+//   - stops messaging a lead who taps the message's "stop" link;
+//   - marks a lead who taps "interested" as contacted, with a follow-up to call them.
 //
 // What can and cannot be known: WhatsApp tells nothing about a message sent by hand -- not
 // delivered, not read. A tap on the link can be counted because the link is Madar's. A reply
@@ -24,6 +25,8 @@ const SITE_URL = "https://www.madar.my"
 const NAME = "{الاسم}"
 const BUSINESS = "{النشاط}"
 const LINK = "{الرابط}"
+// A link that says "I'm interested" with one tap: no form, since the lead is already known.
+const INTERESTED = "{مهتم}"
 // A link that stops further messages with one tap, for the lead who does not want them.
 const STOP = "{إيقاف}"
 // The tag a lead carries once they asked for no more messages. Every list and every send here
@@ -77,6 +80,8 @@ export interface OutreachCampaignView extends Required<OutreachCampaignInput> {
     advanced: number
     // Leads who tapped "stop" in this message.
     stopped: number
+    // Leads who tapped "interested" in this message.
+    interested: number
   }
 }
 
@@ -98,6 +103,7 @@ export interface OutreachLeadView {
     clicks: number
     lastClickedAt: string | null
     repliedAt: string | null
+    interestedAt: string | null
   } | null
 }
 
@@ -135,7 +141,7 @@ export class CrmOutreach {
 
   private async view(row: Row): Promise<OutreachCampaignView> {
     const sends = await this.db.query<Row>(
-      `SELECT s.sent_at, s.clicks, s.replied_at, s.stopped_at, l.stage
+      `SELECT s.sent_at, s.clicks, s.replied_at, s.stopped_at, s.interested_at, l.stage
          FROM crm_outreach_sends s
          LEFT JOIN crm_leads l ON l.id = s.lead_id
         WHERE s.campaign_id = $1`,
@@ -162,6 +168,7 @@ export class CrmOutreach {
         replied: sends.rows.filter((send) => send.replied_at).length,
         advanced: sends.rows.filter((send) => advancedStages.has(String(send.stage))).length,
         stopped: sends.rows.filter((send) => send.stopped_at).length,
+        interested: sends.rows.filter((send) => send.interested_at).length,
       },
     }
   }
@@ -247,7 +254,8 @@ export class CrmOutreach {
            FROM crm_leads ORDER BY created_at DESC`
       ),
       this.db.query<Row>(
-        `SELECT s.lead_id, s.sent_at, s.clicks, s.last_clicked_at, s.replied_at, u.full_name
+        `SELECT s.lead_id, s.sent_at, s.clicks, s.last_clicked_at, s.replied_at, s.interested_at,
+                u.full_name
            FROM crm_outreach_sends s
            LEFT JOIN users u ON u.id = s.sent_by
           WHERE s.campaign_id = $1`,
@@ -288,6 +296,7 @@ export class CrmOutreach {
               clicks: Number(send.clicks),
               lastClickedAt: iso(send.last_clicked_at),
               repliedAt: iso(send.replied_at),
+              interestedAt: iso(send.interested_at),
             }
           : null,
       })
@@ -363,10 +372,14 @@ export class CrmOutreach {
       .join(name)
       .split(BUSINESS)
       .join(String(lead.company_name))
-    // The stop link goes in first: where the message has no {الرابط}, the lead's link is added
-    // at the very end, after it.
-    const hadLink = message.includes(LINK)
-    message = message.split(STOP).join(`${trackedUrl}/stop`)
+    // A message with neither {الرابط} nor {مهتم} gets the lead's link added at the very end,
+    // so there is always something to count; one that has either is left as written.
+    const hadLink = message.includes(LINK) || message.includes(INTERESTED)
+    message = message
+      .split(STOP)
+      .join(`${trackedUrl}/stop`)
+      .split(INTERESTED)
+      .join(`${trackedUrl}/yes`)
     message = hadLink ? message.split(LINK).join(trackedUrl) : `${message.trim()}\n${trackedUrl}`
     return {
       message,
@@ -457,6 +470,49 @@ export class CrmOutreach {
       imageUrl: text(row.image_url),
       target,
     }
+  }
+
+  // A tap on the message's "interested" link, reported by its page once open in a person's
+  // browser. Done once: the lead becomes "contacted" (if it was still new or only messaged), it
+  // is written on their timeline, and whoever owns the lead gets a follow-up to call them now.
+  async recordInterest(code: string): Promise<boolean> {
+    const found = await this.db.query<Row>(
+      `SELECT s.id, s.lead_id, s.interested_at, s.sent_by, l.stage, l.owner_user_id
+         FROM crm_outreach_sends s
+         JOIN crm_leads l ON l.id = s.lead_id
+        WHERE s.code = $1`,
+      [code]
+    )
+    const row = found.rows[0]
+    if (!row) return false
+    if (row.interested_at) return true
+    const at = this.now().toISOString()
+    const leadId = String(row.lead_id)
+    await this.db.query(`UPDATE crm_outreach_sends SET interested_at = $2 WHERE id = $1`, [
+      row.id,
+      at,
+    ])
+    await addActivity(this.db, {
+      leadId,
+      kind: "note",
+      body: "مهتم: ضغط رابط «مهتم» في رسالة واتساب.",
+    })
+    if (row.stage === "new" || row.stage === OUTREACH_STAGE) {
+      await setStage(this.db, { id: leadId, stage: String(row.stage) }, "contacted")
+    }
+    await this.db.query(
+      `INSERT INTO crm_tasks (id, lead_id, title, due_at, assignee_user_id, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        randomUUID(),
+        leadId,
+        "اتصل به: ضغط «مهتم» في رسالة واتساب",
+        at,
+        row.owner_user_id ?? row.sent_by ?? null,
+        row.sent_by ?? null,
+      ]
+    )
+    return true
   }
 
   // A tap on the message's "stop" link, reported by its page once open in a person's browser.

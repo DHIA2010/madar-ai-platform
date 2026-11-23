@@ -31,11 +31,11 @@ import {
 } from "../services/crm-outreach.service"
 import { SOURCE_LABEL, StageBadge } from "./crm-ui"
 
-const VARIABLES = ["{الاسم}", "{النشاط}", "{الرابط}", "{إيقاف}"]
+const VARIABLES = ["{الاسم}", "{النشاط}", "{مهتم}", "{إيقاف}", "{الرابط}"]
 const BLANK: OutreachCampaignInput = {
   name: "",
   message:
-    "مرحبًا {الاسم} 👋\nمعك فريق مدار. نظام سعودي واحد يدير لك البيع والمخزون والحجوزات وتقارير يومك، بدل برامج متفرقة.\n\nجرّبه مجانًا وشوف الفرق:\n{الرابط}\n\nما تبي رسائل منا؟ اضغط هنا: {إيقاف}",
+    "مرحبًا {الاسم} 👋\nمعك فريق مدار. نظام سعودي واحد يدير لك البيع والمخزون والحجوزات وتقارير يومك، بدل برامج متفرقة.\n\nمهتم؟ اضغط هنا ونتواصل معك:\n{مهتم}\n\nغير مهتم؟ اضغط هنا لإيقاف الرسائل:\n{إيقاف}",
   linkUrl: "https://www.madar.my/contact-sales/",
   linkTitle: "مدار",
   linkDescription: "نظام واحد يدير نشاطك كله",
@@ -350,7 +350,7 @@ export function MadarAdminCrmOutreach() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                     <Tile
                       label="أُرسلت اليوم"
                       value={`${selected.stats.sentToday} / ${selected.dailyLimit}`}
@@ -363,6 +363,11 @@ export function MadarAdminCrmOutreach() {
                       hint={`${selected.stats.clicks} ضغطة`}
                     />
                     <Tile label="ردّوا" value={String(selected.stats.replied)} hint="تحدده أنت" />
+                    <Tile
+                      label="مهتمون"
+                      value={String(selected.stats.interested)}
+                      hint="ضغطوا «مهتم»"
+                    />
                     <Tile
                       label="أوقفوا الرسائل"
                       value={String(selected.stats.stopped)}
@@ -474,6 +479,11 @@ export function MadarAdminCrmOutreach() {
                             ) : (
                               <span className="text-muted-foreground">لم يضغط الرابط بعد</span>
                             )}
+                            {lead.send.interestedAt ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">
+                                مهتم
+                              </span>
+                            ) : null}
                             {lead.send.repliedAt ? (
                               <span className="inline-flex items-center gap-1 font-semibold text-violet-700">
                                 <Reply className="size-3.5" />
@@ -643,8 +653,10 @@ export function MadarAdminCrmOutreach() {
                 </div>
                 <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                   {"{الاسم}"} اسم المسؤول (أو النشاط إن لم يوجد)، {"{النشاط}"} اسم النشاط،{" "}
-                  {"{الرابط}"} رابط العميل الخاص. إن لم تكتب {"{الرابط}"} يُضاف في آخر الرسالة.{" "}
-                  {"{إيقاف}"} رابط يضغطه العميل ليوقف الرسائل: يُعلَّم في النظام ولا يُرسل له بعدها.
+                  {"{الرابط}"} رابط العميل الخاص إلى صفحتك. إن لم تكتب {"{الرابط}"} ولا {"{مهتم}"}{" "}
+                  يُضاف الرابط في آخر الرسالة. {"{مهتم}"} رابط يضغطه العميل المهتم: ينتقل إلى «تم
+                  التواصل» وتُنشأ لك متابعة للاتصال به. {"{إيقاف}"} رابط يضغطه ليوقف الرسائل:
+                  يُعلَّم في النظام ولا يُرسل له بعدها.
                 </p>
               </div>
               <label className="block text-sm">

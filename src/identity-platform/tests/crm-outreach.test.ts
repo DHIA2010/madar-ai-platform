@@ -275,6 +275,60 @@ describe("WhatsApp outreach from the CRM", () => {
     })
   })
 
+  it("marks a lead who taps the interested link, once, with a follow-up to call them", async () => {
+    const outreach = new CrmOutreach(database, () => now)
+    const campaign = await outreach.create(actor, {
+      ...CAMPAIGN,
+      dailyLimit: 20,
+      message: "مرحبًا {الاسم}\nمهتم؟ {مهتم}\nغير مهتم؟ {إيقاف}",
+    })
+    const reem = await lead({ company: "الريم", phone: "0553334444" })
+    await database.query(`update crm_leads set owner_user_id = $1 where id = $2`, [
+      actor.userId,
+      reem,
+    ])
+
+    const sent = await outreach.send(actor, campaign.id, reem)
+    // Two links as written, and no third one added at the end.
+    expect(sent.message).toBe(
+      `مرحبًا الريم\nمهتم؟ ${sent.trackedUrl}/yes\nغير مهتم؟ ${sent.trackedUrl}/stop`
+    )
+    expect(await stageOf(reem)).toBe("whatsapp_sent")
+    const code = sent.trackedUrl.split("/").pop() as string
+
+    expect(await outreach.recordInterest(code)).toBe(true)
+    expect(await outreach.recordInterest(code)).toBe(true)
+    expect(await outreach.recordInterest("nosuchcode")).toBe(false)
+
+    expect(await stageOf(reem)).toBe("contacted")
+    const tasks = await database.query<{ title: string; assignee_user_id: string | null }>(
+      `select title, assignee_user_id from crm_tasks where lead_id = $1`,
+      [reem]
+    )
+    expect(tasks.rows).toEqual([
+      { title: "اتصل به: ضغط «مهتم» في رسالة واتساب", assignee_user_id: actor.userId },
+    ])
+    const notes = await database.query<{ body: string }>(
+      `select body from crm_activities where lead_id = $1 and kind = 'note'`,
+      [reem]
+    )
+    expect(notes.rows).toHaveLength(1)
+    expect((await outreach.list(actor))[0].stats).toMatchObject({
+      sent: 1,
+      interested: 1,
+      advanced: 1,
+      stopped: 0,
+    })
+    const row = (await outreach.leads(actor, campaign.id, { status: "sent" })).items[0]
+    expect(row.send?.interestedAt).toBeTruthy()
+
+    // A lead already further along keeps its stage.
+    const far = await lead({ company: "النخيل", phone: "0557778888", stage: "trial" })
+    const second = await outreach.send(actor, campaign.id, far)
+    await outreach.recordInterest(second.trackedUrl.split("/").pop() as string)
+    expect(await stageOf(far)).toBe("trial")
+  })
+
   it("is for the sales team only, and puts numbers in WhatsApp's form", async () => {
     const outreach = new CrmOutreach(database, () => now)
     const outsider = { ...actor, platformPermissions: [] } as AuthenticatedActor

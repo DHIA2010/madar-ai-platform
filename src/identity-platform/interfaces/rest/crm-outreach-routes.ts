@@ -117,7 +117,7 @@ export async function handlePublicOutreachRoute(input: {
   limit: (bucket: string, max: number, windowMs: number) => Promise<boolean>
 }): Promise<boolean> {
   const match = input.pathname.match(
-    /^\/v1\/public\/outreach\/([A-Za-z0-9_-]{6,16})(\/click|\/stop)?$/
+    /^\/v1\/public\/outreach\/([A-Za-z0-9_-]{6,16})(\/click|\/stop|\/interest)?$/
   )
   if (!match) return false
   const missing = () => input.send(404, { code: "NOT_FOUND", message: "Link not found." })
@@ -131,6 +131,11 @@ export async function handlePublicOutreachRoute(input: {
   }
   if (input.method === "POST" && match[2] === "/click") {
     return (await input.outreach.recordClick(match[1])) ? input.send(200, { ok: true }) : missing()
+  }
+  if (input.method === "POST" && match[2] === "/interest") {
+    return (await input.outreach.recordInterest(match[1]))
+      ? input.send(200, { ok: true })
+      : missing()
   }
   if (input.method === "POST" && match[2] === "/stop") {
     return (await input.outreach.recordStop(match[1])) ? input.send(200, { ok: true }) : missing()

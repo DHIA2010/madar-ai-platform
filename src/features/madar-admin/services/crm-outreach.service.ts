@@ -29,6 +29,7 @@ export interface OutreachCampaign extends OutreachCampaignInput {
     replied: number
     advanced: number
     stopped: number
+    interested: number
   }
 }
 export interface OutreachLead {
@@ -47,6 +48,7 @@ export interface OutreachLead {
     clicks: number
     lastClickedAt: string | null
     repliedAt: string | null
+    interestedAt: string | null
   } | null
 }
 export type OutreachStatus = "pending" | "sent" | "all"
