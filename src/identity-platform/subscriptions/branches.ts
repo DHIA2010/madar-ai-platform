@@ -16,6 +16,11 @@ import type {
 // organization may have as many as its most generous running plan allows (the plans don't add
 // up). An organization with none of these plans isn't limited here.
 //
+// A plan that was bought comes before a free trial: once an organization pays for a package, that
+// package (and the branches bought on top of it) sets the limit, and a free trial of another app
+// running beside it does not raise it. Only an organization with nothing bought yet gets the
+// trial's own allowance.
+//
 // Branches that already exist are never locked or hidden -- the limit only stops creating new ones.
 
 // In order of preference when two plans allow the same number.
@@ -126,14 +131,19 @@ export class BranchAllowanceService {
         }
       })
     )
-    candidates.sort(
+    // Bought plans first: a free trial only counts when nothing was bought.
+    const bought = candidates.filter(
+      (candidate) => effectiveSubscriptionStatus(candidate.subscription, now) !== "trial"
+    )
+    const considered = bought.length > 0 ? bought : candidates
+    considered.sort(
       (a, b) =>
         b.allowed - a.allowed ||
         BRANCH_APPLICATIONS.indexOf(a.subscription.application) -
           BRANCH_APPLICATIONS.indexOf(b.subscription.application)
     )
-    return candidates[0]
-      ? { subscription: candidates[0].subscription, pkg: candidates[0].pkg }
+    return considered[0]
+      ? { subscription: considered[0].subscription, pkg: considered[0].pkg }
       : null
   }
 

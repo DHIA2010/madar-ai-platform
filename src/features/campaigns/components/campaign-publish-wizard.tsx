@@ -85,11 +85,15 @@ const FIELD =
   "h-12 rounded-xl border-[#d5dce8] bg-white px-4 text-[14px] font-medium text-[#0b1738] placeholder:text-[#98a2b3]"
 
 const STEPS = ["basics", "audience", "ad", "review"] as const
-// Every age can be picked as the youngest or the oldest. Snapchat takes an exact youngest age
-// up to 45 and an exact oldest age up to 49 (above that is "and older"); TikTok and Meta go to 65.
+// Every age from 18 to 65 can be picked as the youngest or the oldest, on every platform.
+// Snapchat's own targeting stops at an exact youngest age of 45 and an exact oldest age of 49
+// (above that it only knows "and older"), so a choice past those is published as the nearest
+// thing Snapchat can do, and the form says so under the ages (snapchatAges below).
 const YOUNGEST_AGE = 18
-const ageLimits = (platform: PublishPlatform) =>
-  platform === "snapchat" ? { minTop: 45, maxTop: 49 } : { minTop: 65, maxTop: 65 }
+const OLDEST_AGE = 65
+const SNAPCHAT_MIN_AGE_TOP = 45
+const SNAPCHAT_MAX_AGE_TOP = 49
+const AGE_LIMITS = { minTop: OLDEST_AGE - 1, maxTop: OLDEST_AGE }
 const agesBetween = (from: number, to: number) =>
   Array.from({ length: Math.max(0, to - from + 1) }, (_, index) => from + index)
 const NO_MAX_AGE = "none"
@@ -375,9 +379,9 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
           Math.max(Number(current.dailyBudget) || 0, options.limits.minDailyBudgets[platform])
         ),
         // Ages the new platform cannot take exactly fall back to its nearest choice.
-        minAge: Math.min(current.minAge, ageLimits(platform).minTop),
+        minAge: Math.min(current.minAge, AGE_LIMITS.minTop),
         maxAge:
-          current.maxAge !== NO_MAX_AGE && Number(current.maxAge) > ageLimits(platform).maxTop
+          current.maxAge !== NO_MAX_AGE && Number(current.maxAge) > AGE_LIMITS.maxTop
             ? NO_MAX_AGE
             : current.maxAge,
       }
@@ -743,10 +747,24 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     </AppSelect>
   )
 
+  // What Snapchat will really be asked for, when the ages picked are past what it can target.
+  const snapchatAges =
+    draft.platform === "snapchat" &&
+    (draft.minAge > SNAPCHAT_MIN_AGE_TOP ||
+      (draft.maxAge !== NO_MAX_AGE && Number(draft.maxAge) > SNAPCHAT_MAX_AGE_TOP))
+      ? {
+          minAge: Math.min(draft.minAge, SNAPCHAT_MIN_AGE_TOP),
+          maxAge:
+            draft.maxAge !== NO_MAX_AGE && Number(draft.maxAge) <= SNAPCHAT_MAX_AGE_TOP
+              ? draft.maxAge
+              : NO_MAX_AGE,
+        }
+      : null
+  const shownAges = snapchatAges ?? { minAge: draft.minAge, maxAge: draft.maxAge }
   const ageLabel =
-    draft.maxAge === NO_MAX_AGE
-      ? t("audience.agePlus", { age: draft.minAge })
-      : t("audience.ageRange", { min: draft.minAge, max: draft.maxAge })
+    shownAges.maxAge === NO_MAX_AGE
+      ? t("audience.agePlus", { age: shownAges.minAge })
+      : t("audience.ageRange", { min: shownAges.minAge, max: shownAges.maxAge })
 
   const summary: Array<{ label: string; value: string }> = [
     {
@@ -1003,7 +1021,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                     }))
                     setErrors((current) => ({ ...current, maxAge: undefined }))
                   },
-                  agesBetween(YOUNGEST_AGE, ageLimits(draft.platform).minTop).map((age) => ({
+                  agesBetween(YOUNGEST_AGE, AGE_LIMITS.minTop).map((age) => ({
                     value: String(age),
                     label: String(age),
                   }))
@@ -1013,13 +1031,19 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                 {selectField(draft.maxAge, (value) => set("maxAge", value), [
                   { value: NO_MAX_AGE, label: t("audience.noMaxAge") },
                   // Only ages above the youngest one chosen.
-                  ...agesBetween(draft.minAge + 1, ageLimits(draft.platform).maxTop).map((age) => ({
+                  ...agesBetween(draft.minAge + 1, AGE_LIMITS.maxTop).map((age) => ({
                     value: String(age),
                     label: String(age),
                   })),
                 ])}
               </Field>
             </div>
+
+            {snapchatAges ? (
+              <p className="rounded-xl border border-[#fedf89] bg-[#fffaeb] px-4 py-3 text-[12.5px] leading-6 text-[#93370d]">
+                {t("audience.snapchatAgeNote", { ages: ageLabel })}
+              </p>
+            ) : null}
 
             <div className={isGoogle ? "hidden" : undefined}>
               <Field label={t("audience.gender")}>

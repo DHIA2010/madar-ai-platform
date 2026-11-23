@@ -58,6 +58,15 @@ function mergeById<T extends { id: string }>(base: T[], additions: T[]): T[] {
   return [...merged.values()]
 }
 
+// What the server answered, plus only the locally kept items the server does not know yet. The
+// locally kept copy (made when something is created here) is never allowed to overwrite the
+// server's own: it is older, and once showed a deactivated branch as active again after a
+// refresh.
+function serverFirst<T extends { id: string }>(server: T[], local: T[]): T[] {
+  const known = new Set(server.map((item) => item.id))
+  return [...server, ...local.filter((item) => !known.has(item.id))]
+}
+
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { workspaceApplicationService } = useApplicationServices()
   const { authStatus, currentUser } = useAuth()
@@ -107,8 +116,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) {
           return
         }
-        const mergedOrganizations = mergeById(context.availableOrganizations, customOrganizations)
-        const mergedWorkspaces = mergeById(context.availableWorkspaces, customWorkspaces)
+        const mergedOrganizations = serverFirst(context.availableOrganizations, customOrganizations)
+        const mergedWorkspaces = serverFirst(context.availableWorkspaces, customWorkspaces)
 
         setAvailableOrganizations(mergedOrganizations)
         setAvailableWorkspaces(mergedWorkspaces)

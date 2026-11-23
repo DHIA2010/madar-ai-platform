@@ -5165,7 +5165,9 @@
         "buyWorkspaceWithPrice": "Add a workspace (SAR {price} / {period})",
         "buyWorkspace": "Add a workspace",
         "limitTitleWorkspaces": "You've reached your subscription's workspaces",
-        "limitBuyWorkspaces": "Add a workspace to your subscription to create a new one."
+        "limitBuyWorkspaces": "Add a workspace to your subscription to create a new one.",
+        "limitUpgrade": "Subscribe to a package or upgrade yours to add branches.",
+        "viewPlans": "View packages"
       }
     },
     "adsReport": {
@@ -8037,7 +8039,8 @@
           "male": "Men",
           "female": "Women"
         },
-        "googleNote": "Google search ads are shown by what people search for, not by age or gender. Choosing the country is enough."
+        "googleNote": "Google search ads are shown by what people search for, not by age or gender. Choosing the country is enough.",
+        "snapchatAgeNote": "Snapchat targets a youngest age up to 45 and an oldest age up to 49 only; above that it knows only \"and older\". So on Snapchat your ad will be published for these ages: {ages}."
       },
       "countries": {
         "sa": "Saudi Arabia",

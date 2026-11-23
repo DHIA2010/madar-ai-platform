@@ -378,6 +378,39 @@ describe("pricing: the marketplace shows and checkout charges exactly what staff
     expect(best.body).toMatchObject({ allowed: 3, subscription: { application: "advertising" } })
   })
 
+  it("lets a bought package set the branch limit, not a free trial running beside it", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const customer = await signIn("starter@shop.test", "Starter Shop")
+    const pricing = await call<PricingEntry[]>("GET", "/v1/pricing", customer.token)
+    const starter = pricing.body
+      .find((entry) => entry.application === "pos")!
+      .packages.find((pkg) => pkg.includedBranches === 1)!
+    await call(
+      "POST",
+      `/v1/platform-admin/customers/${customer.actor.organizationId}/subscriptions`,
+      staff.token,
+      { application: "pos", packageId: starter.id, interval: "monthly" }
+    )
+    // A free trial of another app, which on its own would allow three branches.
+    await database.query(
+      `insert into organization_subscriptions
+         (id, organization_id, application, status, source, started_at, trial_ends_at)
+       values ($1, $2, 'advertising', 'trial', 'trial', now(), $3)`,
+      [randomUUID(), customer.actor.organizationId, new Date(Date.now() + 7 * 86_400_000)]
+    )
+    const allowance = await call<{
+      allowed: number
+      canBuyBranches: boolean
+      subscription: { application: string; includedBranches: number }
+    }>("GET", "/v1/branches/allowance", customer.token)
+    // One branch, and more can be bought on the package -- not three from the trial.
+    expect(allowance.body).toMatchObject({
+      allowed: 1,
+      canBuyBranches: true,
+      subscription: { application: "pos", includedBranches: 1 },
+    })
+  })
+
   it("gives the purchase-invoice reader only to packages that include it", async () => {
     const staff = await signIn(STAFF_EMAIL, "Madar HQ")
     const customer = await signIn("owner@shop.test", "Shop")

@@ -272,13 +272,18 @@ export default function WorkspacesPage() {
           ? isWorkspaceUnit
             ? t("branchAllowance.limitBuyWorkspaces")
             : t("branchAllowance.limitBuy")
-          : t("branchAllowance.limitContact"),
+          : t("branchAllowance.limitUpgrade"),
+        // Always a way to pay: one more branch on the running package, or the packages page
+        // when the plan in use cannot take branches (a free trial, or a package without them).
         action: allowance?.canBuyBranches
           ? {
               label: isWorkspaceUnit ? t("branchAllowance.buyWorkspace") : t("branchAllowance.buy"),
               onClick: buyBranches,
             }
-          : undefined,
+          : {
+              label: t("branchAllowance.viewPlans"),
+              onClick: () => router.push(ROUTES.marketplace),
+            },
       }
     )
   }
