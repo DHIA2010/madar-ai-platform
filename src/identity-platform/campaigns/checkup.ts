@@ -15,6 +15,12 @@ import {
 // Everything here is plain arithmetic over synced rows. Nothing is guessed: a finding is only
 // raised when its evidence is in the data, and each one carries that evidence so the screen can
 // show it.
+//
+// A finding is something to act on now, so it is only ever raised about what is running now: a
+// campaign that is switched on, and inside it an ad that is switched on in an ad set that is
+// switched on. An ad or campaign someone already stopped still shows in the tables with its
+// numbers, and still counts as the yardstick the running ads are held against, but "pause this
+// ad" is never said about an ad that is already paused.
 
 export type CheckupFindingKind =
   // One ad takes most of a campaign's budget while doing worse than the campaign's other ads.
@@ -70,6 +76,8 @@ export interface CheckupAd {
   platform: CampaignPerformancePlatform
   name: string
   status: string
+  // Switched on, in an ad set and a campaign that are switched on. Only such an ad gets findings.
+  running: boolean
   currency: string | null
   spend: number
   spendShare: number
@@ -113,6 +121,8 @@ export interface CheckupInput {
   adsByCampaignId: Map<string, CampaignPerformanceRow[]>
   // Campaign id -> daily budget when it sits on the ad sets rather than the campaign.
   adSetBudgetByCampaignId: Map<string, number>
+  // The ad sets that are switched off: their ads are not running, whatever the ads' own state.
+  stoppedAdSetIds?: Set<string>
   range: { startDate: string; endDate: string; days: number }
 }
 
@@ -233,7 +243,12 @@ export function buildCheckup(input: CheckupInput): CheckupResult {
       }
     }
 
-    if (campaign.conversions === 0 && campaign.clicks >= MIN_CLICKS_FOR_NO_RESULT) {
+    const campaignRunning = campaign.state === "running"
+    if (
+      campaignRunning &&
+      campaign.conversions === 0 &&
+      campaign.clicks >= MIN_CLICKS_FOR_NO_RESULT
+    ) {
       // Where the people who tapped were lost: before the page opened, or on the page itself.
       const reason =
         campaign.pageViews === null
@@ -260,6 +275,13 @@ export function buildCheckup(input: CheckupInput): CheckupResult {
     )
     const adSpend = campaignAds.reduce((sum, ad) => sum + ad.spend, 0)
     const flagged = new Set<string>()
+    const isRunning = (ad: CampaignPerformanceRow) =>
+      campaignRunning &&
+      checkupCampaignState(ad.status) === "running" &&
+      !(ad.parentId && input.stoppedAdSetIds?.has(ad.parentId))
+    // The ads that share the budget today: the only ones money can move between.
+    const runningAds = campaignAds.filter(isRunning)
+    const runningSpend = runningAds.reduce((sum, ad) => sum + ad.spend, 0)
 
     for (const ad of campaignAds) {
       ads.push({
@@ -269,6 +291,7 @@ export function buildCheckup(input: CheckupInput): CheckupResult {
         platform: campaign.platform,
         name: ad.name,
         status: ad.status,
+        running: isRunning(ad),
         currency: campaign.currency,
         spend: round(ad.spend),
         spendShare: round(ratio(ad.spend, adSpend) * 100, 1),
@@ -282,11 +305,11 @@ export function buildCheckup(input: CheckupInput): CheckupResult {
     }
 
     // -- One ad eating the budget while the others do better -----------------------------
-    if (campaignAds.length >= 2 && adSpend > 0) {
-      for (const ad of campaignAds) {
-        const share = ad.spend / adSpend
+    if (runningAds.length >= 2 && runningSpend > 0) {
+      for (const ad of runningAds) {
+        const share = ad.spend / runningSpend
         if (share < HOG_SHARE) continue
-        const others = campaignAds.filter((other) => other.id !== ad.id)
+        const others = runningAds.filter((other) => other.id !== ad.id)
         const othersSpend = others.reduce((sum, other) => sum + other.spend, 0)
         const othersConversions = others.reduce((sum, other) => sum + other.conversions, 0)
         const othersClicks = others.reduce((sum, other) => sum + other.clicks, 0)
@@ -330,7 +353,7 @@ export function buildCheckup(input: CheckupInput): CheckupResult {
     const totals = totalsByCurrency.get(campaign.currency ?? "")
     const usualCpa = totals && totals.conversions > 0 ? totals.spend / totals.conversions : 0
     if (usualCpa > 0) {
-      for (const ad of campaignAds) {
+      for (const ad of runningAds) {
         if (flagged.has(ad.id) || ad.conversions > 0) continue
         if (ad.spend < usualCpa * NO_RESULT_COST_MULTIPLE) continue
         flagged.add(ad.id)
@@ -348,7 +371,8 @@ export function buildCheckup(input: CheckupInput): CheckupResult {
     const measured = campaignAds.filter((ad) => ad.impressions >= MIN_IMPRESSIONS_FOR_CTR)
     if (measured.length >= 2) {
       for (const ad of measured) {
-        if (flagged.has(ad.id)) continue
+        // A running ad is held against every other ad of the campaign, stopped ones included.
+        if (flagged.has(ad.id) || !isRunning(ad)) continue
         const others = measured.filter((other) => other.id !== ad.id)
         const othersCtr =
           ratio(
@@ -440,9 +464,13 @@ export class CampaignCheckupService {
 
     const adsByCampaignId = new Map<string, CampaignPerformanceRow[]>()
     const adSetBudgetByCampaignId = new Map<string, number>()
+    const stoppedAdSetIds = new Set<string>()
     await Promise.all(
       worthReading.map(async (campaign) => {
         const adSets = (await this.performance.listAdGroups(actor, campaign.id, ranged)).items
+        for (const adSet of adSets) {
+          if (checkupCampaignState(adSet.status) !== "running") stoppedAdSetIds.add(adSet.id)
+        }
         const budget = adSets
           .filter((adSet) => checkupCampaignState(adSet.status) !== "paused")
           .reduce((sum, adSet) => sum + (adSet.dailyBudget ?? 0), 0)
@@ -466,6 +494,7 @@ export class CampaignCheckupService {
       spendYesterdayByCampaignId: new Map(yesterdayRows.map((row) => [row.id, row.spend])),
       adsByCampaignId,
       adSetBudgetByCampaignId,
+      stoppedAdSetIds,
       range: { startDate, endDate, days },
     })
   }

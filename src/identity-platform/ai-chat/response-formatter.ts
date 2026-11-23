@@ -969,6 +969,16 @@ const FOLLOW_UP_TEMPLATES: Partial<Record<string, (output: unknown) => string[]>
       "ما هو إجمالي المبيعات لهذه الفترة؟",
     ]
   },
+  get_ads_performance: () => [
+    "أي إعلان أوقفه وأي إعلان أزيد ميزانيته؟",
+    "كيف تطوّر أداء هذه الإعلانات يومًا بيوم؟",
+  ],
+  get_ad_sets_performance: () => ["ما أداء الإعلانات داخل هذه المجموعات؟"],
+  get_ad_daily_trend: () => ["هل تعب أحد هذه الإعلانات؟", "ما الذي يحتاج انتباهي في حسابي الآن؟"],
+  get_ad_account_checkup: () => [
+    "ما أداء كل إعلان على حدة؟",
+    "أين أخسر الناس: في الإعلان أم في الصفحة؟",
+  ],
   get_campaign_summary: () => [
     "كيف تغيّر الأداء مقارنة بالفترة السابقة؟",
     "ما هي أفضل الحملات أداءً؟",
@@ -1186,6 +1196,156 @@ function chartFromGenericResult(result: KpiResult): ChartSpec {
 // object. `timezone` is the organization's own IANA timezone (resolved once in ai-chat/service.ts
 // via the existing deterministic date-resolution system) -- every date/datetime cell in a
 // ReportTable is formatted against it here, never left to the LLM to compute or reformat.
+// ---- Ad-level tools (campaigns/ads-insights.ts) ----
+
+const AD_STATE_LABEL: Record<string, string> = {
+  running: "يعمل",
+  stopped: "متوقف",
+  problem: "مفعّلة ولا تعمل",
+  paused: "متوقفة",
+  other: "غير معروف",
+}
+
+interface AdInsightTableRow {
+  platform: string
+  campaign: string
+  ad: string
+  state: string
+  spend: number
+  impressions: number
+  clicks: number
+  ctrPercent: number
+  results: number
+  costPerResult: number | null
+}
+
+function tableFromAds(rows: AdInsightTableRow[]): ReportTable {
+  return {
+    title: "أداء الإعلانات",
+    columns: [
+      { key: "ad", label: "الإعلان", format: "text" },
+      { key: "campaign", label: "الحملة", format: "text" },
+      { key: "platform", label: "المنصة", format: "text" },
+      { key: "state", label: "الحالة", format: "status" },
+      { key: "spend", label: "الإنفاق", format: "currency" },
+      { key: "impressions", label: "المشاهدات", format: "number" },
+      { key: "clicks", label: "النقرات", format: "number" },
+      { key: "ctrPercent", label: "نسبة النقر", format: "percent" },
+      { key: "results", label: "النتائج", format: "number" },
+      { key: "costPerResult", label: "تكلفة النتيجة", format: "currency" },
+    ],
+    rows: rows.map((row) => ({
+      ad: row.ad,
+      campaign: row.campaign,
+      platform: row.platform,
+      state: AD_STATE_LABEL[row.state] ?? row.state,
+      spend: row.spend,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      ctrPercent: row.ctrPercent,
+      results: row.results,
+      costPerResult: row.costPerResult,
+    })),
+  }
+}
+
+interface AdSetInsightTableRow extends Omit<AdInsightTableRow, "ad"> {
+  adSet: string
+  dailyBudget: number | null
+}
+
+function tableFromAdSets(rows: AdSetInsightTableRow[]): ReportTable {
+  return {
+    title: "أداء المجموعات الإعلانية",
+    columns: [
+      { key: "adSet", label: "المجموعة الإعلانية", format: "text" },
+      { key: "campaign", label: "الحملة", format: "text" },
+      { key: "platform", label: "المنصة", format: "text" },
+      { key: "state", label: "الحالة", format: "status" },
+      { key: "dailyBudget", label: "الميزانية اليومية", format: "currency" },
+      { key: "spend", label: "الإنفاق", format: "currency" },
+      { key: "clicks", label: "النقرات", format: "number" },
+      { key: "ctrPercent", label: "نسبة النقر", format: "percent" },
+      { key: "results", label: "النتائج", format: "number" },
+      { key: "costPerResult", label: "تكلفة النتيجة", format: "currency" },
+    ],
+    rows: rows.map((row) => ({
+      adSet: row.adSet,
+      campaign: row.campaign,
+      platform: row.platform,
+      state: AD_STATE_LABEL[row.state] ?? row.state,
+      dailyBudget: row.dailyBudget,
+      spend: row.spend,
+      clicks: row.clicks,
+      ctrPercent: row.ctrPercent,
+      results: row.results,
+      costPerResult: row.costPerResult,
+    })),
+  }
+}
+
+interface CheckupCampaignTableRow {
+  platform: string
+  campaign: string
+  state: string
+  dailyBudget: number | null
+  spendToday: number
+  spend: number
+  clicks: number
+  results: number
+  costPerResult: number | null
+}
+
+function tableFromCheckupCampaigns(rows: CheckupCampaignTableRow[]): ReportTable {
+  return {
+    title: "حالة الحملات",
+    columns: [
+      { key: "campaign", label: "الحملة", format: "text" },
+      { key: "platform", label: "المنصة", format: "text" },
+      { key: "state", label: "الحالة", format: "status" },
+      { key: "dailyBudget", label: "الميزانية اليومية", format: "currency" },
+      { key: "spendToday", label: "صُرف اليوم", format: "currency" },
+      { key: "spend", label: "الإنفاق", format: "currency" },
+      { key: "clicks", label: "النقرات", format: "number" },
+      { key: "results", label: "النتائج", format: "number" },
+      { key: "costPerResult", label: "تكلفة النتيجة", format: "currency" },
+    ],
+    rows: rows.map((row) => ({
+      campaign: row.campaign,
+      platform: row.platform,
+      state: AD_STATE_LABEL[row.state] ?? row.state,
+      dailyBudget: row.dailyBudget,
+      spendToday: row.spendToday,
+      spend: row.spend,
+      clicks: row.clicks,
+      results: row.results,
+      costPerResult: row.costPerResult,
+    })),
+  }
+}
+
+interface AdTrendResult {
+  ad: string
+  days: Array<{ date: string; spend: number; ctrPercent: number }>
+}
+
+// One line per ad across the days: the shape of a trend is what the question was about.
+function chartFromAdTrend(
+  ads: AdTrendResult[],
+  key: "spend" | "ctrPercent",
+  title: string
+): ChartSpec {
+  return {
+    type: "chart",
+    chartType: "line",
+    title,
+    series: ads.map((ad) => ({
+      name: ad.ad,
+      data: ad.days.map((day) => ({ label: day.date.slice(5), value: day[key] })),
+    })),
+  }
+}
+
 export function buildStructuredResponse(
   rawResults: RawToolResult[],
   timezone: string
@@ -1286,6 +1446,49 @@ export function buildStructuredResponse(
         }
         dataPeriod = dataPeriod ?? result.queriedPeriod
         if (result.items.length > 0) charts.push(chartFromSpendTrend(result.items))
+        break
+      }
+      case "get_ads_performance": {
+        sawAnalyticsTool = true
+        domain = "advertising"
+        const result = output as {
+          ads: AdInsightTableRow[]
+          queriedPeriod: { from: string; to: string } | null
+        }
+        if (result.ads.length > 0) tables.push(tableFromAds(result.ads))
+        dataPeriod = dataPeriod ?? result.queriedPeriod
+        break
+      }
+      case "get_ad_sets_performance": {
+        sawAnalyticsTool = true
+        domain = "advertising"
+        const result = output as { adSets: AdSetInsightTableRow[] }
+        if (result.adSets.length > 0) tables.push(tableFromAdSets(result.adSets))
+        break
+      }
+      case "get_ad_daily_trend": {
+        sawAnalyticsTool = true
+        domain = "advertising"
+        const result = output as {
+          ads: AdTrendResult[]
+          queriedPeriod: { from: string; to: string } | null
+        }
+        if (result.ads.length > 0) {
+          charts.push(chartFromAdTrend(result.ads, "ctrPercent", "نسبة النقر يومًا بيوم (٪)"))
+          charts.push(chartFromAdTrend(result.ads, "spend", "الإنفاق يومًا بيوم"))
+        }
+        dataPeriod = dataPeriod ?? result.queriedPeriod
+        break
+      }
+      case "get_ad_account_checkup": {
+        sawAnalyticsTool = true
+        domain = "advertising"
+        const result = output as {
+          campaigns: CheckupCampaignTableRow[]
+          queriedPeriod: { from: string; to: string } | null
+        }
+        if (result.campaigns.length > 0) tables.push(tableFromCheckupCampaigns(result.campaigns))
+        dataPeriod = dataPeriod ?? result.queriedPeriod
         break
       }
       case "get_top_campaigns": {

@@ -482,6 +482,11 @@ export function CampaignCheckupScreen() {
                               <div className="min-w-0">
                                 <p className={cn("truncate text-[12.5px] font-bold", HEADING)}>
                                   {ad.name}
+                                  {ad.running ? null : (
+                                    <span className="ms-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500">
+                                      {t("adStopped")}
+                                    </span>
+                                  )}
                                 </p>
                                 <p className={cn("truncate text-[11px]", MUTED)}>
                                   {ad.campaignName}

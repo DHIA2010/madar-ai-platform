@@ -197,6 +197,7 @@ export interface CampaignCheckupAd {
   platform: CampaignPerformancePlatform
   name: string
   status: string
+  running: boolean
   currency: string | null
   spend: number
   spendShare: number

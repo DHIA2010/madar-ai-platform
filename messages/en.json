@@ -7776,7 +7776,8 @@
         "results": "Results",
         "costPerResult": "Cost per result"
       },
-      "noAds": "No active ads in this period."
+      "noAds": "No active ads in this period.",
+      "adStopped": "Stopped"
     },
     "journeyScreen": {
       "title": "Spend & Sales Journey",

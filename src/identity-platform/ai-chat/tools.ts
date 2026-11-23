@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 import { z } from "zod"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+import { AdsInsights } from "../campaigns/ads-insights"
 import {
   defaultComparisonRanges,
   type CampaignAnalyticsEngine,
@@ -254,6 +255,26 @@ const dateRangeShape = {
   endDate: z.string().optional(),
 }
 
+// The filters the ad-level tools share (see campaigns/ads-insights.ts).
+const adsFilterShape = {
+  period: z.enum(RELATIVE_PERIODS).optional(),
+  campaignName: z.string().optional(),
+  adName: z.string().optional(),
+  platform: z.string().optional(),
+  onlyRunning: z.boolean().optional(),
+}
+interface AdsToolInput {
+  startDate?: string
+  endDate?: string
+  period?: RelativePeriod
+  campaignName?: string
+  adName?: string
+  platform?: string
+  onlyRunning?: boolean
+}
+const adsInsights = (services: AiChatToolServices) =>
+  new AdsInsights(services.campaignPerformanceService)
+
 const dateRangeProperties = {
   startDate: {
     type: "string",
@@ -286,7 +307,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     tool: {
       name: "get_campaign_summary",
       description:
-        "Real ad account summary for an optional date range: spend, revenue, ROAS, impressions, clicks, CTR, CPC, CPM, conversions, conversion rate, CPA, active campaign count -- plus data freshness per channel and a confidence level based on sample size. Reach/frequency/creative/audience/geo/device breakdowns are not available at this level -- say so if asked, never estimate them.",
+        "Real ad account summary for an optional date range: spend, revenue, ROAS, impressions, clicks, CTR, CPC, CPM, conversions, conversion rate, CPA, active campaign count -- plus data freshness per channel and a confidence level based on sample size. This is the account level: for individual ads use get_ads_performance, for ad sets get_ad_sets_performance. Reach/frequency/audience/geo/device breakdowns are not synced -- say so if asked, never estimate them.",
       input_schema: {
         type: "object",
         properties: { ...dateRangeProperties, period: relativePeriodProperty },
@@ -655,6 +676,105 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         confidence: comparison.confidence,
         period: comparison.period,
       }
+    },
+  },
+  {
+    category: "advertising",
+    tool: {
+      name: "get_ads_performance",
+      description:
+        "Real numbers for every individual AD (creative) with activity in the period, most spend first: platform, campaign, ad name, state (running/stopped), spend, share of its campaign's spend, impressions, clicks, CTR, cost per click, landing page views (where the platform reports them), results and cost per result. Use it for ANY question about a specific ad, about which ad is best/worst, about ads inside a campaign, or about creatives. Narrow with campaignName / adName / platform (each matches part of the name) or onlyRunning. 'results' is the platform's own conversion count (leads, sign-ups or purchases, whichever the campaign optimises for).",
+      input_schema: {
+        type: "object",
+        properties: {
+          ...dateRangeProperties,
+          period: relativePeriodProperty,
+          campaignName: { type: "string", description: "Part of a campaign's name." },
+          adName: { type: "string", description: "Part of an ad's name." },
+          platform: { type: "string", description: "snapchat, tiktok, meta or google." },
+          onlyRunning: { type: "boolean", description: "Only ads switched on now." },
+        },
+      },
+    },
+    schema: z.object({ ...dateRangeShape, ...adsFilterShape }),
+    execute: async (actor, services, input) => {
+      const parsed = input as AdsToolInput
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
+      return adsInsights(services).ads(actor, resolved, parsed)
+    },
+  },
+  {
+    category: "advertising",
+    tool: {
+      name: "get_ad_sets_performance",
+      description:
+        "Real numbers per AD SET / ad group (the level that holds the daily budget and the audience): platform, campaign, ad set name, state (running/stopped), daily budget, spend, impressions, clicks, CTR, results and cost per result. Use it for questions about budgets, ad sets/ad groups, or which audience group performs better.",
+      input_schema: {
+        type: "object",
+        properties: {
+          ...dateRangeProperties,
+          period: relativePeriodProperty,
+          campaignName: { type: "string", description: "Part of a campaign's name." },
+          platform: { type: "string", description: "snapchat, tiktok, meta or google." },
+          onlyRunning: { type: "boolean", description: "Only ad sets switched on now." },
+        },
+      },
+    },
+    schema: z.object({ ...dateRangeShape, ...adsFilterShape }),
+    execute: async (actor, services, input) => {
+      const parsed = input as AdsToolInput
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
+      return adsInsights(services).adSets(actor, resolved, parsed)
+    },
+  },
+  {
+    category: "advertising",
+    tool: {
+      name: "get_ad_daily_trend",
+      description:
+        "Day-by-day numbers for individual ads over the last N days (default 7, max 14): spend, impressions, clicks, CTR, results and cost per result per day. Use it whenever the question is about an ad's trend over time, whether an ad is getting tired (CTR falling or cost per result rising day after day), what happened to an ad on a given day, or to compare ads' recent days. Narrow with adName or campaignName whenever the user named one.",
+      input_schema: {
+        type: "object",
+        properties: {
+          days: { type: "number", description: "How many days back, 2 to 14. Default 7." },
+          endDate: { type: "string", description: "ISO date of the last day. Default: today." },
+          campaignName: { type: "string", description: "Part of a campaign's name." },
+          adName: { type: "string", description: "Part of an ad's name." },
+          platform: { type: "string", description: "snapchat, tiktok, meta or google." },
+          onlyRunning: { type: "boolean", description: "Only ads switched on now." },
+        },
+      },
+    },
+    schema: z.object({
+      days: z.number().int().min(2).max(14).optional(),
+      endDate: z.string().optional(),
+      campaignName: z.string().optional(),
+      adName: z.string().optional(),
+      platform: z.string().optional(),
+      onlyRunning: z.boolean().optional(),
+    }),
+    execute: async (actor, services, input) =>
+      adsInsights(services).adDailyTrend(
+        actor,
+        input as { days?: number; endDate?: string } & AdsToolInput
+      ),
+  },
+  {
+    category: "advertising",
+    tool: {
+      name: "get_ad_account_checkup",
+      description:
+        "The ad account check-up a media buyer does by hand: for each campaign its real state (running / problem = switched on but not shown / paused), daily budget and today's spend; the path from impressions to clicks to landing page views to results with the overall cost per result; and 'findings' -- the specific running ads or campaigns that need attention now, each with the numbers behind it and what it means. Findings are only ever about what is running now. Use it for 'what is wrong with my ads?', 'which ad should I stop?', 'is my campaign running?', 'did I reach my budget?', 'where am I losing people?'.",
+      input_schema: {
+        type: "object",
+        properties: { ...dateRangeProperties, period: relativePeriodProperty },
+      },
+    },
+    schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
+    execute: async (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
+      return adsInsights(services).accountCheckup(actor, resolved)
     },
   },
   {

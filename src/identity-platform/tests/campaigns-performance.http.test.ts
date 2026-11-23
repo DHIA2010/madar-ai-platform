@@ -6,7 +6,10 @@ import type { AddressInfo } from "node:net"
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
+import { buildStructuredResponse } from "../ai-chat/response-formatter"
+import { type AiChatToolServices, buildToolsForCategory, dispatchToolCall } from "../ai-chat/tools"
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
+import { CampaignsPerformanceAggregationService } from "../campaigns/performance-service"
 import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createIdentityApiServer } from "../interfaces/rest/server"
@@ -1259,6 +1262,97 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
     expect(hog).toMatchObject({ adName: "Ad A", values: { basis: "no_result", share: 80 } })
     // One finding per ad: the hog is not also reported as "spent with no result" or "low taps".
     expect(body.findings.filter((finding) => finding.adName === "Ad A")).toHaveLength(1)
+
+    // The AI assistant reads the same ads: it is never left saying "only campaign-level data".
+    expect(buildToolsForCategory("advertising").map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        "get_ads_performance",
+        "get_ad_sets_performance",
+        "get_ad_daily_trend",
+        "get_ad_account_checkup",
+      ])
+    )
+    const services = {
+      db: database,
+      campaignPerformanceService: new CampaignsPerformanceAggregationService(database),
+    } as unknown as AiChatToolServices
+    const ask = async (tool: string, input: Record<string, unknown> = {}) => {
+      const answer = await dispatchToolCall("advertising", tool, input, actor, services)
+      expect(answer.error).toBeUndefined()
+      return answer.result as Record<string, unknown>
+    }
+
+    const ads = await ask("get_ads_performance")
+    expect(ads.totals).toMatchObject({ ads: 2, runningAds: 2, spend: 100, results: 4 })
+    expect(ads.ads).toEqual([
+      expect.objectContaining({
+        ad: "Ad A",
+        campaign: "Leads",
+        state: "running",
+        spend: 80,
+        spendSharePercent: 80,
+        clicks: 40,
+        ctrPercent: 1,
+        costPerClick: 2,
+        results: 0,
+        costPerResult: null,
+      }),
+      expect.objectContaining({
+        ad: "Ad B",
+        spend: 20,
+        clicks: 160,
+        ctrPercent: 16,
+        landingPageViews: 150,
+        results: 4,
+        costPerResult: 5,
+      }),
+    ])
+    // Narrowed by part of the ad's name.
+    const onlyB = await ask("get_ads_performance", { adName: "ad b" })
+    expect((onlyB.ads as Array<{ ad: string }>).map((row) => row.ad)).toEqual(["Ad B"])
+
+    const adSets = await ask("get_ad_sets_performance")
+    expect(adSets.adSets).toEqual([
+      expect.objectContaining({
+        adSet: "Everyone",
+        campaign: "Leads",
+        state: "running",
+        dailyBudget: 150,
+        spend: 100,
+        results: 4,
+        costPerResult: 25,
+      }),
+    ])
+
+    const trend = await ask("get_ad_daily_trend", { days: 3, endDate: today })
+    const trendAds = trend.ads as Array<{ ad: string; days: Array<Record<string, unknown>> }>
+    expect(trendAds.map((row) => row.ad)).toEqual(["Ad A", "Ad B"])
+    expect(trendAds[1].days.at(-1)).toMatchObject({
+      date: today,
+      spend: 20,
+      clicks: 160,
+      results: 4,
+      costPerResult: 5,
+    })
+
+    const account = await ask("get_ad_account_checkup")
+    expect(account.funnel).toMatchObject({ spend: 100, clicks: 200, results: 4, costPerResult: 25 })
+    expect(account.campaigns).toEqual([
+      expect.objectContaining({ campaign: "Leads", state: "running", dailyBudget: 150 }),
+    ])
+    expect(account.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "budget_hog", ad: "Ad A", meaning: expect.any(String) }),
+      ])
+    )
+
+    // What the chat shows beside the words: a table of the ads.
+    const structured = buildStructuredResponse(
+      [{ tool: "get_ads_performance", output: ads }],
+      "UTC"
+    )
+    expect(structured?.tables[0]).toMatchObject({ title: "أداء الإعلانات" })
+    expect(structured?.tables[0].rows[0]).toMatchObject({ ad: "Ad A", state: "يعمل", spend: 80 })
   })
 
   it("rejects unauthenticated requests", async () => {
