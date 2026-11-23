@@ -21,6 +21,11 @@ export interface AdsReportSettings {
   recipients: AdsReportRecipient[]
   lastSentOn: string | null
   maxRecipients: number
+  // The same plan as the cashier's daily report: the paid add-on while it runs, free otherwise.
+  plan: { paid: boolean; until: string | null }
+  // On the free plan an account has one scheduled report across all its apps. "pos" says the
+  // cashier's daily report holds it, so this one waits for the paid plan.
+  freeUsedBy: "pos" | null
 }
 
 export interface AdsReportSettingsInput {

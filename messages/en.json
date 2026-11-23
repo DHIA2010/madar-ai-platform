@@ -5202,7 +5202,9 @@
         "phonePlaceholder": "05XXXXXXXX",
         "namePlaceholder": "Name (optional)",
         "add": "Add a number",
-        "remove": "Remove the number"
+        "remove": "Remove the number",
+        "lockedAdd": "Another number needs the paid plan.",
+        "freeLocked": "The free report's number cannot be changed."
       },
       "checkupHint": "The findings in the report are the same ones shown in",
       "checkupLink": "the campaigns check-up",
@@ -5222,7 +5224,26 @@
         "templateNotReady": "WhatsApp hasn't approved the report's wording yet. Try later.",
         "unavailable": "WhatsApp is unavailable right now. Try later.",
         "forbidden": "You don't have permission to change this report.",
-        "save": "The settings could not be saved. Try again."
+        "save": "The settings could not be saved. Try again.",
+        "planLimit": "The free report goes to one number. More numbers need the paid plan.",
+        "numberLocked": "The free report's number cannot be changed. Changing it needs the paid plan.",
+        "freeSlotUsed": "Your free report is in use by the cashier. Subscribe to the paid plan to switch this report on."
+      },
+      "plan": {
+        "free": "The free report",
+        "paid": "The paid plan",
+        "freeLimits": "One number, which cannot be changed once saved.",
+        "paidLimits": "Up to 5 numbers, and you can change them any time.",
+        "paidUntil": "until {date}",
+        "upgradeTitle": "Send the report to more than one number",
+        "upgradeBody": "The paid plan for scheduled reports opens the reports of all your apps together, and sends each report to 5 numbers.",
+        "subscribe": "Subscribe",
+        "monthly": "{price} SAR / month",
+        "yearly": "{price} SAR / year"
+      },
+      "freeSlot": {
+        "title": "Your free report is in use by the cashier",
+        "body": "Each account has one free report across all its apps, and it is on for the cashier's daily report now. Subscribe to the paid plan to switch the ads report on beside it."
       }
     },
     "dailyReport": {
@@ -5280,7 +5301,8 @@
         "invalidPhone": "One of the numbers isn't valid — enter a mobile like 0501234567.",
         "templateNotReady": "The daily report template is awaiting WhatsApp's approval — try again later.",
         "unavailable": "WhatsApp is unavailable right now.",
-        "planLimit": "This option is on the Pro plan."
+        "planLimit": "This option is on the Pro plan.",
+        "freeSlotUsed": "Your free report is in use by the ads report. Subscribe to the paid plan to switch this report on."
       },
       "toasts": {
         "savedOn": "Saved — the report will reach you daily: {times}.",
@@ -5336,6 +5358,10 @@
         },
         "invalidPeriod": "This period doesn't work: it has to end by the send time and start before it ends.",
         "spans": "Covers {hours} hours: from {from} to {to}."
+      },
+      "freeSlot": {
+        "title": "Your free report is in use by the ads report",
+        "body": "Each account has one free report across all its apps, and it is on for the ads report now. Subscribe to the paid plan to switch the cashier's daily report on beside it."
       }
     },
     "whatsapp": {

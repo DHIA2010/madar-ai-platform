@@ -8,6 +8,9 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { sendTemplateMessage } from "./messaging"
 import { toWhatsAppNumber } from "./phone"
 import type { WhatsAppPlatformService } from "./platform-config"
+import type { AddonsService } from "../subscriptions/addons"
+
+import { DAILY_REPORT_ADDON } from "./daily-report"
 import { ADS_REPORT_TEMPLATE, type WhatsAppTemplatesService } from "./templates"
 
 // The daily ads report on WhatsApp: every morning, at the time the organization picks (Riyadh
@@ -31,7 +34,13 @@ export interface AdsReportSettings {
   sendTime: string
   recipients: AdsReportRecipient[]
   lastSentOn: string | null
+  // How many numbers the organization's plan sends to.
   maxRecipients: number
+  // The same plan as the cashier's daily report: the paid add-on while it runs, free otherwise.
+  plan: { paid: boolean; until: string | null }
+  // On the free plan an account has one scheduled report across all its apps. "pos" says that
+  // one is in use by the cashier's daily report, so this report waits for the paid plan.
+  freeUsedBy: "pos" | null
 }
 
 export interface AdsReportSettingsInput {
@@ -40,7 +49,13 @@ export interface AdsReportSettingsInput {
   recipients: AdsReportRecipient[]
 }
 
-export const MAX_ADS_REPORT_RECIPIENTS = 2
+// The plans, the same way the cashier's daily report has them (daily-report.ts): the free report
+// goes to one number, which stays fixed once saved; the paid add-on sends to up to five.
+export const FREE_ADS_REPORT_RECIPIENTS = 1
+export const PAID_ADS_REPORT_RECIPIENTS = 5
+export const MAX_ADS_REPORT_RECIPIENTS = PAID_ADS_REPORT_RECIPIENTS
+const needsPaidPlan = (code: string, message: string) =>
+  new IdentityError(code, 403, "business", message)
 const DEFAULT_SEND_TIME = "09:00"
 const FINDINGS_DAYS = 7
 
@@ -207,8 +222,28 @@ export class WhatsAppAdsReportService {
     private readonly db: PostgresDatabase,
     private readonly platform: WhatsAppPlatformService,
     private readonly templates: WhatsAppTemplatesService,
-    private readonly checkup: AdsReportCheckup
+    private readonly checkup: AdsReportCheckup,
+    // Optional: without it every organization is on the free plan.
+    private readonly addons: AddonsService | null = null
   ) {}
+
+  // The organization's plan: the paid add-on for scheduled reports while it runs.
+  private async plan(organizationId: string): Promise<AdsReportSettings["plan"]> {
+    const active = this.addons
+      ? await this.addons.active(organizationId, DAILY_REPORT_ADDON).catch(() => null)
+      : null
+    return active ? { paid: true, until: active.currentPeriodEnd } : { paid: false, until: null }
+  }
+
+  // Whether the cashier's daily report is switched on: on the free plan it holds the account's
+  // one free report.
+  private async posReportEnabled(organizationId: string): Promise<boolean> {
+    const result = await this.db.query<{ enabled: boolean }>(
+      `SELECT enabled FROM whatsapp_daily_report_settings WHERE organization_id = $1`,
+      [organizationId]
+    )
+    return result.rows[0]?.enabled === true
+  }
 
   private async stored(organizationId: string) {
     const result = await this.db.query<{
@@ -249,7 +284,17 @@ export class WhatsAppAdsReportService {
   }
 
   async getSettings(organizationId: string): Promise<AdsReportSettings> {
-    return { ...(await this.stored(organizationId)), maxRecipients: MAX_ADS_REPORT_RECIPIENTS }
+    const [stored, plan, posEnabled] = await Promise.all([
+      this.stored(organizationId),
+      this.plan(organizationId),
+      this.posReportEnabled(organizationId),
+    ])
+    return {
+      ...stored,
+      maxRecipients: plan.paid ? PAID_ADS_REPORT_RECIPIENTS : FREE_ADS_REPORT_RECIPIENTS,
+      plan,
+      freeUsedBy: !plan.paid && posEnabled ? "pos" : null,
+    }
   }
 
   async updateSettings(
@@ -275,13 +320,38 @@ export class WhatsAppAdsReportService {
         recipients.push({ phone, name: recipient.name.trim().slice(0, 80) })
       }
     }
-    if (recipients.length > MAX_ADS_REPORT_RECIPIENTS) {
+    const plan = await this.plan(organizationId)
+    if (plan.paid && recipients.length > PAID_ADS_REPORT_RECIPIENTS) {
       throw new IdentityError(
         "ADS_REPORT_TOO_MANY_RECIPIENTS",
         400,
         "validation",
-        `Up to ${MAX_ADS_REPORT_RECIPIENTS} numbers.`
+        `Up to ${PAID_ADS_REPORT_RECIPIENTS} numbers.`
       )
+    }
+    if (!plan.paid) {
+      if (recipients.length > FREE_ADS_REPORT_RECIPIENTS) {
+        throw needsPaidPlan(
+          "ADS_REPORT_PLAN_LIMIT",
+          "The free report goes to one number -- more need the paid plan."
+        )
+      }
+      // One free report for the whole account: while the cashier's is on, this one is paid.
+      if (input.enabled && (await this.posReportEnabled(organizationId))) {
+        throw needsPaidPlan(
+          "REPORT_FREE_SLOT_USED",
+          "The account's free report is in use by the cashier's daily report."
+        )
+      }
+      // The free report's number is fixed once saved (otherwise one free number could be
+      // rotated between any number of people).
+      const savedPhone = (await this.stored(organizationId)).recipients[0]?.phone
+      if (savedPhone && recipients[0]?.phone !== savedPhone) {
+        throw needsPaidPlan(
+          "ADS_REPORT_NUMBER_LOCKED",
+          "The free report's number can't be changed -- changing it needs the paid plan."
+        )
+      }
     }
     if (input.enabled && recipients.length === 0) {
       throw new IdentityError(
@@ -359,7 +429,10 @@ export class WhatsAppAdsReportService {
     const parameters = adsReportParameters(report)
     let sent = 0
     let failed = 0
-    for (const recipient of to.slice(0, MAX_ADS_REPORT_RECIPIENTS)) {
+    const limit = (await this.plan(organizationId)).paid
+      ? PAID_ADS_REPORT_RECIPIENTS
+      : FREE_ADS_REPORT_RECIPIENTS
+    for (const recipient of to.slice(0, limit)) {
       let waMessageId: string | null = null
       let error: string | null = null
       try {
@@ -416,6 +489,13 @@ export class WhatsAppAdsReportService {
       )
       if (claim.rows.length === 0) continue
       try {
+        // On the free plan the account's one report is the cashier's while that one is on.
+        if (
+          !(await this.plan(organizationId)).paid &&
+          (await this.posReportEnabled(organizationId))
+        ) {
+          continue
+        }
         const report = await this.build(organizationId, now)
         if (!adsReportHasNews(report)) continue
         const result = await this.send(organizationId, report)

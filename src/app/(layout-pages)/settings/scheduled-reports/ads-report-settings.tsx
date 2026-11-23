@@ -7,7 +7,18 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { Clock, Hourglass, Loader2, MessageCircle, Plus, Send, Trash2, Users } from "lucide-react"
+import {
+  Clock,
+  Crown,
+  Hourglass,
+  Loader2,
+  Lock,
+  MessageCircle,
+  Plus,
+  Send,
+  Trash2,
+  Users,
+} from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
@@ -15,6 +26,7 @@ import { ROUTES } from "@/constants/routes"
 import { AppError } from "@/lib/errors/app-error"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
+import { type AddonOverview, addonsService } from "@/features/billing"
 import {
   adsReportService,
   type AdsReportRecipient,
@@ -35,10 +47,24 @@ const MUTED = "text-[#667085]"
 const FIELD_CLASS =
   "h-12 rounded-[12px] border-[#E8EBF0] bg-white text-[14px] text-[#0b1738] placeholder:text-[#98A2B3]"
 
+// The same paid add-on as the cashier's daily report: one plan for every scheduled report.
+const ADDON = "whatsapp_daily_report"
+const checkoutHref = (interval: "monthly" | "yearly") =>
+  `${ROUTES.marketplaceBillingCheckout}?purpose=addon&addon=${ADDON}&interval=${interval}`
+
 interface Draft {
   enabled: boolean
   sendTime: string
   recipients: AdsReportRecipient[]
+}
+
+function LockedHint({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#9a6700]">
+      <Lock className="size-3" />
+      {children}
+    </span>
+  )
 }
 
 // WhatsApp's own *bold* markup, shown as bold in the preview.
@@ -97,6 +123,7 @@ export default function AdsReportSettings() {
 
   const [draft, setDraft] = useState<Draft | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [addon, setAddon] = useState<AddonOverview | null>(null)
   const [preview, setPreview] = useState<{ day: string; text: string; ready: boolean } | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -110,7 +137,11 @@ export default function AdsReportSettings() {
   const load = useCallback(async () => {
     setLoadError(null)
     try {
-      const overview = await adsReportService.get()
+      const [overview, addonOverview] = await Promise.all([
+        adsReportService.get(),
+        addonsService.get(ADDON).catch(() => null),
+      ])
+      setAddon(addonOverview)
       apply(overview.settings)
       setPreview(overview.preview)
     } catch (error) {
@@ -130,6 +161,12 @@ export default function AdsReportSettings() {
         return t("errors.noRecipients")
       case "ADS_REPORT_TOO_MANY_RECIPIENTS":
         return t("errors.tooManyRecipients")
+      case "ADS_REPORT_PLAN_LIMIT":
+        return t("errors.planLimit")
+      case "ADS_REPORT_NUMBER_LOCKED":
+        return t("errors.numberLocked")
+      case "REPORT_FREE_SLOT_USED":
+        return t("errors.freeSlotUsed")
       case "WHATSAPP_INVALID_PHONE":
         return t("errors.invalidPhone")
       case "WHATSAPP_TEMPLATE_NOT_READY":
@@ -203,7 +240,18 @@ export default function AdsReportSettings() {
     )
   }
 
+  const paid = settings.plan.paid
   const canAddRecipient = draft.recipients.length < settings.maxRecipients
+  // On the free plan the saved number can't be changed or removed (only renamed).
+  const lockedPhone = paid ? null : (settings.recipients[0]?.phone ?? null)
+  // The account's one free report is in use by the cashier's daily report.
+  const freeTaken = settings.freeUsedBy === "pos"
+  const priceText = (halalas: number) =>
+    new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(halalas / 100)
+  const dateFormat = new Intl.DateTimeFormat(
+    locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US",
+    { day: "numeric", month: "long", year: "numeric" }
+  )
   const updateRecipient = (index: number, patch: Partial<AdsReportRecipient>) =>
     setDraft({
       ...draft,
@@ -280,9 +328,85 @@ export default function AdsReportSettings() {
             </div>
             <Switch
               checked={draft.enabled}
+              // While the free report is in use elsewhere, this one can only be switched off.
+              disabled={freeTaken && !draft.enabled}
               onCheckedChange={(enabled) => setDraft({ ...draft, enabled })}
               aria-label={t("enable.title")}
             />
+          </section>
+
+          {freeTaken ? (
+            <div className="flex items-start gap-3 rounded-2xl border border-[#fde3a7] bg-[#fffaeb] p-4">
+              <Lock className="mt-0.5 size-5 shrink-0 text-[#b54708]" />
+              <div>
+                <p className="text-[13.5px] font-bold text-[#93370d]">{t("freeSlot.title")}</p>
+                <p className="mt-0.5 text-[12.5px] leading-6 text-[#b54708]">
+                  {t("freeSlot.body")}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* The plan: what the free report includes, and the paid add-on. */}
+          <section
+            className={cn(
+              PANEL,
+              "flex flex-col gap-4 p-5",
+              paid ? "border-[#f5d48a] bg-gradient-to-l from-[#fffbeb] to-white" : ""
+            )}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    "flex size-10 shrink-0 items-center justify-center rounded-[12px]",
+                    paid ? "bg-[#f59e0b] text-white" : "bg-[#f1f5f9] text-[#64748b]"
+                  )}
+                >
+                  <Crown className="size-5" />
+                </span>
+                <div>
+                  <p className={cn("text-[15px] font-bold", HEADING)}>
+                    {paid ? t("plan.paid") : t("plan.free")}
+                    {paid && settings.plan.until ? (
+                      <span className="ms-2 rounded-full bg-[#fef3c7] px-2 py-0.5 text-[11px] font-semibold text-[#92400e]">
+                        {t("plan.paidUntil", {
+                          date: dateFormat.format(new Date(settings.plan.until)),
+                        })}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className={cn("mt-0.5 text-[12px]", MUTED)}>
+                    {paid ? t("plan.paidLimits") : t("plan.freeLimits")}
+                  </p>
+                </div>
+              </div>
+            </div>
+            {!paid && addon?.isActive ? (
+              <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe5f5] bg-[#f6f9ff] p-4">
+                <div>
+                  <p className="text-[13.5px] font-bold text-[#1e3a8a]">{t("plan.upgradeTitle")}</p>
+                  <p className="mt-1 text-[12px] leading-6 text-[#475467]">
+                    {t("plan.upgradeBody")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={checkoutHref("monthly")}
+                    className="inline-flex items-center gap-2 rounded-[10px] bg-[#2563eb] px-4 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#1d4ed8]"
+                  >
+                    {t("plan.subscribe")} ·{" "}
+                    {t("plan.monthly", { price: priceText(addon.monthlyPriceHalalas) })}
+                  </Link>
+                  <Link
+                    href={checkoutHref("yearly")}
+                    className="inline-flex items-center gap-2 rounded-[10px] border border-[#2563eb] bg-white px-4 py-2.5 text-[12.5px] font-bold text-[#2563eb] hover:bg-[#eef4ff]"
+                  >
+                    {t("plan.yearly", { price: priceText(addon.yearlyPriceHalalas) })}
+                  </Link>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <Section
@@ -309,9 +433,16 @@ export default function AdsReportSettings() {
                   <Input
                     dir="ltr"
                     inputMode="tel"
-                    className={cn(FIELD_CLASS, "text-start")}
+                    className={cn(
+                      FIELD_CLASS,
+                      "text-start",
+                      lockedPhone && index === 0 && "cursor-not-allowed bg-[#f8fafc] text-[#475467]"
+                    )}
                     placeholder={t("recipients.phonePlaceholder")}
                     value={recipient.phone}
+                    // The free plan's one number is fixed once saved.
+                    readOnly={Boolean(lockedPhone) && index === 0}
+                    title={lockedPhone && index === 0 ? t("recipients.freeLocked") : undefined}
                     onChange={(event) => updateRecipient(index, { phone: event.target.value })}
                   />
                   <Input
@@ -323,7 +454,11 @@ export default function AdsReportSettings() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-12 rounded-[12px] px-3 text-[#b42318] hover:bg-[#fef3f2]"
+                    className={cn(
+                      "h-12 rounded-[12px] px-3 text-[#b42318] hover:bg-[#fef3f2]",
+                      lockedPhone && index === 0 && "invisible"
+                    )}
+                    disabled={Boolean(lockedPhone) && index === 0}
                     aria-label={t("recipients.remove")}
                     onClick={() =>
                       setDraft({
@@ -351,7 +486,10 @@ export default function AdsReportSettings() {
                   <Plus className="size-4" />
                   {t("recipients.add")}
                 </Button>
+              ) : !paid ? (
+                <LockedHint>{t("recipients.lockedAdd")}</LockedHint>
               ) : null}
+              {lockedPhone ? <LockedHint>{t("recipients.freeLocked")}</LockedHint> : null}
             </div>
           </Section>
 

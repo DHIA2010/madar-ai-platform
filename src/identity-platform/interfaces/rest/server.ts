@@ -1389,7 +1389,9 @@ export function createIdentityApiServer(
           container.infrastructure.database,
           whatsAppPlatformService,
           whatsAppTemplatesService,
-          campaignCheckupService
+          campaignCheckupService,
+          // The same paid add-on as the cashier's daily report decides its plan.
+          new AddonsService(container.infrastructure.database)
         )
       : null
   registerAdsReportService(whatsAppAdsReportService)

@@ -300,6 +300,8 @@ export default function DailyReportSettings() {
       return t("errors.forbidden")
     }
     switch (error.code) {
+      case "REPORT_FREE_SLOT_USED":
+        return t("errors.freeSlotUsed")
       case "DAILY_REPORT_PLAN_LIMIT":
         return t("errors.planLimit")
       case "DAILY_REPORT_NUMBER_LOCKED":
@@ -523,10 +525,25 @@ export default function DailyReportSettings() {
             </div>
             <Switch
               checked={draft.enabled}
+              // While the account's free report is in use by the ads report, this one can only
+              // be switched off.
+              disabled={settings.freeUsedBy === "advertising" && !draft.enabled}
               onCheckedChange={(enabled) => setDraft({ ...draft, enabled })}
               aria-label={t("enable.title")}
             />
           </section>
+
+          {settings.freeUsedBy === "advertising" ? (
+            <div className="flex items-start gap-3 rounded-2xl border border-[#fde3a7] bg-[#fffaeb] p-4">
+              <Lock className="mt-0.5 size-5 shrink-0 text-[#b54708]" />
+              <div>
+                <p className="text-[13.5px] font-bold text-[#93370d]">{t("freeSlot.title")}</p>
+                <p className="mt-0.5 text-[12.5px] leading-6 text-[#b54708]">
+                  {t("freeSlot.body")}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {/* The plan: what the free report includes, and the paid add-on. */}
           <section

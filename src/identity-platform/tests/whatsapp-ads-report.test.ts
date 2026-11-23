@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { CheckupResult } from "../campaigns/checkup"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { AddonsService } from "../subscriptions/addons"
 import {
   adsReportHasNews,
   adsReportParameters,
@@ -208,7 +209,8 @@ describe("the ads report's settings and schedule", () => {
           asked.push(query)
           return query.startDate === query.endDate ? dayResult : week
         },
-      }
+      },
+      new AddonsService(database)
     )
   })
 
@@ -244,7 +246,9 @@ describe("the ads report's settings and schedule", () => {
       enabled: false,
       sendTime: "09:00",
       recipients: [],
-      maxRecipients: 2,
+      maxRecipients: 1,
+      plan: { paid: false, until: null },
+      freeUsedBy: null,
     })
     await expect(
       service.updateSettings(ORG, USER, { enabled: true, sendTime: "09:00", recipients: [] })
@@ -305,6 +309,61 @@ describe("the ads report's settings and schedule", () => {
       { kind: "ads_report", status: "sent" },
       { kind: "ads_report", status: "sent" },
     ])
+  })
+
+  it("follows the cashier report's plan: one fixed number free, five on the paid plan", async () => {
+    const owner = { phone: "0501234567", name: "المالك" }
+    const partner = { phone: "0559876543", name: "الشريك" }
+    const save = (recipients: Array<{ phone: string; name: string }>, enabled = true) =>
+      service.updateSettings(ORG, USER, { enabled, sendTime: "09:00", recipients })
+
+    // Free: one number, and once saved it cannot be swapped for another.
+    await expect(save([owner, partner])).rejects.toMatchObject({ code: "ADS_REPORT_PLAN_LIMIT" })
+    await save([owner])
+    await expect(save([partner])).rejects.toMatchObject({ code: "ADS_REPORT_NUMBER_LOCKED" })
+    // Renaming the same number is fine.
+    expect((await save([{ ...owner, name: "أبو خالد" }])).recipients[0].name).toBe("أبو خالد")
+
+    // Paid: up to five numbers, and the number can change.
+    await new AddonsService(database).extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    const paid = await save([partner, owner])
+    expect(paid).toMatchObject({ maxRecipients: 5, plan: { paid: true }, freeUsedBy: null })
+    expect(paid.recipients.map((entry) => entry.name)).toEqual(["الشريك", "المالك"])
+  })
+
+  it("gives an account one free report across its apps", async () => {
+    const sent = fakeWhatsApp()
+    const owner = { phone: "0501234567", name: "المالك" }
+    // The cashier's daily report is on: it holds the account's free report.
+    await database.query(
+      `insert into whatsapp_daily_report_settings (organization_id, enabled, send_time, recipients)
+       values ($1, true, '23:00', '[]'::jsonb)`,
+      [ORG]
+    )
+    expect(await service.getSettings(ORG)).toMatchObject({ freeUsedBy: "pos" })
+    await expect(
+      service.updateSettings(ORG, USER, { enabled: true, sendTime: "09:00", recipients: [owner] })
+    ).rejects.toMatchObject({ code: "REPORT_FREE_SLOT_USED" })
+    // It can still be prepared switched off, ready for when the plan is paid.
+    await service.updateSettings(ORG, USER, {
+      enabled: false,
+      sendTime: "09:00",
+      recipients: [owner],
+    })
+
+    // An ads report that was already on before the rule sends nothing while the cashier's is on.
+    await database.query(
+      `update whatsapp_ads_report_settings set enabled = true where organization_id = $1`,
+      [ORG]
+    )
+    await service.runDue(new Date("2026-11-20T07:00:00Z"))
+    expect(sent).toHaveLength(0)
+
+    // With the paid plan both reports run.
+    await new AddonsService(database).extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    expect(await service.getSettings(ORG)).toMatchObject({ freeUsedBy: null })
+    await service.runDue(new Date("2026-11-21T07:00:00Z"))
+    expect(sent).toHaveLength(1)
   })
 
   it("sends nothing on a morning with nothing to say", async () => {

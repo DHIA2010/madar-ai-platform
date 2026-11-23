@@ -428,6 +428,29 @@ describe("WhatsAppDailyReportService", () => {
     ).rejects.toMatchObject({ code: "DAILY_REPORT_INVALID_PERIOD" })
   })
 
+  it("cannot be switched on free while the ads report holds the account's one free report", async () => {
+    const settings = {
+      enabled: true,
+      sendTime: "09:00",
+      recipients: [{ phone: "0501234567", name: "المالك" }],
+    }
+    await database.query(
+      `insert into whatsapp_ads_report_settings (organization_id, enabled, send_time, recipients)
+       values ($1, true, '09:00', '[]'::jsonb)`,
+      [ORG]
+    )
+    expect(await service.getSettings(ORG)).toMatchObject({ freeUsedBy: "advertising" })
+    await expect(service.updateSettings(ORG, USER, settings)).rejects.toMatchObject({
+      code: "REPORT_FREE_SLOT_USED",
+    })
+    // The paid plan runs both.
+    await addons.extend(ORG, "whatsapp_daily_report", "monthly", "payment")
+    expect(await service.updateSettings(ORG, USER, settings)).toMatchObject({
+      enabled: true,
+      freeUsedBy: null,
+    })
+  })
+
   it("keeps the free report's number fixed once saved, but lets the name change", async () => {
     await service.updateSettings(ORG, USER, {
       enabled: true,

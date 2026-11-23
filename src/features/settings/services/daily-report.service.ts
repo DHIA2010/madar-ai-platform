@@ -39,6 +39,9 @@ export interface DailyReportWindow {
 }
 
 export interface DailyReportSettings {
+  // On the free plan an account has one scheduled report across all its apps. "advertising"
+  // says the ads report holds it, so this one waits for the paid plan.
+  freeUsedBy?: "advertising" | null
   enabled: boolean
   sendTime: string
   schedules: DailyReportSchedule[]

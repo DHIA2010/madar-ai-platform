@@ -73,7 +73,11 @@ export function ScheduledReportsCategory({ category }: { category: ReportCategor
         adsReportService
           .get()
           .then(({ settings }) =>
-            keep("ads-report", { enabled: settings.enabled, times: [settings.sendTime] })
+            keep("ads-report", {
+              enabled: settings.enabled,
+              times: [settings.sendTime],
+              paid: settings.plan.paid,
+            })
           )
           .catch(() => undefined)
       }

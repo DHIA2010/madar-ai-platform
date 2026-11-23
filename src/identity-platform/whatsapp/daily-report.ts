@@ -78,6 +78,9 @@ export interface DailyReportSettings {
   recipients: DailyReportRecipient[]
   lastSentOn: string | null
   plan: { paid: boolean; until: string | null; limits: DailyReportLimits }
+  // On the free plan an account has one scheduled report across all its apps. "advertising"
+  // says that one is in use by the ads report, so this report waits for the paid plan.
+  freeUsedBy: "advertising" | null
   // The period each send covers on its next run, in the order of `schedules` (only the sends
   // the current plan uses).
   coverage: Array<{ sendTime: string } & DailyReportWindow>
@@ -291,6 +294,16 @@ export class WhatsAppDailyReportService {
       : { paid: false, until: null, limits: FREE_DAILY_REPORT_LIMITS }
   }
 
+  // Whether the ads report is switched on: on the free plan the account has one scheduled
+  // report across all its apps, so while that one is on this one cannot be switched on free.
+  private async adsReportEnabled(organizationId: string): Promise<boolean> {
+    const result = await this.db.query<{ enabled: boolean }>(
+      `SELECT enabled FROM whatsapp_ads_report_settings WHERE organization_id = $1`,
+      [organizationId]
+    )
+    return result.rows[0]?.enabled === true
+  }
+
   private async storedSettings(organizationId: string) {
     const result = await this.db.query<{
       enabled: boolean
@@ -361,6 +374,10 @@ export class WhatsAppDailyReportService {
       recipients: stored.recipients,
       lastSentOn: stored.lastSentOn,
       plan,
+      freeUsedBy:
+        !plan.paid && !stored.enabled && (await this.adsReportEnabled(organizationId))
+          ? "advertising"
+          : null,
       coverage: schedules.map((schedule) => {
         // The next run: today's when its time hasn't passed yet, tomorrow's otherwise.
         const todayRun = riyadhMoment(today, schedule.sendTime)
@@ -466,6 +483,21 @@ export class WhatsAppDailyReportService {
         400,
         "validation",
         "Add at least one number to receive the report."
+      )
+    }
+    // One free report for the whole account: switching this one on while the ads report holds
+    // it needs the paid plan. (One that is already on stays on: it had the free report first.)
+    if (
+      !paid &&
+      input.enabled &&
+      !(await this.storedSettings(organizationId)).enabled &&
+      (await this.adsReportEnabled(organizationId))
+    ) {
+      throw new IdentityError(
+        "REPORT_FREE_SLOT_USED",
+        403,
+        "business",
+        "The account's free report is in use by the ads report."
       )
     }
     // The free report's number is fixed once saved: changing or removing it needs the paid plan
