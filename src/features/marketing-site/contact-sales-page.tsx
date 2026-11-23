@@ -610,7 +610,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                   className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#2878ff] text-[18px] font-extrabold text-white shadow-[0_14px_30px_rgba(40,120,255,0.35)] transition-all hover:bg-[#1f63d6] disabled:opacity-70"
                 >
                   {status === "sending" ? <Loader2 className="size-5 animate-spin" /> : null}
-                  اطلب عرضًا مجانيًا
+                  سجّل الآن
                 </button>
               </form>
             </>
