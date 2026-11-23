@@ -201,7 +201,10 @@ import { GoogleAdsClient } from "../../google-ads/client"
 import { CreativeInsightsService } from "../../campaigns/creative-insights"
 import { CampaignCreativesService } from "../../campaigns/creatives"
 import { CampaignPublishingService } from "../../campaigns/publishing/service"
+import { GoogleSearchCampaignPublisher } from "../../campaigns/publishing/google-publisher"
+import { MetaCampaignPublisher } from "../../campaigns/publishing/meta-publisher"
 import { SnapchatCampaignPublisher } from "../../campaigns/publishing/snapchat-publisher"
+import { TikTokCampaignPublisher } from "../../campaigns/publishing/tiktok-publisher"
 import { CampaignJourneyService } from "../../campaigns/journey-service"
 import { ChannelsAggregationService } from "../../channels/channels-service"
 import { countConnectedPlatforms } from "../../organizations/connected-platforms"
@@ -1445,7 +1448,53 @@ export function createIdentityApiServer(
           container.infrastructure.database,
           campaignCreativesService,
           new SnapchatOAuthService(new SnapchatOAuthRepository(container.infrastructure.database)),
-          new SnapchatCampaignPublisher()
+          new SnapchatCampaignPublisher(),
+          undefined,
+          {
+            tiktok: {
+              access: new TikTokAdsOAuthService(
+                new TikTokAdsOAuthRepository(container.infrastructure.database)
+              ),
+              api: new TikTokCampaignPublisher(),
+            },
+            // Answers only for a connection that was granted the permission to manage ads.
+            meta: {
+              access: new MetaOAuthService(
+                new MetaOAuthRepository(container.infrastructure.database)
+              ),
+              api: new MetaCampaignPublisher(),
+            },
+            // The same settings the Google Ads sync is built with.
+            google: {
+              api: new GoogleSearchCampaignPublisher(
+                new GoogleAdsClient(
+                  new GoogleAdsAuthProvider(container.infrastructure.database, {
+                    tokenEndpoint:
+                      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
+                      "https://oauth2.googleapis.com/token",
+                    encryptionKey:
+                      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+                      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+                      "",
+                  }),
+                  {
+                    apiBaseUrl:
+                      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+                      "https://googleads.googleapis.com/v25",
+                    developerToken:
+                      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
+                      process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
+                      "",
+                    loginCustomerId: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
+                    maxRetries: 0,
+                    minRequestIntervalMs: Number(
+                      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"
+                    ),
+                  }
+                )
+              ),
+            },
+          }
         )
       : null
   // Switching or deleting a campaign, ad group or ad from the campaigns list.

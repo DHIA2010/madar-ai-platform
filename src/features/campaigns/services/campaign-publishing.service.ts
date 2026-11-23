@@ -69,25 +69,52 @@ export const CALLS_TO_ACTION = [
 ] as const
 export type CallToAction = (typeof CALLS_TO_ACTION)[number]
 
+// The platforms a campaign can be published to. Snapchat, TikTok and Meta show a picture or a
+// video; Google is a search campaign: text ads shown to people searching the given keywords.
+export type PublishPlatform = "snapchat" | "tiktok" | "meta" | "google"
+export const PUBLISH_PLATFORMS: PublishPlatform[] = ["snapchat", "tiktok", "meta", "google"]
+
+// The buttons TikTok and Meta offer (Snapchat's own are CALLS_TO_ACTION above).
+export const OTHER_CALLS_TO_ACTION = [
+  "LEARN_MORE",
+  "SHOP_NOW",
+  "ORDER_NOW",
+  "SIGN_UP",
+  "BOOK_NOW",
+  "CONTACT_US",
+] as const
+export type AnyCallToAction = CallToAction | (typeof OTHER_CALLS_TO_ACTION)[number]
+export const callsToActionFor = (platform: PublishPlatform): readonly AnyCallToAction[] =>
+  platform === "snapchat" ? CALLS_TO_ACTION : OTHER_CALLS_TO_ACTION
+
+export interface PublishAccount {
+  connectionId: string
+  adAccountId: string
+  name: string
+  currency: string | null
+}
+
 export interface PublishOptions {
-  snapchat: {
-    accounts: Array<{
-      connectionId: string
-      adAccountId: string
-      name: string
-      currency: string | null
-    }>
-  }
+  snapchat: { accounts: PublishAccount[] }
+  tiktok: { accounts: PublishAccount[] }
+  // needsPermission: Meta is connected for reading only, so nothing can be published to it yet.
+  meta: { accounts: PublishAccount[]; needsPermission: boolean }
+  google: { accounts: PublishAccount[] }
   limits: {
     headlineMax: number
     brandNameMax: number
     minDailyBudget: number
     countries: string[]
+    minDailyBudgets: Record<PublishPlatform, number>
+    tiktokTextMax: number
+    metaHeadlineMax: number
+    metaTextMax: number
+    googleHeadlineMax: number
+    googleDescriptionMax: number
   }
 }
 
-export interface PublishCampaignInput {
-  platform: "snapchat"
+interface PublishCommonInput {
   connectionId: string
   adAccountId: string
   name: string
@@ -99,13 +126,33 @@ export interface PublishCampaignInput {
   minAge: number
   maxAge: number | null
   gender: PublishGender
-  creativeId: string
-  brandName: string
-  headline: string
-  callToAction: CallToAction
   url: string
   startActive: boolean
 }
+
+export type PublishCampaignInput =
+  | (PublishCommonInput & {
+      platform: "snapchat" | "tiktok"
+      creativeId: string
+      brandName: string
+      // Snapchat: the ad's headline. TikTok: the text shown with the video.
+      headline: string
+      callToAction: AnyCallToAction
+    })
+  | (PublishCommonInput & {
+      platform: "meta"
+      creativeId: string
+      headline: string
+      // The text above the picture.
+      text: string
+      callToAction: AnyCallToAction
+    })
+  | (PublishCommonInput & {
+      platform: "google"
+      headlines: string[]
+      descriptions: string[]
+      keywords: string[]
+    })
 
 export interface Publication {
   id: string
@@ -123,6 +170,12 @@ export interface Publication {
   headline: string
   callToAction: string
   url: string
+  details: {
+    text?: string
+    headlines?: string[]
+    descriptions?: string[]
+    keywords?: string[]
+  } | null
   status: "publishing" | "published" | "failed"
   platformStatus: "active" | "paused"
   error: { code: string; step: string | null; reason: string } | null
@@ -147,6 +200,33 @@ export function snapchatCreativeProblem(
   if (creative.kind === "video" && creative.durationSeconds) {
     if (creative.durationSeconds < 3 || creative.durationSeconds > 180) return "duration"
   }
+  return null
+}
+
+// Whether a creative fits the platform it is going to -- the same rules the server applies.
+//   TikTok: video only (upright, square or wide), from 5 seconds to 10 minutes.
+//   Meta: a picture or a video at least 600 wide, no taller than 9:16, no wider than 1.91:1.
+export function creativeProblemFor(
+  platform: Exclude<PublishPlatform, "google">,
+  creative: Pick<Creative, "kind" | "width" | "height" | "durationSeconds">
+): "ratio" | "small" | "duration" | "video_only" | null {
+  if (platform === "snapchat") return snapchatCreativeProblem(creative)
+  const ratio = creative.width && creative.height ? creative.width / creative.height : null
+  if (platform === "tiktok") {
+    if (creative.kind !== "video") return "video_only"
+    if (ratio && ![9 / 16, 1, 16 / 9].some((allowed) => Math.abs(ratio - allowed) <= 0.03)) {
+      return "ratio"
+    }
+    if (
+      creative.durationSeconds &&
+      (creative.durationSeconds < 5 || creative.durationSeconds > 600)
+    ) {
+      return "duration"
+    }
+    return null
+  }
+  if (creative.width && creative.width < 600) return "small"
+  if (ratio && (ratio < 9 / 16 - 0.02 || ratio > 1.91 + 0.05)) return "ratio"
   return null
 }
 

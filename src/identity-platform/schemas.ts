@@ -539,10 +539,10 @@ export const uploadCreativeSchema = z.object({
 
 export const renameCreativeSchema = z.object({ name: z.string().trim().min(1).max(120) })
 
-// A campaign to publish to an ad platform (campaigns/publishing/service.ts). The text limits are
-// Snapchat's own for an ad's headline and brand name.
-export const publishCampaignSchema = z.object({
-  platform: z.literal("snapchat"),
+// A campaign to publish to an ad platform (campaigns/publishing/service.ts). What every platform
+// takes is shared; the text limits are each platform's own. Google is a search campaign: text
+// and keywords instead of a creative.
+const publishCommon = {
   connectionId: z.string().uuid(),
   adAccountId: z.string().min(1).max(100),
   name: z.string().trim().min(2).max(120),
@@ -554,13 +554,50 @@ export const publishCampaignSchema = z.object({
   minAge: z.number().int().min(18).max(49),
   maxAge: z.number().int().min(19).max(49).nullish(),
   gender: z.enum(["all", "male", "female"]),
-  creativeId: z.string().uuid(),
-  brandName: z.string().trim().min(1).max(25),
-  headline: z.string().trim().min(1).max(34),
-  callToAction: z.enum(["MORE", "SHOP_NOW", "ORDER_NOW", "SIGN_UP", "BOOK_NOW", "GET_NOW"]),
   url: z.string().trim().url().max(1000),
   startActive: z.boolean(),
-})
+}
+const shownCallToAction = z.enum([
+  "LEARN_MORE",
+  "SHOP_NOW",
+  "ORDER_NOW",
+  "SIGN_UP",
+  "BOOK_NOW",
+  "CONTACT_US",
+])
+export const publishCampaignSchema = z.discriminatedUnion("platform", [
+  z.object({
+    ...publishCommon,
+    platform: z.literal("snapchat"),
+    creativeId: z.string().uuid(),
+    brandName: z.string().trim().min(1).max(25),
+    headline: z.string().trim().min(1).max(34),
+    callToAction: z.enum(["MORE", "SHOP_NOW", "ORDER_NOW", "SIGN_UP", "BOOK_NOW", "GET_NOW"]),
+  }),
+  z.object({
+    ...publishCommon,
+    platform: z.literal("tiktok"),
+    creativeId: z.string().uuid(),
+    brandName: z.string().trim().min(1).max(40),
+    headline: z.string().trim().min(1).max(100),
+    callToAction: shownCallToAction,
+  }),
+  z.object({
+    ...publishCommon,
+    platform: z.literal("meta"),
+    creativeId: z.string().uuid(),
+    headline: z.string().trim().min(1).max(40),
+    text: z.string().trim().min(1).max(125),
+    callToAction: shownCallToAction,
+  }),
+  z.object({
+    ...publishCommon,
+    platform: z.literal("google"),
+    headlines: z.array(z.string().trim().min(1).max(30)).min(3).max(15),
+    descriptions: z.array(z.string().trim().min(1).max(90)).min(2).max(4),
+    keywords: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
+  }),
+])
 
 export const publicationStatusSchema = z.object({ active: z.boolean() })
 

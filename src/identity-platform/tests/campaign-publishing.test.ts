@@ -18,6 +18,7 @@ import {
   withCampaignTracking,
   type PublishCampaignInput,
 } from "../campaigns/publishing/service"
+import { PlatformPublishError } from "../campaigns/publishing/platform"
 import {
   SnapchatCampaignPublisher,
   SnapchatPublishError,
@@ -517,7 +518,8 @@ describe("the creative library and the publish record", () => {
     }
   }
 
-  const request = (creativeId: string, overrides: Partial<PublishCampaignInput> = {}) =>
+  type SnapchatInput = Extract<PublishCampaignInput, { platform: "snapchat" }>
+  const request = (creativeId: string, overrides: Partial<SnapchatInput> = {}) =>
     ({
       platform: "snapchat",
       connectionId: CONNECTION,
@@ -538,7 +540,7 @@ describe("the creative library and the publish record", () => {
       url: "https://example.com/offer",
       startActive: false,
       ...overrides,
-    }) satisfies PublishCampaignInput
+    }) satisfies SnapchatInput
 
   it("lists the connected accounts, publishes in the background and keeps the record", async () => {
     const { publishing, snap } = service()
@@ -824,7 +826,7 @@ describe("the creative library and the publish record", () => {
     const { publishing, snap } = service()
     const creative = await upload()
     const square = await upload({ width: 1080, height: 1080 })
-    const cases: Array<[Partial<PublishCampaignInput>, string]> = [
+    const cases: Array<[Partial<SnapchatInput>, string]> = [
       [{ adAccountId: "someone-else" }, "PUBLISH_ACCOUNT_NOT_CONNECTED"],
       [{ dailyBudget: 5 }, "PUBLISH_BUDGET_TOO_LOW"],
       [{ startDate: "2026-01-14" }, "PUBLISH_START_IN_PAST"],
@@ -865,6 +867,374 @@ describe("the creative library and the publish record", () => {
     expect(await publishing.get(ORG, started.id)).toMatchObject({
       status: "failed",
       error: { code: "PUBLISH_INTERRUPTED" },
+    })
+  })
+
+  // ---- TikTok, Meta and Google Ads ----
+
+  const TIKTOK_CONNECTION = "40000000-0000-0000-0000-000000000002"
+  const META_CONNECTION = "40000000-0000-0000-0000-000000000003"
+  const META_READ_ONLY = "40000000-0000-0000-0000-000000000004"
+  const GOOGLE_CONNECTION = "40000000-0000-0000-0000-000000000005"
+
+  async function connectOthers() {
+    for (const [table, id, scopes] of [
+      ["tiktok_ads_oauth_connections", TIKTOK_CONNECTION, []],
+      ["meta_oauth_connections", META_CONNECTION, ["ads_read", "ads_management"]],
+      ["meta_oauth_connections", META_READ_ONLY, ["ads_read"]],
+    ] as const) {
+      await database.query(
+        `insert into ${table}
+           (id, organization_id, project_id, status, scopes, created_by_user_id, updated_by_user_id)
+         values ($1, $2, $3, 'connected', $4::jsonb, $5, $5)`,
+        [id, ORG, randomUUID(), JSON.stringify(scopes), USER]
+      )
+    }
+    await database.query(
+      `insert into integration_connections
+         (id, provider_id, provider_family, platform, organization_id, project_id, status,
+          created_by_user_id, updated_by_user_id)
+       values ($1, 'google_ads', 'google', 'google_ads', $2, $3, 'connected', $4, $4)`,
+      [GOOGLE_CONNECTION, ORG, randomUUID(), USER]
+    )
+    // Google's ad accounts point at both the first connections table and the shared one.
+    await database.query(
+      `insert into google_oauth_connections
+         (id, organization_id, project_id, status, created_by_user_id, updated_by_user_id)
+       values ($1, $2, $3, 'connected', $4, $4)`,
+      [GOOGLE_CONNECTION, ORG, randomUUID(), USER]
+    )
+    for (const [table, connection, account] of [
+      ["tiktok_ads_accounts", TIKTOK_CONNECTION, "7700"],
+      ["meta_ads_accounts", META_CONNECTION, "act_55"],
+      ["meta_ads_accounts", META_READ_ONLY, "act_66"],
+    ] as const) {
+      await database.query(
+        `insert into ${table} (id, connection_id, account_id, account_name, currency_code)
+         values ($1, $2, $3, 'Madar', 'SAR')`,
+        [randomUUID(), connection, account]
+      )
+    }
+    await database.query(
+      `insert into google_ads_customer_accounts
+         (id, connection_id, customer_id, display_name, currency_code)
+       values ($1, $2, '273-911-1244', 'Madar', 'SAR')`,
+      [randomUUID(), GOOGLE_CONNECTION]
+    )
+  }
+
+  // Stand-ins for the three publishers: they record what they were handed.
+  function others(refuse: "tiktok" | null = null) {
+    const calls: Array<{ platform: string; action: string; input: Record<string, unknown> }> = []
+    const record =
+      (platform: string, action: string, ids: Record<string, string> = {}) =>
+      async (input: object) => {
+        calls.push({ platform, action, input: input as Record<string, unknown> })
+        if (platform === refuse && action === "publish") {
+          throw new PlatformPublishError(
+            "tiktok",
+            "account",
+            "No pixel on the account.",
+            "NO_PIXEL"
+          )
+        }
+        return ids as never
+      }
+    const token = { resolveAccessToken: async (id: string) => `token-${id.slice(-1)}` }
+    const publishing = new CampaignPublishingService(
+      database,
+      creatives,
+      token,
+      fakeSnapchat().publisher,
+      () => new Date("2026-01-15T06:00:00Z"),
+      {
+        tiktok: {
+          access: token,
+          api: {
+            publish: record("tiktok", "publish", {
+              campaignId: "tt-campaign",
+              adGroupId: "tt-group",
+              videoId: "tt-video",
+              adId: "tt-ad",
+            }),
+            setCampaignStatus: record("tiktok", "status"),
+            deleteCampaign: record("tiktok", "delete"),
+          },
+        },
+        meta: {
+          access: token,
+          api: {
+            publish: record("meta", "publish", {
+              campaignId: "fb-campaign",
+              adSetId: "fb-set",
+              creativeId: "fb-creative",
+              adId: "fb-ad",
+            }),
+            setCampaignStatus: record("meta", "status"),
+            deleteCampaign: record("meta", "delete"),
+          },
+        },
+        google: {
+          api: {
+            publish: record("google", "publish", {
+              campaignId: "g-campaign",
+              budgetResourceName: "customers/2739111244/campaignBudgets/1",
+              adGroupId: "g-group",
+              adId: "g-ad",
+            }),
+            setCampaignStatus: record("google", "status"),
+            deleteCampaign: record("google", "delete"),
+          },
+        },
+      }
+    )
+    return { publishing, calls }
+  }
+
+  const common = {
+    name: "حملة الشتاء",
+    objective: "traffic",
+    dailyBudget: 100,
+    startDate: "2026-01-15",
+    endDate: null,
+    countryCode: "sa",
+    minAge: 25,
+    maxAge: 44,
+    gender: "all",
+    url: "https://example.com/offer",
+    startActive: false,
+  } as const
+  const video = () =>
+    upload({
+      contentType: "video/mp4",
+      dataBase64: MP4.toString("base64"),
+      durationSeconds: 20,
+    })
+  const googleRequest = {
+    ...common,
+    platform: "google",
+    connectionId: GOOGLE_CONNECTION,
+    adAccountId: "273-911-1244",
+    headlines: ["كاشير سريع", "فواتير إلكترونية", "جرّبه مجانًا"],
+    descriptions: ["نظام كاشير سعودي متوافق مع الفوترة.", "ابدأ خلال دقائق."],
+    keywords: ["برنامج كاشير", "نظام نقاط بيع"],
+  } satisfies PublishCampaignInput
+
+  it("offers the connected accounts of each platform, and Meta only when it may manage ads", async () => {
+    await connectOthers()
+    const options = await others().publishing.options(actor)
+    expect(options.tiktok.accounts).toEqual([
+      { connectionId: TIKTOK_CONNECTION, adAccountId: "7700", name: "Madar", currency: "SAR" },
+    ])
+    // The read-only Meta connection's account is not offered.
+    expect(options.meta).toEqual({
+      accounts: [
+        { connectionId: META_CONNECTION, adAccountId: "act_55", name: "Madar", currency: "SAR" },
+      ],
+      needsPermission: false,
+    })
+    expect(options.google.accounts.map((account) => account.adAccountId)).toEqual(["273-911-1244"])
+    expect(options.limits.minDailyBudgets).toMatchObject({ snapchat: 20, tiktok: 75 })
+
+    // With only the read-only connection left, Meta says a permission is missing.
+    await database.query(`update meta_oauth_connections set status = 'paused' where id = $1`, [
+      META_CONNECTION,
+    ])
+    expect((await others().publishing.options(actor)).meta).toEqual({
+      accounts: [],
+      needsPermission: true,
+    })
+    // A service built without the other platforms offers none of them.
+    expect((await service().publishing.options(actor)).tiktok.accounts).toEqual([])
+  })
+
+  it("publishes a video to TikTok and a picture to Meta, each with its own text", async () => {
+    await connectOthers()
+    const { publishing, calls } = others()
+    const clip = await video()
+    const picture = await upload()
+
+    const tiktok = await publishing.publish(actor, {
+      ...common,
+      platform: "tiktok",
+      connectionId: TIKTOK_CONNECTION,
+      adAccountId: "7700",
+      creativeId: clip.id,
+      brandName: "مدار",
+      headline: "حجوزاتك مرتّبة بدون دفاتر",
+      callToAction: "SIGN_UP",
+    })
+    const meta = await publishing.publish(actor, {
+      ...common,
+      platform: "meta",
+      connectionId: META_CONNECTION,
+      adAccountId: "act_55",
+      creativeId: picture.id,
+      headline: "كاشير سريع",
+      text: "نظام سعودي واحد يدير البيع والمخزون.",
+      callToAction: "LEARN_MORE",
+    })
+    await publishing.settled()
+
+    const sent = (platform: string) =>
+      calls.find((call) => call.platform === platform && call.action === "publish")?.input
+    expect(sent("tiktok")).toMatchObject({
+      accessToken: "token-2",
+      advertiserId: "7700",
+      text: "حجوزاتك مرتّبة بدون دفاتر",
+      brandName: "مدار",
+      callToAction: "SIGN_UP",
+      dailyBudget: 100,
+      countryCode: "sa",
+      minAge: 25,
+      maxAge: 44,
+      url: expect.stringContaining("utm_source=tiktok"),
+    })
+    expect((sent("tiktok")?.media as { kind: string }).kind).toBe("video")
+    expect(sent("meta")).toMatchObject({
+      accessToken: "token-3",
+      adAccountId: "act_55",
+      headline: "كاشير سريع",
+      text: "نظام سعودي واحد يدير البيع والمخزون.",
+      url: expect.stringContaining("utm_source=meta"),
+    })
+    expect(await publishing.get(ORG, tiktok.id)).toMatchObject({
+      platform: "tiktok",
+      status: "published",
+      externalCampaignId: "tt-campaign",
+    })
+    expect(await publishing.get(ORG, meta.id)).toMatchObject({
+      platform: "meta",
+      status: "published",
+      externalCampaignId: "fb-campaign",
+      details: { text: "نظام سعودي واحد يدير البيع والمخزون." },
+    })
+
+    // Its switch and its removal go to the platform that holds it.
+    await publishing.setActive(actor, tiktok.id, true)
+    await publishing.remove(actor, meta.id)
+    expect(calls.slice(-2)).toEqual([
+      {
+        platform: "tiktok",
+        action: "status",
+        input: {
+          accessToken: "token-2",
+          advertiserId: "7700",
+          campaignId: "tt-campaign",
+          active: true,
+        },
+      },
+      {
+        platform: "meta",
+        action: "delete",
+        input: { accessToken: "token-3", campaignId: "fb-campaign" },
+      },
+    ])
+    expect((await publishing.list(ORG)).map((entry) => entry.platform)).toEqual(["tiktok"])
+  })
+
+  it("publishes a Google search campaign from text and keywords, with no creative", async () => {
+    await connectOthers()
+    const { publishing, calls } = others()
+    const started = await publishing.publish(actor, googleRequest)
+    await publishing.settled()
+
+    expect(calls[0]).toMatchObject({
+      platform: "google",
+      action: "publish",
+      input: {
+        connectionId: GOOGLE_CONNECTION,
+        // Digits only, as Google's API addresses an account.
+        customerId: "2739111244",
+        startDate: "2026-01-15",
+        endDate: null,
+        headlines: googleRequest.headlines,
+        descriptions: googleRequest.descriptions,
+        keywords: googleRequest.keywords,
+        url: expect.stringContaining("utm_source=google&utm_medium=cpc"),
+      },
+    })
+    expect(await publishing.get(ORG, started.id)).toMatchObject({
+      platform: "google",
+      status: "published",
+      creativeId: null,
+      headline: "كاشير سريع",
+      externalCampaignId: "g-campaign",
+      details: { keywords: ["برنامج كاشير", "نظام نقاط بيع"] },
+    })
+    await publishing.remove(actor, started.id)
+    expect(calls.at(-1)).toMatchObject({
+      platform: "google",
+      action: "delete",
+      input: { customerId: "2739111244", campaignId: "g-campaign" },
+    })
+  })
+
+  it("refuses what does not fit a platform before asking it for anything", async () => {
+    await connectOthers()
+    const { publishing, calls } = others()
+    const picture = await upload()
+    const tiktok = {
+      ...common,
+      platform: "tiktok",
+      connectionId: TIKTOK_CONNECTION,
+      adAccountId: "7700",
+      creativeId: picture.id,
+      brandName: "مدار",
+      headline: "نص الإعلان",
+      callToAction: "SIGN_UP",
+    } satisfies PublishCampaignInput
+
+    // TikTok shows videos only, and its daily budget starts higher.
+    await expect(publishing.publish(actor, tiktok)).rejects.toMatchObject({
+      code: "PUBLISH_CREATIVE_NOT_SUITABLE",
+      details: { problem: "video_only" },
+    })
+    await expect(publishing.publish(actor, { ...tiktok, dailyBudget: 50 })).rejects.toMatchObject({
+      code: "PUBLISH_BUDGET_TOO_LOW",
+      details: { minimum: 75 },
+    })
+    // A Meta account whose connection may only read is not a place to publish to.
+    await expect(
+      publishing.publish(actor, {
+        ...common,
+        platform: "meta",
+        connectionId: META_READ_ONLY,
+        adAccountId: "act_66",
+        creativeId: picture.id,
+        headline: "كاشير سريع",
+        text: "نص",
+        callToAction: "LEARN_MORE",
+      })
+    ).rejects.toMatchObject({ code: "PUBLISH_ACCOUNT_NOT_CONNECTED" })
+    // Google needs three headlines.
+    await expect(
+      publishing.publish(actor, { ...googleRequest, headlines: ["واحد", "اثنان"] })
+    ).rejects.toMatchObject({
+      code: "PUBLISH_TEXT_NOT_SUITABLE",
+      details: { problem: "headlines" },
+    })
+    expect(calls).toEqual([])
+  })
+
+  it("records the platform's own reason when TikTok refuses", async () => {
+    await connectOthers()
+    const { publishing } = others("tiktok")
+    const clip = await video()
+    const started = await publishing.publish(actor, {
+      ...common,
+      platform: "tiktok",
+      connectionId: TIKTOK_CONNECTION,
+      adAccountId: "7700",
+      creativeId: clip.id,
+      brandName: "مدار",
+      headline: "نص الإعلان",
+      callToAction: "SIGN_UP",
+    })
+    await publishing.settled()
+    expect(await publishing.get(ORG, started.id)).toMatchObject({
+      status: "failed",
+      error: { code: "TIKTOK_NO_PIXEL", step: "account", reason: "No pixel on the account." },
     })
   })
 })

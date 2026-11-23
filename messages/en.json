@@ -7932,7 +7932,7 @@
     },
     "publish": {
       "title": "Create a campaign",
-      "subtitle": "Four short steps, then your campaign is published to Snapchat straight from Madar.",
+      "subtitle": "Four short steps, then we publish your campaign to Snapchat, TikTok, Meta or Google straight from Madar.",
       "loadFailed": "The form's data could not be loaded.",
       "retry": "Try again",
       "back": "Back",
@@ -7954,21 +7954,26 @@
       "stepHints": {
         "basics": "Choose the platform, name your campaign and say what you want from it.",
         "audience": "Set the daily budget, the start date and who the ad is shown to.",
-        "ad": "Choose the image or video, write the headline and add your website's link.",
+        "ad": "Prepare your ad: the file or the text, the headline, and your website link.",
         "review": "Check the details. Nothing is published until you press “Publish the campaign”."
       },
       "noAccount": {
-        "title": "Connect your Snapchat ad account first",
-        "body": "To publish a campaign from Madar, a Snapchat ad account has to be connected. Connect it once, then come back here.",
-        "action": "Connect Snapchat"
+        "title": "Connect an ad platform first",
+        "body": "To publish a campaign from Madar we need a connected ad account: Snapchat, TikTok, Meta or Google. Connect it once, then come back here.",
+        "action": "Connect an ad platform"
       },
       "platforms": {
         "snapchat": "Snapchat",
-        "snapchatHint": "Publishing is available now",
+        "snapchatHint": "A full-screen picture or video",
         "meta": "Meta (Facebook and Instagram)",
         "tiktok": "TikTok",
         "google": "Google",
-        "soon": "Soon"
+        "soon": "Soon",
+        "tiktokHint": "A video shown between TikTok clips",
+        "metaHint": "A picture or video on Facebook and Instagram",
+        "googleHint": "A text ad shown to people searching Google",
+        "notConnected": "Not connected",
+        "needsPermission": "Waiting for Meta's permission"
       },
       "basics": {
         "platform": "Platform",
@@ -7990,7 +7995,7 @@
       },
       "audience": {
         "budget": "Daily budget",
-        "budgetHint": "About {week} {currency} a week. Snapchat may spend a little more on one day and less on another.",
+        "budgetHint": "About {week} {currency} a week. The platform may spend a little more on one day and less on another.",
         "startDate": "Start date",
         "endDate": "End date (optional)",
         "endDateHint": "Leave it empty to keep the campaign running until you stop it.",
@@ -8006,7 +8011,8 @@
           "all": "Everyone",
           "male": "Men",
           "female": "Women"
-        }
+        },
+        "googleNote": "Google search ads are shown by what people search for, not by age or gender. Choosing the country is enough."
       },
       "countries": {
         "sa": "Saudi Arabia",
@@ -8033,7 +8039,34 @@
         "url": "Your website's link",
         "urlHint": "The page that opens when the ad is tapped. It has to start with https://",
         "preview": "Roughly how the ad looks",
-        "previewEmpty": "Choose an image or video to see it here"
+        "previewEmpty": "Choose an image or video to see it here",
+        "creativeHints": {
+          "snapchat": "Pick from your library or upload a new file. The size needed is upright 1080×1920 (9:16).",
+          "tiktok": "TikTok shows video only. Pick an upright (9:16) video of 5 seconds or more, or upload a new one.",
+          "meta": "Pick a picture or video from your library or upload a new file. Upright, square and wide all fit."
+        },
+        "fit": {
+          "ok": "Fits this platform",
+          "video_only": "This platform shows video only",
+          "ratio": "The file's shape does not fit this platform",
+          "small": "The file is small. At least 600 pixels wide is needed",
+          "duration": "The video's length does not fit this platform"
+        },
+        "brandNameHintTiktok": "The name shown with the ad when your account has no name on TikTok.",
+        "tiktokText": "Ad text",
+        "tiktokTextHint": "Shown under the video. A short line that tells the customer what they gain.",
+        "text": "Text above the picture",
+        "textHint": "A sentence or two explaining your offer. Shown at the top of the ad.",
+        "textPlaceholder": "Explain your offer in a sentence",
+        "headlines": "Ad headlines (3)",
+        "headlinesHint": "Google shows two or three of them together. Up to 30 characters each.",
+        "headlineNumber": "Headline {number}",
+        "descriptions": "Ad description (2)",
+        "descriptionsHint": "Two lines shown under the headline. Up to 90 characters each.",
+        "descriptionNumber": "Description {number}",
+        "keywords": "The words your customer searches with",
+        "keywordsHint": "One word or phrase per line. Your ad shows to people searching it or something close to it.",
+        "keywordsPlaceholder": "cashier software\npoint of sale system\ne-invoice"
       },
       "callsToAction": {
         "MORE": "Learn more",
@@ -8041,7 +8074,9 @@
         "ORDER_NOW": "Order now",
         "SIGN_UP": "Sign up",
         "BOOK_NOW": "Book now",
-        "GET_NOW": "Get it now"
+        "GET_NOW": "Get it now",
+        "LEARN_MORE": "Learn more",
+        "CONTACT_US": "Contact us"
       },
       "review": {
         "platform": "Platform and account",
@@ -8057,9 +8092,10 @@
         "url": "Link",
         "start": "When does the campaign start?",
         "startPaused": "Publish it switched off",
-        "startPausedHint": "The campaign is created on Snapchat and spends nothing until you switch it on from Madar.",
+        "startPausedHint": "The campaign is created on the platform and spends nothing until you switch it on from Madar.",
         "startNow": "Start as soon as it is approved",
-        "startNowHint": "It starts spending ({amount} {currency} a day) once Snapchat approves the ad."
+        "startNowHint": "It starts spending ({amount} {currency} a day) once the platform approves the ad.",
+        "keywords": "Search words"
       },
       "errors": {
         "account": "Choose the ad account.",
@@ -8073,36 +8109,51 @@
         "creativeFit": "This file does not fit Snapchat. Choose an upright 1080×1920 file.",
         "brandName": "Write your business name.",
         "headline": "Write the ad's headline.",
-        "url": "Write a valid link that starts with https://"
+        "url": "Write a valid link that starts with https://",
+        "creativeFitOther": "This file does not fit the chosen platform. Pick another file.",
+        "text": "Write the text shown above the picture.",
+        "headlines": "Write all three headlines.",
+        "descriptions": "Write both description lines.",
+        "keywords": "Write at least one search word."
       },
       "requestErrors": {
-        "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect Snapchat and try again.",
+        "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect the platform and try again.",
         "PUBLISH_BUDGET_TOO_LOW": "The daily budget is below the minimum.",
         "PUBLISH_START_IN_PAST": "The start date has passed. Choose today or a later date.",
         "PUBLISH_END_BEFORE_START": "The end date is before the start date.",
         "PUBLISH_AGE_RANGE": "The upper age has to be above the lower one.",
         "PUBLISH_INVALID_URL": "The link has to start with https://",
-        "PUBLISH_CREATIVE_NOT_SUITABLE": "The chosen file does not fit Snapchat. Choose an upright 1080×1920 file.",
+        "PUBLISH_CREATIVE_NOT_SUITABLE": "The chosen file does not fit the chosen platform. Pick another file.",
         "CREATIVE_NOT_FOUND": "The chosen file is no longer in the library. Choose another.",
         "forbidden": "You don't have permission to publish campaigns.",
-        "generic": "Publishing could not start. Try again."
+        "generic": "Publishing could not start. Try again.",
+        "PUBLISH_TEXT_NOT_SUITABLE": "The ad's text does not fit Google. Check the headlines, description and search words."
       },
       "result": {
-        "publishingTitle": "Publishing your campaign to Snapchat…",
+        "publishingTitle": "Publishing your campaign…",
         "publishingBody": "We are creating the campaign and uploading the creative. An image takes seconds; a video can take a minute. Keep this page open.",
         "publishedTitle": "The campaign is published",
-        "publishedActive": "“{name}” is on Snapchat now and starts showing once Snapchat approves the ad.",
-        "publishedPaused": "“{name}” was created on Snapchat and is switched off. Switch it on whenever you like.",
-        "reviewNote": "Snapchat reviews every new ad before showing it, usually within hours. The campaign's numbers appear in the campaigns list after the next sync.",
+        "publishedActive": "Campaign \"{name}\" is published, and starts showing once the platform approves the ad.",
+        "publishedPaused": "Campaign \"{name}\" was created on the platform, switched off. Switch it on whenever you like.",
+        "reviewNote": "Every platform reviews a new ad before showing it, usually within hours. The campaign's numbers appear in the campaigns list after the next sync.",
         "failedTitle": "The campaign was not published",
         "failures": {
-          "generic": "Snapchat refused the campaign. The reason as Snapchat sent it:",
+          "generic": "The platform refused the campaign. The reason as the platform sent it:",
           "SNAPCHAT_NO_PUBLIC_PROFILE": "We could not find your account's public profile on Snapchat, which ads are shown under. Create one ad in Snapchat Ads Manager so the profile is linked to your account, then try from here.",
           "SNAPCHAT_NO_PIXEL": "The “Sign-ups and orders” goal needs a Snap Pixel on your ad account. Install the pixel on your website, or choose “Visits to my website”.",
           "SNAPCHAT_MEDIA_NOT_READY": "Snapchat is still processing the file. Try publishing again in a minute, or choose a smaller file.",
           "SNAPCHAT_ACCESS_DENIED": "Snapchat did not let Madar reach the account. Reconnect Snapchat from the integrations page and try again.",
           "PUBLISH_INTERRUPTED": "Publishing was interrupted before it finished, and nothing was created on your account. Try again.",
-          "CREATIVE_STORAGE_UNAVAILABLE": "The creative's file could not be read. Try again shortly."
+          "CREATIVE_STORAGE_UNAVAILABLE": "The creative's file could not be read. Try again shortly.",
+          "TIKTOK_NO_PIXEL": "The \"sign-ups and orders\" goal needs a TikTok Pixel on your ad account. Install the pixel on your site, or choose the \"visits to my site\" goal.",
+          "TIKTOK_NO_IDENTITY": "We found no name to show the ad under on TikTok. Link your TikTok account to your ad account in TikTok Ads Manager, then try from here.",
+          "TIKTOK_MEDIA_NOT_READY": "TikTok is still processing the video. Try publishing again in a minute.",
+          "TIKTOK_ACCESS_DENIED": "TikTok did not let Madar reach the account. Reconnect TikTok from the connections page and try again.",
+          "META_NO_PAGE": "We found no Facebook page to show the ad under. Link your page to your ad account in Meta, then try again.",
+          "META_NO_PIXEL": "The \"sign-ups and orders\" goal needs a Meta Pixel on your ad account. Install the pixel on your site, or choose the \"visits to my site\" goal.",
+          "META_MEDIA_NOT_READY": "Meta is still processing the video. Try publishing again in a minute.",
+          "META_ACCESS_DENIED": "Meta did not let Madar create ads in this account. Reconnect Meta from the connections page and try again.",
+          "GOOGLE_ACCESS_DENIED": "Google did not let Madar reach the account. Reconnect Google from the connections page and try again."
         },
         "backToEdit": "Go back and edit",
         "switchOn": "Switch the campaign on now",

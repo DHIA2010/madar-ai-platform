@@ -24,6 +24,7 @@ import {
   Loader2,
   MousePointerClick,
   PlugZap,
+  TriangleAlert,
   UserPlus,
 } from "lucide-react"
 
@@ -43,15 +44,17 @@ import {
 } from "@/components/app"
 
 import {
-  CALLS_TO_ACTION,
-  type CallToAction,
+  type AnyCallToAction,
+  callsToActionFor,
   campaignPublishingService,
   type Creative,
+  creativeProblemFor,
   type Publication,
+  PUBLISH_PLATFORMS,
   type PublishGender,
   type PublishObjective,
   type PublishOptions,
-  snapchatCreativeProblem,
+  type PublishPlatform,
 } from "../services/campaign-publishing.service"
 import {
   CREATIVE_ACCEPT,
@@ -79,10 +82,27 @@ const AGES = [18, 21, 25, 30, 35, 40, 45] as const
 // Snapchat's oldest selectable age; above it means "and older".
 const MAX_AGES = [24, 29, 34, 39, 44, 49] as const
 const NO_MAX_AGE = "none"
-const SOON_PLATFORMS = ["Meta", "TikTok", "Google Search"] as const
+const PLATFORM_BADGE = {
+  snapchat: "Snapchat",
+  tiktok: "TikTok",
+  meta: "Meta",
+  google: "Google Search",
+} as const
 const POLL_MS = 2500
+const MAX_KEYWORDS = 20
+// The keywords as typed: one per line, or separated by commas.
+const keywordsOf = (text: string) =>
+  [
+    ...new Set(
+      text
+        .split(/[\n,،]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    ),
+  ].slice(0, MAX_KEYWORDS)
 
 interface Draft {
+  platform: PublishPlatform
   accountKey: string
   name: string
   objective: PublishObjective
@@ -96,7 +116,13 @@ interface Draft {
   creativeId: string
   brandName: string
   headline: string
-  callToAction: CallToAction
+  // Meta: the text above the picture.
+  text: string
+  // Google: a search ad's three headlines, two descriptions and its keywords (one per line).
+  headlines: string[]
+  descriptions: string[]
+  keywords: string
+  callToAction: AnyCallToAction
   url: string
   startActive: boolean
 }
@@ -205,6 +231,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
   const [publication, setPublication] = useState<Publication | null>(null)
   const [switching, setSwitching] = useState(false)
   const [draft, setDraft] = useState<Draft>(() => ({
+    platform: "snapchat",
     accountKey: "",
     name: "",
     objective: "traffic",
@@ -218,6 +245,10 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     creativeId: searchParams.get("creative") ?? "",
     brandName: "",
     headline: "",
+    text: "",
+    headlines: ["", "", ""],
+    descriptions: ["", ""],
+    keywords: "",
     callToAction: "MORE",
     url: "",
     startActive: false,
@@ -234,10 +265,24 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       .then(([loaded, library]) => {
         setOptions(loaded)
         setCreatives(library)
-        const first = loaded.snapchat.accounts[0]
-        if (first) {
+        // Opens on the first platform that has a connected account.
+        const platform = PUBLISH_PLATFORMS.find((entry) => loaded[entry].accounts.length > 0)
+        if (platform) {
           setDraft((current) =>
-            current.accountKey ? current : { ...current, accountKey: accountKey(first) }
+            current.accountKey
+              ? current
+              : {
+                  ...current,
+                  platform,
+                  accountKey: accountKey(loaded[platform].accounts[0]),
+                  callToAction: platform === "snapchat" ? "MORE" : "LEARN_MORE",
+                  dailyBudget: String(
+                    Math.max(
+                      Number(current.dailyBudget) || 0,
+                      loaded.limits.minDailyBudgets[platform]
+                    )
+                  ),
+                }
           )
         }
       })
@@ -251,10 +296,12 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
   const { upload, progress } = useCreativeUploader(
     useCallback((creative: Creative) => {
       setCreatives((current) => [creative, ...current])
-      if (!snapchatCreativeProblem(creative)) {
-        setDraft((current) => ({ ...current, creativeId: creative.id }))
-        setErrors((current) => ({ ...current, creativeId: undefined }))
-      }
+      setDraft((current) =>
+        current.platform !== "google" && !creativeProblemFor(current.platform, creative)
+          ? { ...current, creativeId: creative.id }
+          : current
+      )
+      setErrors((current) => ({ ...current, creativeId: undefined }))
     }, [])
   )
 
@@ -274,13 +321,59 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     return () => window.clearTimeout(timer)
   }, [publication, onPublished])
 
-  const accounts = useMemo(() => options?.snapchat.accounts ?? [], [options])
+  const accounts = useMemo(
+    () => options?.[draft.platform].accounts ?? [],
+    [options, draft.platform]
+  )
+  const anyAccount = options
+    ? PUBLISH_PLATFORMS.some((entry) => options[entry].accounts.length > 0)
+    : false
+  const isGoogle = draft.platform === "google"
+  const shownPlatform = draft.platform === "google" ? "snapchat" : draft.platform
+  const problemOf = (entry: Creative) => creativeProblemFor(shownPlatform, entry)
+  const keywords = keywordsOf(draft.keywords)
+
+  // Another platform: its first account, a button it offers, and a budget it accepts. The chosen
+  // file stays only if it fits the new platform.
+  const choosePlatform = (platform: PublishPlatform) => {
+    if (!options || platform === draft.platform) return
+    const first = options[platform].accounts[0]
+    if (!first) return
+    setDraft((current) => {
+      const chosen = creatives.find((entry) => entry.id === current.creativeId)
+      return {
+        ...current,
+        platform,
+        accountKey: accountKey(first),
+        callToAction: callsToActionFor(platform).includes(current.callToAction)
+          ? current.callToAction
+          : platform === "snapchat"
+            ? "MORE"
+            : "LEARN_MORE",
+        creativeId:
+          platform !== "google" && chosen && !creativeProblemFor(platform, chosen)
+            ? current.creativeId
+            : "",
+        dailyBudget: String(
+          Math.max(Number(current.dailyBudget) || 0, options.limits.minDailyBudgets[platform])
+        ),
+      }
+    })
+    setErrors({})
+  }
   const account = accounts.find((entry) => accountKey(entry) === draft.accountKey) ?? null
   const creative = creatives.find((entry) => entry.id === draft.creativeId) ?? null
   const limits = options?.limits
   const currency = account?.currency ?? "SAR"
   const currencyLabel = currency === "SAR" && locale === "ar" ? "ر.س" : currency
   const budget = Number(draft.dailyBudget)
+  const minimumBudget = limits?.minDailyBudgets?.[draft.platform] ?? limits?.minDailyBudget ?? 20
+  const headlineMax =
+    draft.platform === "tiktok"
+      ? (limits?.tiktokTextMax ?? 100)
+      : draft.platform === "meta"
+        ? (limits?.metaHeadlineMax ?? 40)
+        : (limits?.headlineMax ?? 34)
 
   const validate = (index: number): Errors => {
     const found: Errors = {}
@@ -289,22 +382,40 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       if (draft.name.trim().length < 2) found.name = t("errors.name")
     }
     if (index === 1) {
-      const minimum = limits?.minDailyBudget ?? 20
+      const minimum = minimumBudget
       if (!Number.isFinite(budget) || budget < minimum) {
         found.dailyBudget = t("errors.budget", { minimum, currency: currencyLabel })
       }
       if (!draft.startDate) found.startDate = t("errors.startDate")
       else if (draft.startDate < toLocalDay(new Date())) found.startDate = t("errors.startPast")
       if (draft.endDate && draft.endDate < draft.startDate) found.endDate = t("errors.endDate")
-      if (draft.maxAge !== NO_MAX_AGE && Number(draft.maxAge) <= draft.minAge) {
+      if (!isGoogle && draft.maxAge !== NO_MAX_AGE && Number(draft.maxAge) <= draft.minAge) {
         found.maxAge = t("errors.ageRange")
       }
     }
-    if (index === 2) {
+    if (index === 2 && isGoogle) {
+      if (draft.headlines.filter((entry) => entry.trim()).length < 3) {
+        found.headlines = t("errors.headlines")
+      }
+      if (draft.descriptions.filter((entry) => entry.trim()).length < 2) {
+        found.descriptions = t("errors.descriptions")
+      }
+      if (keywords.length === 0) found.keywords = t("errors.keywords")
+    }
+    if (index === 2 && !isGoogle) {
       if (!creative) found.creativeId = t("errors.creative")
-      else if (snapchatCreativeProblem(creative)) found.creativeId = t("errors.creativeFit")
-      if (!draft.brandName.trim()) found.brandName = t("errors.brandName")
+      else if (problemOf(creative)) {
+        found.creativeId = t(
+          draft.platform === "snapchat" ? "errors.creativeFit" : "errors.creativeFitOther"
+        )
+      }
+      if (draft.platform !== "meta" && !draft.brandName.trim()) {
+        found.brandName = t("errors.brandName")
+      }
       if (!draft.headline.trim()) found.headline = t("errors.headline")
+      if (draft.platform === "meta" && !draft.text.trim()) found.text = t("errors.text")
+    }
+    if (index === 2) {
       if (!/^https:\/\/[^\s.]+\.[^\s]+$/i.test(draft.url.trim())) found.url = t("errors.url")
     }
     return found
@@ -332,6 +443,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       "PUBLISH_AGE_RANGE",
       "PUBLISH_INVALID_URL",
       "PUBLISH_CREATIVE_NOT_SUITABLE",
+      "PUBLISH_TEXT_NOT_SUITABLE",
       "CREATIVE_NOT_FOUND",
     ]
     if (known.includes(code)) return t(`requestErrors.${code}`)
@@ -348,31 +460,55 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
         return
       }
     }
-    if (!account || !creative) return
+    if (!account || (!isGoogle && !creative)) return
     setSubmitting(true)
     setSubmitError(null)
+    const common = {
+      connectionId: account.connectionId,
+      adAccountId: account.adAccountId,
+      name: draft.name.trim(),
+      objective: draft.objective,
+      dailyBudget: budget,
+      startDate: draft.startDate,
+      endDate: draft.endDate || null,
+      countryCode: draft.countryCode,
+      // A search ad is aimed by what people search, not by who they are.
+      minAge: isGoogle ? 18 : draft.minAge,
+      maxAge: isGoogle || draft.maxAge === NO_MAX_AGE ? null : Number(draft.maxAge),
+      gender: isGoogle ? ("all" as const) : draft.gender,
+      url: draft.url.trim(),
+      startActive: draft.startActive,
+    }
+    const creativeId = creative?.id ?? ""
     try {
       setPublication(
-        await campaignPublishingService.publish({
-          platform: "snapchat",
-          connectionId: account.connectionId,
-          adAccountId: account.adAccountId,
-          name: draft.name.trim(),
-          objective: draft.objective,
-          dailyBudget: budget,
-          startDate: draft.startDate,
-          endDate: draft.endDate || null,
-          countryCode: draft.countryCode,
-          minAge: draft.minAge,
-          maxAge: draft.maxAge === NO_MAX_AGE ? null : Number(draft.maxAge),
-          gender: draft.gender,
-          creativeId: creative.id,
-          brandName: draft.brandName.trim(),
-          headline: draft.headline.trim(),
-          callToAction: draft.callToAction,
-          url: draft.url.trim(),
-          startActive: draft.startActive,
-        })
+        await campaignPublishingService.publish(
+          draft.platform === "google"
+            ? {
+                ...common,
+                platform: "google",
+                headlines: draft.headlines.map((entry) => entry.trim()).filter(Boolean),
+                descriptions: draft.descriptions.map((entry) => entry.trim()).filter(Boolean),
+                keywords,
+              }
+            : draft.platform === "meta"
+              ? {
+                  ...common,
+                  platform: "meta",
+                  creativeId,
+                  headline: draft.headline.trim(),
+                  text: draft.text.trim(),
+                  callToAction: draft.callToAction,
+                }
+              : {
+                  ...common,
+                  platform: draft.platform,
+                  creativeId,
+                  brandName: draft.brandName.trim(),
+                  headline: draft.headline.trim(),
+                  callToAction: draft.callToAction,
+                }
+        )
       )
     } catch (error) {
       setSubmitError(publishErrorText(error))
@@ -425,7 +561,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
   }
 
   // Nothing to publish to yet: say so, and lead to where a platform is connected.
-  if (accounts.length === 0) {
+  if (!anyAccount) {
     return (
       <div className={cn(PANEL, "flex flex-col items-center gap-3 px-6 py-14 text-center")}>
         <span className="flex size-14 items-center justify-center rounded-full bg-[#eef4ff] text-[#1d4fd8]">
@@ -453,6 +589,15 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       "SNAPCHAT_NO_PIXEL",
       "SNAPCHAT_MEDIA_NOT_READY",
       "SNAPCHAT_ACCESS_DENIED",
+      "TIKTOK_NO_PIXEL",
+      "TIKTOK_NO_IDENTITY",
+      "TIKTOK_MEDIA_NOT_READY",
+      "TIKTOK_ACCESS_DENIED",
+      "META_NO_PAGE",
+      "META_NO_PIXEL",
+      "META_MEDIA_NOT_READY",
+      "META_ACCESS_DENIED",
+      "GOOGLE_ACCESS_DENIED",
       "PUBLISH_INTERRUPTED",
       "CREATIVE_STORAGE_UNAVAILABLE",
     ].includes(errorCode)
@@ -517,7 +662,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               type="button"
               onClick={() => {
                 setPublication(null)
-                setStep(errorCode.startsWith("SNAPCHAT_MEDIA") ? 2 : 3)
+                setStep(errorCode.includes("_MEDIA") ? 2 : 3)
               }}
               className="h-12 rounded-xl bg-[#1d4fd8] px-6 text-[14px] font-bold text-white hover:bg-[#1a45bd]"
             >
@@ -580,7 +725,10 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       : t("audience.ageRange", { min: draft.minAge, max: draft.maxAge })
 
   const summary: Array<{ label: string; value: string }> = [
-    { label: t("review.platform"), value: `${t("platforms.snapchat")} · ${account?.name ?? ""}` },
+    {
+      label: t("review.platform"),
+      value: `${t(`platforms.${draft.platform}`)} · ${account?.name ?? ""}`,
+    },
     { label: t("review.name"), value: draft.name },
     { label: t("review.objective"), value: t(`objectives.${draft.objective}.title`) },
     {
@@ -595,9 +743,12 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     },
     {
       label: t("review.audience"),
-      value: `${t(`countries.${draft.countryCode}`)} · ${ageLabel} · ${t(`audience.genders.${draft.gender}`)}`,
+      value: isGoogle
+        ? t(`countries.${draft.countryCode}`)
+        : `${t(`countries.${draft.countryCode}`)} · ${ageLabel} · ${t(`audience.genders.${draft.gender}`)}`,
     },
-    { label: t("review.headline"), value: draft.headline },
+    { label: t("review.headline"), value: isGoogle ? draft.headlines[0] : draft.headline },
+    ...(isGoogle ? [{ label: t("review.keywords"), value: keywords.join("، ") }] : []),
     { label: t("review.url"), value: draft.url },
   ]
 
@@ -659,24 +810,30 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
           <>
             <Field label={t("basics.platform")}>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Choice
-                  selected
-                  icon={<PlatformBadge platform="Snapchat" className="size-10" />}
-                  title={t("platforms.snapchat")}
-                  description={t("platforms.snapchatHint")}
-                />
-                {SOON_PLATFORMS.map((platform) => (
-                  <Choice
-                    key={platform}
-                    selected={false}
-                    disabled
-                    icon={<PlatformBadge platform={platform} className="size-10" />}
-                    title={t(
-                      `platforms.${platform === "Google Search" ? "google" : platform.toLowerCase()}`
-                    )}
-                    badge={t("platforms.soon")}
-                  />
-                ))}
+                {PUBLISH_PLATFORMS.map((platform) => {
+                  // A platform with no connected account cannot be chosen, and says why.
+                  const connected = options[platform].accounts.length > 0
+                  return (
+                    <Choice
+                      key={platform}
+                      selected={draft.platform === platform}
+                      disabled={!connected}
+                      onClick={() => choosePlatform(platform)}
+                      icon={
+                        <PlatformBadge platform={PLATFORM_BADGE[platform]} className="size-10" />
+                      }
+                      title={t(`platforms.${platform}`)}
+                      description={connected ? t(`platforms.${platform}Hint`) : undefined}
+                      badge={
+                        connected
+                          ? undefined
+                          : platform === "meta" && options.meta.needsPermission
+                            ? t("platforms.needsPermission")
+                            : t("platforms.notConnected")
+                      }
+                    />
+                  )
+                })}
               </div>
             </Field>
 
@@ -751,7 +908,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   className={cn(FIELD, "pe-16")}
                   type="number"
                   inputMode="decimal"
-                  min={limits?.minDailyBudget ?? 20}
+                  min={minimumBudget}
                   value={draft.dailyBudget}
                   onChange={(event) => set("dailyBudget", event.target.value)}
                 />
@@ -800,7 +957,13 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               )}
             </Field>
 
-            <div className="grid gap-5 sm:grid-cols-2">
+            {isGoogle ? (
+              <p className="rounded-xl border border-[#e1e7f0] bg-[#f7f9fd] px-4 py-3 text-[12.5px] leading-6 text-[#475467]">
+                {t("audience.googleNote")}
+              </p>
+            ) : null}
+
+            <div className={cn("grid gap-5 sm:grid-cols-2", isGoogle && "hidden")}>
               <Field label={t("audience.minAge")}>
                 {selectField(
                   String(draft.minAge),
@@ -816,25 +979,129 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               </Field>
             </div>
 
-            <Field label={t("audience.gender")}>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {(["all", "male", "female"] as const).map((gender) => (
-                  <Choice
-                    key={gender}
-                    selected={draft.gender === gender}
-                    onClick={() => set("gender", gender)}
-                    title={t(`audience.genders.${gender}`)}
+            <div className={isGoogle ? "hidden" : undefined}>
+              <Field label={t("audience.gender")}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {(["all", "male", "female"] as const).map((gender) => (
+                    <Choice
+                      key={gender}
+                      selected={draft.gender === gender}
+                      onClick={() => set("gender", gender)}
+                      title={t(`audience.genders.${gender}`)}
+                    />
+                  ))}
+                </div>
+              </Field>
+            </div>
+          </>
+        ) : null}
+
+        {step === 2 && isGoogle ? (
+          <div className="space-y-6">
+            <Field label={t("ad.headlines")} hint={t("ad.headlinesHint")} error={errors.headlines}>
+              <div className="space-y-2.5">
+                {draft.headlines.map((value, index) => (
+                  <AppInput
+                    key={index}
+                    className={FIELD}
+                    maxLength={limits?.googleHeadlineMax ?? 30}
+                    placeholder={t("ad.headlineNumber", { number: index + 1 })}
+                    value={value}
+                    onChange={(event) =>
+                      set(
+                        "headlines",
+                        draft.headlines.map((entry, at) =>
+                          at === index ? event.target.value : entry
+                        )
+                      )
+                    }
                   />
                 ))}
               </div>
             </Field>
-          </>
+
+            <Field
+              label={t("ad.descriptions")}
+              hint={t("ad.descriptionsHint")}
+              error={errors.descriptions}
+            >
+              <div className="space-y-2.5">
+                {draft.descriptions.map((value, index) => (
+                  <AppInput
+                    key={index}
+                    className={FIELD}
+                    maxLength={limits?.googleDescriptionMax ?? 90}
+                    placeholder={t("ad.descriptionNumber", { number: index + 1 })}
+                    value={value}
+                    onChange={(event) =>
+                      set(
+                        "descriptions",
+                        draft.descriptions.map((entry, at) =>
+                          at === index ? event.target.value : entry
+                        )
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </Field>
+
+            <Field
+              label={t("ad.keywords")}
+              hint={t("ad.keywordsHint")}
+              error={errors.keywords}
+              counter={`${keywords.length}/${MAX_KEYWORDS}`}
+            >
+              <textarea
+                rows={5}
+                className="w-full rounded-xl border border-[#d5dce8] bg-white px-4 py-3 text-[14px] font-medium leading-7 text-[#0b1738] outline-none placeholder:text-[#98a2b3] focus:border-[#1d4fd8]"
+                placeholder={t("ad.keywordsPlaceholder")}
+                value={draft.keywords}
+                onChange={(event) => set("keywords", event.target.value)}
+              />
+            </Field>
+
+            <Field label={t("ad.url")} hint={t("ad.urlHint")} error={errors.url}>
+              <AppInput
+                className={cn(FIELD, "text-start")}
+                dir="ltr"
+                inputMode="url"
+                placeholder="https://"
+                value={draft.url}
+                onChange={(event) => set("url", event.target.value)}
+              />
+            </Field>
+
+            {/* The ad roughly as a Google search result shows it. */}
+            <div>
+              <p className={cn("mb-2 text-[12px] font-bold", MUTED)}>{t("ad.preview")}</p>
+              <div className="rounded-xl border border-[#e1e7f0] bg-white p-4 text-start">
+                <p dir="ltr" className="truncate text-end text-[12px] text-[#475467]">
+                  {draft.url
+                    .trim()
+                    .replace(/^https:\/\//i, "")
+                    .split(/[/?#]/)[0] || "example.com"}
+                </p>
+                <p className="mt-1 text-[16px] font-bold leading-7 text-[#1a0dab]">
+                  {draft.headlines.filter((entry) => entry.trim()).join(" | ") ||
+                    t("ad.headlinePlaceholder")}
+                </p>
+                <p className="mt-1 text-[13px] leading-6 text-[#475467]">
+                  {draft.descriptions.filter((entry) => entry.trim()).join(" ")}
+                </p>
+              </div>
+            </div>
+          </div>
         ) : null}
 
-        {step === 2 ? (
+        {step === 2 && !isGoogle ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="space-y-6">
-              <Field label={t("ad.creative")} hint={t("ad.creativeHint")} error={errors.creativeId}>
+              <Field
+                label={t("ad.creative")}
+                hint={t(`ad.creativeHints.${shownPlatform}`)}
+                error={errors.creativeId}
+              >
                 <input
                   ref={fileInput}
                   type="file"
@@ -861,7 +1128,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   </button>
                   {creatives.map((entry) => {
                     const selected = entry.id === draft.creativeId
-                    const unfit = snapchatCreativeProblem(entry) !== null
+                    const unfit = problemOf(entry) !== null
                     return (
                       <button
                         key={entry.id}
@@ -886,37 +1153,73 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                     )
                   })}
                 </div>
-                {creative ? (
+                {creative && draft.platform === "snapchat" ? (
                   <div className="mt-2.5">
                     <SnapchatFitBadge creative={creative} />
                   </div>
                 ) : null}
+                {creative && draft.platform !== "snapchat" ? (
+                  <span
+                    className={cn(
+                      "mt-2.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold",
+                      problemOf(creative)
+                        ? "bg-[#fff4e5] text-[#b54708]"
+                        : "bg-[#e7f8ee] text-[#137a41]"
+                    )}
+                  >
+                    {problemOf(creative) ? (
+                      <TriangleAlert className="size-3" />
+                    ) : (
+                      <CheckCircle2 className="size-3" />
+                    )}
+                    {t(`ad.fit.${problemOf(creative) ?? "ok"}`)}
+                  </span>
+                ) : null}
               </Field>
 
-              <Field
-                label={t("ad.brandName")}
-                hint={t("ad.brandNameHint")}
-                error={errors.brandName}
-                counter={`${draft.brandName.length}/${limits?.brandNameMax ?? 25}`}
-              >
-                <AppInput
-                  className={FIELD}
-                  maxLength={limits?.brandNameMax ?? 25}
-                  placeholder={t("ad.brandNamePlaceholder")}
-                  value={draft.brandName}
-                  onChange={(event) => set("brandName", event.target.value)}
-                />
-              </Field>
+              {draft.platform === "meta" ? (
+                <Field
+                  label={t("ad.text")}
+                  hint={t("ad.textHint")}
+                  error={errors.text}
+                  counter={`${draft.text.length}/${limits?.metaTextMax ?? 125}`}
+                >
+                  <AppInput
+                    className={FIELD}
+                    maxLength={limits?.metaTextMax ?? 125}
+                    placeholder={t("ad.textPlaceholder")}
+                    value={draft.text}
+                    onChange={(event) => set("text", event.target.value)}
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label={t("ad.brandName")}
+                  hint={t(
+                    draft.platform === "tiktok" ? "ad.brandNameHintTiktok" : "ad.brandNameHint"
+                  )}
+                  error={errors.brandName}
+                  counter={`${draft.brandName.length}/${limits?.brandNameMax ?? 25}`}
+                >
+                  <AppInput
+                    className={FIELD}
+                    maxLength={limits?.brandNameMax ?? 25}
+                    placeholder={t("ad.brandNamePlaceholder")}
+                    value={draft.brandName}
+                    onChange={(event) => set("brandName", event.target.value)}
+                  />
+                </Field>
+              )}
 
               <Field
-                label={t("ad.headline")}
-                hint={t("ad.headlineHint")}
+                label={t(draft.platform === "tiktok" ? "ad.tiktokText" : "ad.headline")}
+                hint={t(draft.platform === "tiktok" ? "ad.tiktokTextHint" : "ad.headlineHint")}
                 error={errors.headline}
-                counter={`${draft.headline.length}/${limits?.headlineMax ?? 34}`}
+                counter={`${draft.headline.length}/${headlineMax}`}
               >
                 <AppInput
                   className={FIELD}
-                  maxLength={limits?.headlineMax ?? 34}
+                  maxLength={headlineMax}
                   placeholder={t("ad.headlinePlaceholder")}
                   value={draft.headline}
                   onChange={(event) => set("headline", event.target.value)}
@@ -926,8 +1229,11 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               <Field label={t("ad.callToAction")}>
                 {selectField(
                   draft.callToAction,
-                  (value) => set("callToAction", value as CallToAction),
-                  CALLS_TO_ACTION.map((value) => ({ value, label: t(`callsToAction.${value}`) }))
+                  (value) => set("callToAction", value as AnyCallToAction),
+                  callsToActionFor(draft.platform).map((value) => ({
+                    value,
+                    label: t(`callsToAction.${value}`),
+                  }))
                 )}
               </Field>
 
@@ -977,8 +1283,13 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
 
         {step === 3 ? (
           <>
-            <div className="grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)]">
-              {creative ? (
+            <div
+              className={cn(
+                "grid gap-5",
+                creative && !isGoogle && "sm:grid-cols-[140px_minmax(0,1fr)]"
+              )}
+            >
+              {creative && !isGoogle ? (
                 <CreativeThumb
                   creative={creative}
                   className="mx-auto aspect-[9/16] w-[140px] rounded-xl"
