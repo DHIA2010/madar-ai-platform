@@ -93,6 +93,7 @@ export const SOURCE_LABEL: Record<CrmSource, string> = {
   signup: "تسجيل جديد",
   manual: "يدوي",
   booking: "رابط الحجز",
+  import: "ملف مستورد",
 }
 
 // Ad platforms and sites, as people say them.

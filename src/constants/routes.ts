@@ -69,6 +69,8 @@ export const ROUTES = {
   // The public pages: joining a business's loyalty programme, and a member's own card.
   publicLoyaltyJoinRoot: "/l",
   publicLoyaltyCardRoot: "/lc",
+  // The link inside a WhatsApp message sent from Madar Admin's CRM.
+  publicOutreachRoot: "/o",
   publicLoyaltyJoin: (code: string) => `/l/${code}`,
   publicLoyaltyCard: (token: string) => `/lc/${token}`,
   publicLoyaltyCardManifest: (token: string) => `/lc/${token}/manifest.webmanifest`,
@@ -177,6 +179,7 @@ export const ROUTES = {
   madarAdminCrm: "/madar-admin/crm",
   madarAdminCrmLead: (leadId: string) => `/madar-admin/crm/lead?id=${leadId}`,
   madarAdminCrmTasks: "/madar-admin/crm/tasks",
+  madarAdminCrmOutreach: "/madar-admin/crm/outreach",
   madarAdminCrmDashboard: "/madar-admin/crm/dashboard",
   madarAdminCrmQuotes: "/madar-admin/crm/quotes",
   madarAdminCrmQuote: (quoteId: string) => `/madar-admin/crm/quote?id=${quoteId}`,

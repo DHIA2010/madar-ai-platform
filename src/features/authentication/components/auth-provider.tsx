@@ -35,6 +35,8 @@ const SESSION_FREE_PATHS = [
   // Joining a loyalty programme and a member's own card: the same.
   ROUTES.publicLoyaltyJoinRoot,
   ROUTES.publicLoyaltyCardRoot,
+  // The link inside a WhatsApp message from Madar's sales team: opened by anyone.
+  ROUTES.publicOutreachRoot,
 ]
 
 function isSessionFreePath(pathname: string | null, marketingSite: boolean): boolean {

@@ -963,8 +963,8 @@ export class CrmService {
 
   // Leads brought in from a file. A row needs a name (the company's, else the person's) and a
   // phone or an e-mail. One already in the CRM -- or earlier in the same file -- by the same
-  // phone or e-mail is passed over, so importing a file twice adds nothing. Each lead made
-  // carries the file's tag and belongs to whoever imported it.
+  // phone or e-mail is passed over, so importing a file twice adds nothing. Each lead made has
+  // the source "import", carries the file's tag and belongs to whoever imported it.
   async importLeads(
     actor: AuthenticatedActor,
     input: CrmLeadImportInput
@@ -1015,7 +1015,7 @@ export class CrmService {
         `INSERT INTO crm_leads
            (id, company_name, contact_name, phone, email, source, stage, owner_user_id,
             created_by_user_id, tags)
-         VALUES ($1, $2, $3, $4, $5, 'manual', 'new', $6, $6, $7::jsonb)`,
+         VALUES ($1, $2, $3, $4, $5, 'import', 'new', $6, $6, $7::jsonb)`,
         [
           id,
           name,

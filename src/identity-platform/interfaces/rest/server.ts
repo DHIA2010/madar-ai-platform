@@ -29,6 +29,8 @@ import { ReceiptService } from "../../billing/receipts"
 import { runBillingMaintenance } from "../../subscriptions/maintenance"
 import { toPublicPlatformSettings } from "../../platform-settings/types"
 import { handlePlatformAdminRoute } from "./platform-admin-routes"
+import { handlePublicOutreachRoute } from "./crm-outreach-routes"
+import { CrmOutreach } from "../../crm/outreach"
 import { handleAccountingRoute } from "./accounting-routes"
 import { handleBookingRoute, handlePublicBookingRoute } from "./booking-routes"
 import { handleLoyaltyRoute, handlePublicLoyaltyRoute } from "./loyalty-routes"
@@ -871,6 +873,10 @@ export function createIdentityApiServer(
             }))
         )
       : null
+  // WhatsApp messages the sales team sends by hand from the CRM, with a counted link in each.
+  const crmOutreach = container.infrastructure.database
+    ? new CrmOutreach(container.infrastructure.database)
+    : null
   // "تفعيل الحساب" on a paid sales invoice: the customer's Madar account (found by email, or made
   // like a registration) and the welcome email with a set-password link that lasts 7 days.
   const provisionDeps = container.zidAutoProvisionDeps
@@ -2403,6 +2409,28 @@ export function createIdentityApiServer(
         if (handled) return
       }
 
+      // Public: the link inside a WhatsApp message sent from the CRM -- its card and its taps.
+      if (url.pathname.startsWith("/v1/public/outreach/")) {
+        const handled = await handlePublicOutreachRoute({
+          method,
+          pathname: url.pathname,
+          outreach: crmOutreach,
+          send: (status, body) => {
+            send(status, body)
+            return true
+          },
+          limit: async (bucket, max, windowMs) => {
+            const decision = await container.infrastructure.rateLimiter?.check(
+              `${bucket}:${context.ipAddress}`,
+              max,
+              windowMs
+            )
+            return !decision || decision.allowed
+          },
+        })
+        if (handled) return
+      }
+
       // Public: a business's booking page, and a customer's own booking by its link.
       if (url.pathname.startsWith("/v1/public/booking/")) {
         const handled = await handlePublicBookingRoute({
@@ -3070,6 +3098,18 @@ export function createIdentityApiServer(
         operations: platformOperationsService,
         governance: platformGovernanceService,
         crm: crmService,
+        outreach: crmOutreach,
+        // Kept beside the campaign creatives, a folder the live storage already accepts.
+        uploadOutreachImage: container.infrastructure.objectStorage
+          ? (body, contentType) => {
+              const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1]
+              return container.infrastructure.objectStorage!.uploadPublicObject({
+                key: `campaign-creatives/outreach/${randomUUID()}.${extension}`,
+                body,
+                contentType,
+              })
+            }
+          : null,
         salesDocuments: salesDocumentsService,
         whatsapp: whatsAppPlatformService,
         whatsappTemplates: whatsAppTemplatesService,

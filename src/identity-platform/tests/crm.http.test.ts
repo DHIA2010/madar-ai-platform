@@ -572,7 +572,7 @@ describe("CRM", () => {
       contactName: "سارة",
       phone: "+966553334444",
       email: "reem@example.com",
-      source: "manual",
+      source: "import",
       stage: "new",
       tags: ["قائمة المعرض"],
     })

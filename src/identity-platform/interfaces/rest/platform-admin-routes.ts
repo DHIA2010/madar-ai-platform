@@ -59,7 +59,9 @@ import {
 } from "../../crm/schemas"
 import type { SalesDocumentsService } from "../../crm/sales-documents"
 import { crmLeadImportSchema } from "../../crm/import-schema"
+import type { CrmOutreach } from "../../crm/outreach"
 import type { CrmService } from "../../crm/service"
+import { handleCrmOutreachRoute } from "./crm-outreach-routes"
 import { requirePlatformPermission } from "../../platform-admin/guard"
 import type { PlatformGovernanceService } from "../../platform-admin/governance-service"
 import type { PlatformOperationsService } from "../../platform-admin/operations-service"
@@ -120,6 +122,9 @@ export async function handlePlatformAdminRoute(input: {
   operations: PlatformOperationsService | null
   governance: PlatformGovernanceService | null
   crm: CrmService | null
+  // The CRM's WhatsApp messages sent by hand, and where their picture is kept.
+  outreach?: CrmOutreach | null
+  uploadOutreachImage?: ((body: Buffer, contentType: string) => Promise<string>) | null
   salesDocuments: SalesDocumentsService | null
   whatsapp: WhatsAppPlatformService | null
   whatsappTemplates: WhatsAppTemplatesService | null
@@ -157,6 +162,19 @@ export async function handlePlatformAdminRoute(input: {
 
   const permission = requiredPermission(method, path)
   if (permission !== "settings") requirePlatformPermission(actor, permission)
+
+  if (path.startsWith("/crm/outreach") && input.outreach) {
+    return handleCrmOutreachRoute({
+      method,
+      route: path.slice("/crm".length),
+      query,
+      actor,
+      outreach: input.outreach,
+      uploadImage: input.uploadOutreachImage ?? null,
+      send,
+      readJsonBody,
+    })
+  }
 
   if (path.startsWith("/crm"))
     return handleCrmRoute({ method, path, query, actor, crm, salesDocuments, send, readJsonBody })

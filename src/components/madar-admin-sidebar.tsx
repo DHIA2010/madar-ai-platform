@@ -15,6 +15,7 @@ import {
   Layers,
   LayoutGrid,
   ListChecks,
+  MessageCircle,
   ReceiptText,
   UserCheck,
   Settings2,
@@ -170,6 +171,12 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       title: "بانتظار التفعيل",
       url: ROUTES.madarAdminCrmActivations,
       icon: <UserCheck />,
+      permission: "crm:manage",
+    },
+    {
+      title: "رسائل واتساب",
+      url: ROUTES.madarAdminCrmOutreach,
+      icon: <MessageCircle />,
       permission: "crm:manage",
     },
     {

@@ -11,8 +11,8 @@ export interface CrmStageDef {
   // Built-in: the system moves leads through it; it can't be renamed, moved or deleted.
   system: boolean
 }
-// booking: booked a meeting straight from the Cal.com link.
-export type CrmSource = "website" | "signup" | "manual" | "booking"
+// booking: booked a meeting straight from the Cal.com link. import: brought in from a file.
+export type CrmSource = "website" | "signup" | "manual" | "booking" | "import"
 export type CrmLoggableActivity = "note" | "call" | "whatsapp" | "email"
 export type CrmActivityKind =
   | CrmLoggableActivity

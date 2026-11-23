@@ -16,7 +16,7 @@ export interface CrmStageView {
 }
 
 // booking: booked a meeting straight from the Cal.com link (no website form first).
-export const CRM_SOURCES = ["website", "signup", "manual", "booking"] as const
+export const CRM_SOURCES = ["website", "signup", "manual", "booking", "import"] as const
 export type CrmSource = (typeof CRM_SOURCES)[number]
 
 // What a salesperson can log by hand; the rest are recorded by the system.
