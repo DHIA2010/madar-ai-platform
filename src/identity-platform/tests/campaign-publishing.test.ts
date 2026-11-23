@@ -820,6 +820,93 @@ describe("the creative library and the publish record", () => {
       expect(await stored("ads")).toEqual([["ad-9", "ACTIVE"]])
       expect(await stored("campaigns")).toHaveLength(2)
     })
+
+    it("adds an ad to an ad group that exists, and changes its daily budget", async () => {
+      await seed()
+      const calls: Array<{ action: string; input: Record<string, unknown> }> = []
+      const service = new CampaignControlService(
+        database,
+        {
+          snapchat: {
+            access: { resolveAccessToken: async () => "token" },
+            api: {
+              setEntityStatus: async () => ({}),
+              deleteEntity: async () => undefined,
+              addAd: async (input) => {
+                calls.push({ action: "addAd", input })
+                return { adId: "ad-new", ad: { id: "ad-new", review_status: "PENDING" } }
+              },
+              setAdSquadBudget: async (input) => {
+                calls.push({ action: "budget", input })
+                return { id: "squad-1", daily_budget_micro: 90_000_000 }
+              },
+            },
+          },
+        },
+        creatives
+      )
+      const creative = await upload()
+      const ad = {
+        name: "إعلان جديد",
+        url: "https://example.com/offer",
+        creativeId: creative.id,
+        brandName: "مدار",
+        headline: "كاشير سريع",
+        callToAction: "SIGN_UP",
+      }
+
+      expect(await service.addAd(actor, rowId("squad-1"), ad)).toEqual({ adId: "ad-new" })
+      expect(calls[0].input).toMatchObject({
+        accessToken: "token",
+        adAccountId: ACCOUNT,
+        adSquadId: "squad-1",
+        name: "إعلان جديد",
+        brandName: "مدار",
+        headline: "كاشير سريع",
+        callToAction: "SIGN_UP",
+        url: expect.stringContaining("utm_source=snapchat"),
+      })
+      expect((calls[0].input.media as { kind: string }).kind).toBe("image")
+      // The new ad is on Madar's list at once, under its ad group.
+      const copy = await database.query<{ payload: unknown }>(
+        `select payload from snapchat_records where entity_type = 'ads' and entity_id = 'ad-new'`
+      )
+      const payload = copy.rows[0].payload
+      expect(typeof payload === "string" ? JSON.parse(payload) : payload).toMatchObject({
+        name: "إعلان جديد",
+        status: "ACTIVE",
+        ad_squad_id: "squad-1",
+      })
+
+      expect(await service.setDailyBudget(actor, rowId("squad-1"), 90)).toEqual({
+        id: rowId("squad-1"),
+        dailyBudget: 90,
+      })
+      expect(calls[1]).toEqual({
+        action: "budget",
+        input: { accessToken: "token", adSquadId: "squad-1", dailyBudget: 90 },
+      })
+
+      // Refused before Snapchat is asked: a missing field, a file that does not fit, a budget
+      // under the floor, another organization's ad group, and an ad group that is not there.
+      const square = await upload({ width: 1080, height: 1080 })
+      await expect(
+        service.addAd(actor, rowId("squad-1"), { ...ad, headline: "" })
+      ).rejects.toMatchObject({ code: "CAMPAIGN_AD_INCOMPLETE" })
+      await expect(
+        service.addAd(actor, rowId("squad-1"), { ...ad, creativeId: square.id })
+      ).rejects.toMatchObject({ code: "PUBLISH_CREATIVE_NOT_SUITABLE" })
+      await expect(service.setDailyBudget(actor, rowId("squad-1"), 5)).rejects.toMatchObject({
+        code: "PUBLISH_BUDGET_TOO_LOW",
+      })
+      await expect(
+        service.addAd({ ...actor, organizationId: OTHER_ORG }, rowId("squad-1"), ad)
+      ).rejects.toMatchObject({ code: "CAMPAIGN_CONTROL_NOT_FOUND" })
+      await expect(service.addAd(actor, rowId("squad-404"), ad)).rejects.toMatchObject({
+        code: "CAMPAIGN_CONTROL_NOT_FOUND",
+      })
+      expect(calls).toHaveLength(2)
+    })
   })
 
   it("refuses what it can judge itself before anything reaches Snapchat", async () => {

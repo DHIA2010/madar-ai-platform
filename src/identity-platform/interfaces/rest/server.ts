@@ -295,6 +295,8 @@ import {
   publicationStatusSchema,
   publishCampaignSchema,
   renameCreativeSchema,
+  campaignControlAddAdSchema,
+  campaignControlBudgetSchema,
   campaignControlDeleteSchema,
   campaignControlStatusSchema,
   uploadCreativeSchema,
@@ -1497,59 +1499,100 @@ export function createIdentityApiServer(
           }
         )
       : null
+  // The Google Ads client that adds an ad from the campaigns list: the same settings the
+  // Google Ads sync is built with (dependency-injection/container.ts).
+  const campaignControlGoogleClient = (
+    database: NonNullable<typeof container.infrastructure.database>
+  ) =>
+    new GoogleAdsClient(
+      new GoogleAdsAuthProvider(database, {
+        tokenEndpoint:
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
+          "https://oauth2.googleapis.com/token",
+        encryptionKey:
+          process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+          process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+          "",
+      }),
+      {
+        apiBaseUrl:
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+          "https://googleads.googleapis.com/v25",
+        developerToken:
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
+          process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
+          "",
+        loginCustomerId: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
+        maxRetries: 0,
+        minRequestIntervalMs: Number(
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"
+        ),
+      }
+    )
   // Switching or deleting a campaign, ad group or ad from the campaigns list.
   const campaignControlService = container.infrastructure.database
-    ? new CampaignControlService(container.infrastructure.database, {
-        snapchat: {
-          access: new SnapchatOAuthService(
-            new SnapchatOAuthRepository(container.infrastructure.database)
-          ),
-          api: new SnapchatCampaignPublisher(),
+    ? new CampaignControlService(
+        container.infrastructure.database,
+        {
+          snapchat: {
+            access: new SnapchatOAuthService(
+              new SnapchatOAuthRepository(container.infrastructure.database)
+            ),
+            api: new SnapchatCampaignPublisher(),
+          },
+          tiktok: {
+            access: new TikTokAdsOAuthService(
+              new TikTokAdsOAuthRepository(container.infrastructure.database)
+            ),
+            api: new TikTokCampaignControl(),
+            adder: new TikTokCampaignPublisher(),
+          },
+          // Ready for when Meta grants Madar the permission to manage ads: the connection asks
+          // for read access only today (meta-oauth/service.ts), so Meta refuses these calls and
+          // the campaigns list keeps Meta's controls hidden.
+          meta: {
+            access: new MetaOAuthService(
+              new MetaOAuthRepository(container.infrastructure.database)
+            ),
+            api: new MetaCampaignControl(),
+            adder: new MetaCampaignPublisher(),
+          },
+          // The same settings the Google Ads sync is built with (dependency-injection/container.ts).
+          google: {
+            api: new GoogleCampaignControl(
+              new GoogleAdsClient(
+                new GoogleAdsAuthProvider(container.infrastructure.database, {
+                  tokenEndpoint:
+                    process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
+                    "https://oauth2.googleapis.com/token",
+                  encryptionKey:
+                    process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+                    process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+                    "",
+                }),
+                {
+                  apiBaseUrl:
+                    process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+                    "https://googleads.googleapis.com/v25",
+                  developerToken:
+                    process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
+                    process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
+                    "",
+                  loginCustomerId: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
+                  maxRetries: 0,
+                  minRequestIntervalMs: Number(
+                    process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"
+                  ),
+                }
+              )
+            ),
+            adder: new GoogleSearchCampaignPublisher(
+              campaignControlGoogleClient(container.infrastructure.database)
+            ),
+          },
         },
-        tiktok: {
-          access: new TikTokAdsOAuthService(
-            new TikTokAdsOAuthRepository(container.infrastructure.database)
-          ),
-          api: new TikTokCampaignControl(),
-        },
-        // Ready for when Meta grants Madar the permission to manage ads: the connection asks
-        // for read access only today (meta-oauth/service.ts), so Meta refuses these calls and
-        // the campaigns list keeps Meta's controls hidden.
-        meta: {
-          access: new MetaOAuthService(new MetaOAuthRepository(container.infrastructure.database)),
-          api: new MetaCampaignControl(),
-        },
-        // The same settings the Google Ads sync is built with (dependency-injection/container.ts).
-        google: {
-          api: new GoogleCampaignControl(
-            new GoogleAdsClient(
-              new GoogleAdsAuthProvider(container.infrastructure.database, {
-                tokenEndpoint:
-                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
-                  "https://oauth2.googleapis.com/token",
-                encryptionKey:
-                  process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
-                  process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
-                  "",
-              }),
-              {
-                apiBaseUrl:
-                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
-                  "https://googleads.googleapis.com/v25",
-                developerToken:
-                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
-                  process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
-                  "",
-                loginCustomerId: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
-                maxRetries: 0,
-                minRequestIntervalMs: Number(
-                  process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"
-                ),
-              }
-            )
-          ),
-        },
-      })
+        campaignCreativesService
+      )
     : null
   const campaignRepositoryForLinks = container.infrastructure.database
     ? new CampaignRepository(container.infrastructure.database)
@@ -8089,7 +8132,9 @@ export function createIdentityApiServer(
       if (
         method === "POST" &&
         (url.pathname === "/v1/campaigns/control/status" ||
-          url.pathname === "/v1/campaigns/control/delete")
+          url.pathname === "/v1/campaigns/control/delete" ||
+          url.pathname === "/v1/campaigns/control/ads" ||
+          url.pathname === "/v1/campaigns/control/budget")
       ) {
         if (!campaignControlService) {
           return send(503, {
@@ -8098,6 +8143,18 @@ export function createIdentityApiServer(
           })
         }
         if (!actor.modulePermissions.includes("campaigns:create")) throw ERRORS.forbidden()
+        // A new ad in an ad group that already exists, and an ad group's daily budget.
+        if (url.pathname.endsWith("/ads")) {
+          const { id, ...ad } = campaignControlAddAdSchema.parse(await readJsonBody(request))
+          return send(201, await campaignControlService.addAd(actor, id, ad))
+        }
+        if (url.pathname.endsWith("/budget")) {
+          const payload = campaignControlBudgetSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await campaignControlService.setDailyBudget(actor, payload.id, payload.dailyBudget)
+          )
+        }
         if (url.pathname.endsWith("/status")) {
           const payload = campaignControlStatusSchema.parse(await readJsonBody(request))
           return send(

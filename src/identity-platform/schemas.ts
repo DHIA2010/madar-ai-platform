@@ -612,6 +612,24 @@ export const campaignControlStatusSchema = z.object({
   active: z.boolean(),
 })
 export const campaignControlDeleteSchema = z.object(campaignControlTarget)
+// A new ad for an ad group from the campaigns list, and an ad group's new daily budget. What
+// each platform needs of the ad's fields is checked by the service.
+export const campaignControlAddAdSchema = z.object({
+  id: z.string().min(1).max(300),
+  name: z.string().trim().min(2).max(120),
+  url: z.string().trim().url().max(1000),
+  creativeId: z.string().uuid().nullish(),
+  brandName: z.string().trim().max(40).nullish(),
+  headline: z.string().trim().max(100).nullish(),
+  text: z.string().trim().max(125).nullish(),
+  callToAction: z.string().trim().max(32).nullish(),
+  headlines: z.array(z.string().trim().min(1).max(30)).max(15).nullish(),
+  descriptions: z.array(z.string().trim().min(1).max(90)).max(4).nullish(),
+})
+export const campaignControlBudgetSchema = z.object({
+  id: z.string().min(1).max(300),
+  dailyBudget: z.number().positive().max(100000),
+})
 
 export const importCampaignsSchema = z.object({
   platform: z.enum(CAMPAIGN_PLATFORM_VALUES),

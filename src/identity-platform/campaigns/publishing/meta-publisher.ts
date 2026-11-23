@@ -9,8 +9,10 @@
 
 import {
   PlatformPublishError,
+  type MetaCallToAction,
   type MetaPublishedIds,
   type MetaPublishInput,
+  type PublishMedia,
   type PublishStep,
 } from "./platform"
 
@@ -25,6 +27,21 @@ const META_MIN_AGE = 18
 const META_MAX_AGE = 65
 // Meta's code for "the object does not exist" (or the request is malformed).
 const META_INVALID_PARAMETER = 100
+
+// One ad as Meta is asked to build it: the file, the words around it and where it leads.
+interface MetaAdPiece {
+  name: string
+  media: PublishMedia
+  text: string
+  headline: string
+  callToAction: MetaCallToAction
+  url: string
+}
+
+// The account as Meta names it; it arrives with or without the "act_" prefix.
+function accountOf(adAccountId: string): string {
+  return `act_${adAccountId.trim().replace(/^act_/i, "")}`
+}
 
 interface MetaAnswer {
   status: number
@@ -210,12 +227,7 @@ export class MetaCampaignPublisher {
   }
 
   // Uploads a picture; Meta names it by the hash of its bytes, which is what a creative uses.
-  private async uploadImage(
-    token: string,
-    account: string,
-    input: MetaPublishInput
-  ): Promise<string> {
-    const { media } = input
+  private async uploadImage(token: string, account: string, media: PublishMedia): Promise<string> {
     const form = new FormData()
     form.append(
       "filename",
@@ -238,16 +250,16 @@ export class MetaCampaignPublisher {
   private async uploadVideo(
     token: string,
     account: string,
-    input: MetaPublishInput
+    media: PublishMedia,
+    name: string
   ): Promise<{ videoId: string; thumbnailUrl: string | null }> {
-    const { media } = input
     const form = new FormData()
     form.append(
       "source",
       new Blob([new Uint8Array(media.bytes)], { type: media.contentType }),
       media.fileName
     )
-    form.append("name", input.name)
+    form.append("name", name)
     const videoId = this.createdId(
       "media",
       await this.call("media", token, "POST", `/${account}/advideos`, form)
@@ -281,10 +293,72 @@ export class MetaCampaignPublisher {
     )
   }
 
+  // One ad inside an ad set that exists: the file is uploaded, the creative built from it and the
+  // ad created, shown under the given page. Nothing is deleted here when a step is refused.
+  private async adInAdSet(
+    token: string,
+    account: string,
+    pageId: string,
+    adSetId: string,
+    piece: MetaAdPiece
+  ): Promise<{ creativeId: string; adId: string }> {
+    const callToAction = { type: piece.callToAction, value: { link: piece.url } }
+    let story: Json
+    if (piece.media.kind === "video") {
+      const { videoId, thumbnailUrl } = await this.uploadVideo(
+        token,
+        account,
+        piece.media,
+        piece.name
+      )
+      story = {
+        page_id: pageId,
+        video_data: {
+          video_id: videoId,
+          message: piece.text,
+          title: piece.headline,
+          ...(thumbnailUrl ? { image_url: thumbnailUrl } : {}),
+          call_to_action: callToAction,
+        },
+      }
+    } else {
+      const imageHash = await this.uploadImage(token, account, piece.media)
+      story = {
+        page_id: pageId,
+        link_data: {
+          link: piece.url,
+          message: piece.text,
+          name: piece.headline,
+          image_hash: imageHash,
+          call_to_action: callToAction,
+        },
+      }
+    }
+
+    const creativeId = this.createdId(
+      "creative",
+      await this.call("creative", token, "POST", `/${account}/adcreatives`, {
+        name: piece.name,
+        object_story_spec: story,
+      })
+    )
+
+    const adId = this.createdId(
+      "ad",
+      await this.call("ad", token, "POST", `/${account}/ads`, {
+        name: piece.name,
+        adset_id: adSetId,
+        creative: { creative_id: creativeId },
+        status: "ACTIVE",
+      })
+    )
+
+    return { creativeId, adId }
+  }
+
   async publish(input: MetaPublishInput): Promise<MetaPublishedIds> {
     const token = input.accessToken
-    // The account arrives with or without Meta's "act_" prefix.
-    const account = `act_${input.adAccountId.trim().replace(/^act_/i, "")}`
+    const account = accountOf(input.adAccountId)
     // Everything the campaign depends on is looked up first, so a missing piece stops the publish
     // before anything is created.
     const pageId = await this.pageId(token, account)
@@ -333,51 +407,7 @@ export class MetaCampaignPublisher {
         })
       )
 
-      const callToAction = { type: input.callToAction, value: { link: input.url } }
-      let story: Json
-      if (input.media.kind === "video") {
-        const { videoId, thumbnailUrl } = await this.uploadVideo(token, account, input)
-        story = {
-          page_id: pageId,
-          video_data: {
-            video_id: videoId,
-            message: input.text,
-            title: input.headline,
-            ...(thumbnailUrl ? { image_url: thumbnailUrl } : {}),
-            call_to_action: callToAction,
-          },
-        }
-      } else {
-        const imageHash = await this.uploadImage(token, account, input)
-        story = {
-          page_id: pageId,
-          link_data: {
-            link: input.url,
-            message: input.text,
-            name: input.headline,
-            image_hash: imageHash,
-            call_to_action: callToAction,
-          },
-        }
-      }
-
-      const creativeId = this.createdId(
-        "creative",
-        await this.call("creative", token, "POST", `/${account}/adcreatives`, {
-          name: input.name,
-          object_story_spec: story,
-        })
-      )
-
-      const adId = this.createdId(
-        "ad",
-        await this.call("ad", token, "POST", `/${account}/ads`, {
-          name: input.name,
-          adset_id: adSetId,
-          creative: { creative_id: creativeId },
-          status: "ACTIVE",
-        })
-      )
+      const { creativeId, adId } = await this.adInAdSet(token, account, pageId, adSetId, input)
 
       return { campaignId, adSetId, creativeId, adId }
     } catch (error) {
@@ -386,6 +416,41 @@ export class MetaCampaignPublisher {
       await this.call("campaign", token, "DELETE", `/${campaignId}`).catch(() => undefined)
       throw error
     }
+  }
+
+  // A new ad in an ad set that already exists: the page it is shown under is looked up, then the
+  // file, the creative and the ad are created. The ad set and its other ads are left as they
+  // are, and nothing is deleted when a step is refused (an uploaded file or a creative without an
+  // ad is not shown to anyone and costs nothing).
+  async addAd(input: {
+    accessToken: string
+    // With or without the "act_" prefix.
+    adAccountId: string
+    adSetId: string
+    name: string
+    media: PublishMedia
+    text: string
+    headline: string
+    callToAction: MetaCallToAction
+    url: string
+  }): Promise<{ adId: string; creativeId: string }> {
+    const token = input.accessToken
+    const account = accountOf(input.adAccountId)
+    const pageId = await this.pageId(token, account)
+    const { creativeId, adId } = await this.adInAdSet(token, account, pageId, input.adSetId, input)
+    return { adId, creativeId }
+  }
+
+  // Changes what an ad set may spend a day (in the ad account's currency, whole units). Meta
+  // takes just the field that changes, in the currency's smallest unit.
+  async setAdSetBudget(input: {
+    accessToken: string
+    adSetId: string
+    dailyBudget: number
+  }): Promise<void> {
+    await this.call("ad_set", input.accessToken, "POST", `/${input.adSetId}`, {
+      daily_budget: Math.round(input.dailyBudget * 100),
+    })
   }
 
   // Switches a published campaign on or off. Meta takes just the field that changes.

@@ -23,6 +23,9 @@ import {
 // Google's own limits for the words people search.
 const GOOGLE_MAX_KEYWORDS = 20
 const GOOGLE_KEYWORD_MAX = 80
+// And for one responsive search ad: more than these are refused, so only the first ones are sent.
+const GOOGLE_MAX_HEADLINES = 15
+const GOOGLE_MAX_DESCRIPTIONS = 4
 
 // Google's id for each country an ad can be shown in (its "geo target constants").
 const GOOGLE_COUNTRY_IDS: Record<string, string> = {
@@ -56,10 +59,11 @@ function keywordsOf(values: string[]): string[] {
   })
 }
 
-// Which part of the ad's text Google would refuse, or null when all of it fits.
-export function googleTextProblem(
-  input: Pick<GooglePublishInput, "headlines" | "descriptions" | "keywords">
-): "headlines" | "descriptions" | "keywords" | null {
+// Which part of a text ad's own words Google would refuse, or null when both fit.
+function adTextProblem(input: {
+  headlines: string[]
+  descriptions: string[]
+}): "headlines" | "descriptions" | null {
   const headlines = filled(input.headlines)
   if (
     headlines.length < GOOGLE_MIN_HEADLINES ||
@@ -74,6 +78,15 @@ export function googleTextProblem(
   ) {
     return "descriptions"
   }
+  return null
+}
+
+// Which part of the ad's text Google would refuse, or null when all of it fits.
+export function googleTextProblem(
+  input: Pick<GooglePublishInput, "headlines" | "descriptions" | "keywords">
+): "headlines" | "descriptions" | "keywords" | null {
+  const adProblem = adTextProblem(input)
+  if (adProblem) return adProblem
   const keywords = keywordsOf(input.keywords)
   if (
     keywords.length === 0 ||
@@ -83,6 +96,36 @@ export function googleTextProblem(
     return "keywords"
   }
   return null
+}
+
+// The write that creates one responsive search ad in an ad group: the headlines and descriptions
+// as they are sent (trimmed, without empty ones, no more than Google takes) and where it leads.
+function adCreateOperation(
+  adGroupResourceName: string,
+  ad: { headlines: string[]; descriptions: string[]; url: string }
+): Operation {
+  return {
+    create: {
+      adGroup: adGroupResourceName,
+      status: "ENABLED",
+      ad: {
+        finalUrls: [ad.url],
+        responsiveSearchAd: {
+          headlines: filled(ad.headlines)
+            .slice(0, GOOGLE_MAX_HEADLINES)
+            .map((text) => ({ text })),
+          descriptions: filled(ad.descriptions)
+            .slice(0, GOOGLE_MAX_DESCRIPTIONS)
+            .map((text) => ({ text })),
+        },
+      },
+    },
+  }
+}
+
+// An ad is named through its ad group: ".../adGroupAds/<adGroupId>~<adId>".
+function adIdOf(adResourceName: string): string {
+  return (adResourceName.split("/").pop() as string).split("~").pop() as string
 }
 
 // A refusal in the words the publishing service reads: Google's own reason, and whether it was
@@ -151,8 +194,6 @@ export class GoogleSearchCampaignPublisher {
         "REFUSED"
       )
     }
-    const headlines = filled(input.headlines)
-    const descriptions = filled(input.descriptions)
     const keywords = keywordsOf(input.keywords)
 
     // The daily budget is a thing of its own on Google, and its name must be unique in the
@@ -252,23 +293,10 @@ export class GoogleSearchCampaignPublisher {
       const adResourceName = this.created(
         "ad",
         await this.mutate("ad", input, "adGroupAds", [
-          {
-            create: {
-              adGroup: adGroupResourceName,
-              status: "ENABLED",
-              ad: {
-                finalUrls: [input.url],
-                responsiveSearchAd: {
-                  headlines: headlines.map((text) => ({ text })),
-                  descriptions: descriptions.map((text) => ({ text })),
-                },
-              },
-            },
-          },
+          adCreateOperation(adGroupResourceName, input),
         ])
       )
-      // An ad is named through its ad group: ".../adGroupAds/<adGroupId>~<adId>".
-      const adId = (adResourceName.split("/").pop() as string).split("~").pop() as string
+      const adId = adIdOf(adResourceName)
 
       return { campaignId, budgetResourceName, adGroupId, adId }
     } catch (error) {
@@ -295,6 +323,36 @@ export class GoogleSearchCampaignPublisher {
         .catch(() => undefined)
       throw refusal("campaign", error)
     }
+  }
+
+  // A new responsive search ad in an ad group that already exists. The text is checked first, so
+  // one that does not fit is refused before Google is asked; the ad group's keywords and other
+  // ads are left as they are.
+  async addAd(input: {
+    connectionId: string
+    // Digits only.
+    customerId: string
+    adGroupId: string
+    headlines: string[]
+    descriptions: string[]
+    url: string
+  }): Promise<{ adId: string }> {
+    const problem = adTextProblem(input)
+    if (problem) {
+      throw new PlatformPublishError(
+        "google",
+        "ad",
+        `The ${problem} do not fit Google's limits.`,
+        "REFUSED"
+      )
+    }
+    const adResourceName = this.created(
+      "ad",
+      await this.mutate("ad", input, "adGroupAds", [
+        adCreateOperation(`customers/${input.customerId}/adGroups/${input.adGroupId}`, input),
+      ])
+    )
+    return { adId: adIdOf(adResourceName) }
   }
 
   // Switches a published campaign on or off; only its status is sent.

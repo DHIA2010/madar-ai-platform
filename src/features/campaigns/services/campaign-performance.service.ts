@@ -89,6 +89,8 @@ export interface CampaignPerformanceRow {
   purchaseValue: number
   // Meta only: whether this row's connection may change ads.
   manageable?: boolean
+  // An ad group's (or campaign's) daily budget, where the platform's sync carries it.
+  dailyBudget?: number | null
 }
 
 export interface CampaignPerformancePlatformRow extends CampaignPerformanceRow {
@@ -250,6 +252,22 @@ const PERFORMANCE_ENDPOINT = ["", "v1", "campaigns", "performance"].join(String.
 const CONTROL_ENDPOINT = {
   status: ["", "v1", "campaigns", "control", "status"].join(String.fromCharCode(47)),
   remove: ["", "v1", "campaigns", "control", "delete"].join(String.fromCharCode(47)),
+  ads: ["", "v1", "campaigns", "control", "ads"].join(String.fromCharCode(47)),
+  budget: ["", "v1", "campaigns", "control", "budget"].join(String.fromCharCode(47)),
+}
+
+// A new ad for an ad group that already exists. Snapchat, TikTok and Meta take a creative with
+// their own text; Google takes a search ad's headlines and descriptions.
+export interface CampaignAddAdInput {
+  name: string
+  url: string
+  creativeId?: string
+  brandName?: string
+  headline?: string
+  text?: string
+  callToAction?: string
+  headlines?: string[]
+  descriptions?: string[]
 }
 
 function buildQuery(
@@ -378,6 +396,27 @@ export const campaignPerformanceService = {
     await client.post<{ id: string; level: CampaignControlLevel }, { ok: boolean }>(
       CONTROL_ENDPOINT.remove,
       { id, level }
+    )
+  },
+
+  // Adds an ad to an ad group on its ad platform (the id is the ad group's row id).
+  async addAd(adGroupId: string, ad: CampaignAddAdInput): Promise<{ adId: string }> {
+    return client.post<CampaignAddAdInput & { id: string }, { adId: string }>(
+      CONTROL_ENDPOINT.ads,
+      { id: adGroupId, ...ad },
+      // A video is uploaded to the platform and processed before the ad is made.
+      { timeoutMs: 3 * 60_000 }
+    )
+  },
+
+  // Changes an ad group's daily budget on its ad platform.
+  async setDailyBudget(
+    adGroupId: string,
+    dailyBudget: number
+  ): Promise<{ id: string; dailyBudget: number }> {
+    return client.post<{ id: string; dailyBudget: number }, { id: string; dailyBudget: number }>(
+      CONTROL_ENDPOINT.budget,
+      { id: adGroupId, dailyBudget }
     )
   },
 

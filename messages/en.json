@@ -7851,7 +7851,32 @@
         "deleted": "Deleted from the ad platform",
         "deleteFailed": "Could not delete. Try again.",
         "notSupported": "Read-only",
-        "notSupportedHint": "This connection is read-only for now, so it cannot be switched or deleted from Madar."
+        "notSupportedHint": "This connection is read-only for now, so it cannot be switched or deleted from Madar.",
+        "addAd": {
+          "button": "Add an ad",
+          "buttonLabel": "Add an ad to {name}",
+          "title": "New ad in {name}",
+          "name": "Ad name",
+          "namePlaceholder": "e.g. Winter offer",
+          "submit": "Add the ad",
+          "adding": "Adding…",
+          "cancel": "Cancel",
+          "added": "The ad was added. The platform reviews it before showing it.",
+          "failed": "The ad could not be added.",
+          "incomplete": "Fill in every field, and make sure the link starts with https://"
+        },
+        "budget": {
+          "button": "Daily budget",
+          "buttonLabel": "Change the budget of {name}",
+          "title": "Daily budget of {name}",
+          "label": "Budget per day",
+          "hint": "The lowest budget is {minimum} {currency}. The change applies on the platform at once.",
+          "submit": "Save",
+          "cancel": "Cancel",
+          "saved": "The budget was changed on the platform",
+          "failed": "The budget could not be changed.",
+          "tooLow": "The lowest daily budget is {minimum} {currency}."
+        }
       }
     },
     "performanceChart": {
@@ -8058,15 +8083,18 @@
         "text": "Text above the picture",
         "textHint": "A sentence or two explaining your offer. Shown at the top of the ad.",
         "textPlaceholder": "Explain your offer in a sentence",
-        "headlines": "Ad headlines (3)",
-        "headlinesHint": "Google shows two or three of them together. Up to 30 characters each.",
+        "headlines": "Ad headlines (at least 3)",
+        "headlinesHint": "Add up to 15 headlines; Google tries them and shows the best. Up to 30 characters each.",
         "headlineNumber": "Headline {number}",
-        "descriptions": "Ad description (2)",
-        "descriptionsHint": "Two lines shown under the headline. Up to 90 characters each.",
+        "descriptions": "Ad description (at least 2 lines)",
+        "descriptionsHint": "Add up to 4 lines; Google picks from them. Up to 90 characters each.",
         "descriptionNumber": "Description {number}",
         "keywords": "The words your customer searches with",
         "keywordsHint": "One word or phrase per line. Your ad shows to people searching it or something close to it.",
-        "keywordsPlaceholder": "cashier software\npoint of sale system\ne-invoice"
+        "keywordsPlaceholder": "cashier software\npoint of sale system\ne-invoice",
+        "addHeadline": "Add a headline",
+        "addDescription": "Add a description",
+        "removeLine": "Remove this line"
       },
       "callsToAction": {
         "MORE": "Learn more",

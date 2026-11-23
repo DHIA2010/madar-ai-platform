@@ -99,6 +99,9 @@ function fakeTikTok(
     }
     if (method === "POST" && path === "/file/image/ad/upload/") return ok({ image_id: "img-1" })
     if (method === "POST" && path === "/ad/create/") return ok({ ad_ids: ["ad-1"] })
+    if (method === "POST" && path === "/adgroup/update/") {
+      return ok({ adgroup_id: body?.adgroup_id })
+    }
     if (method === "POST" && path === "/campaign/status/update/") {
       if (body?.operation_status === "DELETE" && (options.campaignGone || options.deleteRefused)) {
         return no("Campaign does not exist or cannot be deleted")
@@ -523,5 +526,172 @@ describe("a published TikTok campaign", () => {
 
     expect(error.code).toBe("TIKTOK_ACCESS_DENIED")
     expect(fake.calls).toHaveLength(1)
+  })
+})
+
+describe("adding an ad to a TikTok ad group that already exists", () => {
+  const adInput = () => ({
+    accessToken: "token-1",
+    advertiserId: ADVERTISER,
+    adGroupId: "group-7",
+    name: "Second video",
+    media: { kind: "video" as const, bytes: MP4, contentType: "video/mp4", fileName: "two.mp4" },
+    brandName: "Madar",
+    text: "Sell in store and online",
+    callToAction: "LEARN_MORE" as const,
+    url: "https://www.madar.my/pos",
+  })
+
+  it("uploads the video, makes its cover and creates the ad in the given ad group", async () => {
+    const fake = fakeTikTok({ coverAfter: 1 })
+    const { publisher, waits } = publisherFor(fake)
+
+    const ids = await publisher.addAd(adInput())
+
+    expect(ids).toEqual({ adId: "ad-1", videoId: "vid-1" })
+    // No campaign and no ad group are created.
+    expect(steps(fake.calls)).toEqual([
+      "GET /identity/get/",
+      "POST /file/video/ad/upload/",
+      "GET /file/video/ad/info/",
+      "GET /file/video/ad/info/",
+      "POST /file/image/ad/upload/",
+      "POST /ad/create/",
+    ])
+    expect(waits).toEqual([3000])
+    expect(fake.calls.every((call) => call.token === "token-1")).toBe(true)
+
+    const [identity, video, , , image, ad] = fake.calls
+    expect(identity.query).toEqual({ advertiser_id: ADVERTISER })
+    expect(video.isForm).toBe(true)
+    expect(video.body).toMatchObject({
+      advertiser_id: ADVERTISER,
+      upload_type: "UPLOAD_BY_FILE",
+      video_signature: createHash("md5").update(MP4).digest("hex"),
+    })
+    expect(String(video.body?.file_name)).toMatch(/^\d+-two\.mp4$/)
+    expect(image.body).toEqual({
+      advertiser_id: ADVERTISER,
+      upload_type: "UPLOAD_BY_URL",
+      image_url: "https://cover.test/1.jpg",
+    })
+    expect(ad.body).toEqual({
+      advertiser_id: ADVERTISER,
+      adgroup_id: "group-7",
+      creatives: [
+        {
+          ad_name: "Second video",
+          identity_type: "BC_AUTH_TT",
+          identity_id: "id-bc",
+          identity_authorized_bc_id: "bc-9",
+          ad_format: "SINGLE_VIDEO",
+          video_id: "vid-1",
+          image_ids: ["img-1"],
+          ad_text: "Sell in store and online",
+          call_to_action: "LEARN_MORE",
+          landing_page_url: "https://www.madar.my/pos",
+        },
+      ],
+    })
+  })
+
+  it("makes an identity from the brand name when the account has none", async () => {
+    const fake = fakeTikTok({ identities: [] })
+    const { publisher } = publisherFor(fake)
+
+    await publisher.addAd(adInput())
+
+    expect(fake.calls[1].path).toBe("/identity/create/")
+    expect(fake.calls[1].body).toEqual({ advertiser_id: ADVERTISER, display_name: "Madar" })
+  })
+
+  it("refuses a picture without calling TikTok", async () => {
+    const fake = fakeTikTok()
+    const { publisher } = publisherFor(fake)
+
+    const error = await refusal(
+      publisher.addAd({
+        ...adInput(),
+        media: {
+          kind: "image",
+          bytes: Buffer.from("png"),
+          contentType: "image/png",
+          fileName: "offer.png",
+        },
+      })
+    )
+
+    expect(error.code).toBe("TIKTOK_REFUSED")
+    expect(error.step).toBe("media")
+    expect(error.reason).toBe("TikTok shows video ads only.")
+    expect(fake.calls).toEqual([])
+  })
+
+  it("reports TikTok's reason when the ad is refused, and deletes nothing", async () => {
+    const fake = fakeTikTok({ refuse: "/ad/create/" })
+    const { publisher } = publisherFor(fake)
+
+    const error = await refusal(publisher.addAd(adInput()))
+
+    expect(error.code).toBe("TIKTOK_REFUSED")
+    expect(error.step).toBe("ad")
+    expect(error.reason).toBe("Ad text is too long")
+    expect(fake.calls[fake.calls.length - 1].path).toBe("/ad/create/")
+    expect(fake.calls.some((call) => call.path === "/campaign/status/update/")).toBe(false)
+  })
+
+  it("reports a rejected login as access denied", async () => {
+    const fake = fakeTikTok({ denied: true })
+    const { publisher } = publisherFor(fake)
+
+    const error = await refusal(publisher.addAd(adInput()))
+
+    expect(error.code).toBe("TIKTOK_ACCESS_DENIED")
+    expect(steps(fake.calls)).toEqual(["GET /identity/get/"])
+  })
+})
+
+describe("a TikTok ad group's daily budget", () => {
+  const target = { accessToken: "token-1", advertiserId: ADVERTISER, adGroupId: "group-7" }
+
+  it("is changed with the ad account, the ad group and the new budget", async () => {
+    const fake = fakeTikTok()
+    const { publisher } = publisherFor(fake)
+
+    await expect(
+      publisher.setAdGroupBudget({ ...target, dailyBudget: 120 })
+    ).resolves.toBeUndefined()
+
+    expect(fake.calls).toHaveLength(1)
+    expect(fake.calls[0]).toMatchObject({
+      method: "POST",
+      path: "/adgroup/update/",
+      token: "token-1",
+    })
+    expect(fake.calls[0].body).toEqual({
+      advertiser_id: ADVERTISER,
+      adgroup_id: "group-7",
+      budget: 120,
+    })
+  })
+
+  it("reports a refused change at the ad group step", async () => {
+    const fake = fakeTikTok({ refuse: "/adgroup/update/" })
+    const { publisher } = publisherFor(fake)
+
+    const error = await refusal(publisher.setAdGroupBudget({ ...target, dailyBudget: 120 }))
+
+    expect(error.code).toBe("TIKTOK_REFUSED")
+    expect(error.step).toBe("ad_set")
+    expect(error.reason).toBe("Ad text is too long")
+  })
+
+  it("reports a rejected login as access denied", async () => {
+    const fake = fakeTikTok({ denied: true })
+    const { publisher } = publisherFor(fake)
+
+    const error = await refusal(publisher.setAdGroupBudget({ ...target, dailyBudget: 120 }))
+
+    expect(error.code).toBe("TIKTOK_ACCESS_DENIED")
   })
 })

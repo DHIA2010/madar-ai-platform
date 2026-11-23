@@ -10,7 +10,9 @@ import { createHash } from "node:crypto"
 import {
   PlatformPublishError,
   type PublishErrorCode,
+  type PublishMedia,
   type PublishStep,
+  type TikTokCallToAction,
   type TikTokPublishedIds,
   type TikTokPublishInput,
 } from "./platform"
@@ -164,8 +166,11 @@ export class TikTokCampaignPublisher {
 
   // The identity (name and picture) the ad is shown under -- TikTok requires one on every ad. An
   // account that has none yet gets a plain one made from the brand name.
-  private async identity(token: string, input: TikTokPublishInput): Promise<Identity> {
-    const advertiserId = input.advertiserId
+  private async identity(
+    token: string,
+    advertiserId: string,
+    brandName: string
+  ): Promise<Identity> {
     const listed = await this.call("account", token, "GET", "/identity/get/", {
       advertiser_id: advertiserId,
     }).catch((error: unknown) => {
@@ -188,7 +193,7 @@ export class TikTokCampaignPublisher {
 
     const made = await this.call("account", token, "POST", "/identity/create/", {
       advertiser_id: advertiserId,
-      display_name: input.brandName,
+      display_name: brandName,
     }).catch((error: unknown) => {
       if (isDenied(error)) throw error
       const reason = error instanceof PlatformPublishError ? error.reason : "no reason given"
@@ -224,12 +229,15 @@ export class TikTokCampaignPublisher {
     return pixel.pixel_code as string
   }
 
-  private async uploadVideo(token: string, input: TikTokPublishInput): Promise<string> {
-    const { media } = input
+  private async uploadVideo(
+    token: string,
+    advertiserId: string,
+    media: PublishMedia
+  ): Promise<string> {
     // TikTok refuses a file name the account already has, so each upload gets its own.
     const fileName = `${Date.now()}-${media.fileName}`
     const form = new FormData()
-    form.append("advertiser_id", input.advertiserId)
+    form.append("advertiser_id", advertiserId)
     form.append("upload_type", "UPLOAD_BY_FILE")
     // The md5 of the file, which TikTok checks the upload against.
     form.append("video_signature", createHash("md5").update(media.bytes).digest("hex"))
@@ -275,6 +283,47 @@ export class TikTokCampaignPublisher {
     return imageId
   }
 
+  // The ad itself: one video with its cover, shown under the identity, in the given ad group.
+  private async createAd(
+    token: string,
+    advertiserId: string,
+    ad: {
+      adGroupId: string
+      name: string
+      identity: Identity
+      videoId: string
+      imageId: string
+      text: string
+      callToAction: TikTokCallToAction
+      url: string
+    }
+  ): Promise<string> {
+    const { identity } = ad
+    const data = await this.call("ad", token, "POST", "/ad/create/", {
+      advertiser_id: advertiserId,
+      adgroup_id: ad.adGroupId,
+      creatives: [
+        {
+          ad_name: ad.name,
+          identity_type: identity.type,
+          identity_id: identity.id,
+          ...(identity.authorizedBcId
+            ? { identity_authorized_bc_id: identity.authorizedBcId }
+            : {}),
+          ad_format: "SINGLE_VIDEO",
+          video_id: ad.videoId,
+          image_ids: [ad.imageId],
+          ad_text: ad.text,
+          call_to_action: ad.callToAction,
+          landing_page_url: ad.url,
+        },
+      ],
+    })
+    const adId = asId(asList(asObject(data).ad_ids)[0])
+    if (!adId) throw refused("ad", "TikTok did not return the ad.")
+    return adId
+  }
+
   private campaignStatus(
     step: PublishStep,
     input: { accessToken: string; advertiserId: string; campaignId: string },
@@ -303,7 +352,7 @@ export class TikTokCampaignPublisher {
     if (ages.length === 0) throw refused("ad_set", "The age range matches no TikTok age group.")
     const startTime = scheduleTime("ad_set", input.startAt)
     const endTime = input.endAt ? scheduleTime("ad_set", input.endAt) : null
-    const identity = await this.identity(token, input)
+    const identity = await this.identity(token, advertiserId, input.brandName)
     const pixelCode = input.objective === "leads" ? await this.pixelCode(token, advertiserId) : null
 
     const campaign = await this.call("campaign", token, "POST", "/campaign/create/", {
@@ -351,31 +400,18 @@ export class TikTokCampaignPublisher {
       const adGroupId = asId(asObject(adGroup).adgroup_id)
       if (!adGroupId) throw refused("ad_set", "TikTok did not return the ad group.")
 
-      const videoId = await this.uploadVideo(token, input)
+      const videoId = await this.uploadVideo(token, advertiserId, input.media)
       const imageId = await this.coverImage(token, advertiserId, videoId)
-
-      const ad = await this.call("ad", token, "POST", "/ad/create/", {
-        advertiser_id: advertiserId,
-        adgroup_id: adGroupId,
-        creatives: [
-          {
-            ad_name: input.name,
-            identity_type: identity.type,
-            identity_id: identity.id,
-            ...(identity.authorizedBcId
-              ? { identity_authorized_bc_id: identity.authorizedBcId }
-              : {}),
-            ad_format: "SINGLE_VIDEO",
-            video_id: videoId,
-            image_ids: [imageId],
-            ad_text: input.text,
-            call_to_action: input.callToAction,
-            landing_page_url: input.url,
-          },
-        ],
+      const adId = await this.createAd(token, advertiserId, {
+        adGroupId,
+        name: input.name,
+        identity,
+        videoId,
+        imageId,
+        text: input.text,
+        callToAction: input.callToAction,
+        url: input.url,
       })
-      const adId = asId(asList(asObject(ad).ad_ids)[0])
-      if (!adId) throw refused("ad", "TikTok did not return the ad.")
 
       return { campaignId, adGroupId, videoId, adId }
     } catch (error) {
@@ -388,6 +424,57 @@ export class TikTokCampaignPublisher {
       ).catch(() => undefined)
       throw error
     }
+  }
+
+  // A new ad in an ad group that already exists: uploads the video, makes its cover and creates
+  // the ad. Nothing is deleted when a step fails -- there is no campaign of ours to clean up -- so
+  // a video uploaded before a refused ad stays, unused, in the account's library.
+  async addAd(input: {
+    accessToken: string
+    advertiserId: string
+    adGroupId: string
+    name: string
+    // TikTok shows video ads; a picture is refused before anything is called.
+    media: PublishMedia
+    // Only used when the account has no TikTok identity yet and one has to be made.
+    brandName: string
+    text: string
+    callToAction: TikTokCallToAction
+    url: string
+  }): Promise<{ adId: string; videoId: string }> {
+    if (input.media.kind !== "video") {
+      throw refused("media", "TikTok shows video ads only.")
+    }
+    const token = input.accessToken
+    const advertiserId = input.advertiserId
+    const identity = await this.identity(token, advertiserId, input.brandName)
+    const videoId = await this.uploadVideo(token, advertiserId, input.media)
+    const imageId = await this.coverImage(token, advertiserId, videoId)
+    const adId = await this.createAd(token, advertiserId, {
+      adGroupId: input.adGroupId,
+      name: input.name,
+      identity,
+      videoId,
+      imageId,
+      text: input.text,
+      callToAction: input.callToAction,
+      url: input.url,
+    })
+    return { adId, videoId }
+  }
+
+  // Changes an ad group's daily budget, in the ad account's currency.
+  async setAdGroupBudget(input: {
+    accessToken: string
+    advertiserId: string
+    adGroupId: string
+    dailyBudget: number
+  }): Promise<void> {
+    await this.call("ad_set", input.accessToken, "POST", "/adgroup/update/", {
+      advertiser_id: input.advertiserId,
+      adgroup_id: input.adGroupId,
+      budget: input.dailyBudget,
+    })
   }
 
   // Switches a published campaign on or off.

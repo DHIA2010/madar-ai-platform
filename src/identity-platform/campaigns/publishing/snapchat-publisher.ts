@@ -274,7 +274,10 @@ export class SnapchatCampaignPublisher {
     return pixel.id as string
   }
 
-  private async uploadMedia(token: string, input: SnapchatPublishInput): Promise<string> {
+  private async uploadMedia(
+    token: string,
+    input: Pick<SnapchatPublishInput, "adAccountId" | "media" | "name">
+  ): Promise<string> {
     const { adAccountId, media } = input
     const created = this.created(
       "media",
@@ -404,49 +407,14 @@ export class SnapchatCampaignPublisher {
       )
       const adSquadId = adSquad.id as string
 
-      const mediaId = await this.uploadMedia(token, input)
-
-      const creative = this.created(
-        "creative",
-        await this.call("creative", token, "POST", `/adaccounts/${account}/creatives`, {
-          creatives: [
-            {
-              ad_account_id: account,
-              name: input.name,
-              type: "WEB_VIEW",
-              headline: input.headline,
-              brand_name: input.brandName,
-              shareable: true,
-              call_to_action: input.callToAction,
-              top_snap_media_id: mediaId,
-              web_view_properties: { url: input.url },
-              profile_properties: { profile_id: profileId },
-            },
-          ],
-        }),
-        "creatives",
-        "creative"
-      )
-      const creativeId = creative.id as string
-
-      const ad = this.created(
-        "ad",
-        await this.call("ad", token, "POST", `/adsquads/${adSquadId}/ads`, {
-          ads: [
-            {
-              ad_squad_id: adSquadId,
-              creative_id: creativeId,
-              name: input.name,
-              type: "REMOTE_WEBPAGE",
-              status: "ACTIVE",
-            },
-          ],
-        }),
-        "ads",
-        "ad"
-      )
-
-      return { campaignId, adSquadId, mediaId, creativeId, adId: ad.id as string }
+      const made = await this.createAd(token, { ...input, adSquadId, profileId })
+      return {
+        campaignId,
+        adSquadId,
+        mediaId: made.mediaId,
+        creativeId: made.creativeId,
+        adId: made.adId,
+      }
     } catch (error) {
       // Nothing half-built stays on the account. Deleting the campaign takes its ad set and ad
       // with it; a failure to delete must not hide the original reason.
@@ -455,6 +423,114 @@ export class SnapchatCampaignPublisher {
       )
       throw error
     }
+  }
+
+  // The file, the creative that shows it, and the ad that puts the creative in an ad set: the
+  // last three pieces of a publish, and all of "add an ad to an ad set that already exists".
+  private async createAd(
+    token: string,
+    input: Pick<
+      SnapchatPublishInput,
+      "adAccountId" | "name" | "media" | "brandName" | "headline" | "callToAction" | "url"
+    > & { adSquadId: string; profileId: string }
+  ): Promise<{ mediaId: string; creativeId: string; adId: string; ad: Json }> {
+    const mediaId = await this.uploadMedia(token, input)
+    const creative = this.created(
+      "creative",
+      await this.call("creative", token, "POST", `/adaccounts/${input.adAccountId}/creatives`, {
+        creatives: [
+          {
+            ad_account_id: input.adAccountId,
+            name: input.name,
+            type: "WEB_VIEW",
+            headline: input.headline,
+            brand_name: input.brandName,
+            shareable: true,
+            call_to_action: input.callToAction,
+            top_snap_media_id: mediaId,
+            web_view_properties: { url: input.url },
+            profile_properties: { profile_id: input.profileId },
+          },
+        ],
+      }),
+      "creatives",
+      "creative"
+    )
+    const creativeId = creative.id as string
+    const ad = this.created(
+      "ad",
+      await this.call("ad", token, "POST", `/adsquads/${input.adSquadId}/ads`, {
+        ads: [
+          {
+            ad_squad_id: input.adSquadId,
+            creative_id: creativeId,
+            name: input.name,
+            type: "REMOTE_WEBPAGE",
+            status: "ACTIVE",
+          },
+        ],
+      }),
+      "ads",
+      "ad"
+    )
+    return { mediaId, creativeId, adId: ad.id as string, ad }
+  }
+
+  // A new ad in an ad set that already exists. Returns the ad as Snapchat now holds it.
+  async addAd(input: {
+    accessToken: string
+    adAccountId: string
+    adSquadId: string
+    name: string
+    media: SnapchatPublishInput["media"]
+    brandName: string
+    headline: string
+    callToAction: SnapchatCallToAction
+    url: string
+  }): Promise<{ mediaId: string; creativeId: string; adId: string; ad: Json }> {
+    const profileId = await this.publicProfileId(input.accessToken, input.adAccountId)
+    return this.createAd(input.accessToken, { ...input, profileId })
+  }
+
+  // Changes an ad set's daily budget. Like its switch, an ad set is updated by sending the
+  // whole of it back through its campaign with the one field changed. Returns the ad set as
+  // Snapchat now holds it.
+  async setAdSquadBudget(input: {
+    accessToken: string
+    adSquadId: string
+    dailyBudget: number
+  }): Promise<Json> {
+    const shape = ENTITY_SHAPES.ad_set
+    const body = await this.call(
+      "ad_set",
+      input.accessToken,
+      "GET",
+      `/${shape.list}/${input.adSquadId}`
+    )
+    const current = (Array.isArray(body[shape.list]) ? (body[shape.list] as Json[]) : [])[0]?.[
+      shape.item
+    ] as Json | undefined
+    const campaignId = current?.[shape.parentKey]
+    if (!current || typeof campaignId !== "string") {
+      throw new SnapchatPublishError("ad_set", "It is no longer on Snapchat.", "SNAPCHAT_GONE")
+    }
+    const next: Json = Object.fromEntries(
+      Object.entries(current).filter(([key]) => !shape.readOnly.has(key))
+    )
+    next.daily_budget_micro = Math.round(input.dailyBudget * 1_000_000)
+    const saved = this.created(
+      "ad_set",
+      await this.call(
+        "ad_set",
+        input.accessToken,
+        "PUT",
+        `/${shape.parentList}/${campaignId}/${shape.list}`,
+        { [shape.list]: [next] }
+      ),
+      shape.list,
+      shape.item
+    )
+    return { ...current, ...saved }
   }
 
   // Deletes a published campaign from the account, with its ad set and ad. A campaign that is

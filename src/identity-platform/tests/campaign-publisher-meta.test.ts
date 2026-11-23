@@ -134,6 +134,7 @@ function fakeMeta(
       })
     }
     if (method === "POST" && path === "/camp-1") return reply({ success: true })
+    if (method === "POST" && path === "/set-1") return reply({ success: true })
     if (method === "DELETE") return reply({ success: true })
     return reply({ error: { message: `unexpected ${method} ${path}`, code: 1 } }, 404)
   }) as typeof fetch
@@ -420,5 +421,82 @@ describe("publishing to Meta", () => {
     await expect(
       refused.publisher.deleteCampaign({ accessToken: "token", campaignId: "camp-1" })
     ).rejects.toMatchObject({ reason: "Try again later", code: "META_REFUSED" })
+  })
+
+  const adInput = () => ({
+    accessToken: "token",
+    adAccountId: "1234567890",
+    adSetId: "set-9",
+    name: "إعلان جديد",
+    media: { kind: "image" as const, bytes: PNG, contentType: "image/png", fileName: "a.png" },
+    text: "جرّب مدار مجاناً",
+    headline: "كاشير سريع",
+    callToAction: "SHOP_NOW" as const,
+    url: "https://example.com/?utm_source=meta",
+  })
+
+  it("adds an ad to an ad set that exists, without a new campaign or ad set", async () => {
+    const { calls, publisher } = fakeMeta()
+    const ids = await publisher.addAd(adInput())
+    expect(ids).toEqual({ adId: "ad-1", creativeId: "creative-1" })
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      `GET /${ACCOUNT}/promote_pages`,
+      `POST /${ACCOUNT}/adimages`,
+      `POST /${ACCOUNT}/adcreatives`,
+      `POST /${ACCOUNT}/ads`,
+    ])
+    expect(calls.find((call) => call.path === `/${ACCOUNT}/adcreatives`)?.body).toEqual({
+      name: "إعلان جديد",
+      object_story_spec: {
+        page_id: "page-1",
+        link_data: {
+          link: "https://example.com/?utm_source=meta",
+          message: "جرّب مدار مجاناً",
+          name: "كاشير سريع",
+          image_hash: "hash-1",
+          call_to_action: {
+            type: "SHOP_NOW",
+            value: { link: "https://example.com/?utm_source=meta" },
+          },
+        },
+      },
+    })
+    expect(calls.find((call) => call.path === `/${ACCOUNT}/ads`)?.body).toEqual({
+      name: "إعلان جديد",
+      adset_id: "set-9",
+      creative: { creative_id: "creative-1" },
+      status: "ACTIVE",
+    })
+  })
+
+  it("reports Meta's reason when a new ad's creative is refused, and deletes nothing", async () => {
+    const { calls, publisher } = fakeMeta({ refuse: "/adcreatives" })
+    const error = await publisher.addAd(adInput()).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(PlatformPublishError)
+    expect(error).toMatchObject({
+      platform: "meta",
+      step: "creative",
+      reason: "The headline is too long",
+      code: "META_REFUSED",
+    })
+    expect(calls.some((call) => call.path === `/${ACCOUNT}/ads`)).toBe(false)
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false)
+  })
+
+  it("changes an ad set's daily budget, in the currency's smallest unit", async () => {
+    const { calls, publisher } = fakeMeta()
+    await publisher.setAdSetBudget({ accessToken: "token", adSetId: "set-1", dailyBudget: 75.5 })
+    expect(calls).toEqual([
+      { method: "POST", path: "/set-1", query: "", body: { daily_budget: 7550 } },
+    ])
+
+    const denied = fakeMeta({ refuse: "/set-1", refuseDenied: true })
+    await expect(
+      denied.publisher.setAdSetBudget({ accessToken: "token", adSetId: "set-1", dailyBudget: 50 })
+    ).rejects.toMatchObject({
+      step: "ad_set",
+      code: "META_ACCESS_DENIED",
+      reason: "(#200) Requires ads_management permission",
+    })
   })
 })

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { IdentityError } from "../application/errors/IdentityError"
 import { GoogleAdsMutateError } from "../google-ads/client"
@@ -8,12 +10,33 @@ import {
   type GoogleControlTarget,
   type TikTokOperation,
 } from "./control-platforms"
-import { SnapchatPublishError, type SnapchatEntityLevel } from "./publishing/snapchat-publisher"
+import type { CampaignCreativesService } from "./creatives"
+import {
+  PlatformPublishError,
+  type MetaCallToAction,
+  type PublishMedia,
+  type TikTokCallToAction,
+} from "./publishing/platform"
+import {
+  creativeProblemFor,
+  MIN_DAILY_BUDGETS,
+  withCampaignTracking,
+  type PublishPlatform,
+} from "./publishing/service"
+import {
+  SnapchatPublishError,
+  type SnapchatCallToAction,
+  type SnapchatEntityLevel,
+} from "./publishing/snapchat-publisher"
 
 // Switching a campaign, an ad group or an ad on or off -- or deleting it -- from the campaigns
 // list. The list shows what the last sync brought from each ad platform (performance-service.ts);
 // this acts on the platform itself and then corrects Madar's own copy, so the list is right at
 // once instead of after the next sync.
+//
+// It also adds to what is already running: a new ad in an ad group that exists (the file, the
+// text and the link are sent to the platform, and the new ad joins Madar's copy at once), and an
+// ad group's daily budget.
 //
 // Snapchat, TikTok, Google Ads and Meta. (Meta only answers once its connection has been granted
 // the permission to manage ads; until then it refuses, and the refusal is passed on.)
@@ -34,6 +57,85 @@ export interface SnapchatControl {
     level: SnapchatEntityLevel
     id: string
   }): Promise<void>
+  addAd?(input: {
+    accessToken: string
+    adAccountId: string
+    adSquadId: string
+    name: string
+    media: PublishMedia
+    brandName: string
+    headline: string
+    callToAction: SnapchatCallToAction
+    url: string
+  }): Promise<{ adId: string; ad: Record<string, unknown> }>
+  setAdSquadBudget?(input: {
+    accessToken: string
+    adSquadId: string
+    dailyBudget: number
+  }): Promise<Record<string, unknown>>
+}
+
+// What adds an ad or changes a budget on TikTok, Meta and Google (their publishers).
+export interface TikTokAdder {
+  addAd(input: {
+    accessToken: string
+    advertiserId: string
+    adGroupId: string
+    name: string
+    media: PublishMedia
+    brandName: string
+    text: string
+    callToAction: TikTokCallToAction
+    url: string
+  }): Promise<{ adId: string }>
+  setAdGroupBudget(input: {
+    accessToken: string
+    advertiserId: string
+    adGroupId: string
+    dailyBudget: number
+  }): Promise<void>
+}
+export interface MetaAdder {
+  addAd(input: {
+    accessToken: string
+    adAccountId: string
+    adSetId: string
+    name: string
+    media: PublishMedia
+    text: string
+    headline: string
+    callToAction: MetaCallToAction
+    url: string
+  }): Promise<{ adId: string }>
+  setAdSetBudget(input: {
+    accessToken: string
+    adSetId: string
+    dailyBudget: number
+  }): Promise<void>
+}
+export interface GoogleAdder {
+  addAd(input: {
+    connectionId: string
+    customerId: string
+    adGroupId: string
+    headlines: string[]
+    descriptions: string[]
+    url: string
+  }): Promise<{ adId: string }>
+}
+
+// A new ad for an ad group that already exists. Snapchat, TikTok and Meta take a creative from
+// the library with their own text; Google takes a search ad's headlines and descriptions.
+export interface AddAdInput {
+  name: string
+  url: string
+  creativeId?: string | null
+  brandName?: string | null
+  headline?: string | null
+  text?: string | null
+  callToAction?: string | null
+  headlines?: string[] | null
+  descriptions?: string[] | null
 }
 
 export interface TikTokControl {
@@ -62,10 +164,21 @@ interface TokenAccess {
 
 export interface CampaignControlPlatforms {
   snapchat?: { access: TokenAccess; api: SnapchatControl }
-  tiktok?: { access: TokenAccess; api: TikTokControl }
-  google?: { api: GoogleControl }
-  meta?: { access: TokenAccess; api: MetaControl }
+  tiktok?: { access: TokenAccess; api: TikTokControl; adder?: TikTokAdder }
+  google?: { api: GoogleControl; adder?: GoogleAdder }
+  meta?: { access: TokenAccess; api: MetaControl; adder?: MetaAdder }
 }
+
+const SOURCE_PLATFORM: Record<string, PublishPlatform> = {
+  snapchat_ads: "snapchat",
+  tiktok_ads: "tiktok",
+  meta_ads: "meta",
+  google_ads: "google",
+}
+const incomplete = (field: string) =>
+  new IdentityError("CAMPAIGN_AD_INCOMPLETE", 422, "validation", `The ad needs: ${field}.`, {
+    field,
+  })
 
 const SNAPCHAT_LEVEL: Record<ControlLevel, SnapchatEntityLevel> = {
   campaign: "campaign",
@@ -137,6 +250,9 @@ async function onPlatform<T>(work: () => Promise<T>): Promise<T> {
     if (caught instanceof SnapchatPublishError) {
       throw new IdentityError(caught.code, 422, "external", caught.reason, { step: caught.step })
     }
+    if (caught instanceof PlatformPublishError) {
+      throw new IdentityError(caught.code, 422, "external", caught.reason, { step: caught.step })
+    }
     if (caught instanceof PlatformControlError) {
       throw new IdentityError(
         caught.denied ? "PLATFORM_ACCESS_DENIED" : "PLATFORM_REFUSED",
@@ -163,7 +279,9 @@ async function onPlatform<T>(work: () => Promise<T>): Promise<T> {
 export class CampaignControlService {
   constructor(
     private readonly db: PostgresDatabase,
-    private readonly platforms: CampaignControlPlatforms
+    private readonly platforms: CampaignControlPlatforms,
+    // The creative library, for adding an ad. Left out, ads cannot be added.
+    private readonly creatives: Pick<CampaignCreativesService, "get" | "readFile"> | null = null
   ) {}
 
   private split(rowId: string, level: ControlLevel): Target & { source: string } {
@@ -502,5 +620,306 @@ export class CampaignControlService {
     } else {
       await drop("google_ads_ads", "ad_id")
     }
+  }
+
+  // ---- Adding to what is running ----
+
+  // Madar's copy of a new ad, so the list shows it at once. The platform already has the ad, so
+  // a failure here must not fail the request: the next sync brings the row anyway.
+  private async insertRecord(
+    table: string,
+    target: Target,
+    entityId: string,
+    payload: Record<string, unknown>
+  ) {
+    await this.db
+      .query(
+        `INSERT INTO ${table}
+           (id, connection_id, customer_id, entity_type, entity_id, record_date, payload)
+         VALUES ($1, $2, $3, 'ads', $4, $5::date, $6::jsonb)`,
+        [
+          randomUUID(),
+          target.connectionId,
+          target.customerId,
+          entityId,
+          new Date().toISOString().slice(0, 10),
+          JSON.stringify(payload),
+        ]
+      )
+      .catch((error: unknown) =>
+        console.error("campaigns.control_add_ad_copy_failed", {
+          table,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      )
+  }
+
+  // A new ad in an ad group that already exists, on the ad group's own platform.
+  async addAd(
+    actor: AuthenticatedActor,
+    adGroupRowId: string,
+    input: AddAdInput
+  ): Promise<{ adId: string }> {
+    const target = this.split(adGroupRowId, "adGroup")
+    const platform = SOURCE_PLATFORM[target.source]
+    if (!platform) throw notSupported()
+    const name = input.name.trim()
+    let url: string
+    try {
+      if (new URL(input.url).protocol !== "https:") throw new Error("not https")
+      url = withCampaignTracking(input.url, name, platform)
+    } catch {
+      throw new IdentityError(
+        "PUBLISH_INVALID_URL",
+        422,
+        "validation",
+        "The website address has to start with https://."
+      )
+    }
+
+    if (platform === "google") {
+      const adder = this.google().adder
+      if (!adder) throw notSupported()
+      const resolved = await this.googleTarget(actor, target)
+      const made = await onPlatform(() =>
+        adder.addAd({
+          connectionId: resolved.connectionId,
+          customerId: resolved.customerId,
+          adGroupId: resolved.id,
+          headlines: (input.headlines ?? []).map((entry) => entry.trim()).filter(Boolean),
+          descriptions: (input.descriptions ?? []).map((entry) => entry.trim()).filter(Boolean),
+          url,
+        })
+      )
+      const adGroup = await this.db.query<{ campaign_id: string | null }>(
+        `SELECT campaign_id FROM google_ads_ad_groups
+          WHERE connection_id = $1 AND customer_id = $2 AND ad_group_id = $3`,
+        [target.connectionId, target.customerId, target.externalId]
+      )
+      await this.db
+        .query(
+          `INSERT INTO google_ads_ads
+             (id, connection_id, customer_id, ad_id, campaign_id, ad_group_id, status, ad_type,
+              headline)
+           VALUES ($1, $2, $3, $4, $5, $6, 'ENABLED', 'RESPONSIVE_SEARCH_AD', $7)`,
+          [
+            randomUUID(),
+            target.connectionId,
+            target.customerId,
+            made.adId,
+            adGroup.rows[0]?.campaign_id ?? null,
+            target.externalId,
+            (input.headlines ?? [])[0]?.trim() ?? name,
+          ]
+        )
+        .catch((error: unknown) =>
+          console.error("campaigns.control_add_ad_copy_failed", {
+            table: "google_ads_ads",
+            message: error instanceof Error ? error.message : String(error),
+          })
+        )
+      return made
+    }
+
+    // Whose ad group it is comes first: nothing about the ad is looked at for someone else's.
+    const owned = {
+      snapchat: ["snapchat_oauth_connections", "snapchat_records", SNAPCHAT_RECORD.adGroup],
+      tiktok: ["tiktok_ads_oauth_connections", "tiktok_ads_records", TIKTOK_RECORD.adGroup],
+      meta: ["meta_oauth_connections", "meta_records", META_RECORD.adGroup],
+    }[platform]
+    await this.ownConnection(actor, owned[0], target.connectionId)
+    await this.record(owned[1], target, owned[2])
+
+    if (!this.creatives) throw notSupported()
+    if (!input.creativeId) throw incomplete("creativeId")
+    const headline = input.headline?.trim()
+    if (!headline) throw incomplete("headline")
+    const callToAction = input.callToAction?.trim()
+    if (!callToAction) throw incomplete("callToAction")
+    const creative = await this.creatives.get(actor.organizationId, input.creativeId)
+    const problem = creativeProblemFor(platform, creative)
+    if (problem) {
+      throw new IdentityError(
+        "PUBLISH_CREATIVE_NOT_SUITABLE",
+        422,
+        "validation",
+        "The creative does not fit the platform.",
+        { problem }
+      )
+    }
+    const file = async (): Promise<PublishMedia> => {
+      const read = await this.creatives!.readFile(actor.organizationId, input.creativeId!)
+      return {
+        kind: read.creative.kind,
+        bytes: read.bytes,
+        contentType: read.creative.contentType,
+        fileName: read.fileName,
+      }
+    }
+
+    if (platform === "snapchat") {
+      const { access, api } = this.snapchat()
+      if (!api.addAd) throw notSupported()
+      const brandName = input.brandName?.trim()
+      if (!brandName) throw incomplete("brandName")
+      await this.ownConnection(actor, "snapchat_oauth_connections", target.connectionId)
+      await this.record("snapchat_records", target, SNAPCHAT_RECORD.adGroup)
+      const addAd = api.addAd.bind(api)
+      const made = await onPlatform(async () =>
+        addAd({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          adAccountId: target.customerId,
+          adSquadId: target.externalId,
+          name,
+          media: await file(),
+          brandName,
+          headline,
+          callToAction: callToAction as SnapchatCallToAction,
+          url,
+        })
+      )
+      await this.insertRecord("snapchat_records", target, made.adId, {
+        ...made.ad,
+        name,
+        status: "ACTIVE",
+        ad_squad_id: target.externalId,
+      })
+      return { adId: made.adId }
+    }
+
+    if (platform === "tiktok") {
+      const { access, adder } = this.tiktok()
+      if (!adder) throw notSupported()
+      const brandName = input.brandName?.trim()
+      if (!brandName) throw incomplete("brandName")
+      await this.ownConnection(actor, "tiktok_ads_oauth_connections", target.connectionId)
+      const own = await this.record("tiktok_ads_records", target, TIKTOK_RECORD.adGroup)
+      const made = await onPlatform(async () =>
+        adder.addAd({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          advertiserId: target.customerId,
+          adGroupId: target.externalId,
+          name,
+          media: await file(),
+          brandName,
+          text: headline,
+          callToAction: callToAction as TikTokCallToAction,
+          url,
+        })
+      )
+      await this.insertRecord("tiktok_ads_records", target, made.adId, {
+        ad_id: made.adId,
+        ad_name: name,
+        adgroup_id: target.externalId,
+        campaign_id: parse(own.payload).campaign_id ?? null,
+        operation_status: "ENABLE",
+      })
+      return { adId: made.adId }
+    }
+
+    const { access, adder } = this.meta()
+    if (!adder) throw notSupported()
+    const text = input.text?.trim()
+    if (!text) throw incomplete("text")
+    await this.ownConnection(actor, "meta_oauth_connections", target.connectionId)
+    const own = await this.record("meta_records", target, META_RECORD.adGroup)
+    const made = await onPlatform(async () =>
+      adder.addAd({
+        accessToken: await access.resolveAccessToken(target.connectionId),
+        adAccountId: target.customerId,
+        adSetId: target.externalId,
+        name,
+        media: await file(),
+        text,
+        headline,
+        callToAction: callToAction as MetaCallToAction,
+        url,
+      })
+    )
+    await this.insertRecord("meta_records", target, made.adId, {
+      id: made.adId,
+      ad_id: made.adId,
+      name,
+      adset_id: target.externalId,
+      campaign_id: parse(own.payload).campaign_id ?? null,
+      status: "ACTIVE",
+      effective_status: "ACTIVE",
+    })
+    return { adId: made.adId }
+  }
+
+  // An ad group's daily budget, in its ad account's currency. Snapchat, TikTok and Meta keep
+  // the budget on the ad group; on Google it sits on the campaign, which is not changed here.
+  async setDailyBudget(
+    actor: AuthenticatedActor,
+    adGroupRowId: string,
+    dailyBudget: number
+  ): Promise<{ id: string; dailyBudget: number }> {
+    const target = this.split(adGroupRowId, "adGroup")
+    const platform = SOURCE_PLATFORM[target.source]
+    if (!platform || platform === "google") throw notSupported()
+    const minimum = MIN_DAILY_BUDGETS[platform]
+    if (!(dailyBudget >= minimum)) {
+      throw new IdentityError(
+        "PUBLISH_BUDGET_TOO_LOW",
+        422,
+        "validation",
+        `The daily budget starts at ${minimum}.`,
+        { minimum }
+      )
+    }
+    if (platform === "snapchat") {
+      const { access, api } = this.snapchat()
+      if (!api.setAdSquadBudget) throw notSupported()
+      await this.ownConnection(actor, "snapchat_oauth_connections", target.connectionId)
+      const own = await this.record("snapchat_records", target, SNAPCHAT_RECORD.adGroup)
+      const setBudget = api.setAdSquadBudget.bind(api)
+      const saved = await onPlatform(async () =>
+        setBudget({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          adSquadId: target.externalId,
+          dailyBudget,
+        })
+      )
+      await this.savePayload("snapchat_records", own.id, {
+        ...parse(own.payload),
+        ...saved,
+        daily_budget_micro: Math.round(dailyBudget * 1_000_000),
+      })
+    } else if (platform === "tiktok") {
+      const { access, adder } = this.tiktok()
+      if (!adder) throw notSupported()
+      await this.ownConnection(actor, "tiktok_ads_oauth_connections", target.connectionId)
+      const own = await this.record("tiktok_ads_records", target, TIKTOK_RECORD.adGroup)
+      await onPlatform(async () =>
+        adder.setAdGroupBudget({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          advertiserId: target.customerId,
+          adGroupId: target.externalId,
+          dailyBudget,
+        })
+      )
+      await this.savePayload("tiktok_ads_records", own.id, {
+        ...parse(own.payload),
+        budget: dailyBudget,
+      })
+    } else {
+      const { access, adder } = this.meta()
+      if (!adder) throw notSupported()
+      await this.ownConnection(actor, "meta_oauth_connections", target.connectionId)
+      const own = await this.record("meta_records", target, META_RECORD.adGroup)
+      await onPlatform(async () =>
+        adder.setAdSetBudget({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          adSetId: target.externalId,
+          dailyBudget,
+        })
+      )
+      await this.savePayload("meta_records", own.id, {
+        ...parse(own.payload),
+        daily_budget: String(Math.round(dailyBudget * 100)),
+      })
+    }
+    return { id: target.rowId, dailyBudget }
   }
 }

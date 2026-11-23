@@ -388,4 +388,95 @@ describe("the Google Ads search campaign publisher", () => {
       code: "GOOGLE_ACCESS_DENIED",
     })
   })
+
+  it("sends no more headlines and descriptions than Google takes in one ad", async () => {
+    const { publisher, calls } = fakeGoogle()
+    await publisher.publish(
+      input({
+        headlines: Array.from({ length: 16 }, (_, i) => `Headline ${i + 1}`),
+        descriptions: Array.from({ length: 5 }, (_, i) => `Description ${i + 1}.`),
+      })
+    )
+    const ad = created(calls[5]).ad as {
+      responsiveSearchAd: { headlines: Array<{ text: string }>; descriptions: unknown[] }
+    }
+    expect(ad.responsiveSearchAd.headlines).toHaveLength(15)
+    expect(ad.responsiveSearchAd.headlines.at(-1)).toEqual({ text: "Headline 15" })
+    expect(ad.responsiveSearchAd.descriptions).toHaveLength(4)
+  })
+
+  const adInput = () => ({
+    connectionId: CONNECTION,
+    customerId: CUSTOMER,
+    adGroupId: "21",
+    headlines: [" Cashier for your shop ", "Try it free", "", "Works in Arabic"],
+    descriptions: ["Sell, track stock and invoice from one place.", "Start in minutes."],
+    url: "https://www.example.com/pos",
+  })
+
+  it("adds a text ad to an ad group that exists", async () => {
+    const { publisher, calls } = fakeGoogle()
+    await expect(publisher.addAd(adInput())).resolves.toEqual({ adId: "31" })
+    expect(calls).toEqual([
+      {
+        connectionId: CONNECTION,
+        customerId: CUSTOMER,
+        service: "adGroupAds",
+        operations: [
+          {
+            create: {
+              adGroup: AD_GROUP,
+              status: "ENABLED",
+              ad: {
+                finalUrls: ["https://www.example.com/pos"],
+                responsiveSearchAd: {
+                  headlines: [
+                    { text: "Cashier for your shop" },
+                    { text: "Try it free" },
+                    { text: "Works in Arabic" },
+                  ],
+                  descriptions: [
+                    { text: "Sell, track stock and invoice from one place." },
+                    { text: "Start in minutes." },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+    ])
+  })
+
+  it("refuses a new ad whose text does not fit before asking Google", async () => {
+    const { publisher, calls } = fakeGoogle()
+    const refusedCases = [
+      { headlines: ["One", "Two"] },
+      { headlines: ["One", "Two", "x".repeat(31)] },
+      { descriptions: ["Only one."] },
+    ]
+    for (const overrides of refusedCases) {
+      await expect(publisher.addAd({ ...adInput(), ...overrides })).rejects.toMatchObject({
+        name: "PlatformPublishError",
+        platform: "google",
+        step: "ad",
+        code: "GOOGLE_REFUSED",
+      })
+    }
+    expect(calls).toEqual([])
+  })
+
+  it("reports a new ad the connection is not allowed to create as an access denial", async () => {
+    const { publisher, calls } = fakeGoogle({
+      refuse: { adGroupAds: new GoogleAdsMutateError(403, "The caller does not have permission.") },
+    })
+    await expect(publisher.addAd(adInput())).rejects.toMatchObject({
+      platform: "google",
+      step: "ad",
+      code: "GOOGLE_ACCESS_DENIED",
+      reason: "The caller does not have permission.",
+    })
+    // Nothing was created, so nothing is removed.
+    expect(calls).toHaveLength(1)
+  })
 })

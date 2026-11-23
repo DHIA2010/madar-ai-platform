@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useLocale, useTranslations } from "next-intl"
 import { subDays } from "date-fns"
-import { ChevronDown, Loader2, Plus, Search, Trash2 } from "lucide-react"
+import { ChevronDown, Loader2, Plus, Search, Trash2, Wallet } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
 
@@ -24,6 +24,12 @@ import {
   canControlCampaignRow,
   isCampaignRowSwitchedOn,
 } from "../services/campaign-performance.service"
+import {
+  AdGroupAddAdDialog,
+  AdGroupBudgetDialog,
+  campaignRowPublishPlatform,
+  canChangeAdGroupBudget,
+} from "./campaign-ad-group-actions"
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { campaignStatusBucket, campaignStatusPill } from "./campaign-status-pill"
 
@@ -86,6 +92,9 @@ export function CampaignListScreen() {
   const [switching, setSwitching] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<CampaignPerformanceRow | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  // The ad group a new ad is being added to, and the one whose daily budget is being changed.
+  const [addingAdTo, setAddingAdTo] = useState<CampaignPerformanceRow | null>(null)
+  const [budgetOf, setBudgetOf] = useState<CampaignPerformanceRow | null>(null)
 
   const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
   const endDay = dateRange?.to ?? dateRange?.from
@@ -347,6 +356,32 @@ export function CampaignListScreen() {
                 fallback={<span className={cn("text-[12px]", MUTED)}>—</span>}
               >
                 <div className="flex items-center justify-center gap-2">
+                  {row.level === "adGroup" && campaignRowPublishPlatform(row) ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setAddingAdTo(row)}
+                        aria-label={t("listScreen.controls.addAd.buttonLabel", { name: row.name })}
+                        title={t("listScreen.controls.addAd.button")}
+                        className="flex size-10 items-center justify-center rounded-[10px] text-[#1d4fd8] transition-colors hover:bg-[#eef4ff]"
+                      >
+                        <Plus className="size-4" />
+                      </button>
+                      {canChangeAdGroupBudget(row) ? (
+                        <button
+                          type="button"
+                          onClick={() => setBudgetOf(row)}
+                          aria-label={t("listScreen.controls.budget.buttonLabel", {
+                            name: row.name,
+                          })}
+                          title={t("listScreen.controls.budget.button")}
+                          className="flex size-10 items-center justify-center rounded-[10px] text-[#137a41] transition-colors hover:bg-[#e7f8ee]"
+                        >
+                          <Wallet className="size-4" />
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null}
                   {switching === row.id ? (
                     <Loader2 className="size-5 animate-spin text-[#98a2b3]" />
                   ) : (
@@ -565,6 +600,20 @@ export function CampaignListScreen() {
         </div>
       </div>
 
+      <AdGroupAddAdDialog
+        row={addingAdTo}
+        onClose={() => setAddingAdTo(null)}
+        onAdded={(row) => {
+          // The new ad shows under its ad group at once.
+          setExpanded((current) => new Set(current).add(row.id))
+          void loadChildren(row)
+        }}
+      />
+      <AdGroupBudgetDialog
+        row={budgetOf}
+        onClose={() => setBudgetOf(null)}
+        onSaved={(row, dailyBudget) => patchRow(row, (entry) => ({ ...entry, dailyBudget }))}
+      />
       <AppConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {

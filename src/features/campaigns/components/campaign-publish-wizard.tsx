@@ -24,6 +24,8 @@ import {
   Loader2,
   MousePointerClick,
   PlugZap,
+  Plus,
+  Trash2,
   TriangleAlert,
   UserPlus,
 } from "lucide-react"
@@ -90,6 +92,9 @@ const PLATFORM_BADGE = {
 } as const
 const POLL_MS = 2500
 const MAX_KEYWORDS = 20
+// Google's own limits for one search ad.
+const MAX_GOOGLE_HEADLINES = 15
+const MAX_GOOGLE_DESCRIPTIONS = 4
 // The keywords as typed: one per line, or separated by commas.
 const keywordsOf = (text: string) =>
   [
@@ -1001,22 +1006,49 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
             <Field label={t("ad.headlines")} hint={t("ad.headlinesHint")} error={errors.headlines}>
               <div className="space-y-2.5">
                 {draft.headlines.map((value, index) => (
-                  <AppInput
-                    key={index}
-                    className={FIELD}
-                    maxLength={limits?.googleHeadlineMax ?? 30}
-                    placeholder={t("ad.headlineNumber", { number: index + 1 })}
-                    value={value}
-                    onChange={(event) =>
-                      set(
-                        "headlines",
-                        draft.headlines.map((entry, at) =>
-                          at === index ? event.target.value : entry
+                  <div key={index} className="flex items-center gap-2">
+                    <AppInput
+                      className={FIELD}
+                      maxLength={limits?.googleHeadlineMax ?? 30}
+                      placeholder={t("ad.headlineNumber", { number: index + 1 })}
+                      value={value}
+                      onChange={(event) =>
+                        set(
+                          "headlines",
+                          draft.headlines.map((entry, at) =>
+                            at === index ? event.target.value : entry
+                          )
                         )
-                      )
-                    }
-                  />
+                      }
+                    />
+                    {draft.headlines.length > 3 ? (
+                      <button
+                        type="button"
+                        aria-label={t("ad.removeLine")}
+                        title={t("ad.removeLine")}
+                        onClick={() =>
+                          set(
+                            "headlines",
+                            draft.headlines.filter((_, at) => at !== index)
+                          )
+                        }
+                        className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-[#b42318] hover:bg-[#fef3f2]"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    ) : null}
+                  </div>
                 ))}
+                {draft.headlines.length < MAX_GOOGLE_HEADLINES ? (
+                  <button
+                    type="button"
+                    onClick={() => set("headlines", [...draft.headlines, ""])}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-dashed border-[#cfd8e6] px-4 text-[13px] font-bold text-[#1d4fd8] hover:border-[#1d4fd8]/60"
+                  >
+                    <Plus className="size-4" />
+                    {t("ad.addHeadline")}
+                  </button>
+                ) : null}
               </div>
             </Field>
 
@@ -1027,22 +1059,49 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
             >
               <div className="space-y-2.5">
                 {draft.descriptions.map((value, index) => (
-                  <AppInput
-                    key={index}
-                    className={FIELD}
-                    maxLength={limits?.googleDescriptionMax ?? 90}
-                    placeholder={t("ad.descriptionNumber", { number: index + 1 })}
-                    value={value}
-                    onChange={(event) =>
-                      set(
-                        "descriptions",
-                        draft.descriptions.map((entry, at) =>
-                          at === index ? event.target.value : entry
+                  <div key={index} className="flex items-center gap-2">
+                    <AppInput
+                      className={FIELD}
+                      maxLength={limits?.googleDescriptionMax ?? 90}
+                      placeholder={t("ad.descriptionNumber", { number: index + 1 })}
+                      value={value}
+                      onChange={(event) =>
+                        set(
+                          "descriptions",
+                          draft.descriptions.map((entry, at) =>
+                            at === index ? event.target.value : entry
+                          )
                         )
-                      )
-                    }
-                  />
+                      }
+                    />
+                    {draft.descriptions.length > 2 ? (
+                      <button
+                        type="button"
+                        aria-label={t("ad.removeLine")}
+                        title={t("ad.removeLine")}
+                        onClick={() =>
+                          set(
+                            "descriptions",
+                            draft.descriptions.filter((_, at) => at !== index)
+                          )
+                        }
+                        className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-[#b42318] hover:bg-[#fef3f2]"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    ) : null}
+                  </div>
                 ))}
+                {draft.descriptions.length < MAX_GOOGLE_DESCRIPTIONS ? (
+                  <button
+                    type="button"
+                    onClick={() => set("descriptions", [...draft.descriptions, ""])}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-dashed border-[#cfd8e6] px-4 text-[13px] font-bold text-[#1d4fd8] hover:border-[#1d4fd8]/60"
+                  >
+                    <Plus className="size-4" />
+                    {t("ad.addDescription")}
+                  </button>
+                ) : null}
               </div>
             </Field>
 
