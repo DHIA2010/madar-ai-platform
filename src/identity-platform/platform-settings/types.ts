@@ -29,6 +29,8 @@ export interface PlatformSettings {
   // Kept to named accounts until Meta's App Review grants the permission to the app: before
   // that, Meta only gives it to people with a role on Madar's Meta app.
   metaManageAdsEmails: string
+  // The key of Google's Places service, for the sales team's prospect finder (crm/prospects.ts).
+  googlePlacesApiKey: string
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -48,6 +50,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   quoteTerms: "",
   invoiceTerms: "",
   metaManageAdsEmails: "",
+  googlePlacesApiKey: "",
 }
 
 // The subset anyone may read (before signing in, too): what the login/sign-up pages and the

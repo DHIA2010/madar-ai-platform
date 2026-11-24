@@ -16,7 +16,17 @@ export interface CrmStageView {
 }
 
 // booking: booked a meeting straight from the Cal.com link (no website form first).
-export const CRM_SOURCES = ["website", "signup", "manual", "booking", "import"] as const
+// directory: chosen from the free directory of Saudi businesses. google_maps: chosen from a
+// Google Maps search. Both come in through the lead import, like a file's rows.
+export const CRM_SOURCES = [
+  "website",
+  "signup",
+  "manual",
+  "booking",
+  "import",
+  "directory",
+  "google_maps",
+] as const
 export type CrmSource = (typeof CRM_SOURCES)[number]
 
 // What a salesperson can log by hand; the rest are recorded by the system.

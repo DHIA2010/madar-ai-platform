@@ -1,0 +1,45 @@
+name: Saudi places directory
+
+# Keeps Madar Admin's free directory of Saudi businesses up to date (crm/places.ts). Once a day
+# it asks Madar which release of the Overture Maps open data it holds; when a newer one is out
+# (about monthly), or the sales team asked for a fresh load, it reads that release and sends
+# the Saudi rows to Madar. Most days it finds nothing to do and ends in seconds.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Load again even when Madar already holds the newest release"
+        type: boolean
+        default: false
+
+# id-token: the identity token this run shows Madar instead of a stored password.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: saudi-places
+  cancel-in-progress: false
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/saudi-places
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the loader
+        working-directory: tools/saudi-places
+        run: npm ci
+      - name: Load the Saudi businesses
+        working-directory: tools/saudi-places
+        env:
+          API_BASE: https://api.madar.my
+          FORCE: ${{ inputs.force || false }}
+        run: node load.mjs

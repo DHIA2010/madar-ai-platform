@@ -25,13 +25,18 @@ type Column = keyof CrmImportRow
 const PIECE = 1000
 
 export const crmImportService = {
-  async importLeads(tag: string, rows: CrmImportRow[]): Promise<CrmImportResult> {
+  // source: where the rows came from, when not a file (the prospect finder's two sources).
+  async importLeads(
+    tag: string,
+    rows: CrmImportRow[],
+    source?: "directory" | "google_maps"
+  ): Promise<CrmImportResult> {
     const total: CrmImportResult = { created: 0, duplicates: 0, invalid: 0 }
     for (let start = 0; start < rows.length; start += PIECE) {
-      const piece = await client.post<{ tag: string; rows: CrmImportRow[] }, CrmImportResult>(
-        ENDPOINT,
-        { tag, rows: rows.slice(start, start + PIECE) }
-      )
+      const piece = await client.post<
+        { tag: string; rows: CrmImportRow[]; source?: string },
+        CrmImportResult
+      >(ENDPOINT, { tag, rows: rows.slice(start, start + PIECE), ...(source ? { source } : {}) })
       total.created += piece.created
       total.duplicates += piece.duplicates
       total.invalid += piece.invalid

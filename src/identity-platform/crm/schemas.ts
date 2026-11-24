@@ -187,6 +187,35 @@ export const crmInvoicePeriodSchema = z.object({
 
 export const crmTermsSchema = z.object({ terms: z.string().max(5000).nullable() })
 
+// The prospect finder: a search of Google Maps, the team's mark on a place, a website to read.
+export const crmProspectSearchSchema = z.object({
+  query: z.string().trim().min(2).max(160),
+  pageToken: z.string().max(2000).optional(),
+  // A square of the map to search inside (a mall): its middle and half its width in metres.
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
+  radius: z.coerce.number().int().min(50).max(2000).optional(),
+  // Go on past the month's free searches, at Google's price.
+  allowPaid: z.enum(["true", "false"]).optional(),
+})
+// The free directory: an activity, words, a city or a point with a distance, and the page.
+export const crmPlacesSearchSchema = z.object({
+  activity: z.string().max(40).optional(),
+  keyword: z.string().trim().max(80).optional(),
+  city: z.string().max(40).optional(),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
+  radius: z.coerce.number().int().min(50).max(5000).optional(),
+  mobileOnly: z.enum(["true", "false"]).optional(),
+  offset: z.coerce.number().int().min(0).max(200000).optional(),
+})
+export const crmProspectMarkSchema = z.object({
+  placeId: z.string().trim().min(5).max(300),
+  status: z.enum(["contacted", "interested", "not_interested", "no_answer"]).nullable(),
+  note: z.string().trim().max(500).nullish(),
+})
+export const crmProspectEmailSchema = z.object({ website: z.string().trim().url().max(500) })
+
 export const publicInvoiceCouponSchema = z.object({ code: z.string().trim().min(1).max(40) })
 
 export const publicInvoiceConfirmSchema = z.object({

@@ -13,6 +13,8 @@ const cell = (max: number) =>
 export const crmLeadImportSchema = z.object({
   // The label every lead of this file carries, so the batch can be found and filtered later.
   tag: z.string().trim().min(1).max(40),
+  // Where the rows came from: a file (the default), the free directory, or a Google Maps search.
+  source: z.enum(["import", "directory", "google_maps"]).optional(),
   rows: z
     .array(
       z.object({

@@ -32,6 +32,7 @@ type GeneralSettings = Pick<
   | "quoteTerms"
   | "invoiceTerms"
   | "metaManageAdsEmails"
+  | "googlePlacesApiKey"
 >
 
 // Platform-wide settings, saved to the backend and applied immediately: the announcement banner
@@ -60,6 +61,7 @@ export function MadarAdminSettings() {
           quoteTerms: loaded.quoteTerms ?? "",
           invoiceTerms: loaded.invoiceTerms ?? "",
           metaManageAdsEmails: loaded.metaManageAdsEmails ?? "",
+          googlePlacesApiKey: loaded.googlePlacesApiKey ?? "",
         })
       )
       .catch(() => toast.error("تعذر تحميل إعدادات المنصة."))
@@ -279,6 +281,24 @@ export function MadarAdminSettings() {
             />
           </div>
         </div>
+      </AppCard>
+
+      <AppCard className="rounded-[14px] border-border bg-white p-5 shadow-none">
+        <h2 className="text-base font-bold text-foreground">البحث عن عملاء في خرائط قوقل</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          مفتاح خدمة Google Places (New) من حسابكم في Google Cloud. تستخدمه صفحة «البحث عن عملاء» في
+          المبيعات. كل بحث يُحسب على حسابكم في قوقل.
+        </p>
+        <AppInput
+          type="password"
+          dir="ltr"
+          autoComplete="off"
+          className="mt-3"
+          placeholder="AIza..."
+          aria-label="مفتاح Google Places"
+          value={settings?.googlePlacesApiKey ?? ""}
+          onChange={(event) => update("googlePlacesApiKey", event.target.value)}
+        />
       </AppCard>
 
       <AppCard className="rounded-[14px] border-border bg-white p-5 shadow-none">

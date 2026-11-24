@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   ListChecks,
   MessageCircle,
+  MapPinned,
   ReceiptText,
   UserCheck,
   Settings2,
@@ -153,6 +154,12 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       title: "العملاء المحتملون",
       url: ROUTES.madarAdminCrm,
       icon: <Target />,
+      permission: "crm:manage",
+    },
+    {
+      title: "البحث عن عملاء",
+      url: ROUTES.madarAdminCrmProspects,
+      icon: <MapPinned />,
       permission: "crm:manage",
     },
     {

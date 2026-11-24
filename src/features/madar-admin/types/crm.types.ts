@@ -12,7 +12,15 @@ export interface CrmStageDef {
   system: boolean
 }
 // booking: booked a meeting straight from the Cal.com link. import: brought in from a file.
-export type CrmSource = "website" | "signup" | "manual" | "booking" | "import"
+// directory: chosen from the free directory of businesses. google_maps: from a Google Maps search.
+export type CrmSource =
+  | "website"
+  | "signup"
+  | "manual"
+  | "booking"
+  | "import"
+  | "directory"
+  | "google_maps"
 export type CrmLoggableActivity = "note" | "call" | "whatsapp" | "email"
 export type CrmActivityKind =
   | CrmLoggableActivity
@@ -133,6 +141,66 @@ export interface CrmActivity {
   meta: Record<string, unknown>
   actor: CrmPerson | null
   createdAt: string
+}
+
+// The prospect finder: a business found on Google Maps (shown live, never saved), with the
+// team's own mark on it.
+export type CrmProspectStatus = "contacted" | "interested" | "not_interested" | "no_answer"
+export interface CrmProspectMark {
+  status: CrmProspectStatus
+  note: string | null
+  updatedAt: string
+  updatedBy: string | null
+}
+export interface CrmProspect {
+  placeId: string
+  name: string
+  category: string | null
+  address: string | null
+  phone: string | null
+  internationalPhone: string | null
+  website: string | null
+  mapsUrl: string | null
+  rating: number | null
+  ratings: number | null
+  closed: boolean
+  latitude: number | null
+  longitude: number | null
+  email: string | null
+  social: string | null
+  mark: CrmProspectMark | null
+}
+// The free directory of Saudi businesses: how fresh it is, and what a search can pick from.
+export interface CrmPlacesOverview {
+  release: string | null
+  loadedAt: string | null
+  places: number
+  refreshRequestedAt: string | null
+  activities: Array<{ key: string; label: string }>
+  cities: Array<{ key: string; label: string }>
+}
+export interface CrmPlacesQuery {
+  activity?: string
+  keyword?: string
+  city?: string
+  area?: CrmProspectArea | null
+  mobileOnly?: boolean
+  offset?: number
+}
+// This month's searches against Google's free allowance, and the price past it.
+export interface CrmProspectUsage {
+  month: string
+  used: number
+  free: number
+  remaining: number
+  usdPerSearch: number
+  paid: number
+  costUsd: number
+}
+export interface CrmProspectArea {
+  latitude: number
+  longitude: number
+  radius: number
 }
 
 export interface CrmTask {

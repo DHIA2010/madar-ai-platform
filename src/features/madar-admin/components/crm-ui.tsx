@@ -94,6 +94,8 @@ export const SOURCE_LABEL: Record<CrmSource, string> = {
   manual: "يدوي",
   booking: "رابط الحجز",
   import: "ملف مستورد",
+  directory: "دليل الأنشطة",
+  google_maps: "خرائط قوقل",
 }
 
 // Ad platforms and sites, as people say them.

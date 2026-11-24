@@ -36,6 +36,10 @@ import {
   crmStageDeleteQuerySchema,
   crmStageInputSchema,
   crmStageOrderSchema,
+  crmPlacesSearchSchema,
+  crmProspectEmailSchema,
+  crmProspectMarkSchema,
+  crmProspectSearchSchema,
   crmTermsSchema,
   crmViewInputSchema,
   crmViewListQuerySchema,
@@ -58,6 +62,8 @@ import {
   crmTaskListQuerySchema,
 } from "../../crm/schemas"
 import type { SalesDocumentsService } from "../../crm/sales-documents"
+import type { CrmPlacesDirectory } from "../../crm/places"
+import type { CrmProspectFinder } from "../../crm/prospects"
 import { crmLeadImportSchema } from "../../crm/import-schema"
 import type { CrmOutreach } from "../../crm/outreach"
 import type { CrmService } from "../../crm/service"
@@ -125,6 +131,10 @@ export async function handlePlatformAdminRoute(input: {
   // The CRM's WhatsApp messages sent by hand, and where their picture is kept.
   outreach?: CrmOutreach | null
   uploadOutreachImage?: ((body: Buffer, contentType: string) => Promise<string>) | null
+  // The prospect finder; absent where there is no database.
+  prospects?: CrmProspectFinder | null
+  // The free directory of Saudi businesses; absent where there is no database.
+  places?: CrmPlacesDirectory | null
   salesDocuments: SalesDocumentsService | null
   whatsapp: WhatsAppPlatformService | null
   whatsappTemplates: WhatsAppTemplatesService | null
@@ -177,7 +187,18 @@ export async function handlePlatformAdminRoute(input: {
   }
 
   if (path.startsWith("/crm"))
-    return handleCrmRoute({ method, path, query, actor, crm, salesDocuments, send, readJsonBody })
+    return handleCrmRoute({
+      method,
+      path,
+      query,
+      actor,
+      crm,
+      prospects: input.prospects ?? null,
+      places: input.places ?? null,
+      salesDocuments,
+      send,
+      readJsonBody,
+    })
 
   if (method === "GET" && path === "/customers") {
     const { page, pageSize, ...filters } = customerListQuerySchema.parse(query)
@@ -442,12 +463,81 @@ async function handleCrmRoute(input: {
   query: Record<string, string>
   actor: AuthenticatedActor
   crm: CrmService
+  prospects: CrmProspectFinder | null
+  places: CrmPlacesDirectory | null
   salesDocuments: SalesDocumentsService
   send: (status: number, body: unknown) => boolean
   readJsonBody: () => Promise<unknown>
 }): Promise<boolean> {
   const { method, path, query, actor, crm, salesDocuments: docs, send, readJsonBody } = input
   const route = path.slice("/crm".length)
+
+  // ---- The free directory of Saudi businesses ----
+  if (route.startsWith("/places") && input.places) {
+    const places = input.places
+    if (method === "GET" && route === "/places") {
+      return send(200, await places.overview(actor))
+    }
+    if (method === "GET" && route === "/places/search") {
+      const asked = crmPlacesSearchSchema.parse(query)
+      return send(
+        200,
+        await places.search(actor, {
+          activity: asked.activity,
+          keyword: asked.keyword,
+          city: asked.city,
+          area:
+            asked.latitude !== undefined && asked.longitude !== undefined
+              ? {
+                  latitude: asked.latitude,
+                  longitude: asked.longitude,
+                  radius: asked.radius ?? 300,
+                }
+              : null,
+          mobileOnly: asked.mobileOnly === "true",
+          offset: asked.offset,
+        })
+      )
+    }
+    if (method === "POST" && route === "/places/refresh") {
+      return send(200, await places.requestRefresh(actor))
+    }
+  }
+
+  // ---- The prospect finder ----
+  if (route.startsWith("/prospects") && input.prospects) {
+    const prospects = input.prospects
+    if (method === "GET" && route === "/prospects/search") {
+      const asked = crmProspectSearchSchema.parse(query)
+      return send(
+        200,
+        await prospects.search(actor, {
+          query: asked.query,
+          pageToken: asked.pageToken,
+          area:
+            asked.latitude !== undefined && asked.longitude !== undefined
+              ? {
+                  latitude: asked.latitude,
+                  longitude: asked.longitude,
+                  radius: asked.radius ?? 300,
+                }
+              : null,
+          allowPaid: asked.allowPaid === "true",
+        })
+      )
+    }
+    if (method === "GET" && route === "/prospects/usage") {
+      return send(200, await prospects.usage(actor))
+    }
+    if (method === "POST" && route === "/prospects/marks") {
+      const body = crmProspectMarkSchema.parse(await readJsonBody())
+      return send(200, { mark: await prospects.mark(actor, body) })
+    }
+    if (method === "POST" && route === "/prospects/emails") {
+      const { website } = crmProspectEmailSchema.parse(await readJsonBody())
+      return send(200, { emails: await prospects.emails(actor, website) })
+    }
+  }
 
   // ---- Quotes and invoices ----
   if (method === "GET" && route === "/catalog") return send(200, await docs.catalog(actor))

@@ -11,6 +11,13 @@ import type {
   CrmLeadInput,
   CrmLoggableActivity,
   CrmPerson,
+  CrmPlacesOverview,
+  CrmPlacesQuery,
+  CrmProspect,
+  CrmProspectArea,
+  CrmProspectMark,
+  CrmProspectStatus,
+  CrmProspectUsage,
   CrmQuote,
   CrmQuoteInput,
   CrmSavedView,
@@ -142,6 +149,70 @@ export const crmService = {
   deleteTask(taskId: string): Promise<CrmLeadDetail> {
     return client.delete(`${ENDPOINT}/tasks/${encodeURIComponent(taskId)}`)
   },
+  // ---- The free directory of Saudi businesses ----
+  placesOverview(): Promise<CrmPlacesOverview> {
+    return client.get(`${ENDPOINT}/places`)
+  },
+  searchPlaces(
+    asked: CrmPlacesQuery
+  ): Promise<{ items: CrmProspect[]; total: number; nextOffset: number | null }> {
+    return client.get(
+      `${ENDPOINT}/places/search${toQuery({
+        activity: asked.activity || undefined,
+        keyword: asked.keyword || undefined,
+        city: asked.city || undefined,
+        latitude: asked.area?.latitude,
+        longitude: asked.area?.longitude,
+        radius: asked.area?.radius,
+        mobileOnly: asked.mobileOnly ? "true" : undefined,
+        offset: asked.offset || undefined,
+      })}`
+    )
+  },
+  requestPlacesRefresh(): Promise<Omit<CrmPlacesOverview, "activities" | "cities">> {
+    return client.post(`${ENDPOINT}/places/refresh`, {})
+  },
+
+  // ---- The prospect finder ----
+  searchProspects(
+    query: string,
+    pageToken: string | null,
+    options: { area?: CrmProspectArea | null; allowPaid?: boolean } = {}
+  ): Promise<{ items: CrmProspect[]; nextPageToken: string | null; usage: CrmProspectUsage }> {
+    return client.get(
+      `${ENDPOINT}/prospects/search${toQuery({
+        query,
+        pageToken: pageToken ?? undefined,
+        latitude: options.area?.latitude,
+        longitude: options.area?.longitude,
+        radius: options.area?.radius,
+        allowPaid: options.allowPaid ? "true" : undefined,
+      })}`
+    )
+  },
+  prospectUsage(): Promise<CrmProspectUsage> {
+    return client.get(`${ENDPOINT}/prospects/usage`)
+  },
+  async markProspect(input: {
+    placeId: string
+    status: CrmProspectStatus | null
+    note: string | null
+  }): Promise<CrmProspectMark | null> {
+    return (
+      await client.post<typeof input, { mark: CrmProspectMark | null }>(
+        `${ENDPOINT}/prospects/marks`,
+        input
+      )
+    ).mark
+  },
+  async prospectEmails(website: string): Promise<string[]> {
+    return (
+      await client.post<{ website: string }, { emails: string[] }>(`${ENDPOINT}/prospects/emails`, {
+        website,
+      })
+    ).emails
+  },
+
   listTasks(filters: {
     scope: "mine" | "all"
     status: "open" | "overdue" | "done"

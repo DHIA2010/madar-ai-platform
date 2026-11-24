@@ -31,6 +31,13 @@ import { toPublicPlatformSettings } from "../../platform-settings/types"
 import { handlePlatformAdminRoute } from "./platform-admin-routes"
 import { handlePublicOutreachRoute } from "./crm-outreach-routes"
 import { CrmOutreach } from "../../crm/outreach"
+import {
+  CrmPlacesDirectory,
+  isPlacesWorkflow,
+  placesBatchSchema,
+  placesCompleteSchema,
+} from "../../crm/places"
+import { CrmProspectFinder } from "../../crm/prospects"
 import { handleAccountingRoute } from "./accounting-routes"
 import { handleBookingRoute, handlePublicBookingRoute } from "./booking-routes"
 import { handleLoyaltyRoute, handlePublicLoyaltyRoute } from "./loyalty-routes"
@@ -878,6 +885,12 @@ export function createIdentityApiServer(
             }))
         )
       : null
+  const crmProspectFinder = container.infrastructure.database
+    ? new CrmProspectFinder(container.infrastructure.database, container.platformSettings)
+    : null
+  const crmPlacesDirectory = container.infrastructure.database
+    ? new CrmPlacesDirectory(container.infrastructure.database)
+    : null
   // WhatsApp messages the sales team sends by hand from the CRM, with a counted link in each.
   const crmOutreach = container.infrastructure.database
     ? new CrmOutreach(container.infrastructure.database)
@@ -2246,6 +2259,29 @@ export function createIdentityApiServer(
         return send(200, { ok: true, leadId })
       }
 
+      // Server-to-server: the monthly load of the free directory of Saudi businesses, sent by
+      // Madar's own GitHub workflow (crm/places.ts). The caller proves itself with the identity
+      // token GitHub signs for that workflow's run; anyone else gets 401.
+      if (url.pathname.startsWith("/v1/public/crm-places/")) {
+        if (!crmPlacesDirectory) {
+          return send(503, { code: "CRM_PLACES_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!(await isPlacesWorkflow(request.headers.authorization))) {
+          return send(401, { code: "CRM_PLACES_UNAUTHORIZED", message: "Unauthorized." })
+        }
+        if (method === "GET" && url.pathname === "/v1/public/crm-places/state") {
+          return send(200, await crmPlacesDirectory.loadState())
+        }
+        if (method === "POST" && url.pathname === "/v1/public/crm-places/batch") {
+          const batch = placesBatchSchema.parse(await readJsonBody(request))
+          return send(200, await crmPlacesDirectory.loadBatch(batch.release, batch.rows))
+        }
+        if (method === "POST" && url.pathname === "/v1/public/crm-places/complete") {
+          const { release } = placesCompleteSchema.parse(await readJsonBody(request))
+          return send(200, await crmPlacesDirectory.loadComplete(release))
+        }
+      }
+
       // Public, server-to-server: Meta's WhatsApp webhook. GET is Meta checking the URL (echo the
       // challenge when the verify token matches); POST is an event, signed with the app secret.
       if (
@@ -3204,6 +3240,8 @@ export function createIdentityApiServer(
               })
             }
           : null,
+        prospects: crmProspectFinder,
+        places: crmPlacesDirectory,
         salesDocuments: salesDocumentsService,
         whatsapp: whatsAppPlatformService,
         whatsappTemplates: whatsAppTemplatesService,

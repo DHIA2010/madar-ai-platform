@@ -1,0 +1,11 @@
+{
+  "name": "madar-saudi-places-loader",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reads the Saudi rows of the Overture Maps places open data and sends them to Madar (run monthly by .github/workflows/saudi-places.yml).",
+  "dependencies": {
+    "hyparquet": "1.33.1",
+    "hyparquet-compressors": "1.1.3"
+  }
+}

@@ -993,6 +993,7 @@ export class CrmService {
       if (phone) seen.add(`p:${phone}`)
       if (email) seen.add(`e:${email}`)
     }
+    const source = input.source ?? "import"
     let created = 0
     let duplicates = 0
     let invalid = 0
@@ -1015,7 +1016,7 @@ export class CrmService {
         `INSERT INTO crm_leads
            (id, company_name, contact_name, phone, email, source, stage, owner_user_id,
             created_by_user_id, tags)
-         VALUES ($1, $2, $3, $4, $5, 'import', 'new', $6, $6, $7::jsonb)`,
+         VALUES ($1, $2, $3, $4, $5, $8, 'new', $6, $6, $7::jsonb)`,
         [
           id,
           name,
@@ -1024,12 +1025,13 @@ export class CrmService {
           email,
           actor.userId,
           JSON.stringify([input.tag]),
+          source,
         ]
       )
       await addActivity(this.db, {
         leadId: id,
         kind: "created",
-        meta: { source: "import", tag: input.tag },
+        meta: { source, tag: input.tag },
         actorUserId: actor.userId,
       })
       created += 1

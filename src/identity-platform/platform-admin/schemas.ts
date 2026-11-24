@@ -139,6 +139,7 @@ export const platformSettingsPatchSchema = z
     quoteTerms: z.string().trim().max(5000),
     invoiceTerms: z.string().trim().max(5000),
     metaManageAdsEmails: z.string().trim().max(2000),
+    googlePlacesApiKey: z.string().trim().max(200),
   })
   .partial()
 

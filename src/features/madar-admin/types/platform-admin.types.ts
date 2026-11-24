@@ -220,6 +220,7 @@ export interface AdminPlatformSettings {
   quoteTerms: string
   invoiceTerms: string
   metaManageAdsEmails: string
+  googlePlacesApiKey: string
 }
 
 export type AdminCouponStatus = "active" | "disabled" | "expired" | "exhausted"
