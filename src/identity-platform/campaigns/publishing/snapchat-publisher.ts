@@ -92,6 +92,10 @@ export interface SnapchatPublishInput {
   // (snapchat-geo.ts). Left out or empty: the whole country.
   regionIds?: string[] | null
   cityKeys?: string[] | null
+  // The languages people use Snapchat in, and Snapchat's own interests (snapchat-audience.ts).
+  // Left out or empty: everyone.
+  languages?: string[] | null
+  interestIds?: string[] | null
   // What the ad set is delivered for; left out, the objective's own first choice.
   goal?: SnapchatGoal | null
   // The most the whole campaign may spend in a day, and over its life. Left out: no cap.
@@ -139,6 +143,12 @@ export class SnapchatPublishError extends Error {
   }
 }
 
+import {
+  interestNameAr,
+  languageNameAr,
+  type SnapchatInterest,
+  type SnapchatLanguage,
+} from "./snapchat-audience"
 import { regionNameAr, snapchatPlaces, type SnapchatRegion } from "./snapchat-geo"
 
 type Json = Record<string, unknown>
@@ -480,6 +490,8 @@ export class SnapchatCampaignPublisher {
       const demographic: Json = { min_age: String(input.minAge), operation: "INCLUDE" }
       if (input.maxAge) demographic.max_age = String(input.maxAge)
       if (input.gender !== "all") demographic.gender = input.gender.toUpperCase()
+      if (input.languages?.length) demographic.languages = [...new Set(input.languages)]
+      const interestIds = [...new Set(input.interestIds ?? [])]
       const adSquad = this.created(
         "ad_set",
         await this.call("ad_set", token, "POST", `/campaigns/${campaignId}/adsquads`, {
@@ -494,6 +506,9 @@ export class SnapchatCampaignPublisher {
                 geos: places.geos,
                 ...(places.locations ? { locations: places.locations } : {}),
                 demographics: [demographic],
+                ...(interestIds.length > 0
+                  ? { interests: [{ category_id: interestIds, operation: "INCLUDE" }] }
+                  : {}),
               },
               placement_v2: { config: "AUTOMATIC" },
               billing_event: "IMPRESSION",
@@ -815,6 +830,59 @@ export class SnapchatCampaignPublisher {
         id: String(region.id),
         name: String(region.name ?? region.id),
         nameAr: regionNameAr(country, String(region.code ?? "")),
+      })
+    }
+    return found
+  }
+
+  // The languages Snapchat can aim an ad set at (the language people use the app in).
+  async listLanguages(input: { accessToken: string }): Promise<SnapchatLanguage[]> {
+    const body = await this.call(
+      "account",
+      input.accessToken,
+      "GET",
+      "/targeting/demographics/languages"
+    )
+    const found: SnapchatLanguage[] = []
+    for (const entry of Array.isArray(body.targeting_dimensions)
+      ? (body.targeting_dimensions as Json[])
+      : []) {
+      const language = entry.languages as Json | undefined
+      if (!language?.id) continue
+      const id = String(language.id)
+      found.push({ id, name: String(language.name ?? id), nameAr: languageNameAr(id) })
+    }
+    return found
+  }
+
+  // The interests Snapchat offers in a country (its "lifestyle categories"), the wide ones and
+  // the narrower ones under them.
+  async listInterests(input: {
+    accessToken: string
+    countryCode: string
+  }): Promise<SnapchatInterest[]> {
+    const country = input.countryCode.toLowerCase()
+    const body = await this.call(
+      "account",
+      input.accessToken,
+      "GET",
+      `/targeting/v1/interests/scls?country_code=${encodeURIComponent(country)}&is_hec=false&limit=1000`
+    )
+    const found: SnapchatInterest[] = []
+    for (const entry of Array.isArray(body.targeting_dimensions)
+      ? (body.targeting_dimensions as Json[])
+      : []) {
+      const interest = entry.scls as Json | undefined
+      if (!interest?.id) continue
+      const id = String(interest.id)
+      // Snapchat sends the parent as "parentId" (its documentation says "parent_id"); the
+      // widest ones hang under "SLC_0", which is not an interest itself.
+      const parent = String(interest.parentId ?? interest.parent_id ?? "")
+      found.push({
+        id,
+        name: String(interest.name ?? id),
+        nameAr: interestNameAr(id),
+        parentId: parent && parent !== "SLC_0" ? parent : null,
       })
     }
     return found

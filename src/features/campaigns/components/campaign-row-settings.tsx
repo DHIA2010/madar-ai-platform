@@ -26,6 +26,7 @@ import {
   campaignPerformanceService,
 } from "../services/campaign-performance.service"
 import { CALLS_TO_ACTION } from "../services/campaign-publishing.service"
+import { CampaignAudiencePicker } from "./campaign-audience-picker"
 import { CampaignLocationPicker } from "./campaign-location-picker"
 import {
   CAMPAIGN_SELECT_CONTENT_CLASSNAME,
@@ -81,6 +82,8 @@ interface Draft {
   url: string
   regionIds: string[]
   cityKeys: string[]
+  languages: string[]
+  interestIds: string[]
 }
 
 function draftOf(settings: CampaignControlSettings, name: string): Draft {
@@ -97,6 +100,8 @@ function draftOf(settings: CampaignControlSettings, name: string): Draft {
     url: settings.url ?? "",
     regionIds: settings.regions.map((region) => region.id),
     cityKeys: settings.cities.map((city) => city.key),
+    languages: settings.languages.map((language) => language.id),
+    interestIds: settings.interests.map((interest) => interest.id),
   }
 }
 
@@ -123,6 +128,8 @@ function changesOf(
       changes.regionIds = draft.regionIds
       changes.cityKeys = draft.cityKeys
     }
+    if (!same(draft.languages, start.languages)) changes.languages = draft.languages
+    if (!same(draft.interestIds, start.interestIds)) changes.interestIds = draft.interestIds
   }
   if (level === "ad") {
     if (draft.headline.trim() !== start.headline) changes.headline = draft.headline.trim()
@@ -318,6 +325,22 @@ function SettingsBody({
           ? settings.cities.map((city) => (locale === "ar" ? city.nameAr : city.name)).join("، ")
           : null,
       ],
+      [
+        t("fields.languages"),
+        settings.languages.length
+          ? settings.languages
+              .map((entry) => (locale === "ar" ? entry.nameAr : null) ?? entry.name)
+              .join("، ")
+          : null,
+      ],
+      [
+        t("fields.interests"),
+        settings.interests.length
+          ? settings.interests
+              .map((entry) => (locale === "ar" ? entry.nameAr : null) ?? entry.name)
+              .join("، ")
+          : null,
+      ],
       [t("fields.ages"), ages],
       [t("fields.gender"), settings.gender ? p(`audience.genders.${settings.gender}`) : null],
       [t("fields.brandName"), settings.brandName],
@@ -462,7 +485,9 @@ function SettingsBody({
       changes.brandName !== undefined ||
       changes.callToAction !== undefined ||
       changes.url !== undefined ||
-      changes.regionIds !== undefined)
+      changes.regionIds !== undefined ||
+      changes.languages !== undefined ||
+      changes.interestIds !== undefined)
 
   return (
     <div className="space-y-5" dir={dir}>
@@ -559,6 +584,16 @@ function SettingsBody({
                 }
               />
             </div>
+          ) : null}
+          {settings.countries.length === 1 ? (
+            <CampaignAudiencePicker
+              connectionId={row.id.split(":")[1] ?? ""}
+              countryCode={settings.countries[0].toLowerCase()}
+              value={{ languages: draft.languages, interestIds: draft.interestIds }}
+              onChange={(audience) =>
+                setDraft((current) => (current ? { ...current, ...audience } : current))
+              }
+            />
           ) : null}
         </>
       ) : null}

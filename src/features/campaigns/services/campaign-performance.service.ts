@@ -280,6 +280,9 @@ export interface CampaignControlSettings {
   // An ad group's regions and cities, when it is narrowed to some.
   regions: Array<{ id: string; name: string; nameAr: string | null }>
   cities: Array<{ key: string; name: string; nameAr: string }>
+  // An ad group's languages and interests, when it is narrowed to some.
+  languages: Array<{ id: string; name: string; nameAr: string | null }>
+  interests: Array<{ id: string; name: string; nameAr: string | null }>
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -306,6 +309,9 @@ export interface CampaignControlChanges {
   // An ad group's regions or cities; both empty is the whole country.
   regionIds?: string[]
   cityKeys?: string[]
+  // An ad group's languages and interests; empty is everyone.
+  languages?: string[]
+  interestIds?: string[]
   // Copies of an ad only.
   url?: string
 }

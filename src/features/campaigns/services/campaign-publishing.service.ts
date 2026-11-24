@@ -151,6 +151,22 @@ export interface PublishLocations {
   cities: PublishCity[]
 }
 
+// The languages and interests a Snapchat campaign can be narrowed to (backend: campaigns/
+// publishing/snapchat-audience.ts): Snapchat's own lists for the country.
+export interface PublishLanguage {
+  id: string
+  name: string
+  nameAr: string | null
+}
+export interface PublishInterest extends PublishLanguage {
+  // The wider interest it belongs to; null for the widest ones.
+  parentId: string | null
+}
+export interface PublishAudiences {
+  languages: PublishLanguage[]
+  interests: PublishInterest[]
+}
+
 export interface PublishAccount {
   connectionId: string
   adAccountId: string
@@ -220,6 +236,9 @@ export type PublishCampaignInput =
       // Snapchat only: some of the country's regions, or some of its cities.
       regionIds?: string[] | null
       cityKeys?: string[] | null
+      // Snapchat only: the languages and interests to narrow to. Empty: everyone.
+      languages?: string[] | null
+      interestIds?: string[] | null
     })
   | (PublishCommonInput & {
       platform: "meta"
@@ -424,6 +443,12 @@ export const campaignPublishingService = {
   async locations(connectionId: string, countryCode: string): Promise<PublishLocations> {
     return client.get<PublishLocations>(
       `${path("publish", "locations")}?connectionId=${encodeURIComponent(connectionId)}&country=${encodeURIComponent(countryCode)}`
+    )
+  },
+
+  async audiences(connectionId: string, countryCode: string): Promise<PublishAudiences> {
+    return client.get<PublishAudiences>(
+      `${path("publish", "audiences")}?connectionId=${encodeURIComponent(connectionId)}&country=${encodeURIComponent(countryCode)}`
     )
   },
 

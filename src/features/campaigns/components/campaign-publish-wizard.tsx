@@ -67,6 +67,7 @@ import {
   type SnapchatBidStrategy,
   type SnapchatGoal,
 } from "../services/campaign-publishing.service"
+import { CampaignAudiencePicker } from "./campaign-audience-picker"
 import {
   CREATIVE_ACCEPT,
   CreativeThumb,
@@ -144,6 +145,8 @@ interface Draft {
   // Snapchat only: some of the country's regions, or some of its cities. Empty: all of it.
   regionIds: string[]
   cityKeys: string[]
+  languages: string[]
+  interestIds: string[]
   dailyBudget: string
   startDate: string
   endDate: string
@@ -298,6 +301,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     bidAmount: "",
     regionIds: [],
     cityKeys: [],
+    languages: [],
+    interestIds: [],
     dailyBudget: "50",
     startDate: toLocalDay(new Date()),
     endDate: "",
@@ -631,6 +636,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                         bidAmount: draft.bidStrategy === "auto" ? null : Number(draft.bidAmount),
                         regionIds: draft.regionIds,
                         cityKeys: draft.cityKeys,
+                        languages: draft.languages,
+                        interestIds: draft.interestIds,
                       }
                     : {}),
                 }
@@ -919,7 +926,15 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               : isSnapchat && draft.cityKeys.length > 0
                 ? ` (${t("places.citiesCount", { count: draft.cityKeys.length })})`
                 : ""
-          } · ${ageLabel} · ${t(`audience.genders.${draft.gender}`)}`,
+          } · ${ageLabel} · ${t(`audience.genders.${draft.gender}`)}${
+            isSnapchat && draft.languages.length > 0
+              ? ` · ${t("audiences.languagesCount", { count: draft.languages.length })}`
+              : ""
+          }${
+            isSnapchat && draft.interestIds.length > 0
+              ? ` · ${t("audiences.interestsCount", { count: draft.interestIds.length })}`
+              : ""
+          }`,
     },
     { label: t("review.headline"), value: isGoogle ? draft.headlines[0] : draft.headline },
     ...(isGoogle ? [{ label: t("review.keywords"), value: keywords.join("، ") }] : []),
@@ -1151,6 +1166,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                     countryCode: value,
                     regionIds: [],
                     cityKeys: [],
+                    interestIds: [],
                   })),
                 (limits?.countries ?? ["sa"]).map((code) => ({
                   value: code,
@@ -1169,6 +1185,16 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   onChange={(places) => setDraft((current) => ({ ...current, ...places }))}
                 />
               </Field>
+            ) : null}
+
+            {isSnapchat && account ? (
+              <CampaignAudiencePicker
+                key={`audience:${account.connectionId}:${draft.countryCode}`}
+                connectionId={account.connectionId}
+                countryCode={draft.countryCode}
+                value={{ languages: draft.languages, interestIds: draft.interestIds }}
+                onChange={(audience) => setDraft((current) => ({ ...current, ...audience }))}
+              />
             ) : null}
 
             {isGoogle ? (

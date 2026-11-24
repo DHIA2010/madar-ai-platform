@@ -7971,7 +7971,9 @@
             "callToAction": "Button",
             "url": "Link",
             "regions": "Regions",
-            "cities": "Cities"
+            "cities": "Cities",
+            "languages": "Languages",
+            "interests": "Interests"
           },
           "values": {
             "noEnd": "No end",
@@ -7992,7 +7994,7 @@
           "ageHint": "Snapchat takes an upper age up to {top}. Leave “Age to” empty to include everyone older.",
           "urlFixed": "An ad's link does not change once it is published. To change it, copy the ad and put the new link in the copy.",
           "urlHint": "It has to start with https://",
-          "reviewAgain": "Note: changing the audience (including its regions and cities), or the ad's text or link, sends the ads back to Snapchat's review, and they stop showing until approved.",
+          "reviewAgain": "Note: changing the audience (including its regions, cities, languages and interests), or the ad's text or link, sends the ads back to Snapchat's review, and they stop showing until approved.",
           "notAvailable": "Editing and copying from Madar are available for Snapchat for now. This platform's settings can only be viewed.",
           "problems": {
             "name": "Write a name of at least two letters.",
@@ -8434,6 +8436,24 @@
         "onlyCountry": "This country has no regions or cities to pick, so the ad is shown across all of it.",
         "regionsCount": "{count, plural, one {# region} other {# regions}}",
         "citiesCount": "{count, plural, one {# city} other {# cities}}"
+      },
+      "audiences": {
+        "languages": {
+          "label": "Audience language",
+          "more": "More languages",
+          "hintAll": "No language picked, so the ad is shown to everyone whatever their language.",
+          "hintSome": "The ad is shown only to people who use Snapchat in one of the picked languages."
+        },
+        "interests": {
+          "label": "Audience interests",
+          "search": "Search for an interest, like: coffee",
+          "none": "No interest with that name.",
+          "hintAll": "No interest picked, so the ad is shown to everyone. These are the interests as Snapchat knows them; type in the search to find narrower ones.",
+          "hintSome": "{count, plural, one {# interest picked} other {# interests picked}}. The ad is shown to people interested in any one of them."
+        },
+        "unavailable": "The languages and interests could not be read from Snapchat right now, so the ad is shown to everyone.",
+        "languagesCount": "{count, plural, one {# language} other {# languages}}",
+        "interestsCount": "{count, plural, one {# interest} other {# interests}}"
       }
     },
     "metrics": {

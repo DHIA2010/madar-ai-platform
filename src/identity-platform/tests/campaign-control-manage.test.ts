@@ -394,6 +394,35 @@ describe("viewing, editing and copying from the campaigns list", () => {
     ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
   })
 
+  it("narrows an ad group to languages and interests, and shows them", async () => {
+    const { service, account } = control()
+    const sentTargeting = () =>
+      (account.writes().at(-1)?.body?.adsquads as Json[])[0].targeting as Json
+
+    // As loaded: the interest the ad group already has, named in Arabic.
+    const before = await service.settings(actor, rowId("squad-1"), "adGroup")
+    expect(before.interests.map((entry) => entry.id)).toEqual(["SLC_1"])
+    expect(before.interests[0].nameAr).toBe("محبو المغامرات")
+    expect(before.languages).toEqual([])
+
+    const after = await service.edit(actor, rowId("squad-1"), "adGroup", {
+      languages: ["ar"],
+      interestIds: ["SLC_39", "SLC_253"],
+    })
+    expect(sentTargeting()).toMatchObject({
+      geos: [{ country_code: "sa", operation: "INCLUDE" }],
+      demographics: [{ min_age: "25", languages: ["ar"], operation: "INCLUDE" }],
+      interests: [{ category_id: ["SLC_39", "SLC_253"], operation: "INCLUDE" }],
+    })
+    expect(after.languages.map((entry) => entry.id)).toEqual(["ar"])
+    expect(after.interests.map((entry) => entry.id)).toEqual(["SLC_39", "SLC_253"])
+
+    // Both emptied: everyone again.
+    await service.edit(actor, rowId("squad-1"), "adGroup", { languages: [], interestIds: [] })
+    expect(sentTargeting()).not.toHaveProperty("interests")
+    expect(sentTargeting().demographics).toEqual([{ min_age: "25", operation: "INCLUDE" }])
+  })
+
   it("leaves the audience untouched when only the name changes", async () => {
     const { service, account } = control()
     const before = structuredClone(account.store.adsquads.get("squad-1")?.targeting)

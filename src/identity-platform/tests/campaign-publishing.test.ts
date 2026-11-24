@@ -21,6 +21,10 @@ import {
 } from "../campaigns/publishing/service"
 import { PlatformPublishError } from "../campaigns/publishing/platform"
 import {
+  readSnapchatAudience,
+  withSnapchatAudience,
+} from "../campaigns/publishing/snapchat-audience"
+import {
   readSnapchatPlaces,
   snapchatCities,
   snapchatPlacesProblem,
@@ -372,6 +376,119 @@ describe("publishing to Snapchat", () => {
         cityKeys: ["riyadh"],
       })
     ).toBe("places")
+  })
+
+  it("narrows the audience to languages and interests, and reads them back", async () => {
+    const adSet = async (overrides: Partial<SnapchatPublishInput>) => {
+      const { calls, publisher } = fakeSnapchat()
+      await publisher.publish(snapInput(overrides))
+      return (
+        calls.find((call) => call.path === "/campaigns/camp-1/adsquads")?.body as {
+          adsquads: Array<{ targeting: Record<string, unknown> }>
+        }
+      ).adsquads[0].targeting
+    }
+    // Nothing chosen: everyone, and nothing about languages or interests is sent.
+    const everyone = await adSet({})
+    expect(everyone).not.toHaveProperty("interests")
+    expect((everyone.demographics as Array<Record<string, unknown>>)[0]).not.toHaveProperty(
+      "languages"
+    )
+
+    // The shape a live ad set holds: languages beside the ages, interests in one list.
+    const narrowed = await adSet({
+      languages: ["ar", "en", "ar"],
+      interestIds: ["SLC_28", "SLC_104", "SLC_28"],
+    })
+    expect((narrowed.demographics as Array<Record<string, unknown>>)[0]).toMatchObject({
+      languages: ["ar", "en"],
+      operation: "INCLUDE",
+    })
+    expect(narrowed.interests).toEqual([
+      { category_id: ["SLC_28", "SLC_104"], operation: "INCLUDE" },
+    ])
+    expect(readSnapchatAudience(narrowed)).toEqual({
+      languages: ["ar", "en"],
+      interestIds: ["SLC_28", "SLC_104"],
+    })
+
+    // Editing: a list left out stays, an empty one removes the limit, the rest is kept.
+    const live = {
+      regulated_content: false,
+      demographics: [{ min_age: "25", languages: ["ar"], operation: "INCLUDE" }],
+      interests: [
+        { category_id: ["SLC_1", "DLXS_9"], operation: "INCLUDE" },
+        { category_id: ["SLC_7"], operation: "EXCLUDE" },
+      ],
+      devices: [{ os_type: "iOS", operation: "INCLUDE" }],
+    }
+    expect(withSnapchatAudience(live, undefined, undefined)).toBe(live)
+    expect(withSnapchatAudience(live, ["ar"], ["SLC_1"])).toBe(live)
+    expect(withSnapchatAudience(live, ["en"], ["SLC_39", "SLC_253"])).toEqual({
+      regulated_content: false,
+      demographics: [{ min_age: "25", languages: ["en"], operation: "INCLUDE" }],
+      interests: [
+        { category_id: ["SLC_39", "SLC_253"], operation: "INCLUDE" },
+        // What Madar does not offer is not lost.
+        { category_id: ["DLXS_9"], operation: "INCLUDE" },
+        { category_id: ["SLC_7"], operation: "EXCLUDE" },
+      ],
+      devices: [{ os_type: "iOS", operation: "INCLUDE" }],
+    })
+    const cleared = withSnapchatAudience(
+      {
+        demographics: [{ languages: ["ar"], operation: "INCLUDE" }],
+        interests: live.interests.slice(0, 1),
+      },
+      [],
+      []
+    ) as Record<string, unknown>
+    // A demographic that would say nothing is dropped rather than sent empty.
+    expect(cleared).not.toHaveProperty("demographics")
+    expect(cleared.interests).toEqual([{ category_id: ["DLXS_9"], operation: "INCLUDE" }])
+  })
+
+  it("lists Snapchat's languages and a country's interests, with the Arabic names Madar knows", async () => {
+    const asked: string[] = []
+    const publisher = new SnapchatCampaignPublisher({
+      apiBaseUrl: "https://snap.test/v1",
+      fetch: (async (input: RequestInfo | URL) => {
+        asked.push(String(input))
+        return new Response(
+          JSON.stringify(
+            String(input).includes("languages")
+              ? {
+                  request_status: "SUCCESS",
+                  targeting_dimensions: [
+                    { languages: { id: "ar", name: "Arabic" } },
+                    { languages: { id: "xx", name: "Other" } },
+                  ],
+                }
+              : {
+                  request_status: "SUCCESS",
+                  targeting_dimensions: [
+                    { scls: { id: "SLC_28", name: "Foodies", parentId: "SLC_0" } },
+                    { scls: { id: "SLC_104", name: "Coffee Lovers", parentId: "SLC_28" } },
+                    { scls: { id: "SLC_999", name: "New One", parent_id: "SLC_28" } },
+                  ],
+                }
+          )
+        )
+      }) as typeof fetch,
+    })
+    expect(await publisher.listLanguages({ accessToken: "token" })).toEqual([
+      { id: "ar", name: "Arabic", nameAr: "العربية" },
+      { id: "xx", name: "Other", nameAr: null },
+    ])
+    expect(await publisher.listInterests({ accessToken: "token", countryCode: "SA" })).toEqual([
+      { id: "SLC_28", name: "Foodies", nameAr: "محبو الطعام", parentId: null },
+      { id: "SLC_104", name: "Coffee Lovers", nameAr: "محبو القهوة", parentId: "SLC_28" },
+      { id: "SLC_999", name: "New One", nameAr: null, parentId: "SLC_28" },
+    ])
+    expect(asked).toEqual([
+      "https://snap.test/v1/targeting/demographics/languages",
+      "https://snap.test/v1/targeting/v1/interests/scls?country_code=sa&is_hec=false&limit=1000",
+    ])
   })
 
   it("lists a country's regions as Snapchat names them, with the Arabic names Madar knows", async () => {

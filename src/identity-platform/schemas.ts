@@ -562,6 +562,16 @@ const snapchatCityKeys = z
   .array(z.string().regex(/^[a-z_]{2,40}$/))
   .max(40)
   .nullish()
+// Who an ad set is shown to beyond age and gender: Snapchat's own language codes and interest
+// ids (campaigns/publishing/snapchat-audience.ts).
+const snapchatLanguages = z
+  .array(z.string().regex(/^[a-z]{2,3}$/))
+  .max(30)
+  .nullish()
+const snapchatInterestIds = z
+  .array(z.string().regex(/^SLC_\d{1,6}$/))
+  .max(100)
+  .nullish()
 const publishCommon = {
   tracking: linkTrackingSchema,
   connectionId: z.string().uuid(),
@@ -611,6 +621,8 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
     bidAmount: z.number().positive().max(100_000).nullish(),
     regionIds: snapchatRegionIds,
     cityKeys: snapchatCityKeys,
+    languages: snapchatLanguages,
+    interestIds: snapchatInterestIds,
     creativeId: z.string().uuid(),
     brandName: z.string().trim().min(1).max(25),
     headline: z.string().trim().min(1).max(34),
@@ -688,6 +700,8 @@ const campaignControlChanges = {
   // An ad group's regions or cities; both empty is the whole country.
   regionIds: snapchatRegionIds,
   cityKeys: snapchatCityKeys,
+  languages: snapchatLanguages,
+  interestIds: snapchatInterestIds,
 }
 export const campaignControlSettingsSchema = z.object(campaignControlTarget)
 export const campaignControlEditSchema = z.object({

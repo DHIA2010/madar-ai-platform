@@ -22,6 +22,7 @@ import {
   type TikTokPublishedIds,
   type TikTokPublishInput,
 } from "./platform"
+import type { SnapchatInterest, SnapchatLanguage } from "./snapchat-audience"
 import {
   snapchatCities,
   snapchatPlacesProblem,
@@ -108,6 +109,9 @@ export type PublishCampaignInput =
       // Where inside the country: some regions or some cities. Empty: the whole country.
       regionIds?: string[] | null
       cityKeys?: string[] | null
+      // The languages and Snapchat interests to narrow to. Empty: everyone.
+      languages?: string[] | null
+      interestIds?: string[] | null
     })
   | (PublishCommonInput & {
       platform: "tiktok"
@@ -147,6 +151,8 @@ export interface PublicationDetails {
   bidAmount?: number
   regionIds?: string[]
   cityKeys?: string[]
+  languages?: string[]
+  interestIds?: string[]
 }
 
 export interface PublicationView {
@@ -218,6 +224,14 @@ export interface SnapchatPublisher {
   }): Promise<void>
   deleteCampaign(input: { accessToken: string; campaignId: string }): Promise<void>
   listRegions?(input: { accessToken: string; countryCode: string }): Promise<SnapchatRegion[]>
+  listLanguages?(input: { accessToken: string }): Promise<SnapchatLanguage[]>
+  listInterests?(input: { accessToken: string; countryCode: string }): Promise<SnapchatInterest[]>
+}
+
+// The languages and interests a Snapchat campaign can be narrowed to.
+export interface PublishAudiences {
+  languages: SnapchatLanguage[]
+  interests: SnapchatInterest[]
 }
 
 // The places inside a country a Snapchat campaign can be narrowed to.
@@ -391,6 +405,8 @@ function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
   }
   if (input.regionIds?.length) details.regionIds = input.regionIds
   if (input.cityKeys?.length) details.cityKeys = input.cityKeys
+  if (input.languages?.length) details.languages = input.languages
+  if (input.interestIds?.length) details.interestIds = input.interestIds
   return Object.keys(details).length > 0 ? details : null
 }
 
@@ -583,6 +599,9 @@ export class CampaignPublishingService {
   private readonly running = new Set<Promise<void>>()
   // Snapchat's regions per country, kept for a day.
   private readonly regions = new Map<string, { regions: SnapchatRegion[]; until: number }>()
+  // Snapchat's languages, and its interests per country, kept for a day too.
+  private languages: { languages: SnapchatLanguage[]; until: number } | null = null
+  private readonly interests = new Map<string, { interests: SnapchatInterest[]; until: number }>()
 
   constructor(
     private readonly db: PostgresDatabase,
@@ -702,6 +721,45 @@ export class CampaignPublishingService {
       this.regions.set(country, { regions, until: this.now().getTime() + 24 * 60 * 60_000 })
     }
     return { regions, cities }
+  }
+
+  // The languages and the interests a Snapchat campaign in this country can be narrowed to:
+  // Snapchat's own lists, asked for through one of the organization's connections and kept for
+  // a day. A list Snapchat did not give comes back empty, and the campaign reaches everyone.
+  async audiences(
+    actor: AuthenticatedActor,
+    connectionId: string,
+    countryCode: string
+  ): Promise<PublishAudiences> {
+    const country = countryCode.toLowerCase()
+    const own = (await this.accounts(actor, "snapchat")).accounts.some(
+      (entry) => entry.connectionId === connectionId
+    )
+    if (!own) throw invalid("PUBLISH_ACCOUNT_NOT_CONNECTED", "That ad account is not connected.")
+    const now = this.now().getTime()
+    const until = now + 24 * 60 * 60_000
+    let token: Promise<string> | null = null
+    const accessToken = () => (token ??= this.snapchatAccess.resolveAccessToken(connectionId))
+    let languages = this.languages && this.languages.until > now ? this.languages.languages : null
+    if (!languages) {
+      languages = this.snapchat.listLanguages
+        ? await accessToken()
+            .then((key) => this.snapchat.listLanguages!({ accessToken: key }))
+            .catch(() => [] as SnapchatLanguage[])
+        : []
+      if (languages.length > 0) this.languages = { languages, until }
+    }
+    const kept = this.interests.get(country)
+    let interests = kept && kept.until > now ? kept.interests : null
+    if (!interests) {
+      interests = this.snapchat.listInterests
+        ? await accessToken()
+            .then((key) => this.snapchat.listInterests!({ accessToken: key, countryCode: country }))
+            .catch(() => [] as SnapchatInterest[])
+        : []
+      if (interests.length > 0) this.interests.set(country, { interests, until })
+    }
+    return { languages, interests }
   }
 
   async list(organizationId: string): Promise<PublicationView[]> {
@@ -986,6 +1044,8 @@ export class CampaignPublishingService {
       bidAmount: input.bidAmount ?? null,
       regionIds: input.regionIds ?? null,
       cityKeys: input.cityKeys ?? null,
+      languages: input.languages ?? null,
+      interestIds: input.interestIds ?? null,
       minAge: Math.min(shown.minAge, SNAPCHAT_MIN_AGE_TOP),
       maxAge: shown.maxAge && shown.maxAge <= SNAPCHAT_MAX_AGE_TOP ? shown.maxAge : null,
       accessToken: await this.snapchatAccess.resolveAccessToken(input.connectionId),

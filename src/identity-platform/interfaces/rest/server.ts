@@ -8159,6 +8159,7 @@ export function createIdentityApiServer(
       if (
         url.pathname === "/v1/campaigns/publish/options" ||
         url.pathname === "/v1/campaigns/publish/locations" ||
+        url.pathname === "/v1/campaigns/publish/audiences" ||
         url.pathname.startsWith("/v1/campaigns/publications")
       ) {
         if (!campaignPublishingService) {
@@ -8181,6 +8182,22 @@ export function createIdentityApiServer(
           return send(
             200,
             await campaignPublishingService.locations(
+              actor,
+              url.searchParams.get("connectionId") ?? "",
+              country
+            )
+          )
+        }
+        // The languages and interests a Snapchat campaign's audience can be narrowed to.
+        if (method === "GET" && url.pathname === "/v1/campaigns/publish/audiences") {
+          if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+          const country = (url.searchParams.get("country") ?? "").toLowerCase()
+          if (!/^[a-z]{2}$/.test(country)) {
+            throw ERRORS.validation({ country: "A two-letter country code is needed." })
+          }
+          return send(
+            200,
+            await campaignPublishingService.audiences(
               actor,
               url.searchParams.get("connectionId") ?? "",
               country
