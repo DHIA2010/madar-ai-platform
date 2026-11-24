@@ -192,3 +192,65 @@ export function CampaignAudiencePicker({
     </div>
   )
 }
+
+// Which phones a Snapchat campaign is shown on: the system and the connection. Everything is
+// the starting choice and narrows nothing.
+export type DeviceSystem = "all" | "ios" | "android"
+export type DeviceConnection = "all" | "wifi" | "cell"
+export interface ChosenDevices {
+  deviceSystem: DeviceSystem
+  deviceConnection: DeviceConnection
+}
+
+const OPTION =
+  "inline-flex h-11 items-center justify-center rounded-xl border-2 px-4 text-[13px] font-bold transition-colors"
+const SYSTEMS: DeviceSystem[] = ["all", "ios", "android"]
+const CONNECTIONS: DeviceConnection[] = ["all", "wifi", "cell"]
+
+export function CampaignDevicePicker({
+  value,
+  onChange,
+}: {
+  value: ChosenDevices
+  onChange: (value: ChosenDevices) => void
+}) {
+  const t = useTranslations("campaigns.publish.devices")
+  const row = <T extends DeviceSystem | DeviceConnection>(
+    group: "systems" | "connections",
+    options: T[],
+    chosen: T,
+    pick: (entry: T) => void
+  ) => (
+    <div>
+      <span className={LABEL}>{t(`${group}.label`)}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((entry) => (
+          <button
+            key={entry}
+            type="button"
+            aria-pressed={chosen === entry}
+            onClick={() => pick(entry)}
+            className={cn(
+              OPTION,
+              chosen === entry
+                ? "border-[#1d4fd8] bg-[#f3f7ff] text-[#1d4fd8]"
+                : "border-[#e1e7f0] bg-white text-[#3b4a66] hover:border-[#1d4fd8]/40"
+            )}
+          >
+            {t(`${group}.${entry}` as Parameters<typeof t>[0])}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+  return (
+    <div className="space-y-5">
+      {row("systems", SYSTEMS, value.deviceSystem, (entry) =>
+        onChange({ ...value, deviceSystem: entry })
+      )}
+      {row("connections", CONNECTIONS, value.deviceConnection, (entry) =>
+        onChange({ ...value, deviceConnection: entry })
+      )}
+    </div>
+  )
+}

@@ -296,3 +296,81 @@ export function withSnapchatAudience(
   }
   return next
 }
+
+// Which phones an ad set is shown on: the system (iPhone or Android) and the connection (Wi-Fi
+// or mobile data). A live ad set holds them like this:
+//   devices: [{ os_type: "iOS", operation: "INCLUDE" }, { os_type: "ANDROID", operation: "INCLUDE" }]
+// What is in one entry must all hold; entries are alternatives. So one system and one connection
+// go in one entry: devices: [{ os_type: "iOS", connection_type: "WIFI", operation: "INCLUDE" }].
+// No "devices" at all means every phone on any connection.
+export const SNAPCHAT_DEVICE_SYSTEMS = ["all", "ios", "android"] as const
+export type SnapchatDeviceSystem = (typeof SNAPCHAT_DEVICE_SYSTEMS)[number]
+export const SNAPCHAT_DEVICE_CONNECTIONS = ["all", "wifi", "cell"] as const
+export type SnapchatDeviceConnection = (typeof SNAPCHAT_DEVICE_CONNECTIONS)[number]
+
+const SYSTEM_VALUE: Record<Exclude<SnapchatDeviceSystem, "all">, string> = {
+  ios: "iOS",
+  android: "ANDROID",
+}
+
+// The devices part of an ad set's targeting, or null when nothing is narrowed.
+export function snapchatDevices(
+  system: SnapchatDeviceSystem | null | undefined,
+  connection: SnapchatDeviceConnection | null | undefined
+): Json[] | null {
+  const entry: Json = {}
+  if (system && system !== "all") entry.os_type = SYSTEM_VALUE[system]
+  if (connection && connection !== "all") entry.connection_type = connection.toUpperCase()
+  return Object.keys(entry).length > 0 ? [{ ...entry, operation: "INCLUDE" }] : null
+}
+
+// The system and the connection an ad set's targeting names, read back. Several systems
+// together (iPhone and Android, as Snapchat's own screen writes "all") read as all.
+export function readSnapchatDevices(targeting: unknown): {
+  system: SnapchatDeviceSystem
+  connection: SnapchatDeviceConnection
+} {
+  const spec = (targeting ?? {}) as Json
+  const devices = Array.isArray(spec.devices) ? (spec.devices as Json[]) : []
+  const of = (key: string) => [
+    ...new Set(devices.map((entry) => String(entry[key] ?? "").toUpperCase())),
+  ]
+  const systems = of("os_type")
+  const connections = of("connection_type")
+  return {
+    system:
+      systems.length !== 1
+        ? "all"
+        : systems[0] === "IOS"
+          ? "ios"
+          : systems[0] === "ANDROID"
+            ? "android"
+            : "all",
+    connection:
+      connections.length !== 1
+        ? "all"
+        : connections[0] === "WIFI"
+          ? "wifi"
+          : connections[0] === "CELL"
+            ? "cell"
+            : "all",
+  }
+}
+
+// An ad set's targeting with the system and the connection asked for. One left out stays as it
+// is, and the very same object comes back when nothing differs. A change rewrites the devices
+// part whole, so anything finer set on Snapchat itself (phone models, system versions) goes.
+export function withSnapchatDevices(
+  targeting: unknown,
+  system: SnapchatDeviceSystem | null | undefined,
+  connection: SnapchatDeviceConnection | null | undefined
+): unknown {
+  const before = readSnapchatDevices(targeting)
+  const wanted = { system: system ?? before.system, connection: connection ?? before.connection }
+  if (wanted.system === before.system && wanted.connection === before.connection) return targeting
+  const spec = { ...((targeting ?? {}) as Json) }
+  const devices = snapchatDevices(wanted.system, wanted.connection)
+  if (devices) spec.devices = devices
+  else delete spec.devices
+  return spec
+}

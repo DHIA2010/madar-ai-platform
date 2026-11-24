@@ -26,7 +26,12 @@ import {
   campaignPerformanceService,
 } from "../services/campaign-performance.service"
 import { CALLS_TO_ACTION } from "../services/campaign-publishing.service"
-import { CampaignAudiencePicker } from "./campaign-audience-picker"
+import {
+  CampaignAudiencePicker,
+  CampaignDevicePicker,
+  type DeviceConnection,
+  type DeviceSystem,
+} from "./campaign-audience-picker"
 import { CampaignLocationPicker } from "./campaign-location-picker"
 import {
   CAMPAIGN_SELECT_CONTENT_CLASSNAME,
@@ -84,6 +89,9 @@ interface Draft {
   cityKeys: string[]
   languages: string[]
   interestIds: string[]
+  deviceSystem: DeviceSystem
+  deviceConnection: DeviceConnection
+  lifetimeBudget: string
 }
 
 function draftOf(settings: CampaignControlSettings, name: string): Draft {
@@ -102,6 +110,9 @@ function draftOf(settings: CampaignControlSettings, name: string): Draft {
     cityKeys: settings.cities.map((city) => city.key),
     languages: settings.languages.map((language) => language.id),
     interestIds: settings.interests.map((interest) => interest.id),
+    deviceSystem: settings.deviceSystem ?? "all",
+    deviceConnection: settings.deviceConnection ?? "all",
+    lifetimeBudget: settings.lifetimeBudget ? String(settings.lifetimeBudget) : "",
   }
 }
 
@@ -119,7 +130,14 @@ function changesOf(
     changes.endDate = draft.endDate || null
   }
   if (level === "adGroup") {
-    if (draft.dailyBudget !== start.dailyBudget) changes.dailyBudget = Number(draft.dailyBudget)
+    // An ad group has one kind of budget: a day's, or its whole run's.
+    if (settings.lifetimeBudget != null && settings.dailyBudget == null) {
+      if (draft.lifetimeBudget !== start.lifetimeBudget) {
+        changes.lifetimeBudget = Number(draft.lifetimeBudget)
+      }
+    } else if (draft.dailyBudget !== start.dailyBudget) {
+      changes.dailyBudget = Number(draft.dailyBudget)
+    }
     if (draft.minAge !== start.minAge && draft.minAge) changes.minAge = Number(draft.minAge)
     if (draft.maxAge !== start.maxAge) changes.maxAge = draft.maxAge ? Number(draft.maxAge) : null
     if (draft.gender !== start.gender) changes.gender = draft.gender
@@ -130,6 +148,10 @@ function changesOf(
     }
     if (!same(draft.languages, start.languages)) changes.languages = draft.languages
     if (!same(draft.interestIds, start.interestIds)) changes.interestIds = draft.interestIds
+    if (draft.deviceSystem !== start.deviceSystem) changes.deviceSystem = draft.deviceSystem
+    if (draft.deviceConnection !== start.deviceConnection) {
+      changes.deviceConnection = draft.deviceConnection
+    }
   }
   if (level === "ad") {
     if (draft.headline.trim() !== start.headline) changes.headline = draft.headline.trim()
@@ -302,6 +324,10 @@ function SettingsBody({
         t("fields.dailyBudget"),
         settings.dailyBudget ? `${settings.dailyBudget} ${currencyLabel}` : null,
       ],
+      [
+        t("fields.lifetimeBudget"),
+        settings.lifetimeBudget ? `${settings.lifetimeBudget} ${currencyLabel}` : null,
+      ],
       [t("fields.start"), day(settings.startAt)],
       [
         t("fields.end"),
@@ -339,6 +365,18 @@ function SettingsBody({
           ? settings.interests
               .map((entry) => (locale === "ar" ? entry.nameAr : null) ?? entry.name)
               .join("، ")
+          : null,
+      ],
+      [
+        t("fields.devices"),
+        settings.deviceSystem && settings.deviceSystem !== "all"
+          ? p(`devices.systems.${settings.deviceSystem}`)
+          : null,
+      ],
+      [
+        t("fields.connection"),
+        settings.deviceConnection && settings.deviceConnection !== "all"
+          ? p(`devices.connections.${settings.deviceConnection}`)
           : null,
       ],
       [t("fields.ages"), ages],
@@ -412,11 +450,13 @@ function SettingsBody({
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => (current ? { ...current, [key]: value } : current))
   const changes = changesOf(level, mode, settings, draft)
+  // An ad group whose budget is for its whole run rather than for a day.
+  const wholeRun = settings.lifetimeBudget != null && settings.dailyBudget == null
 
   const problem = (): string | null => {
     if (draft.name.trim().length < 2) return t("problems.name")
     if (level === "adGroup") {
-      if (!(Number(draft.dailyBudget) >= MIN_DAILY_BUDGET)) {
+      if (!(Number(wholeRun ? draft.lifetimeBudget : draft.dailyBudget) >= MIN_DAILY_BUDGET)) {
         return t("problems.budget", { minimum: MIN_DAILY_BUDGET, currency: currencyLabel })
       }
       const from = Number(draft.minAge)
@@ -487,7 +527,9 @@ function SettingsBody({
       changes.url !== undefined ||
       changes.regionIds !== undefined ||
       changes.languages !== undefined ||
-      changes.interestIds !== undefined)
+      changes.interestIds !== undefined ||
+      changes.deviceSystem !== undefined ||
+      changes.deviceConnection !== undefined)
 
   return (
     <div className="space-y-5" dir={dir}>
@@ -506,15 +548,19 @@ function SettingsBody({
       {level === "adGroup" ? (
         <>
           <div>
-            <label className={LABEL}>{t("fields.dailyBudget")}</label>
+            <label className={LABEL}>
+              {wholeRun ? t("fields.lifetimeBudget") : t("fields.dailyBudget")}
+            </label>
             <div className="relative">
               <AppInput
                 className={cn(FIELD, "pe-16")}
                 type="number"
                 inputMode="decimal"
                 min={MIN_DAILY_BUDGET}
-                value={draft.dailyBudget}
-                onChange={(event) => set("dailyBudget", event.target.value)}
+                value={wholeRun ? draft.lifetimeBudget : draft.dailyBudget}
+                onChange={(event) =>
+                  set(wholeRun ? "lifetimeBudget" : "dailyBudget", event.target.value)
+                }
               />
               <span className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold text-[#6b7b96]">
                 {currencyLabel}
@@ -595,6 +641,12 @@ function SettingsBody({
               }
             />
           ) : null}
+          <CampaignDevicePicker
+            value={{ deviceSystem: draft.deviceSystem, deviceConnection: draft.deviceConnection }}
+            onChange={(devices) =>
+              setDraft((current) => (current ? { ...current, ...devices } : current))
+            }
+          />
         </>
       ) : null}
 

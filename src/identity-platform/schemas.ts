@@ -572,6 +572,9 @@ const snapchatInterestIds = z
   .array(z.string().regex(/^SLC_\d{1,6}$/))
   .max(100)
   .nullish()
+// The phones an ad set is shown on.
+const snapchatDeviceSystem = z.enum(["all", "ios", "android"]).nullish()
+const snapchatDeviceConnection = z.enum(["all", "wifi", "cell"]).nullish()
 const publishCommon = {
   tracking: linkTrackingSchema,
   connectionId: z.string().uuid(),
@@ -623,6 +626,9 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
     cityKeys: snapchatCityKeys,
     languages: snapchatLanguages,
     interestIds: snapchatInterestIds,
+    deviceSystem: snapchatDeviceSystem,
+    deviceConnection: snapchatDeviceConnection,
+    lifetimeBudget: z.number().positive().max(10000000).nullish(),
     creativeId: z.string().uuid(),
     brandName: z.string().trim().min(1).max(25),
     headline: z.string().trim().min(1).max(34),
@@ -702,6 +708,9 @@ const campaignControlChanges = {
   cityKeys: snapchatCityKeys,
   languages: snapchatLanguages,
   interestIds: snapchatInterestIds,
+  deviceSystem: snapchatDeviceSystem,
+  deviceConnection: snapchatDeviceConnection,
+  lifetimeBudget: z.number().positive().max(10000000).nullish(),
 }
 export const campaignControlSettingsSchema = z.object(campaignControlTarget)
 export const campaignControlEditSchema = z.object({

@@ -22,7 +22,9 @@ import {
 import { PlatformPublishError } from "../campaigns/publishing/platform"
 import {
   readSnapchatAudience,
+  readSnapchatDevices,
   withSnapchatAudience,
+  withSnapchatDevices,
 } from "../campaigns/publishing/snapchat-audience"
 import {
   readSnapchatPlaces,
@@ -446,6 +448,70 @@ describe("publishing to Snapchat", () => {
     // A demographic that would say nothing is dropped rather than sent empty.
     expect(cleared).not.toHaveProperty("demographics")
     expect(cleared.interests).toEqual([{ category_id: ["DLXS_9"], operation: "INCLUDE" }])
+  })
+
+  it("narrows to a phone system or a connection, and takes a budget for the whole run", async () => {
+    const adSet = async (overrides: Partial<SnapchatPublishInput>) => {
+      const { calls, publisher } = fakeSnapchat()
+      await publisher.publish(snapInput(overrides))
+      return (
+        calls.find((call) => call.path === "/campaigns/camp-1/adsquads")?.body as {
+          adsquads: Array<Record<string, unknown> & { targeting: Record<string, unknown> }>
+        }
+      ).adsquads[0]
+    }
+    // Nothing chosen: every phone, and an amount a day.
+    const plain = await adSet({})
+    expect(plain.targeting).not.toHaveProperty("devices")
+    expect(plain).toMatchObject({
+      daily_budget_micro: 50_000_000,
+      delivery_constraint: "DAILY_BUDGET",
+    })
+    expect(plain).not.toHaveProperty("lifetime_budget_micro")
+    expect(
+      (await adSet({ deviceSystem: "all", deviceConnection: "all" })).targeting
+    ).not.toHaveProperty("devices")
+
+    // One system and one connection go in one entry, so both must hold.
+    const narrowed = await adSet({ deviceSystem: "ios", deviceConnection: "wifi" })
+    expect(narrowed.targeting.devices).toEqual([
+      { os_type: "iOS", connection_type: "WIFI", operation: "INCLUDE" },
+    ])
+    expect(readSnapchatDevices(narrowed.targeting)).toEqual({ system: "ios", connection: "wifi" })
+    expect((await adSet({ deviceSystem: "android" })).targeting.devices).toEqual([
+      { os_type: "ANDROID", operation: "INCLUDE" },
+    ])
+
+    // Reading: both systems listed, the way Snapchat's own screen writes "all", is all.
+    const live = {
+      geos: [{ country_code: "sa", operation: "INCLUDE" }],
+      devices: [
+        { os_type: "iOS", operation: "INCLUDE" },
+        { os_type: "ANDROID", operation: "INCLUDE" },
+      ],
+    }
+    expect(readSnapchatDevices(live)).toEqual({ system: "all", connection: "all" })
+    // Nothing differs: the very same object, so it is sent back as Snapchat gave it.
+    expect(withSnapchatDevices(live, "all", undefined)).toBe(live)
+    expect(withSnapchatDevices(live, undefined, undefined)).toBe(live)
+    expect(withSnapchatDevices(live, "all", "cell")).toEqual({
+      geos: live.geos,
+      devices: [{ connection_type: "CELL", operation: "INCLUDE" }],
+    })
+    expect(withSnapchatDevices(narrowed.targeting, "all", "all")).not.toHaveProperty("devices")
+
+    // A budget for the whole run replaces the daily one, and only with an end.
+    const lifetime = await adSet({ lifetimeBudget: 900, endAt: "2026-01-25T20:59:00.000Z" })
+    expect(lifetime).toMatchObject({
+      lifetime_budget_micro: 900_000_000,
+      delivery_constraint: "LIFETIME_BUDGET",
+      end_time: "2026-01-25T20:59:00.000Z",
+    })
+    expect(lifetime).not.toHaveProperty("daily_budget_micro")
+    expect(await adSet({ lifetimeBudget: 900, endAt: null })).toMatchObject({
+      daily_budget_micro: 50_000_000,
+      delivery_constraint: "DAILY_BUDGET",
+    })
   })
 
   it("lists Snapchat's languages and a country's interests, with the Arabic names Madar knows", async () => {
@@ -1240,6 +1306,9 @@ describe("the creative library and the publish record", () => {
       [{ adAccountId: "someone-else" }, "PUBLISH_ACCOUNT_NOT_CONNECTED"],
       [{ dailyBudget: 5 }, "PUBLISH_BUDGET_TOO_LOW"],
       [{ campaignDailyCap: 5 }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      // A budget for the whole run needs a last day, and enough for each of its days (6 here).
+      [{ lifetimeBudget: 500, endDate: null }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      [{ lifetimeBudget: 100 }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
       [{ objective: "awareness", goal: "PIXEL_PURCHASE" }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
       [{ startDate: "2026-01-14" }, "PUBLISH_START_IN_PAST"],
       [{ endDate: "2026-01-10" }, "PUBLISH_END_BEFORE_START"],

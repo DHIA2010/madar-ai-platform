@@ -22,7 +22,12 @@ import {
   type TikTokPublishedIds,
   type TikTokPublishInput,
 } from "./platform"
-import type { SnapchatInterest, SnapchatLanguage } from "./snapchat-audience"
+import type {
+  SnapchatDeviceConnection,
+  SnapchatDeviceSystem,
+  SnapchatInterest,
+  SnapchatLanguage,
+} from "./snapchat-audience"
 import {
   snapchatCities,
   snapchatPlacesProblem,
@@ -112,6 +117,12 @@ export type PublishCampaignInput =
       // The languages and Snapchat interests to narrow to. Empty: everyone.
       languages?: string[] | null
       interestIds?: string[] | null
+      // The phones it is shown on. Left out or "all": every phone on any connection.
+      deviceSystem?: SnapchatDeviceSystem | null
+      deviceConnection?: SnapchatDeviceConnection | null
+      // One amount for the whole run instead of an amount a day; needs an end date. The daily
+      // budget kept with the record is then the average a day.
+      lifetimeBudget?: number | null
     })
   | (PublishCommonInput & {
       platform: "tiktok"
@@ -153,6 +164,9 @@ export interface PublicationDetails {
   cityKeys?: string[]
   languages?: string[]
   interestIds?: string[]
+  deviceSystem?: string
+  deviceConnection?: string
+  lifetimeBudget?: number
 }
 
 export interface PublicationView {
@@ -341,6 +355,13 @@ const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000
 const invalid = (code: string, message: string, details?: Record<string, unknown>) =>
   new IdentityError(code, 422, "validation", message, details)
 
+// How many days a campaign runs, its first and last day both counted.
+const runDays = (input: { startDate: string; endDate?: string | null }) =>
+  Math.round(
+    (Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`)) /
+      86_400_000
+  ) + 1
+
 const riyadhDay = (date: Date) =>
   new Date(date.getTime() + RIYADH_OFFSET_MS).toISOString().slice(0, 10)
 type SnapchatInput = Extract<PublishCampaignInput, { platform: "snapchat" }>
@@ -407,6 +428,11 @@ function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
   if (input.cityKeys?.length) details.cityKeys = input.cityKeys
   if (input.languages?.length) details.languages = input.languages
   if (input.interestIds?.length) details.interestIds = input.interestIds
+  if (input.deviceSystem && input.deviceSystem !== "all") details.deviceSystem = input.deviceSystem
+  if (input.deviceConnection && input.deviceConnection !== "all") {
+    details.deviceConnection = input.deviceConnection
+  }
+  if (input.lifetimeBudget) details.lifetimeBudget = input.lifetimeBudget
   return Object.keys(details).length > 0 ? details : null
 }
 
@@ -788,7 +814,22 @@ export class CampaignPublishingService {
   // Checks the request, records the campaign as "publishing" and starts the publish. Everything
   // that can be judged without the platform is judged here, so the merchant hears about it at
   // once rather than after a wait.
-  async publish(actor: AuthenticatedActor, input: PublishCampaignInput): Promise<PublicationView> {
+  async publish(actor: AuthenticatedActor, given: PublishCampaignInput): Promise<PublicationView> {
+    // A Snapchat budget for the whole run: it needs a last day, and what it comes to a day is
+    // held to the same floor as a daily budget and kept as the record's daily budget.
+    let input = given
+    if (given.platform === "snapchat" && given.lifetimeBudget) {
+      const days = given.endDate && given.endDate >= given.startDate ? runDays(given) : 0
+      const minimum = MIN_DAILY_BUDGETS.snapchat * days
+      if (days === 0 || given.lifetimeBudget < minimum) {
+        throw invalid(
+          "PUBLISH_SETTINGS_NOT_SUITABLE",
+          "A budget for the whole run needs an end date and enough for each day.",
+          { problem: days === 0 ? "lifetime_budget_end" : "lifetime_budget", minimum }
+        )
+      }
+      input = { ...given, dailyBudget: Math.round((given.lifetimeBudget / days) * 100) / 100 }
+    }
     const account = (await this.accounts(actor, input.platform)).accounts.find(
       (entry) =>
         entry.connectionId === input.connectionId && entry.adAccountId === input.adAccountId
@@ -1046,6 +1087,9 @@ export class CampaignPublishingService {
       cityKeys: input.cityKeys ?? null,
       languages: input.languages ?? null,
       interestIds: input.interestIds ?? null,
+      deviceSystem: input.deviceSystem ?? null,
+      deviceConnection: input.deviceConnection ?? null,
+      lifetimeBudget: input.lifetimeBudget ?? null,
       minAge: Math.min(shown.minAge, SNAPCHAT_MIN_AGE_TOP),
       maxAge: shown.maxAge && shown.maxAge <= SNAPCHAT_MAX_AGE_TOP ? shown.maxAge : null,
       accessToken: await this.snapchatAccess.resolveAccessToken(input.connectionId),

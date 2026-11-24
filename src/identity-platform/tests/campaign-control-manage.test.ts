@@ -423,6 +423,58 @@ describe("viewing, editing and copying from the campaigns list", () => {
     expect(sentTargeting().demographics).toEqual([{ min_age: "25", operation: "INCLUDE" }])
   })
 
+  it("narrows an ad group to phones, and changes only the kind of budget it has", async () => {
+    const { service, account } = control()
+    const sent = () => (account.writes().at(-1)?.body?.adsquads as Json[])[0]
+
+    const before = await service.settings(actor, rowId("squad-1"), "adGroup")
+    expect(before).toMatchObject({
+      deviceSystem: "all",
+      deviceConnection: "all",
+      lifetimeBudget: null,
+    })
+
+    const after = await service.edit(actor, rowId("squad-1"), "adGroup", {
+      deviceSystem: "android",
+      deviceConnection: "wifi",
+    })
+    expect((sent().targeting as Json).devices).toEqual([
+      { os_type: "ANDROID", connection_type: "WIFI", operation: "INCLUDE" },
+    ])
+    expect(after).toMatchObject({ deviceSystem: "android", deviceConnection: "wifi" })
+    await service.edit(actor, rowId("squad-1"), "adGroup", {
+      deviceSystem: "all",
+      deviceConnection: "all",
+    })
+    expect(sent().targeting).not.toHaveProperty("devices")
+
+    // This ad group has a daily budget: a budget for the whole run is refused, before Snapchat.
+    const writes = account.writes().length
+    await expect(
+      service.edit(actor, rowId("squad-1"), "adGroup", { lifetimeBudget: 900 })
+    ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
+    expect(account.writes().length).toBe(writes)
+
+    // One made with a budget for its whole run takes a new amount, and no daily one.
+    const squad = account.store.adsquads.get("squad-1") as Json
+    delete squad.daily_budget_micro
+    squad.lifetime_budget_micro = 900_000_000
+    squad.delivery_constraint = "LIFETIME_BUDGET"
+    expect(await service.settings(actor, rowId("squad-1"), "adGroup")).toMatchObject({
+      dailyBudget: null,
+      lifetimeBudget: 900,
+    })
+    await service.edit(actor, rowId("squad-1"), "adGroup", { lifetimeBudget: 1200 })
+    expect(sent()).toMatchObject({
+      lifetime_budget_micro: 1_200_000_000,
+      delivery_constraint: "LIFETIME_BUDGET",
+    })
+    expect(sent()).not.toHaveProperty("daily_budget_micro")
+    await expect(
+      service.edit(actor, rowId("squad-1"), "adGroup", { dailyBudget: 100 })
+    ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
+  })
+
   it("leaves the audience untouched when only the name changes", async () => {
     const { service, account } = control()
     const before = structuredClone(account.store.adsquads.get("squad-1")?.targeting)

@@ -96,6 +96,12 @@ export interface SnapchatPublishInput {
   // Left out or empty: everyone.
   languages?: string[] | null
   interestIds?: string[] | null
+  // The phones it is shown on: the system and the connection. Left out: every phone.
+  deviceSystem?: SnapchatDeviceSystem | null
+  deviceConnection?: SnapchatDeviceConnection | null
+  // One amount for the whole run instead of an amount a day; it needs an end date. When set,
+  // dailyBudget is only the average a day and is not sent.
+  lifetimeBudget?: number | null
   // What the ad set is delivered for; left out, the objective's own first choice.
   goal?: SnapchatGoal | null
   // The most the whole campaign may spend in a day, and over its life. Left out: no cap.
@@ -146,6 +152,9 @@ export class SnapchatPublishError extends Error {
 import {
   interestNameAr,
   languageNameAr,
+  snapchatDevices,
+  type SnapchatDeviceConnection,
+  type SnapchatDeviceSystem,
   type SnapchatInterest,
   type SnapchatLanguage,
 } from "./snapchat-audience"
@@ -492,6 +501,8 @@ export class SnapchatCampaignPublisher {
       if (input.gender !== "all") demographic.gender = input.gender.toUpperCase()
       if (input.languages?.length) demographic.languages = [...new Set(input.languages)]
       const interestIds = [...new Set(input.interestIds ?? [])]
+      const devices = snapchatDevices(input.deviceSystem, input.deviceConnection)
+      const lifetime = input.lifetimeBudget && input.endAt ? input.lifetimeBudget : null
       const adSquad = this.created(
         "ad_set",
         await this.call("ad_set", token, "POST", `/campaigns/${campaignId}/adsquads`, {
@@ -509,12 +520,17 @@ export class SnapchatCampaignPublisher {
                 ...(interestIds.length > 0
                   ? { interests: [{ category_id: interestIds, operation: "INCLUDE" }] }
                   : {}),
+                ...(devices ? { devices } : {}),
               },
               placement_v2: { config: "AUTOMATIC" },
               billing_event: "IMPRESSION",
               ...bidding,
-              daily_budget_micro: micro(input.dailyBudget),
-              delivery_constraint: "DAILY_BUDGET",
+              ...(lifetime
+                ? { lifetime_budget_micro: micro(lifetime), delivery_constraint: "LIFETIME_BUDGET" }
+                : {
+                    daily_budget_micro: micro(input.dailyBudget),
+                    delivery_constraint: "DAILY_BUDGET",
+                  }),
               pacing_type: "STANDARD",
               child_ad_type: "REMOTE_WEBPAGE",
               start_time: input.startAt,

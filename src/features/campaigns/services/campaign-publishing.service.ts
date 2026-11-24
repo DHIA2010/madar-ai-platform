@@ -239,6 +239,11 @@ export type PublishCampaignInput =
       // Snapchat only: the languages and interests to narrow to. Empty: everyone.
       languages?: string[] | null
       interestIds?: string[] | null
+      // Snapchat only: the phones it is shown on, and one budget for the whole run (which needs
+      // an end date) instead of a daily one.
+      deviceSystem?: "all" | "ios" | "android" | null
+      deviceConnection?: "all" | "wifi" | "cell" | null
+      lifetimeBudget?: number | null
     })
   | (PublishCommonInput & {
       platform: "meta"

@@ -283,6 +283,11 @@ export interface CampaignControlSettings {
   // An ad group's languages and interests, when it is narrowed to some.
   languages: Array<{ id: string; name: string; nameAr: string | null }>
   interests: Array<{ id: string; name: string; nameAr: string | null }>
+  // The phones an ad group is shown on, and its budget for the whole run when it has one
+  // instead of a daily budget (Snapchat ad groups).
+  deviceSystem: "all" | "ios" | "android" | null
+  deviceConnection: "all" | "wifi" | "cell" | null
+  lifetimeBudget: number | null
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -312,6 +317,10 @@ export interface CampaignControlChanges {
   // An ad group's languages and interests; empty is everyone.
   languages?: string[]
   interestIds?: string[]
+  deviceSystem?: "all" | "ios" | "android"
+  deviceConnection?: "all" | "wifi" | "cell"
+  // For an ad group whose budget is for its whole run.
+  lifetimeBudget?: number
   // Copies of an ad only.
   url?: string
 }

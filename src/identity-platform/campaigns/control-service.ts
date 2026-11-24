@@ -30,7 +30,11 @@ import {
   interestNameAr,
   languageNameAr,
   readSnapchatAudience,
+  readSnapchatDevices,
   withSnapchatAudience,
+  withSnapchatDevices,
+  type SnapchatDeviceConnection,
+  type SnapchatDeviceSystem,
   type SnapchatInterest,
   type SnapchatLanguage,
 } from "./publishing/snapchat-audience"
@@ -161,6 +165,11 @@ export interface ControlSettings {
   // An ad group's languages and interests, when it is narrowed to some (snapchat-audience.ts).
   languages: SnapchatLanguage[]
   interests: SnapchatInterest[]
+  // The phones an ad group is shown on (Snapchat ad groups only).
+  deviceSystem: SnapchatDeviceSystem | null
+  deviceConnection: SnapchatDeviceConnection | null
+  // An ad group's budget for its whole run, when it has that instead of a daily budget.
+  lifetimeBudget: number | null
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -190,6 +199,11 @@ export interface EditInput {
   // An ad group's languages and interests. Left out: as they are; empty: everyone.
   languages?: string[] | null
   interestIds?: string[] | null
+  deviceSystem?: SnapchatDeviceSystem | null
+  deviceConnection?: SnapchatDeviceConnection | null
+  // The budget for the whole run, for an ad group that has one (the kind of budget cannot be
+  // switched after the ad group is made).
+  lifetimeBudget?: number | null
 }
 
 // A copy: its own name, and whatever of the original's settings the copy should have differently.
@@ -1182,6 +1196,9 @@ export class CampaignControlService {
     if (level === "adGroup" && input.dailyBudget != null) {
       this.budgetFloor("snapchat", input.dailyBudget)
     }
+    if (level === "adGroup" && input.lifetimeBudget != null) {
+      this.budgetFloor("snapchat", input.lifetimeBudget)
+    }
     ageOrder(input.minAge, input.maxAge)
     placesFit(input)
     const url = level === "ad" ? secureUrl(input.url) : null
@@ -1197,9 +1214,7 @@ export class CampaignControlService {
           else next.end_time = endOfRiyadhDay(input.endDate)
         }
         if (level === "adGroup") {
-          if (input.dailyBudget != null) {
-            next.daily_budget_micro = Math.round(input.dailyBudget * 1_000_000)
-          }
+          snapchatBudget(next, input)
           next.targeting = snapchatAudience(next.targeting, input)
         }
         return next
@@ -1281,6 +1296,9 @@ export class CampaignControlService {
     if (level === "adGroup" && input.dailyBudget != null) {
       this.budgetFloor("snapchat", input.dailyBudget)
     }
+    if (level === "adGroup" && input.lifetimeBudget != null) {
+      this.budgetFloor("snapchat", input.lifetimeBudget)
+    }
     ageOrder(input.minAge, input.maxAge)
     placesFit(input)
     const url = secureUrl(input.url)
@@ -1323,9 +1341,7 @@ export class CampaignControlService {
           status: "PAUSED",
           change: (copy) => {
             const next: Record<string, unknown> = { ...copy, name }
-            if (input.dailyBudget != null) {
-              next.daily_budget_micro = Math.round(input.dailyBudget * 1_000_000)
-            }
+            snapchatBudget(next, input)
             next.targeting = snapchatAudience(next.targeting, input)
             return next
           },
@@ -1371,6 +1387,9 @@ const EMPTY: SettingsBody = {
   cities: [],
   languages: [],
   interests: [],
+  deviceSystem: null,
+  deviceConnection: null,
+  lifetimeBudget: null,
   minAge: null,
   maxAge: null,
   gender: null,
@@ -1405,6 +1424,7 @@ function snapchatSettings(level: ControlLevel, entity: Raw, creative: Raw | null
   const gender = String(demographic.gender ?? "").toLowerCase()
   const places = readSnapchatPlaces(entity.targeting)
   const audience = readSnapchatAudience(entity.targeting)
+  const devices = readSnapchatDevices(entity.targeting)
   return {
     ...EMPTY,
     name: String(entity.name ?? ""),
@@ -1414,6 +1434,9 @@ function snapchatSettings(level: ControlLevel, entity: Raw, creative: Raw | null
       text(entity.objective),
     goal: text(entity.optimization_goal),
     dailyBudget: amount(entity.daily_budget_micro, 1_000_000),
+    lifetimeBudget: level === "adGroup" ? amount(entity.lifetime_budget_micro, 1_000_000) : null,
+    deviceSystem: level === "adGroup" ? devices.system : null,
+    deviceConnection: level === "adGroup" ? devices.connection : null,
     startAt: instant(entity.start_time),
     endAt: instant(entity.end_time),
     countries: [
@@ -1588,14 +1611,48 @@ function snapchatAudience(
   current: unknown,
   input: Pick<
     EditInput,
-    "minAge" | "maxAge" | "gender" | "regionIds" | "cityKeys" | "languages" | "interestIds"
+    | "minAge"
+    | "maxAge"
+    | "gender"
+    | "regionIds"
+    | "cityKeys"
+    | "languages"
+    | "interestIds"
+    | "deviceSystem"
+    | "deviceConnection"
   >
 ): unknown {
-  return withSnapchatAudience(
-    snapchatDemographics(snapchatWhere(current, input), input),
-    input.languages,
-    input.interestIds
+  return withSnapchatDevices(
+    withSnapchatAudience(
+      snapchatDemographics(snapchatWhere(current, input), input),
+      input.languages,
+      input.interestIds
+    ),
+    input.deviceSystem,
+    input.deviceConnection
   )
+}
+
+// An ad group's budget with the amounts asked for. Each ad group has one kind of budget, a day's
+// or the whole run's, and only the kind it has can be changed.
+function snapchatBudget(
+  next: Record<string, unknown>,
+  input: Pick<EditInput, "dailyBudget" | "lifetimeBudget">
+) {
+  const lifetime = next.lifetime_budget_micro != null && next.daily_budget_micro == null
+  if ((input.lifetimeBudget != null && !lifetime) || (input.dailyBudget != null && lifetime)) {
+    throw new IdentityError(
+      "PUBLISH_SETTINGS_NOT_SUITABLE",
+      422,
+      "validation",
+      "The kind of budget cannot be changed after the ad group is made.",
+      { problem: "budget_kind" }
+    )
+  }
+  if (input.dailyBudget != null) next.daily_budget_micro = Math.round(input.dailyBudget * 1_000_000)
+  if (input.lifetimeBudget != null) {
+    next.lifetime_budget_micro = Math.round(input.lifetimeBudget * 1_000_000)
+  }
 }
 
 // The audience's places: the ad group's own country, narrowed to the regions or the cities asked

@@ -67,7 +67,12 @@ import {
   type SnapchatBidStrategy,
   type SnapchatGoal,
 } from "../services/campaign-publishing.service"
-import { CampaignAudiencePicker } from "./campaign-audience-picker"
+import {
+  CampaignAudiencePicker,
+  CampaignDevicePicker,
+  type DeviceConnection,
+  type DeviceSystem,
+} from "./campaign-audience-picker"
 import {
   CREATIVE_ACCEPT,
   CreativeThumb,
@@ -147,6 +152,11 @@ interface Draft {
   cityKeys: string[]
   languages: string[]
   interestIds: string[]
+  deviceSystem: DeviceSystem
+  deviceConnection: DeviceConnection
+  // Snapchat: an amount a day, or one amount for the whole run (which needs an end date).
+  budgetKind: "daily" | "lifetime"
+  lifetimeBudget: string
   dailyBudget: string
   startDate: string
   endDate: string
@@ -303,6 +313,10 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     cityKeys: [],
     languages: [],
     interestIds: [],
+    deviceSystem: "all",
+    deviceConnection: "all",
+    budgetKind: "daily",
+    lifetimeBudget: "",
     dailyBudget: "50",
     startDate: toLocalDay(new Date()),
     endDate: "",
@@ -448,7 +462,22 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
   const limits = options?.limits
   const currency = account?.currency ?? "SAR"
   const currencyLabel = currency === "SAR" && locale === "ar" ? "ر.س" : currency
-  const budget = Number(draft.dailyBudget)
+  // A budget for the whole run is spread over the days from the first to the last, both counted;
+  // what it comes to a day is what the caps and the floor are held against.
+  const lifetime = draft.platform === "snapchat" && draft.budgetKind === "lifetime"
+  const runDays =
+    draft.startDate && draft.endDate && draft.endDate >= draft.startDate
+      ? Math.round(
+          (Date.parse(`${draft.endDate}T00:00:00Z`) - Date.parse(`${draft.startDate}T00:00:00Z`)) /
+            86_400_000
+        ) + 1
+      : 0
+  const lifetimeBudget = Number(draft.lifetimeBudget)
+  const budget = lifetime
+    ? runDays > 0
+      ? Math.round((lifetimeBudget / runDays) * 100) / 100
+      : 0
+    : Number(draft.dailyBudget)
   const minimumBudget = limits?.minDailyBudgets?.[draft.platform] ?? limits?.minDailyBudget ?? 20
   const headlineMax =
     draft.platform === "tiktok"
@@ -465,7 +494,16 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     }
     if (index === 1) {
       const minimum = minimumBudget
-      if (!Number.isFinite(budget) || budget < minimum) {
+      if (lifetime) {
+        if (runDays === 0) found.dailyBudget = t("errors.lifetimeEnd")
+        else if (!Number.isFinite(lifetimeBudget) || lifetimeBudget < minimum * runDays) {
+          found.dailyBudget = t("errors.lifetimeBudget", {
+            minimum: minimum * runDays,
+            days: runDays,
+            currency: currencyLabel,
+          })
+        }
+      } else if (!Number.isFinite(budget) || budget < minimum) {
         found.dailyBudget = t("errors.budget", { minimum, currency: currencyLabel })
       }
       if (!draft.startDate) found.startDate = t("errors.startDate")
@@ -638,6 +676,9 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                         cityKeys: draft.cityKeys,
                         languages: draft.languages,
                         interestIds: draft.interestIds,
+                        deviceSystem: draft.deviceSystem,
+                        deviceConnection: draft.deviceConnection,
+                        lifetimeBudget: lifetime ? lifetimeBudget : null,
                       }
                     : {}),
                 }
@@ -908,7 +949,9 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       : []),
     {
       label: t("review.budget"),
-      value: t("review.budgetValue", { amount: draft.dailyBudget, currency: currencyLabel }),
+      value: lifetime
+        ? t("review.lifetimeBudgetValue", { amount: draft.lifetimeBudget, currency: currencyLabel })
+        : t("review.budgetValue", { amount: draft.dailyBudget, currency: currencyLabel }),
     },
     {
       label: t("review.dates"),
@@ -1101,15 +1144,44 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
 
         {step === 1 ? (
           <>
+            {isSnapchat ? (
+              <div className="flex flex-wrap gap-2">
+                {(["daily", "lifetime"] as const).map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-pressed={draft.budgetKind === kind}
+                    onClick={() => set("budgetKind", kind)}
+                    className={cn(
+                      "inline-flex h-11 items-center justify-center rounded-xl border-2 px-4 text-[13px] font-bold transition-colors",
+                      draft.budgetKind === kind
+                        ? "border-[#1d4fd8] bg-[#f3f7ff] text-[#1d4fd8]"
+                        : "border-[#e1e7f0] bg-white text-[#3b4a66] hover:border-[#1d4fd8]/40"
+                    )}
+                  >
+                    {t(`audience.budgetKinds.${kind}`)}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             <Field
-              label={t("audience.budget")}
+              label={lifetime ? t("audience.lifetimeBudget") : t("audience.budget")}
               hint={
-                Number.isFinite(budget) && budget > 0
-                  ? t("audience.budgetHint", {
-                      week: Math.round(budget * 7),
-                      currency: currencyLabel,
-                    })
-                  : undefined
+                lifetime
+                  ? runDays > 0 && lifetimeBudget > 0
+                    ? t("audience.lifetimeBudgetHint", {
+                        days: runDays,
+                        day: Math.round(budget),
+                        currency: currencyLabel,
+                      })
+                    : t("audience.lifetimeBudgetNeedsEnd")
+                  : Number.isFinite(budget) && budget > 0
+                    ? t("audience.budgetHint", {
+                        week: Math.round(budget * 7),
+                        currency: currencyLabel,
+                      })
+                    : undefined
               }
               error={errors.dailyBudget}
             >
@@ -1119,8 +1191,10 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   type="number"
                   inputMode="decimal"
                   min={minimumBudget}
-                  value={draft.dailyBudget}
-                  onChange={(event) => set("dailyBudget", event.target.value)}
+                  value={lifetime ? draft.lifetimeBudget : draft.dailyBudget}
+                  onChange={(event) =>
+                    set(lifetime ? "lifetimeBudget" : "dailyBudget", event.target.value)
+                  }
                 />
                 <span
                   className={cn(
@@ -1194,6 +1268,16 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                 countryCode={draft.countryCode}
                 value={{ languages: draft.languages, interestIds: draft.interestIds }}
                 onChange={(audience) => setDraft((current) => ({ ...current, ...audience }))}
+              />
+            ) : null}
+
+            {isSnapchat ? (
+              <CampaignDevicePicker
+                value={{
+                  deviceSystem: draft.deviceSystem,
+                  deviceConnection: draft.deviceConnection,
+                }}
+                onChange={(devices) => setDraft((current) => ({ ...current, ...devices }))}
               />
             ) : null}
 

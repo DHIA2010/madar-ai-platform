@@ -7973,7 +7973,10 @@
             "regions": "Regions",
             "cities": "Cities",
             "languages": "Languages",
-            "interests": "Interests"
+            "interests": "Interests",
+            "lifetimeBudget": "Budget for the whole run",
+            "devices": "Phone type",
+            "connection": "Connection"
           },
           "values": {
             "noEnd": "No end",
@@ -8199,7 +8202,14 @@
         "googleNote": "Google search ads are shown by what people search for, not by age or gender. Choosing the country is enough.",
         "snapchatAgeNote": "Snapchat targets a youngest age up to 45 and an oldest age up to 49 only; above that it knows only \"and older\". So on Snapchat your ad will be published for these ages: {ages}.",
         "goal": "What do you want more of?",
-        "goalHint": "Snapchat shows the ad to people likely to do this. We picked the best fit for your objective; you can change it."
+        "goalHint": "Snapchat shows the ad to people likely to do this. We picked the best fit for your objective; you can change it.",
+        "budgetKinds": {
+          "daily": "Daily budget",
+          "lifetime": "Budget for the whole run"
+        },
+        "lifetimeBudget": "Budget for the whole run",
+        "lifetimeBudgetHint": "Spent over {days, plural, one {# day} other {# days}}, about {day} {currency} a day. Snapchat spreads it itself and may spend more on one day and less on another.",
+        "lifetimeBudgetNeedsEnd": "One amount for the campaign's whole run. It needs an end date."
       },
       "countries": {
         "sa": "Saudi Arabia",
@@ -8286,7 +8296,8 @@
         "startNow": "Start as soon as it is approved",
         "startNowHint": "It starts spending ({amount} {currency} a day) once the platform approves the ad.",
         "keywords": "Search words",
-        "goal": "Optimised for"
+        "goal": "Optimised for",
+        "lifetimeBudgetValue": "{amount} {currency} for the whole run"
       },
       "errors": {
         "account": "Choose the ad account.",
@@ -8309,7 +8320,9 @@
         "dailyCap": "The daily spend cap has to be at least {minimum} {currency} and at least a quarter of the day's budget.",
         "lifetimeCap": "The lifetime spend cap has to be at least {minimum} {currency} and at least one day's budget.",
         "bidAmount": "Enter the bid amount.",
-        "targetCostGoal": "A target cost is not available with what you chose under “What do you want more of?”. Pick automatic bidding or a maximum bid."
+        "targetCostGoal": "A target cost is not available with what you chose under “What do you want more of?”. Pick automatic bidding or a maximum bid.",
+        "lifetimeEnd": "A budget for the whole run needs an end date. Pick the end date first.",
+        "lifetimeBudget": "The lowest budget for {days} days is {minimum} {currency}."
       },
       "requestErrors": {
         "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect the platform and try again.",
@@ -8454,6 +8467,20 @@
         "unavailable": "The languages and interests could not be read from Snapchat right now, so the ad is shown to everyone.",
         "languagesCount": "{count, plural, one {# language} other {# languages}}",
         "interestsCount": "{count, plural, one {# interest} other {# interests}}"
+      },
+      "devices": {
+        "systems": {
+          "label": "Phone type",
+          "all": "All phones",
+          "ios": "iPhone",
+          "android": "Android"
+        },
+        "connections": {
+          "label": "Connection",
+          "all": "Any connection",
+          "wifi": "Wi-Fi only",
+          "cell": "Mobile data only"
+        }
       }
     },
     "metrics": {
