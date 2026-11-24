@@ -6,20 +6,36 @@
 // Snapchat answers each write with { request_status, <items>: [{ sub_request_status, sub_request
 // _error_reason, <item> }] } -- a 200 can still carry a refused item, so both are checked.
 
-// Snapchat's campaign objectives a web advertiser can be published with. (Its fifth, promoting
-// an app, needs the app's store details and an app-install ad, which Madar does not build yet.)
-export type SnapchatObjective = "awareness" | "traffic" | "leads" | "sales"
+// Snapchat's five campaign objectives. Four send people to a website; the fifth, promoting an
+// app, sends them to the app's page in the App Store or Google Play (an "app install" ad) and
+// needs the app's store details and its icon.
+export type SnapchatObjective = "awareness" | "traffic" | "leads" | "sales" | "app"
 export const SNAPCHAT_OBJECTIVES: readonly SnapchatObjective[] = [
   "awareness",
   "traffic",
   "leads",
   "sales",
+  "app",
 ]
+
+// The app an app-promotion campaign is for: its name as the ad shows it (30 letters at most),
+// its number in the App Store, its package name in Google Play (one of the two is enough for
+// Madar; the ad then goes to that store only), and its icon -- a square PNG, 200 to 2000 wide.
+export interface SnapchatAppInput {
+  name: string
+  iosAppId?: string | null
+  androidPackage?: string | null
+  icon: { kind: "image" | "video"; bytes: Buffer; contentType: string; fileName: string }
+}
+export const SNAPCHAT_APP_NAME_MAX = 30
+export const SNAPCHAT_APP_ICON_MIN = 200
+export const SNAPCHAT_APP_ICON_MAX = 2000
 const OBJECTIVE_TYPE: Record<SnapchatObjective, string> = {
   awareness: "AWARENESS_AND_ENGAGEMENT",
   traffic: "TRAFFIC",
   leads: "LEADS",
   sales: "SALES",
+  app: "APP_PROMOTION",
 }
 
 // What an ad set is delivered for: who Snapchat shows the ad to. Each objective has its own
@@ -28,6 +44,7 @@ const OBJECTIVE_TYPE: Record<SnapchatObjective, string> = {
 export type SnapchatGoal =
   | "IMPRESSIONS"
   | "SWIPES"
+  | "APP_INSTALLS"
   | "VIDEO_VIEWS"
   | "PIXEL_PAGE_VIEW"
   | "PIXEL_SIGNUP"
@@ -38,6 +55,9 @@ export const SNAPCHAT_GOALS: Record<SnapchatObjective, readonly SnapchatGoal[]> 
   traffic: ["SWIPES", "PIXEL_PAGE_VIEW"],
   leads: ["PIXEL_SIGNUP", "SWIPES"],
   sales: ["PIXEL_PURCHASE", "PIXEL_ADD_TO_CART", "PIXEL_PAGE_VIEW"],
+  // Installs are counted by Snapchat only when the app reports them to it (the Snap app id or a
+  // measurement partner, set up outside Madar); taps on the ad need nothing.
+  app: ["APP_INSTALLS", "SWIPES"],
 }
 
 // How Snapchat bids for the ad set: on its own, around a cost per result to aim for, or never
@@ -60,8 +80,27 @@ export const SNAPCHAT_CALLS_TO_ACTION = [
   "SIGN_UP",
   "BOOK_NOW",
   "GET_NOW",
+  "INSTALL_NOW",
+  "DOWNLOAD",
+  "USE_APP",
 ] as const
 export type SnapchatCallToAction = (typeof SNAPCHAT_CALLS_TO_ACTION)[number]
+// The buttons an app-install ad may carry, and the ones only it may carry.
+export const SNAPCHAT_APP_CALLS_TO_ACTION: readonly SnapchatCallToAction[] = [
+  "INSTALL_NOW",
+  "DOWNLOAD",
+  "GET_NOW",
+  "USE_APP",
+  "SHOP_NOW",
+  "ORDER_NOW",
+  "SIGN_UP",
+  "BOOK_NOW",
+]
+export const SNAPCHAT_APP_ONLY_CALLS_TO_ACTION: readonly SnapchatCallToAction[] = [
+  "INSTALL_NOW",
+  "DOWNLOAD",
+  "USE_APP",
+]
 
 // Snapchat's own limits for the text on an ad.
 export const SNAPCHAT_HEADLINE_MAX = 34
@@ -102,6 +141,9 @@ export interface SnapchatPublishInput {
   // One amount for the whole run instead of an amount a day; it needs an end date. When set,
   // dailyBudget is only the average a day and is not sent.
   lifetimeBudget?: number | null
+  // The app, for the app-promotion objective: every ad is then an app-install ad and `url` is
+  // not used.
+  app?: SnapchatAppInput | null
   // The names of the first ad group and the first ad; left out, the campaign's own name.
   adGroupName?: string | null
   adName?: string | null
@@ -509,6 +551,20 @@ export class SnapchatCampaignPublisher {
             bid_micro: micro(input.bidAmount),
           }
 
+    const app = input.objective === "app" ? (input.app ?? null) : null
+    if (input.objective === "app" && !(app?.iosAppId || app?.androidPackage)) {
+      throw new SnapchatPublishError("campaign", "An app campaign needs the app's store details.")
+    }
+    // An app in one store only is shown to that store's phones, unless phones were chosen.
+    const onlySystem: SnapchatDeviceSystem | null = !app
+      ? null
+      : app.iosAppId && !app.androidPackage
+        ? "ios"
+        : app.androidPackage && !app.iosAppId
+          ? "android"
+          : null
+    const adType = app ? "APP_INSTALL" : "REMOTE_WEBPAGE"
+
     const campaign = this.created(
       "campaign",
       await this.call("campaign", token, "POST", `/adaccounts/${account}/campaigns`, {
@@ -521,6 +577,16 @@ export class SnapchatCampaignPublisher {
             ...(input.endAt ? { end_time: input.endAt } : {}),
             buy_model: "AUCTION",
             objective_v2_properties: { objective_v2_type: OBJECTIVE_TYPE[input.objective] },
+            // Snapchat asks for the app's store ids on a campaign of app-install ads, to count
+            // installs against it.
+            ...(app
+              ? {
+                  measurement_spec: {
+                    ...(app.iosAppId ? { ios_app_id: app.iosAppId } : {}),
+                    ...(app.androidPackage ? { android_app_url: app.androidPackage } : {}),
+                  },
+                }
+              : {}),
             ...(input.campaignDailyCap
               ? { daily_budget_micro: micro(input.campaignDailyCap) }
               : {}),
@@ -554,7 +620,12 @@ export class SnapchatCampaignPublisher {
         if (group.gender !== "all") demographic.gender = group.gender.toUpperCase()
         if (group.languages?.length) demographic.languages = [...new Set(group.languages)]
         const interestIds = [...new Set(group.interestIds ?? [])]
-        const devices = snapchatDevices(group.deviceSystem, group.deviceConnection)
+        const devices = snapchatDevices(
+          onlySystem && (!group.deviceSystem || group.deviceSystem === "all")
+            ? onlySystem
+            : group.deviceSystem,
+          group.deviceConnection
+        )
         const lifetime = group.lifetimeBudget && input.endAt ? group.lifetimeBudget : null
         const adSquad = this.created(
           "ad_set",
@@ -588,7 +659,7 @@ export class SnapchatCampaignPublisher {
                       delivery_constraint: "DAILY_BUDGET",
                     }),
                 pacing_type: "STANDARD",
-                child_ad_type: "REMOTE_WEBPAGE",
+                child_ad_type: adType,
                 start_time: input.startAt,
                 ...(input.endAt ? { end_time: input.endAt } : {}),
                 optimization_goal: goal,
@@ -604,6 +675,19 @@ export class SnapchatCampaignPublisher {
         adSquadIds.push(adSquad.id as string)
       }
 
+      // The app's icon is uploaded once and shown on every ad.
+      const appShown = app
+        ? {
+            name: app.name,
+            iosAppId: app.iosAppId ?? null,
+            androidPackage: app.androidPackage ?? null,
+            iconMediaId: await this.uploadMedia(token, {
+              adAccountId: account,
+              media: app.icon,
+              name: `${app.name} icon`,
+            }),
+          }
+        : null
       const placed: NonNullable<SnapchatPublishedIds["ads"]> = []
       for (const [adIndex, ad] of ads.entries()) {
         const made = await this.makeCreative(token, {
@@ -611,12 +695,14 @@ export class SnapchatCampaignPublisher {
           adAccountId: account,
           brandName: input.brandName,
           profileId,
+          app: appShown,
         })
         for (const adSquadId of adSquadIds) {
           const put = await this.placeAd(token, {
             adSquadId,
             creativeId: made.creativeId,
             name: ad.name,
+            type: adType,
           })
           placed.push({ adId: put.id as string, adSquadId, ...made, adIndex })
         }
@@ -661,7 +747,16 @@ export class SnapchatCampaignPublisher {
     input: Pick<
       SnapchatPublishInput,
       "adAccountId" | "name" | "media" | "brandName" | "headline" | "callToAction" | "url"
-    > & { profileId: string }
+    > & {
+      profileId: string
+      // Given: an app-install creative, which opens the app's store page instead of a link.
+      app?: {
+        name: string
+        iosAppId: string | null
+        androidPackage: string | null
+        iconMediaId: string
+      } | null
+    }
   ): Promise<{ mediaId: string; creativeId: string }> {
     const mediaId = await this.uploadMedia(token, input)
     const creative = this.created(
@@ -671,13 +766,24 @@ export class SnapchatCampaignPublisher {
           {
             ad_account_id: input.adAccountId,
             name: input.name,
-            type: "WEB_VIEW",
+            type: input.app ? "APP_INSTALL" : "WEB_VIEW",
             headline: input.headline,
             brand_name: input.brandName,
             shareable: true,
             call_to_action: input.callToAction,
             top_snap_media_id: mediaId,
-            web_view_properties: { url: input.url },
+            ...(input.app
+              ? {
+                  app_install_properties: {
+                    app_name: input.app.name,
+                    ...(input.app.iosAppId ? { ios_app_id: input.app.iosAppId } : {}),
+                    ...(input.app.androidPackage
+                      ? { android_app_url: input.app.androidPackage }
+                      : {}),
+                    icon_media_id: input.app.iconMediaId,
+                  },
+                }
+              : { web_view_properties: { url: input.url } }),
             profile_properties: { profile_id: input.profileId },
           },
         ],
@@ -691,7 +797,7 @@ export class SnapchatCampaignPublisher {
   // The ad that puts a creative in an ad set.
   private async placeAd(
     token: string,
-    input: { adSquadId: string; creativeId: string; name: string }
+    input: { adSquadId: string; creativeId: string; name: string; type?: string }
   ): Promise<Json> {
     return this.created(
       "ad",
@@ -701,7 +807,7 @@ export class SnapchatCampaignPublisher {
             ad_squad_id: input.adSquadId,
             creative_id: input.creativeId,
             name: input.name,
-            type: "REMOTE_WEBPAGE",
+            type: input.type ?? "REMOTE_WEBPAGE",
             status: "ACTIVE",
           },
         ],

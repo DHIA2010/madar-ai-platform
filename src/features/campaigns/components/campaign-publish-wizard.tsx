@@ -50,6 +50,8 @@ import {
 
 import {
   type AnyCallToAction,
+  APP_NAME_MAX,
+  appIconProblem,
   callsToActionFor,
   type CallToAction,
   campaignPublishingService,
@@ -183,6 +185,12 @@ interface Draft {
   // are the ad group and the ad being worked on; the lists hold every one of them (the entry
   // being worked on is refreshed from the boxes whenever the lists are read), and the names
   // tell them apart once there is more than one.
+  // Snapchat's app objective: the app's name, its App Store number, its Google Play package
+  // name (one store is enough) and its icon, a creative in the library.
+  appName: string
+  appIosId: string
+  appAndroidPackage: string
+  appIconId: string
   groupName: string
   groups: GroupDraft[]
   groupAt: number
@@ -333,6 +341,7 @@ const OBJECTIVE_LOOK: Record<PublishObjective, { icon: typeof Megaphone; classNa
   traffic: { icon: MousePointerClick, className: "bg-[#eef4ff] text-[#1d4fd8]" },
   leads: { icon: UserPlus, className: "bg-[#e7f8ee] text-[#137a41]" },
   sales: { icon: ShoppingCart, className: "bg-[#f4ebff] text-[#6941c6]" },
+  app: { icon: Smartphone, className: "bg-[#e6f6fb] text-[#0e7090]" },
 }
 
 function Choice({
@@ -445,6 +454,10 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       url: "",
       tracking: {},
       startActive: false,
+      appName: "",
+      appIosId: "",
+      appAndroidPackage: "",
+      appIconId: "",
       groupName: "",
       groups: [],
       groupAt: 0,
@@ -463,6 +476,16 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     setDraft((current) => ({ ...current, [key]: value }))
     setErrors((current) => ({ ...current, [key]: undefined }))
   }
+
+  // The app's icon is uploaded into the library like any creative, and chosen at once.
+  const iconInput = useRef<HTMLInputElement>(null)
+  const { upload: uploadIcon, progress: iconProgress } = useCreativeUploader(
+    useCallback((creative: Creative) => {
+      setCreatives((current) => [creative, ...current])
+      setDraft((current) => ({ ...current, appIconId: creative.id }))
+      setErrors((current) => ({ ...current, appIconId: undefined }))
+    }, [])
+  )
 
   const load = useCallback(() => {
     setLoadFailed(false)
@@ -538,6 +561,26 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
   // The other platforms are published with traffic or leads only.
   const objective: PublishObjective =
     isSnapchat || draft.objective === "leads" ? draft.objective : "traffic"
+  // An app campaign's ads open the app's store page: no link, and buttons of their own.
+  const isApp = isSnapchat && objective === "app"
+  const appIcon = creatives.find((entry) => entry.id === draft.appIconId) ?? null
+  const appStoreUrl = draft.appIosId.trim()
+    ? `https://apps.apple.com/app/id${draft.appIosId.trim()}`
+    : `https://play.google.com/store/apps/details?id=${draft.appAndroidPackage.trim()}`
+  // Choosing or leaving the app objective swaps every ad's button for one that fits.
+  const chooseObjective = (next: PublishObjective) => {
+    setErrors({})
+    setDraft((current) => {
+      const offered = callsToActionFor(current.platform, next)
+      const fit = (button: AnyCallToAction) => (offered.includes(button) ? button : offered[0])
+      return {
+        ...current,
+        objective: next,
+        callToAction: fit(current.callToAction),
+        ads: current.ads.map((ad) => ({ ...ad, callToAction: fit(ad.callToAction) })),
+      }
+    })
+  }
   const goals = SNAPCHAT_GOALS[objective]
   // A goal chosen for another objective falls back to this objective's own pick.
   const goal: SnapchatGoal = draft.goal && goals.includes(draft.goal) ? draft.goal : goals[0]
@@ -683,6 +726,18 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     if (index === 0) {
       if (!account) found.accountKey = t("errors.account")
       if (draft.name.trim().length < 2) found.name = t("errors.name")
+      if (isApp) {
+        const ios = draft.appIosId.trim()
+        const android = draft.appAndroidPackage.trim()
+        if (!draft.appName.trim()) found.appName = t("errors.appName")
+        if (!ios && !android) found.appIosId = t("errors.appStore")
+        else if (ios && !/^\d{5,15}$/.test(ios)) found.appIosId = t("errors.appIosId")
+        if (android && !/^[A-Za-z]\w*(\.[A-Za-z]\w*)+$/.test(android)) {
+          found.appAndroidPackage = t("errors.appAndroidPackage")
+        }
+        if (!appIcon) found.appIconId = t("errors.appIcon")
+        else if (appIconProblem(appIcon)) found.appIconId = t("errors.appIconFit")
+      }
     }
     if (index === 1) {
       const minimum = minimumBudget
@@ -775,7 +830,9 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
           )
         }
         if (!ad.headline.trim()) wrong.headline = t("errors.headline")
-        if (!/^https:\/\/[^\s.]+\.[^\s]+$/i.test(ad.url.trim())) wrong.url = t("errors.url")
+        if (!isApp && !/^https:\/\/[^\s.]+\.[^\s]+$/i.test(ad.url.trim())) {
+          wrong.url = t("errors.url")
+        }
         if (ads.length > 1 && ad.adName.trim().length < 2) wrong.adName = t("errors.slotName")
         if (Object.keys(wrong).length > 0) {
           if (at !== adAt) showAd(at)
@@ -814,6 +871,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       "PUBLISH_CREATIVE_NOT_SUITABLE",
       "PUBLISH_TEXT_NOT_SUITABLE",
       "PUBLISH_SETTINGS_NOT_SUITABLE",
+      "PUBLISH_APP_NOT_SUITABLE",
       "PUBLISH_OBJECTIVE_NOT_SUPPORTED",
       "CREATIVE_NOT_FOUND",
     ]
@@ -852,7 +910,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       minAge: isGoogle ? 18 : firstGroup.minAge,
       maxAge: isGoogle ? null : maxAgeOf(firstGroup),
       gender: isGoogle ? ("all" as const) : firstGroup.gender,
-      url: (isGoogle ? draft.url : firstAd.url).trim(),
+      // An app ad opens the app's store page; that page stands in as the campaign's link.
+      url: isApp ? appStoreUrl : (isGoogle ? draft.url : firstAd.url).trim(),
       tracking: resolveTracking(draft.platform, { campaign: draft.name }, draft.tracking),
       startActive: draft.startActive,
     }
@@ -902,6 +961,16 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                         deviceSystem: firstGroup.deviceSystem,
                         deviceConnection: firstGroup.deviceConnection,
                         lifetimeBudget: lifetime ? Number(firstGroup.lifetimeBudget) : null,
+                        ...(isApp
+                          ? {
+                              app: {
+                                name: draft.appName.trim(),
+                                iosAppId: draft.appIosId.trim() || null,
+                                androidPackage: draft.appAndroidPackage.trim() || null,
+                                iconCreativeId: draft.appIconId,
+                              },
+                            }
+                          : {}),
                         ...(moreGroups.length > 0
                           ? {
                               adGroupName: groupLabel(firstGroup, 0),
@@ -929,7 +998,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                                 creativeId: ad.creativeId,
                                 headline: ad.headline.trim(),
                                 callToAction: ad.callToAction as CallToAction,
-                                url: ad.url.trim(),
+                                url: isApp ? appStoreUrl : ad.url.trim(),
                               })),
                             }
                           : {}),
@@ -1261,7 +1330,12 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     },
     { label: t("review.headline"), value: isGoogle ? draft.headlines[0] : draft.headline },
     ...(isGoogle ? [{ label: t("review.keywords"), value: keywords.join("، ") }] : []),
-    { label: t("review.url"), value: draft.url },
+    ...(isApp
+      ? [
+          { label: t("review.app"), value: draft.appName },
+          { label: t("review.url"), value: appStoreUrl },
+        ]
+      : [{ label: t("review.url"), value: draft.url }]),
   ]
 
   return (
@@ -1384,7 +1458,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                       <Choice
                         key={entry}
                         selected={objective === entry}
-                        onClick={() => set("objective", entry)}
+                        onClick={() => chooseObjective(entry)}
                         icon={
                           <span
                             className={cn(
@@ -1397,28 +1471,94 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                         }
                         title={t(`objectives.${entry}.title`)}
                         description={t(`objectives.${entry}.hint`)}
-                        note={isSnapchat ? t("objectives.format") : undefined}
+                        note={
+                          !isSnapchat
+                            ? undefined
+                            : entry === "app"
+                              ? t("objectives.formatApp")
+                              : t("objectives.format")
+                        }
                       />
                     )
                   }
                 )}
-                {isSnapchat ? (
-                  // Snapchat's fifth objective, shown so the list is whole; not published yet.
-                  <Choice
-                    selected={false}
-                    disabled
-                    badge={t("platforms.soon")}
-                    icon={
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f1f4f9] text-[#6b7b96]">
-                        <Smartphone className="size-5" />
-                      </span>
-                    }
-                    title={t("objectives.app.title")}
-                    description={t("objectives.app.hint")}
-                  />
-                ) : null}
               </div>
             </Field>
+
+            {isApp ? (
+              <div className="space-y-5 rounded-xl border border-[#e1e7f0] bg-[#f7f9fd] p-4">
+                <div>
+                  <p className={cn("text-[13px] font-bold", HEADING)}>{t("app.title")}</p>
+                  <p className={cn("mt-1 text-[12px] leading-5", MUTED)}>{t("app.note")}</p>
+                </div>
+                <Field label={t("app.name")} error={errors.appName}>
+                  <AppInput
+                    className={FIELD}
+                    maxLength={APP_NAME_MAX}
+                    value={draft.appName}
+                    onChange={(event) => set("appName", event.target.value)}
+                  />
+                </Field>
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Field label={t("app.iosId")} hint={t("app.iosIdHint")} error={errors.appIosId}>
+                    <AppInput
+                      className={cn(FIELD, "text-start")}
+                      dir="ltr"
+                      inputMode="numeric"
+                      placeholder="1234567890"
+                      value={draft.appIosId}
+                      onChange={(event) => set("appIosId", event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("app.androidPackage")}
+                    hint={t("app.androidPackageHint")}
+                    error={errors.appAndroidPackage}
+                  >
+                    <AppInput
+                      className={cn(FIELD, "text-start")}
+                      dir="ltr"
+                      placeholder="com.example.app"
+                      value={draft.appAndroidPackage}
+                      onChange={(event) => set("appAndroidPackage", event.target.value)}
+                    />
+                  </Field>
+                </div>
+                <Field label={t("app.icon")} hint={t("app.iconHint")} error={errors.appIconId}>
+                  <input
+                    ref={iconInput}
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(event) => {
+                      void uploadIcon(event.target.files)
+                      event.target.value = ""
+                    }}
+                  />
+                  <div className="flex items-center gap-3">
+                    {appIcon ? (
+                      <CreativeThumb
+                        creative={appIcon}
+                        className="size-16 shrink-0 overflow-hidden rounded-2xl border border-[#e1e7f0]"
+                      />
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={iconProgress !== null}
+                      onClick={() => iconInput.current?.click()}
+                      className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-dashed border-[#cfd8e6] bg-white px-4 text-[13px] font-bold text-[#1d4fd8] hover:border-[#1d4fd8]/60 disabled:opacity-60"
+                    >
+                      {iconProgress ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <ImagePlus className="size-4" />
+                      )}
+                      {appIcon ? t("app.iconChange") : t("app.iconUpload")}
+                    </button>
+                  </div>
+                </Field>
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -1660,7 +1800,14 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
 
             {isSnapchat ? (
               <>
-                <Field label={t("audience.goal")} hint={t("audience.goalHint")}>
+                <Field
+                  label={t("audience.goal")}
+                  hint={
+                    goal === "APP_INSTALLS"
+                      ? t("audience.goalHintInstalls")
+                      : t("audience.goalHint")
+                  }
+                >
                   {selectField(
                     goal,
                     (value) => set("goal", value as SnapchatGoal),
@@ -2095,31 +2242,39 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                 {selectField(
                   draft.callToAction,
                   (value) => set("callToAction", value as AnyCallToAction),
-                  callsToActionFor(draft.platform).map((value) => ({
+                  callsToActionFor(draft.platform, objective).map((value) => ({
                     value,
                     label: t(`callsToAction.${value}`),
                   }))
                 )}
               </Field>
 
-              <Field label={t("ad.url")} hint={t("ad.urlHint")} error={errors.url}>
-                <AppInput
-                  className={cn(FIELD, "text-start")}
-                  dir="ltr"
-                  inputMode="url"
-                  placeholder="https://"
-                  value={draft.url}
-                  onChange={(event) => set("url", event.target.value)}
-                />
-              </Field>
+              {isApp ? (
+                <p className="rounded-xl border border-[#e1e7f0] bg-[#f7f9fd] px-4 py-3 text-[12.5px] leading-6 text-[#475467]">
+                  {t("app.adNote", { name: draft.appName })}
+                </p>
+              ) : (
+                <>
+                  <Field label={t("ad.url")} hint={t("ad.urlHint")} error={errors.url}>
+                    <AppInput
+                      className={cn(FIELD, "text-start")}
+                      dir="ltr"
+                      inputMode="url"
+                      placeholder="https://"
+                      value={draft.url}
+                      onChange={(event) => set("url", event.target.value)}
+                    />
+                  </Field>
 
-              <CampaignTrackingFields
-                platform={draft.platform}
-                url={draft.url}
-                defaults={{ campaign: draft.name }}
-                edits={draft.tracking}
-                onChange={(tracking) => set("tracking", tracking)}
-              />
+                  <CampaignTrackingFields
+                    platform={draft.platform}
+                    url={draft.url}
+                    defaults={{ campaign: draft.name }}
+                    edits={draft.tracking}
+                    onChange={(tracking) => set("tracking", tracking)}
+                  />
+                </>
+              )}
             </div>
 
             {/* The ad roughly as Snapchat shows it: the creative full-screen, the brand and

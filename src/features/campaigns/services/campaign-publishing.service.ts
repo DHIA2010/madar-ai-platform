@@ -76,14 +76,39 @@ export const CREATIVE_LIMITS = {
   videoBytes: 30 * 1024 * 1024,
 } as const
 
-// Snapchat is published with four objectives; the other platforms with traffic and leads.
-export type PublishObjective = "awareness" | "traffic" | "leads" | "sales"
-export const SNAPCHAT_OBJECTIVES: PublishObjective[] = ["awareness", "traffic", "leads", "sales"]
+// Snapchat is published with its five objectives; the other platforms with traffic and leads.
+// "app" promotes an app: its ads open the app's page in the App Store or Google Play.
+export type PublishObjective = "awareness" | "traffic" | "leads" | "sales" | "app"
+export const SNAPCHAT_OBJECTIVES: PublishObjective[] = [
+  "awareness",
+  "traffic",
+  "leads",
+  "sales",
+  "app",
+]
+// The app an app-promotion campaign is for (the same limits the server holds).
+export const APP_NAME_MAX = 30
+export const APP_ICON_MIN = 200
+export const APP_ICON_MAX = 2000
+export function appIconProblem(
+  creative: Pick<Creative, "kind" | "contentType" | "width" | "height">
+): boolean {
+  return (
+    creative.kind !== "image" ||
+    creative.contentType !== "image/png" ||
+    !creative.width ||
+    !creative.height ||
+    Math.abs(creative.width / creative.height - 1) > 0.02 ||
+    creative.width < APP_ICON_MIN ||
+    creative.width > APP_ICON_MAX
+  )
+}
 // What a Snapchat ad set is delivered for, per objective; the first is Madar's own pick. The
 // PIXEL_ ones need the account's Snap Pixel. (The same lists the server holds.)
 export type SnapchatGoal =
   | "IMPRESSIONS"
   | "SWIPES"
+  | "APP_INSTALLS"
   | "VIDEO_VIEWS"
   | "PIXEL_PAGE_VIEW"
   | "PIXEL_SIGNUP"
@@ -94,6 +119,7 @@ export const SNAPCHAT_GOALS: Record<PublishObjective, SnapchatGoal[]> = {
   traffic: ["SWIPES", "PIXEL_PAGE_VIEW"],
   leads: ["PIXEL_SIGNUP", "SWIPES"],
   sales: ["PIXEL_PURCHASE", "PIXEL_ADD_TO_CART", "PIXEL_PAGE_VIEW"],
+  app: ["APP_INSTALLS", "SWIPES"],
 }
 export type SnapchatBidStrategy = "auto" | "target_cost" | "max_bid"
 // Snapchat takes a target cost only for these goals.
@@ -114,7 +140,18 @@ export const CALLS_TO_ACTION = [
   "BOOK_NOW",
   "GET_NOW",
 ] as const
-export type CallToAction = (typeof CALLS_TO_ACTION)[number]
+// The buttons of a Snapchat app-install ad.
+export const APP_CALLS_TO_ACTION = [
+  "INSTALL_NOW",
+  "DOWNLOAD",
+  "GET_NOW",
+  "USE_APP",
+  "SHOP_NOW",
+  "ORDER_NOW",
+  "SIGN_UP",
+  "BOOK_NOW",
+] as const
+export type CallToAction = (typeof CALLS_TO_ACTION)[number] | (typeof APP_CALLS_TO_ACTION)[number]
 
 // The platforms a campaign can be published to. Snapchat, TikTok and Meta show a picture or a
 // video; Google is a search campaign: text ads shown to people searching the given keywords.
@@ -131,8 +168,15 @@ export const OTHER_CALLS_TO_ACTION = [
   "CONTACT_US",
 ] as const
 export type AnyCallToAction = CallToAction | (typeof OTHER_CALLS_TO_ACTION)[number]
-export const callsToActionFor = (platform: PublishPlatform): readonly AnyCallToAction[] =>
-  platform === "snapchat" ? CALLS_TO_ACTION : OTHER_CALLS_TO_ACTION
+export const callsToActionFor = (
+  platform: PublishPlatform,
+  objective?: PublishObjective
+): readonly AnyCallToAction[] =>
+  platform !== "snapchat"
+    ? OTHER_CALLS_TO_ACTION
+    : objective === "app"
+      ? APP_CALLS_TO_ACTION
+      : CALLS_TO_ACTION
 
 // The places inside a country a Snapchat campaign can be narrowed to (backend: campaigns/
 // publishing/snapchat-geo.ts): Snapchat's own regions, and the cities Madar offers.
@@ -244,6 +288,13 @@ export type PublishCampaignInput =
       deviceSystem?: "all" | "ios" | "android" | null
       deviceConnection?: "all" | "wifi" | "cell" | null
       lifetimeBudget?: number | null
+      // Snapchat only, for the app objective: the app and its icon (a creative in the library).
+      app?: {
+        name: string
+        iosAppId?: string | null
+        androidPackage?: string | null
+        iconCreativeId: string
+      } | null
       // Snapchat only: the names of the first ad group and ad, and more of each. Every ad is
       // placed in every ad group.
       adGroupName?: string | null

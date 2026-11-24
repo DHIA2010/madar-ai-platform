@@ -12,6 +12,7 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { CampaignControlService } from "../campaigns/control-service"
 import { CreativeInsightsService } from "../campaigns/creative-insights"
 import { CampaignCreativesService } from "../campaigns/creatives"
+import { publishCampaignSchema } from "../schemas"
 import {
   CampaignPublishingService,
   snapchatCreativeProblem,
@@ -1051,6 +1052,125 @@ describe("the creative library and the publish record", () => {
       })
     }
     expect(snap.calls.length).toBe(before)
+  })
+
+  it("publishes an app promotion campaign: app-install ads that lead to the store", async () => {
+    const { publishing, snap } = service()
+    const creative = await upload()
+    const icon = await upload({ width: 512, height: 512 })
+    const app = { name: "مدار", iosAppId: "1234567890", iconCreativeId: icon.id }
+    const started = await publishing.publish(
+      actor,
+      request(creative.id, {
+        objective: "app",
+        app,
+        callToAction: "INSTALL_NOW",
+        // Whatever link is sent is not used: the ad opens the app's store page.
+        url: "https://example.com/ignored",
+      })
+    )
+    expect(started.url).toBe("https://apps.apple.com/app/id1234567890")
+    // The request as the wizard sends it passes the request check too.
+    expect(
+      publishCampaignSchema.safeParse({
+        ...request(creative.id, { objective: "app", app, callToAction: "INSTALL_NOW" }),
+        // The test's own connection id is not a real one.
+        connectionId: randomUUID(),
+        goal: "APP_INSTALLS",
+        url: "https://apps.apple.com/app/id1234567890",
+      }).error?.issues ?? []
+    ).toEqual([])
+    await publishing.settled()
+    expect(await publishing.get(ORG, started.id)).toMatchObject({ status: "published" })
+
+    const sent = <T>(path: string, key: string) =>
+      snap.calls
+        .filter((call) => call.method === "POST" && call.path === path)
+        .map((call) => (call.body as Record<string, T[]>)[key][0])
+    expect(
+      sent<Record<string, unknown>>(`/adaccounts/${ACCOUNT}/campaigns`, "campaigns")[0]
+    ).toMatchObject({
+      objective_v2_properties: { objective_v2_type: "APP_PROMOTION" },
+      measurement_spec: { ios_app_id: "1234567890" },
+    })
+    const squad = sent<Record<string, unknown>>("/campaigns/camp-1/adsquads", "adsquads")[0]
+    expect(squad).toMatchObject({
+      optimization_goal: "APP_INSTALLS",
+      child_ad_type: "APP_INSTALL",
+      // Only in the App Store: shown to iPhones.
+      targeting: { devices: [{ os_type: "iOS", operation: "INCLUDE" }] },
+    })
+    expect(squad).not.toHaveProperty("pixel_id")
+    // The ad's file and the app's icon are both uploaded.
+    expect(sent(`/adaccounts/${ACCOUNT}/media`, "media")).toHaveLength(2)
+    const made = sent<Record<string, unknown>>(`/adaccounts/${ACCOUNT}/creatives`, "creatives")[0]
+    expect(made).toMatchObject({
+      type: "APP_INSTALL",
+      call_to_action: "INSTALL_NOW",
+      app_install_properties: {
+        app_name: "مدار",
+        ios_app_id: "1234567890",
+        icon_media_id: "media-1",
+      },
+    })
+    expect(made).not.toHaveProperty("web_view_properties")
+    expect(made.app_install_properties as object).not.toHaveProperty("android_app_url")
+    expect(sent<Record<string, unknown>>("/adsquads/squad-1/ads", "ads")[0]).toMatchObject({
+      type: "APP_INSTALL",
+    })
+
+    // Refused before Snapchat is asked.
+    const before = snap.calls.length
+    const tall = await upload()
+    const refused: Array<[Partial<SnapchatInput>, string]> = [
+      [{ objective: "app", callToAction: "INSTALL_NOW" }, "PUBLISH_APP_NOT_SUITABLE"],
+      [
+        { objective: "app", callToAction: "INSTALL_NOW", app: { ...app, iosAppId: null } },
+        "PUBLISH_APP_NOT_SUITABLE",
+      ],
+      [
+        {
+          objective: "app",
+          callToAction: "INSTALL_NOW",
+          app: { ...app, androidPackage: "not a package" },
+        },
+        "PUBLISH_APP_NOT_SUITABLE",
+      ],
+      // An icon that is not square.
+      [
+        { objective: "app", callToAction: "INSTALL_NOW", app: { ...app, iconCreativeId: tall.id } },
+        "PUBLISH_APP_NOT_SUITABLE",
+      ],
+      // A website button on an app ad, and an app button on a website ad.
+      [{ objective: "app", app, callToAction: "MORE" }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      [{ callToAction: "INSTALL_NOW" }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+    ]
+    for (const [overrides, code] of refused) {
+      await expect(
+        publishing.publish(actor, request(creative.id, overrides))
+      ).rejects.toMatchObject({ code })
+    }
+    expect(snap.calls.length).toBe(before)
+
+    // An app in Google Play only goes to Android phones, by its package name.
+    await publishing.publish(
+      actor,
+      request(creative.id, {
+        objective: "app",
+        goal: "SWIPES",
+        callToAction: "DOWNLOAD",
+        app: { name: "Madar", androidPackage: "my.madar.app", iconCreativeId: icon.id },
+      })
+    )
+    await publishing.settled()
+    const second = sent<Record<string, unknown>>("/campaigns/camp-1/adsquads", "adsquads")[1]
+    expect(second).toMatchObject({
+      optimization_goal: "SWIPES",
+      targeting: { devices: [{ os_type: "ANDROID", operation: "INCLUDE" }] },
+    })
+    expect(
+      sent<Record<string, unknown>>(`/adaccounts/${ACCOUNT}/creatives`, "creatives")[1]
+    ).toMatchObject({ app_install_properties: { android_app_url: "my.madar.app" } })
   })
 
   it("removes a published campaign from Snapchat and from the list", async () => {

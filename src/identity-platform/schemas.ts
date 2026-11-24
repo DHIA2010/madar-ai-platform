@@ -572,6 +572,17 @@ const snapchatInterestIds = z
   .array(z.string().regex(/^SLC_\d{1,6}$/))
   .max(100)
   .nullish()
+const snapchatCallToAction = z.enum([
+  "MORE",
+  "SHOP_NOW",
+  "ORDER_NOW",
+  "SIGN_UP",
+  "BOOK_NOW",
+  "GET_NOW",
+  "INSTALL_NOW",
+  "DOWNLOAD",
+  "USE_APP",
+])
 // The phones an ad set is shown on.
 const snapchatDeviceSystem = z.enum(["all", "ios", "android"]).nullish()
 const snapchatDeviceConnection = z.enum(["all", "wifi", "cell"]).nullish()
@@ -606,7 +617,21 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
     platform: z.literal("snapchat"),
     // Snapchat's own objectives, and the settings only it is given (campaigns/publishing/
     // snapchat-publisher.ts). Whether they fit together is checked by the service.
-    objective: z.enum(["awareness", "traffic", "leads", "sales"]),
+    objective: z.enum(["awareness", "traffic", "leads", "sales", "app"]),
+    // The app, for the app-promotion objective: its name, its App Store number and/or its
+    // Google Play package name, and its icon (a creative from the library).
+    app: z
+      .object({
+        name: z.string().trim().min(1).max(30),
+        iosAppId: z
+          .string()
+          .trim()
+          .regex(/^\d{5,15}$/)
+          .nullish(),
+        androidPackage: z.string().trim().max(150).nullish(),
+        iconCreativeId: z.string().uuid(),
+      })
+      .nullish(),
     goal: z
       .enum([
         "IMPRESSIONS",
@@ -616,6 +641,7 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
         "PIXEL_SIGNUP",
         "PIXEL_ADD_TO_CART",
         "PIXEL_PURCHASE",
+        "APP_INSTALLS",
       ])
       .nullish(),
     campaignDailyCap: z.number().positive().max(1_000_000).nullish(),
@@ -657,7 +683,7 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
           name: z.string().trim().min(2).max(120),
           creativeId: z.string().uuid(),
           headline: z.string().trim().min(1).max(34),
-          callToAction: z.enum(["MORE", "SHOP_NOW", "ORDER_NOW", "SIGN_UP", "BOOK_NOW", "GET_NOW"]),
+          callToAction: snapchatCallToAction,
           url: z.string().trim().min(1).max(2000),
         })
       )
@@ -666,7 +692,7 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
     creativeId: z.string().uuid(),
     brandName: z.string().trim().min(1).max(25),
     headline: z.string().trim().min(1).max(34),
-    callToAction: z.enum(["MORE", "SHOP_NOW", "ORDER_NOW", "SIGN_UP", "BOOK_NOW", "GET_NOW"]),
+    callToAction: snapchatCallToAction,
   }),
   z.object({
     ...publishCommon,

@@ -8176,9 +8176,10 @@
         },
         "app": {
           "title": "App promotion",
-          "hint": "Outcome: installs of your app. Not available from Madar yet: it needs the app's store details."
+          "hint": "Outcome: installs of your app from the App Store or Google Play."
         },
-        "format": "Ad format: a full-screen image or video with your website link"
+        "format": "Ad format: a full-screen image or video with your website link",
+        "formatApp": "Ad format: a full-screen image or video with a button that opens the app's store page"
       },
       "audience": {
         "budget": "Daily budget",
@@ -8209,7 +8210,8 @@
         },
         "lifetimeBudget": "Budget for the whole run",
         "lifetimeBudgetHint": "Spent over {days, plural, one {# day} other {# days}}, about {day} {currency} a day. Snapchat spreads it itself and may spend more on one day and less on another.",
-        "lifetimeBudgetNeedsEnd": "One amount for the campaign's whole run. It needs an end date."
+        "lifetimeBudgetNeedsEnd": "One amount for the campaign's whole run. It needs an end date.",
+        "goalHintInstalls": "Snapchat counts installs only when your app reports them to it (a Snap app ID or a measurement partner, set up outside Madar). If that is not set up, choose “Taps on the ad”."
       },
       "countries": {
         "sa": "Saudi Arabia",
@@ -8276,7 +8278,10 @@
         "BOOK_NOW": "Book now",
         "GET_NOW": "Get it now",
         "LEARN_MORE": "Learn more",
-        "CONTACT_US": "Contact us"
+        "CONTACT_US": "Contact us",
+        "INSTALL_NOW": "Install now",
+        "DOWNLOAD": "Download",
+        "USE_APP": "Use app"
       },
       "review": {
         "platform": "Platform and account",
@@ -8300,7 +8305,8 @@
         "lifetimeBudgetValue": "{amount} {currency} for the whole run",
         "adGroups": "Ad groups",
         "ads": "Ads",
-        "adsValue": "{ads, plural, one {# ad} other {# ads}} in {groups, plural, one {# ad group} other {# ad groups}}, {total} in total"
+        "adsValue": "{ads, plural, one {# ad} other {# ads}} in {groups, plural, one {# ad group} other {# ad groups}}, {total} in total",
+        "app": "App"
       },
       "errors": {
         "account": "Choose the ad account.",
@@ -8326,7 +8332,13 @@
         "targetCostGoal": "A target cost is not available with what you chose under “What do you want more of?”. Pick automatic bidding or a maximum bid.",
         "lifetimeEnd": "A budget for the whole run needs an end date. Pick the end date first.",
         "lifetimeBudget": "The lowest budget for {days} days is {minimum} {currency}.",
-        "slotName": "Type a name of at least two letters."
+        "slotName": "Type a name of at least two letters.",
+        "appName": "Type the app's name.",
+        "appStore": "Type the app's App Store number or its Google Play package name.",
+        "appIosId": "The App Store number is digits only, like 1234567890.",
+        "appAndroidPackage": "A package name looks like com.example.app.",
+        "appIcon": "Upload the app's icon.",
+        "appIconFit": "The icon has to be a square PNG, 200 to 2000 pixels."
       },
       "requestErrors": {
         "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect the platform and try again.",
@@ -8341,7 +8353,8 @@
         "generic": "Publishing could not start. Try again.",
         "PUBLISH_TEXT_NOT_SUITABLE": "The ad's text does not fit Google. Check the headlines, description and search words.",
         "PUBLISH_SETTINGS_NOT_SUITABLE": "A campaign setting does not fit Snapchat. Check the spend caps and the bidding.",
-        "PUBLISH_OBJECTIVE_NOT_SUPPORTED": "That objective is not available for this platform yet. Pick visits or sign-ups."
+        "PUBLISH_OBJECTIVE_NOT_SUPPORTED": "That objective is not available for this platform yet. Pick visits or sign-ups.",
+        "PUBLISH_APP_NOT_SUITABLE": "The app's details or icon do not fit Snapchat. Check the store number, the package name and the icon."
       },
       "result": {
         "publishingTitle": "Publishing your campaign…",
@@ -8415,7 +8428,8 @@
         "PIXEL_PAGE_VIEW": "Website page views (pixel)",
         "PIXEL_SIGNUP": "Sign-ups (pixel)",
         "PIXEL_ADD_TO_CART": "Adds to cart (pixel)",
-        "PIXEL_PURCHASE": "Purchases (pixel)"
+        "PIXEL_PURCHASE": "Purchases (pixel)",
+        "APP_INSTALLS": "App installs"
       },
       "advanced": {
         "title": "Advanced options (optional)",
@@ -8499,6 +8513,20 @@
         "groupsNote": "Each ad group has its own budget and audience (places, language, interests, phone, age, gender). The dates, the country and the goal are shared by all ad groups. A new ad group starts as a copy of the current one.",
         "adsNote": "Each ad has its own creative, text, button and link. The brand name is shared. A new ad starts as a copy of the current one.",
         "adsNoteGroups": "Each ad has its own creative, text, button and link. Every ad is placed in all {groups} ad groups. The brand name is shared."
+      },
+      "app": {
+        "title": "App details",
+        "note": "One store is enough. With one store only, the ad is shown to that store's phones.",
+        "name": "App name as the ad shows it",
+        "iosId": "App Store app number",
+        "iosIdHint": "The digits after id in the app's link, like apps.apple.com/app/id1234567890",
+        "androidPackage": "Google Play package name",
+        "androidPackageHint": "What follows id= in the app's link, like com.example.app",
+        "icon": "App icon",
+        "iconHint": "A square PNG, 200 to 2000 pixels, with no border.",
+        "iconUpload": "Upload the icon",
+        "iconChange": "Change the icon",
+        "adNote": "The ad opens “{name}” in the store directly, so it needs no link."
       }
     },
     "metrics": {

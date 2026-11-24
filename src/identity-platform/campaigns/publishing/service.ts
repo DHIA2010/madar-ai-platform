@@ -47,6 +47,11 @@ import {
   type SnapchatObjective,
   type SnapchatPublishedIds,
   type SnapchatPublishInput,
+  SNAPCHAT_APP_CALLS_TO_ACTION,
+  SNAPCHAT_APP_ICON_MAX,
+  SNAPCHAT_APP_ICON_MIN,
+  SNAPCHAT_APP_NAME_MAX,
+  SNAPCHAT_APP_ONLY_CALLS_TO_ACTION,
 } from "./snapchat-publisher"
 
 // Publishing a campaign from Madar to an ad platform: Snapchat, TikTok, Meta (Facebook and
@@ -125,6 +130,48 @@ export interface PublishAdInput {
   url: string
 }
 
+// The app an app-promotion campaign is for. One store is enough; the icon is a creative from
+// the library: a square PNG.
+export interface PublishAppInput {
+  name: string
+  iosAppId?: string | null
+  androidPackage?: string | null
+  iconCreativeId: string
+}
+
+// The app's page in its store: where an app-install ad leads, kept as the record's link.
+export function appStoreUrl(app: Pick<PublishAppInput, "iosAppId" | "androidPackage">): string {
+  return app.iosAppId
+    ? `https://apps.apple.com/app/id${app.iosAppId}`
+    : `https://play.google.com/store/apps/details?id=${app.androidPackage ?? ""}`
+}
+
+// Whether an app's details and icon fit Snapchat, or what is wrong.
+export function snapchatAppProblem(
+  app: PublishAppInput | null | undefined,
+  icon: CreativeView | null
+): "app" | "store" | "ios_id" | "android_package" | "icon" | null {
+  if (!app || !app.name.trim() || app.name.trim().length > SNAPCHAT_APP_NAME_MAX) return "app"
+  if (!app.iosAppId && !app.androidPackage) return "store"
+  if (app.iosAppId && !/^\d{5,15}$/.test(app.iosAppId)) return "ios_id"
+  if (app.androidPackage && !/^[A-Za-z][\w]*(\.[A-Za-z][\w]*)+$/.test(app.androidPackage)) {
+    return "android_package"
+  }
+  if (
+    !icon ||
+    icon.kind !== "image" ||
+    icon.contentType !== "image/png" ||
+    !icon.width ||
+    !icon.height ||
+    Math.abs(icon.width / icon.height - 1) > 0.02 ||
+    icon.width < SNAPCHAT_APP_ICON_MIN ||
+    icon.width > SNAPCHAT_APP_ICON_MAX
+  ) {
+    return "icon"
+  }
+  return null
+}
+
 export const PUBLISH_MAX_AD_GROUPS = 5
 export const PUBLISH_MAX_ADS = 5
 
@@ -152,6 +199,9 @@ export type PublishCampaignInput =
       // One amount for the whole run instead of an amount a day; needs an end date. The daily
       // budget kept with the record is then the average a day.
       lifetimeBudget?: number | null
+      // The app, for the app-promotion objective. The ads then open the app's store page and
+      // the link sent is not used.
+      app?: PublishAppInput | null
       // The names of the first ad group and the first ad; left out, the campaign's name.
       adGroupName?: string | null
       adName?: string | null
@@ -208,6 +258,8 @@ export interface PublicationDetails {
   adName?: string
   adGroups?: PublishAdGroupInput[]
   ads?: PublishAdInput[]
+  // The app an app-promotion campaign is for.
+  app?: PublishAppInput
 }
 
 export interface PublicationView {
@@ -474,6 +526,7 @@ function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
     details.deviceConnection = input.deviceConnection
   }
   if (input.lifetimeBudget) details.lifetimeBudget = input.lifetimeBudget
+  if (input.objective === "app" && input.app) details.app = input.app
   if (input.moreAdGroups?.length) {
     details.adGroups = input.moreAdGroups
     if (input.adGroupName?.trim()) details.adGroupName = input.adGroupName.trim()
@@ -961,11 +1014,50 @@ export class CampaignPublishingService {
       // The other platforms are published with two objectives for now.
       throw invalid("PUBLISH_OBJECTIVE_NOT_SUPPORTED", "That objective is not available there yet.")
     }
+    // An app campaign: the app's details and icon have to fit, its ads carry an app button, and
+    // they lead to the app's store page rather than to a link. Any other campaign: no app button.
+    const isApp = input.platform === "snapchat" && input.objective === "app"
+    if (input.platform === "snapchat") {
+      const buttons = [input.callToAction, ...(input.moreAds ?? []).map((ad) => ad.callToAction)]
+      if (isApp) {
+        const icon = input.app?.iconCreativeId
+          ? await this.creatives.get(actor.organizationId, input.app.iconCreativeId)
+          : null
+        const problem = snapchatAppProblem(input.app, icon)
+        if (problem) {
+          throw invalid("PUBLISH_APP_NOT_SUITABLE", "The app's details do not fit Snapchat.", {
+            problem,
+          })
+        }
+        const store = appStoreUrl(input.app!)
+        input = {
+          ...input,
+          app: {
+            name: input.app!.name.trim(),
+            iosAppId: input.app!.iosAppId || null,
+            androidPackage: input.app!.androidPackage || null,
+            iconCreativeId: input.app!.iconCreativeId,
+          },
+          url: store,
+          moreAds: input.moreAds?.map((ad) => ({ ...ad, url: store })) ?? null,
+        }
+      }
+      const allowed = isApp
+        ? (button: SnapchatCallToAction) => SNAPCHAT_APP_CALLS_TO_ACTION.includes(button)
+        : (button: SnapchatCallToAction) => !SNAPCHAT_APP_ONLY_CALLS_TO_ACTION.includes(button)
+      if (!buttons.every(allowed)) {
+        throw invalid("PUBLISH_SETTINGS_NOT_SUITABLE", "That button does not fit the ad.", {
+          problem: "call_to_action",
+        })
+      }
+    }
     let url: string
     try {
       const parsed = new URL(input.url)
       if (parsed.protocol !== "https:") throw new Error("not https")
-      url = withCampaignTracking(input.url, input.name, input.platform, input.tracking)
+      url = isApp
+        ? input.url
+        : withCampaignTracking(input.url, input.name, input.platform, input.tracking)
     } catch {
       throw invalid("PUBLISH_INVALID_URL", "The website address has to start with https://.")
     }
@@ -999,7 +1091,9 @@ export class CampaignPublishingService {
         let adUrl: string
         try {
           if (new URL(ad.url).protocol !== "https:") throw new Error("not https")
-          adUrl = withCampaignTracking(ad.url, input.name, "snapchat", input.tracking)
+          adUrl = isApp
+            ? ad.url
+            : withCampaignTracking(ad.url, input.name, "snapchat", input.tracking)
         } catch {
           throw invalid("PUBLISH_INVALID_URL", "The website address has to start with https://.")
         }
@@ -1205,6 +1299,22 @@ export class CampaignPublishingService {
       deviceSystem: input.deviceSystem ?? null,
       deviceConnection: input.deviceConnection ?? null,
       lifetimeBudget: input.lifetimeBudget ?? null,
+      app:
+        input.objective === "app" && input.app
+          ? await this.creatives
+              .readFile(organizationId, input.app.iconCreativeId)
+              .then((icon) => ({
+                name: input.app!.name,
+                iosAppId: input.app!.iosAppId ?? null,
+                androidPackage: input.app!.androidPackage ?? null,
+                icon: {
+                  kind: icon.creative.kind,
+                  bytes: icon.bytes,
+                  contentType: icon.creative.contentType,
+                  fileName: icon.fileName,
+                },
+              }))
+          : null,
       adGroupName: input.adGroupName ?? null,
       adName: input.adName ?? null,
       moreAdGroups: (input.moreAdGroups ?? []).map((group) => ({
