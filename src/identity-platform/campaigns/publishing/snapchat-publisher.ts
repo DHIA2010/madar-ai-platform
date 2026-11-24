@@ -102,6 +102,13 @@ export interface SnapchatPublishInput {
   // One amount for the whole run instead of an amount a day; it needs an end date. When set,
   // dailyBudget is only the average a day and is not sent.
   lifetimeBudget?: number | null
+  // The names of the first ad group and the first ad; left out, the campaign's own name.
+  adGroupName?: string | null
+  adName?: string | null
+  // More ad groups in the same campaign, each with its own budget and audience, and more ads.
+  // Every ad is placed in every ad group.
+  moreAdGroups?: SnapchatAdGroupInput[] | null
+  moreAds?: SnapchatAdInput[] | null
   // What the ad set is delivered for; left out, the objective's own first choice.
   goal?: SnapchatGoal | null
   // The most the whole campaign may spend in a day, and over its life. Left out: no cap.
@@ -113,12 +120,46 @@ export interface SnapchatPublishInput {
   bidAmount?: number | null
 }
 
+// One ad group of a campaign: its own budget and its own audience. The country, the dates, the
+// goal and the bid are the campaign's.
+export type SnapchatAdGroupInput = Pick<
+  SnapchatPublishInput,
+  | "dailyBudget"
+  | "lifetimeBudget"
+  | "minAge"
+  | "maxAge"
+  | "gender"
+  | "regionIds"
+  | "cityKeys"
+  | "languages"
+  | "interestIds"
+  | "deviceSystem"
+  | "deviceConnection"
+> & { name: string }
+
+// One ad of a campaign: its file, its text, its button and its link.
+export type SnapchatAdInput = Pick<
+  SnapchatPublishInput,
+  "media" | "headline" | "callToAction" | "url"
+> & { name: string }
+
 export interface SnapchatPublishedIds {
   campaignId: string
+  // The first ad group, and the first ad in it with its creative and its file.
   adSquadId: string
   mediaId: string
   creativeId: string
   adId: string
+  // Only when the campaign has more than one ad group or ad: every ad group, and every ad
+  // placed (adIndex says which of the campaign's ads it shows, the first being 0).
+  adSquadIds?: string[]
+  ads?: Array<{
+    adId: string
+    adSquadId: string
+    creativeId: string
+    mediaId: string
+    adIndex: number
+  }>
 }
 
 export type SnapchatPublishStep =
@@ -494,67 +535,103 @@ export class SnapchatCampaignPublisher {
     )
     const campaignId = campaign.id as string
 
+    const groups: SnapchatAdGroupInput[] = [
+      { ...input, name: input.adGroupName?.trim() || input.name },
+      ...(input.moreAdGroups ?? []),
+    ]
+    const ads: SnapchatAdInput[] = [
+      { ...input, name: input.adName?.trim() || input.name },
+      ...(input.moreAds ?? []),
+    ]
     try {
-      const places = snapchatPlaces(input.countryCode, input.regionIds, input.cityKeys)
-      const demographic: Json = { min_age: String(input.minAge), operation: "INCLUDE" }
-      if (input.maxAge) demographic.max_age = String(input.maxAge)
-      if (input.gender !== "all") demographic.gender = input.gender.toUpperCase()
-      if (input.languages?.length) demographic.languages = [...new Set(input.languages)]
-      const interestIds = [...new Set(input.interestIds ?? [])]
-      const devices = snapchatDevices(input.deviceSystem, input.deviceConnection)
-      const lifetime = input.lifetimeBudget && input.endAt ? input.lifetimeBudget : null
-      const adSquad = this.created(
-        "ad_set",
-        await this.call("ad_set", token, "POST", `/campaigns/${campaignId}/adsquads`, {
-          adsquads: [
-            {
-              name: input.name,
-              campaign_id: campaignId,
-              status: "ACTIVE",
-              type: "SNAP_ADS",
-              targeting: {
-                regulated_content: false,
-                geos: places.geos,
-                ...(places.locations ? { locations: places.locations } : {}),
-                demographics: [demographic],
-                ...(interestIds.length > 0
-                  ? { interests: [{ category_id: interestIds, operation: "INCLUDE" }] }
+      // Every ad group first, then each ad's file and creative once, then the ad itself in
+      // every ad group.
+      const adSquadIds: string[] = []
+      for (const group of groups) {
+        const places = snapchatPlaces(input.countryCode, group.regionIds, group.cityKeys)
+        const demographic: Json = { min_age: String(group.minAge), operation: "INCLUDE" }
+        if (group.maxAge) demographic.max_age = String(group.maxAge)
+        if (group.gender !== "all") demographic.gender = group.gender.toUpperCase()
+        if (group.languages?.length) demographic.languages = [...new Set(group.languages)]
+        const interestIds = [...new Set(group.interestIds ?? [])]
+        const devices = snapchatDevices(group.deviceSystem, group.deviceConnection)
+        const lifetime = group.lifetimeBudget && input.endAt ? group.lifetimeBudget : null
+        const adSquad = this.created(
+          "ad_set",
+          await this.call("ad_set", token, "POST", `/campaigns/${campaignId}/adsquads`, {
+            adsquads: [
+              {
+                name: group.name,
+                campaign_id: campaignId,
+                status: "ACTIVE",
+                type: "SNAP_ADS",
+                targeting: {
+                  regulated_content: false,
+                  geos: places.geos,
+                  ...(places.locations ? { locations: places.locations } : {}),
+                  demographics: [demographic],
+                  ...(interestIds.length > 0
+                    ? { interests: [{ category_id: interestIds, operation: "INCLUDE" }] }
+                    : {}),
+                  ...(devices ? { devices } : {}),
+                },
+                placement_v2: { config: "AUTOMATIC" },
+                billing_event: "IMPRESSION",
+                ...bidding,
+                ...(lifetime
+                  ? {
+                      lifetime_budget_micro: micro(lifetime),
+                      delivery_constraint: "LIFETIME_BUDGET",
+                    }
+                  : {
+                      daily_budget_micro: micro(group.dailyBudget),
+                      delivery_constraint: "DAILY_BUDGET",
+                    }),
+                pacing_type: "STANDARD",
+                child_ad_type: "REMOTE_WEBPAGE",
+                start_time: input.startAt,
+                ...(input.endAt ? { end_time: input.endAt } : {}),
+                optimization_goal: goal,
+                ...(pixelId
+                  ? { pixel_id: pixelId, conversion_window: "SWIPE_28DAY_VIEW_1DAY" }
                   : {}),
-                ...(devices ? { devices } : {}),
               },
-              placement_v2: { config: "AUTOMATIC" },
-              billing_event: "IMPRESSION",
-              ...bidding,
-              ...(lifetime
-                ? { lifetime_budget_micro: micro(lifetime), delivery_constraint: "LIFETIME_BUDGET" }
-                : {
-                    daily_budget_micro: micro(input.dailyBudget),
-                    delivery_constraint: "DAILY_BUDGET",
-                  }),
-              pacing_type: "STANDARD",
-              child_ad_type: "REMOTE_WEBPAGE",
-              start_time: input.startAt,
-              ...(input.endAt ? { end_time: input.endAt } : {}),
-              optimization_goal: goal,
-              ...(pixelId ? { pixel_id: pixelId, conversion_window: "SWIPE_28DAY_VIEW_1DAY" } : {}),
-            },
-          ],
-        }),
-        "adsquads",
-        "adsquad"
-      )
-      const adSquadId = adSquad.id as string
+            ],
+          }),
+          "adsquads",
+          "adsquad"
+        )
+        adSquadIds.push(adSquad.id as string)
+      }
 
-      const made = await this.createAd(token, { ...input, adSquadId, profileId })
+      const placed: NonNullable<SnapchatPublishedIds["ads"]> = []
+      for (const [adIndex, ad] of ads.entries()) {
+        const made = await this.makeCreative(token, {
+          ...ad,
+          adAccountId: account,
+          brandName: input.brandName,
+          profileId,
+        })
+        for (const adSquadId of adSquadIds) {
+          const put = await this.placeAd(token, {
+            adSquadId,
+            creativeId: made.creativeId,
+            name: ad.name,
+          })
+          placed.push({ adId: put.id as string, adSquadId, ...made, adIndex })
+        }
+      }
+      const first = placed[0]
       return {
         campaignId,
-        adSquadId,
-        mediaId: made.mediaId,
-        creativeId: made.creativeId,
-        adId: made.adId,
+        adSquadId: adSquadIds[0],
+        mediaId: first.mediaId,
+        creativeId: first.creativeId,
+        adId: first.adId,
+        ...(placed.length > 1 ? { adSquadIds, ads: placed } : {}),
       }
     } catch (error) {
-      // Nothing half-built stays on the account. Deleting the campaign takes its ad set and ad
+      // Nothing half-built stays on the account. Deleting the campaign takes its ad sets and ads
       // with it; a failure to delete must not hide the original reason.
       await this.call("campaign", token, "DELETE", `/campaigns/${campaignId}`).catch(
         () => undefined
@@ -572,6 +649,20 @@ export class SnapchatCampaignPublisher {
       "adAccountId" | "name" | "media" | "brandName" | "headline" | "callToAction" | "url"
     > & { adSquadId: string; profileId: string }
   ): Promise<{ mediaId: string; creativeId: string; adId: string; ad: Json }> {
+    const made = await this.makeCreative(token, input)
+    const ad = await this.placeAd(token, { ...input, creativeId: made.creativeId })
+    return { ...made, adId: ad.id as string, ad }
+  }
+
+  // An ad's file and the creative that shows it. A creative belongs to the ad account, so one
+  // can be placed in several ad sets.
+  private async makeCreative(
+    token: string,
+    input: Pick<
+      SnapchatPublishInput,
+      "adAccountId" | "name" | "media" | "brandName" | "headline" | "callToAction" | "url"
+    > & { profileId: string }
+  ): Promise<{ mediaId: string; creativeId: string }> {
     const mediaId = await this.uploadMedia(token, input)
     const creative = this.created(
       "creative",
@@ -594,14 +685,21 @@ export class SnapchatCampaignPublisher {
       "creatives",
       "creative"
     )
-    const creativeId = creative.id as string
-    const ad = this.created(
+    return { mediaId, creativeId: creative.id as string }
+  }
+
+  // The ad that puts a creative in an ad set.
+  private async placeAd(
+    token: string,
+    input: { adSquadId: string; creativeId: string; name: string }
+  ): Promise<Json> {
+    return this.created(
       "ad",
       await this.call("ad", token, "POST", `/adsquads/${input.adSquadId}/ads`, {
         ads: [
           {
             ad_squad_id: input.adSquadId,
-            creative_id: creativeId,
+            creative_id: input.creativeId,
             name: input.name,
             type: "REMOTE_WEBPAGE",
             status: "ACTIVE",
@@ -611,7 +709,6 @@ export class SnapchatCampaignPublisher {
       "ads",
       "ad"
     )
-    return { mediaId, creativeId, adId: ad.id as string, ad }
   }
 
   // A new ad in an ad set that already exists. Returns the ad as Snapchat now holds it.

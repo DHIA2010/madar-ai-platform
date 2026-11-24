@@ -8297,7 +8297,10 @@
         "startNowHint": "It starts spending ({amount} {currency} a day) once the platform approves the ad.",
         "keywords": "Search words",
         "goal": "Optimised for",
-        "lifetimeBudgetValue": "{amount} {currency} for the whole run"
+        "lifetimeBudgetValue": "{amount} {currency} for the whole run",
+        "adGroups": "Ad groups",
+        "ads": "Ads",
+        "adsValue": "{ads, plural, one {# ad} other {# ads}} in {groups, plural, one {# ad group} other {# ad groups}}, {total} in total"
       },
       "errors": {
         "account": "Choose the ad account.",
@@ -8322,7 +8325,8 @@
         "bidAmount": "Enter the bid amount.",
         "targetCostGoal": "A target cost is not available with what you chose under “What do you want more of?”. Pick automatic bidding or a maximum bid.",
         "lifetimeEnd": "A budget for the whole run needs an end date. Pick the end date first.",
-        "lifetimeBudget": "The lowest budget for {days} days is {minimum} {currency}."
+        "lifetimeBudget": "The lowest budget for {days} days is {minimum} {currency}.",
+        "slotName": "Type a name of at least two letters."
       },
       "requestErrors": {
         "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect the platform and try again.",
@@ -8481,6 +8485,20 @@
           "wifi": "Wi-Fi only",
           "cell": "Mobile data only"
         }
+      },
+      "slots": {
+        "group": "Ad group {n}",
+        "ad": "Ad {n}",
+        "groupsTitle": "Ad groups",
+        "adsTitle": "Ads",
+        "addGroup": "Another ad group",
+        "addAd": "Another ad",
+        "remove": "Remove “{name}”",
+        "groupName": "Ad group name",
+        "adName": "Ad name",
+        "groupsNote": "Each ad group has its own budget and audience (places, language, interests, phone, age, gender). The dates, the country and the goal are shared by all ad groups. A new ad group starts as a copy of the current one.",
+        "adsNote": "Each ad has its own creative, text, button and link. The brand name is shared. A new ad starts as a copy of the current one.",
+        "adsNoteGroups": "Each ad has its own creative, text, button and link. Every ad is placed in all {groups} ad groups. The brand name is shared."
       }
     },
     "metrics": {

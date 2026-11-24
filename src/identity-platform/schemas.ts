@@ -629,6 +629,40 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
     deviceSystem: snapchatDeviceSystem,
     deviceConnection: snapchatDeviceConnection,
     lifetimeBudget: z.number().positive().max(10000000).nullish(),
+    adGroupName: z.string().trim().min(2).max(120).nullish(),
+    adName: z.string().trim().min(2).max(120).nullish(),
+    // More ad groups and more ads in the same campaign; every ad goes in every ad group.
+    moreAdGroups: z
+      .array(
+        z.object({
+          name: z.string().trim().min(2).max(120),
+          dailyBudget: z.number().positive().max(100000),
+          lifetimeBudget: z.number().positive().max(10000000).nullish(),
+          minAge: z.number().int().min(18).max(65),
+          maxAge: z.number().int().min(18).max(65).nullish(),
+          gender: z.enum(["all", "male", "female"]),
+          regionIds: snapchatRegionIds,
+          cityKeys: snapchatCityKeys,
+          languages: snapchatLanguages,
+          interestIds: snapchatInterestIds,
+          deviceSystem: snapchatDeviceSystem,
+          deviceConnection: snapchatDeviceConnection,
+        })
+      )
+      .max(4)
+      .nullish(),
+    moreAds: z
+      .array(
+        z.object({
+          name: z.string().trim().min(2).max(120),
+          creativeId: z.string().uuid(),
+          headline: z.string().trim().min(1).max(34),
+          callToAction: z.enum(["MORE", "SHOP_NOW", "ORDER_NOW", "SIGN_UP", "BOOK_NOW", "GET_NOW"]),
+          url: z.string().trim().min(1).max(2000),
+        })
+      )
+      .max(4)
+      .nullish(),
     creativeId: z.string().uuid(),
     brandName: z.string().trim().min(1).max(25),
     headline: z.string().trim().min(1).max(34),

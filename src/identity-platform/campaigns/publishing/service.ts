@@ -99,6 +99,35 @@ interface PublishCommonInput {
   startActive: boolean
 }
 
+// One more ad group of a Snapchat campaign: its own budget and audience. The country, the dates,
+// the goal and the bid are the campaign's.
+export interface PublishAdGroupInput {
+  name: string
+  dailyBudget: number
+  lifetimeBudget?: number | null
+  minAge: number
+  maxAge?: number | null
+  gender: "all" | "male" | "female"
+  regionIds?: string[] | null
+  cityKeys?: string[] | null
+  languages?: string[] | null
+  interestIds?: string[] | null
+  deviceSystem?: SnapchatDeviceSystem | null
+  deviceConnection?: SnapchatDeviceConnection | null
+}
+
+// One more ad of a Snapchat campaign: its own creative, text, button and link.
+export interface PublishAdInput {
+  name: string
+  creativeId: string
+  headline: string
+  callToAction: SnapchatCallToAction
+  url: string
+}
+
+export const PUBLISH_MAX_AD_GROUPS = 5
+export const PUBLISH_MAX_ADS = 5
+
 export type PublishCampaignInput =
   | (PublishCommonInput & {
       platform: "snapchat"
@@ -123,6 +152,13 @@ export type PublishCampaignInput =
       // One amount for the whole run instead of an amount a day; needs an end date. The daily
       // budget kept with the record is then the average a day.
       lifetimeBudget?: number | null
+      // The names of the first ad group and the first ad; left out, the campaign's name.
+      adGroupName?: string | null
+      adName?: string | null
+      // More ad groups (each its own budget and audience) and more ads. Every ad is placed in
+      // every ad group.
+      moreAdGroups?: PublishAdGroupInput[] | null
+      moreAds?: PublishAdInput[] | null
     })
   | (PublishCommonInput & {
       platform: "tiktok"
@@ -167,6 +203,11 @@ export interface PublicationDetails {
   deviceSystem?: string
   deviceConnection?: string
   lifetimeBudget?: number
+  // A campaign made with several ad groups or ads: the names of the first ones, and the rest.
+  adGroupName?: string
+  adName?: string
+  adGroups?: PublishAdGroupInput[]
+  ads?: PublishAdInput[]
 }
 
 export interface PublicationView {
@@ -433,6 +474,14 @@ function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
     details.deviceConnection = input.deviceConnection
   }
   if (input.lifetimeBudget) details.lifetimeBudget = input.lifetimeBudget
+  if (input.moreAdGroups?.length) {
+    details.adGroups = input.moreAdGroups
+    if (input.adGroupName?.trim()) details.adGroupName = input.adGroupName.trim()
+  }
+  if (input.moreAds?.length) {
+    details.ads = input.moreAds
+    if (input.adName?.trim()) details.adName = input.adName.trim()
+  }
   return Object.keys(details).length > 0 ? details : null
 }
 
@@ -830,6 +879,49 @@ export class CampaignPublishingService {
       }
       input = { ...given, dailyBudget: Math.round((given.lifetimeBudget / days) * 100) / 100 }
     }
+    // More ad groups: each held to the same rules as the first, with the same kind of budget.
+    if (input.platform === "snapchat" && input.moreAdGroups?.length) {
+      const first = input
+      const days = first.lifetimeBudget ? runDays(first) : 0
+      const unsuitable = (problem: string) =>
+        invalid("PUBLISH_SETTINGS_NOT_SUITABLE", "An ad group's settings do not fit Snapchat.", {
+          problem,
+        })
+      const groups = input.moreAdGroups.map((group) => {
+        if (Boolean(group.lifetimeBudget) !== Boolean(first.lifetimeBudget)) {
+          throw unsuitable("budget_kind")
+        }
+        const dailyBudget = group.lifetimeBudget
+          ? Math.round((group.lifetimeBudget / days) * 100) / 100
+          : group.dailyBudget
+        if (dailyBudget < MIN_DAILY_BUDGETS.snapchat) {
+          throw invalid("PUBLISH_BUDGET_TOO_LOW", "An ad group's budget is too low.", {
+            minimum: MIN_DAILY_BUDGETS.snapchat,
+          })
+        }
+        if (group.maxAge && group.maxAge <= group.minAge) {
+          throw invalid("PUBLISH_AGE_RANGE", "The oldest age has to be above the youngest.")
+        }
+        if (snapchatPlacesProblem(first.countryCode, group.regionIds, group.cityKeys)) {
+          throw unsuitable("places")
+        }
+        return { ...group, name: group.name.trim(), dailyBudget }
+      })
+      if (groups.length + 1 > PUBLISH_MAX_AD_GROUPS) throw unsuitable("too_many_ad_groups")
+      input = { ...first, moreAdGroups: groups }
+    }
+    if (input.platform === "snapchat" && (input.moreAds?.length ?? 0) + 1 > PUBLISH_MAX_ADS) {
+      throw invalid("PUBLISH_SETTINGS_NOT_SUITABLE", "Too many ads.", { problem: "too_many_ads" })
+    }
+    // What the whole campaign may spend in a day: every ad group's budget together.
+    const totalDailyBudget =
+      input.platform === "snapchat"
+        ? Math.round(
+            (input.dailyBudget +
+              (input.moreAdGroups ?? []).reduce((sum, group) => sum + group.dailyBudget, 0)) *
+              100
+          ) / 100
+        : input.dailyBudget
     const account = (await this.accounts(actor, input.platform)).accounts.find(
       (entry) =>
         entry.connectionId === input.connectionId && entry.adAccountId === input.adAccountId
@@ -855,7 +947,7 @@ export class CampaignPublishingService {
       throw invalid("PUBLISH_AGE_RANGE", "The oldest age has to be above the youngest.")
     }
     if (input.platform === "snapchat") {
-      const problem = snapchatSettingsProblem(input)
+      const problem = snapchatSettingsProblem({ ...input, dailyBudget: totalDailyBudget })
       if (problem) {
         throw invalid(
           "PUBLISH_SETTINGS_NOT_SUITABLE",
@@ -892,6 +984,28 @@ export class CampaignPublishingService {
           problem,
         })
       }
+    }
+    // More ads: each with a creative that fits and a secure link, tracked like the first.
+    if (input.platform === "snapchat" && input.moreAds?.length) {
+      const ads: PublishAdInput[] = []
+      for (const ad of input.moreAds) {
+        const creative = await this.creatives.get(actor.organizationId, ad.creativeId)
+        const problem = creativeProblemFor("snapchat", creative)
+        if (problem) {
+          throw invalid("PUBLISH_CREATIVE_NOT_SUITABLE", "A creative does not fit the platform.", {
+            problem,
+          })
+        }
+        let adUrl: string
+        try {
+          if (new URL(ad.url).protocol !== "https:") throw new Error("not https")
+          adUrl = withCampaignTracking(ad.url, input.name, "snapchat", input.tracking)
+        } catch {
+          throw invalid("PUBLISH_INVALID_URL", "The website address has to start with https://.")
+        }
+        ads.push({ ...ad, name: ad.name.trim(), headline: ad.headline.trim(), url: adUrl })
+      }
+      input = { ...input, moreAds: ads }
     }
     const details: PublicationDetails | null =
       input.platform === "google"
@@ -935,7 +1049,7 @@ export class CampaignPublishingService {
         input.name.trim(),
         input.objective,
         account.currency,
-        input.dailyBudget,
+        totalDailyBudget,
         startAt.toISOString(),
         endAt ? endAt.toISOString() : null,
         JSON.stringify({
@@ -980,6 +1094,7 @@ export class CampaignPublishingService {
           WHERE id = $1`,
         [id, JSON.stringify(ids)]
       )
+      await this.tieAds(organizationId, input, ids)
     } catch (caught) {
       const error =
         caught instanceof SnapchatPublishError || caught instanceof PlatformPublishError
@@ -1090,6 +1205,30 @@ export class CampaignPublishingService {
       deviceSystem: input.deviceSystem ?? null,
       deviceConnection: input.deviceConnection ?? null,
       lifetimeBudget: input.lifetimeBudget ?? null,
+      adGroupName: input.adGroupName ?? null,
+      adName: input.adName ?? null,
+      moreAdGroups: (input.moreAdGroups ?? []).map((group) => ({
+        ...group,
+        minAge: Math.min(group.minAge, SNAPCHAT_MIN_AGE_TOP),
+        maxAge: group.maxAge && group.maxAge <= SNAPCHAT_MAX_AGE_TOP ? group.maxAge : null,
+      })),
+      moreAds: await Promise.all(
+        (input.moreAds ?? []).map(async (ad) => {
+          const adFile = await this.creatives.readFile(organizationId, ad.creativeId)
+          return {
+            name: ad.name,
+            headline: ad.headline,
+            callToAction: ad.callToAction,
+            url: ad.url,
+            media: {
+              kind: adFile.creative.kind,
+              bytes: adFile.bytes,
+              contentType: adFile.creative.contentType,
+              fileName: adFile.fileName,
+            },
+          }
+        })
+      ),
       minAge: Math.min(shown.minAge, SNAPCHAT_MIN_AGE_TOP),
       maxAge: shown.maxAge && shown.maxAge <= SNAPCHAT_MAX_AGE_TOP ? shown.maxAge : null,
       accessToken: await this.snapchatAccess.resolveAccessToken(input.connectionId),
@@ -1098,6 +1237,46 @@ export class CampaignPublishingService {
       headline: input.headline.trim(),
       callToAction: input.callToAction,
     })
+  }
+
+  // A campaign made with several ad groups or ads: every ad but the first (which the record
+  // itself names) is tied to the library creative it was made from (campaign_creative_ads), so
+  // the library counts it and its file is never brought in again as a new one. A tie that could
+  // not be written does not undo the publish.
+  private async tieAds(
+    organizationId: string,
+    input: PublishCampaignInput,
+    ids: { campaignId: string } & Partial<SnapchatPublishedIds>
+  ): Promise<void> {
+    if (input.platform !== "snapchat" || !ids.ads) return
+    const creativeIds = [input.creativeId, ...(input.moreAds ?? []).map((ad) => ad.creativeId)]
+    for (const ad of ids.ads) {
+      const creativeId = creativeIds[ad.adIndex]
+      if (ad.adId === ids.adId || !creativeId) continue
+      await this.db
+        .query(
+          `INSERT INTO campaign_creative_ads
+             (id, organization_id, creative_id, platform, connection_id, account_id, ad_id,
+              platform_creative_id, media_id)
+           VALUES ($1, $2, $3, 'snapchat', $4, $5, $6, $7, $8)
+           ON CONFLICT (platform, connection_id, ad_id) DO NOTHING`,
+          [
+            randomUUID(),
+            organizationId,
+            creativeId,
+            input.connectionId,
+            input.adAccountId,
+            ad.adId,
+            ad.creativeId,
+            ad.mediaId,
+          ]
+        )
+        .catch((error: unknown) =>
+          console.error("campaigns.publish_ad_tie_failed", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+        )
+    }
   }
 
   // One published campaign's switch or removal, on whichever platform holds it.

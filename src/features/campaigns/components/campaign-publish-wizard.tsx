@@ -51,6 +51,7 @@ import {
 import {
   type AnyCallToAction,
   callsToActionFor,
+  type CallToAction,
   campaignPublishingService,
   type Creative,
   creativeProblemFor,
@@ -178,9 +179,117 @@ interface Draft {
   // What was typed over Madar's own tracking words for the link.
   tracking: TrackingEdits
   startActive: boolean
+  // Snapchat: a campaign can be made with several ad groups and several ads. The boxes above
+  // are the ad group and the ad being worked on; the lists hold every one of them (the entry
+  // being worked on is refreshed from the boxes whenever the lists are read), and the names
+  // tell them apart once there is more than one.
+  groupName: string
+  groups: GroupDraft[]
+  groupAt: number
+  adName: string
+  ads: AdDraft[]
+  adAt: number
 }
 
+// What each ad group has of its own: its budget and its audience. The dates, the country, the
+// goal and the bid are the campaign's.
+const GROUP_KEYS = [
+  "groupName",
+  "dailyBudget",
+  "lifetimeBudget",
+  "minAge",
+  "maxAge",
+  "gender",
+  "regionIds",
+  "cityKeys",
+  "languages",
+  "interestIds",
+  "deviceSystem",
+  "deviceConnection",
+] as const
+type GroupDraft = Pick<Draft, (typeof GROUP_KEYS)[number]>
+// What each ad has of its own. The brand name and the link's tracking words are shared.
+const AD_KEYS = ["adName", "creativeId", "headline", "callToAction", "url"] as const
+type AdDraft = Pick<Draft, (typeof AD_KEYS)[number]>
+const MAX_SLOTS = 5
+
+const pickKeys = <K extends keyof Draft>(draft: Draft, keys: readonly K[]) =>
+  Object.fromEntries(keys.map((key) => [key, draft[key]])) as Pick<Draft, K>
+// Every ad group and every ad, with the one being worked on as the boxes now have it.
+const groupsOf = (draft: Draft): GroupDraft[] =>
+  draft.groups.map((group, index) =>
+    index === draft.groupAt ? pickKeys(draft, GROUP_KEYS) : group
+  )
+const adsOf = (draft: Draft): AdDraft[] =>
+  draft.ads.map((ad, index) => (index === draft.adAt ? pickKeys(draft, AD_KEYS) : ad))
+
 type Errors = Partial<Record<keyof Draft, string>>
+
+// The ad groups (or the ads) of the campaign as tabs: pick one to work on, add a copy of the
+// one being worked on, or remove one.
+function SlotTabs({
+  labels,
+  at,
+  onPick,
+  onAdd,
+  onRemove,
+  addLabel,
+  removeLabel,
+}: {
+  labels: string[]
+  at: number
+  onPick: (index: number) => void
+  onAdd: () => void
+  onRemove: (index: number) => void
+  addLabel: string
+  removeLabel: (label: string) => string
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="tablist">
+      {labels.map((label, index) => (
+        <span
+          key={index}
+          className={cn(
+            "inline-flex h-11 items-center overflow-hidden rounded-xl border-2 text-[13px] font-bold transition-colors",
+            index === at
+              ? "border-[#1d4fd8] bg-[#f3f7ff] text-[#1d4fd8]"
+              : "border-[#e1e7f0] bg-white text-[#3b4a66] hover:border-[#1d4fd8]/40"
+          )}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={index === at}
+            onClick={() => onPick(index)}
+            className="h-full max-w-[220px] truncate px-4"
+          >
+            {label}
+          </button>
+          {labels.length > 1 ? (
+            <button
+              type="button"
+              aria-label={removeLabel(label)}
+              onClick={() => onRemove(index)}
+              className="flex h-full w-9 items-center justify-center border-s border-current/20 text-[#98a2b3] hover:text-[#b42318]"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          ) : null}
+        </span>
+      ))}
+      {labels.length < MAX_SLOTS ? (
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex h-11 items-center gap-1.5 rounded-xl border-2 border-dashed border-[#c7d2e6] bg-white px-4 text-[13px] font-bold text-[#1d4fd8] hover:border-[#1d4fd8]/60"
+        >
+          <Plus className="size-4" />
+          {addLabel}
+        </button>
+      ) : null}
+    </div>
+  )
+}
 
 const accountKey = (account: { connectionId: string; adAccountId: string }) =>
   `${account.connectionId}|${account.adAccountId}`
@@ -299,43 +408,56 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [publication, setPublication] = useState<Publication | null>(null)
   const [switching, setSwitching] = useState(false)
-  const [draft, setDraft] = useState<Draft>(() => ({
-    platform: "snapchat",
-    accountKey: "",
-    name: "",
-    objective: "traffic",
-    goal: "",
-    campaignDailyCap: "",
-    campaignLifetimeCap: "",
-    bidStrategy: "auto",
-    bidAmount: "",
-    regionIds: [],
-    cityKeys: [],
-    languages: [],
-    interestIds: [],
-    deviceSystem: "all",
-    deviceConnection: "all",
-    budgetKind: "daily",
-    lifetimeBudget: "",
-    dailyBudget: "50",
-    startDate: toLocalDay(new Date()),
-    endDate: "",
-    countryCode: "sa",
-    minAge: 18,
-    maxAge: NO_MAX_AGE,
-    gender: "all",
-    creativeId: searchParams.get("creative") ?? "",
-    brandName: "",
-    headline: "",
-    text: "",
-    headlines: ["", "", ""],
-    descriptions: ["", ""],
-    keywords: "",
-    callToAction: "MORE",
-    url: "",
-    tracking: {},
-    startActive: false,
-  }))
+  const [draft, setDraft] = useState<Draft>(() => {
+    const base = {
+      platform: "snapchat" as PublishPlatform,
+      accountKey: "",
+      name: "",
+      objective: "traffic",
+      goal: "",
+      campaignDailyCap: "",
+      campaignLifetimeCap: "",
+      bidStrategy: "auto",
+      bidAmount: "",
+      regionIds: [],
+      cityKeys: [],
+      languages: [],
+      interestIds: [],
+      deviceSystem: "all",
+      deviceConnection: "all",
+      budgetKind: "daily",
+      lifetimeBudget: "",
+      dailyBudget: "50",
+      startDate: toLocalDay(new Date()),
+      endDate: "",
+      countryCode: "sa",
+      minAge: 18,
+      maxAge: NO_MAX_AGE,
+      gender: "all",
+      creativeId: searchParams.get("creative") ?? "",
+      brandName: "",
+      headline: "",
+      text: "",
+      headlines: ["", "", ""],
+      descriptions: ["", ""],
+      keywords: "",
+      callToAction: "MORE",
+      url: "",
+      tracking: {},
+      startActive: false,
+      groupName: "",
+      groups: [],
+      groupAt: 0,
+      adName: "",
+      ads: [],
+      adAt: 0,
+    } satisfies Draft as Draft
+    return {
+      ...base,
+      groups: [pickKeys(base, GROUP_KEYS)],
+      ads: [pickKeys(base, AD_KEYS)],
+    }
+  })
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -473,11 +595,81 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
         ) + 1
       : 0
   const lifetimeBudget = Number(draft.lifetimeBudget)
-  const budget = lifetime
-    ? runDays > 0
-      ? Math.round((lifetimeBudget / runDays) * 100) / 100
-      : 0
-    : Number(draft.dailyBudget)
+  // What an ad group comes to a day.
+  const dailyOf = (group: Pick<GroupDraft, "dailyBudget" | "lifetimeBudget">) =>
+    lifetime
+      ? runDays > 0
+        ? Math.round((Number(group.lifetimeBudget) / runDays) * 100) / 100
+        : 0
+      : Number(group.dailyBudget)
+  const budget = dailyOf(draft)
+  // Only Snapchat takes several ad groups and ads; elsewhere it is the one being worked on.
+  const multi = draft.platform === "snapchat"
+  const groups = multi ? groupsOf(draft) : [pickKeys(draft, GROUP_KEYS)]
+  const ads = multi ? adsOf(draft) : [pickKeys(draft, AD_KEYS)]
+  const groupAt = multi ? draft.groupAt : 0
+  const adAt = multi ? draft.adAt : 0
+  // What the whole campaign may spend in a day: every ad group together.
+  const totalBudget =
+    Math.round(groups.reduce((sum, group) => sum + (dailyOf(group) || 0), 0) * 100) / 100
+  const groupLabel = (group: GroupDraft, index: number) =>
+    group.groupName.trim() || t("slots.group", { n: index + 1 })
+  const adLabel = (ad: AdDraft, index: number) =>
+    ad.adName.trim() || t("slots.ad", { n: index + 1 })
+
+  // Working on another ad group or ad: the boxes are kept in the list, then filled from it.
+  const showGroup = (index: number) =>
+    setDraft((current) => {
+      const all = groupsOf(current)
+      return { ...current, groups: all, ...all[index], groupAt: index }
+    })
+  const showAd = (index: number) =>
+    setDraft((current) => {
+      const all = adsOf(current)
+      return { ...current, ads: all, ...all[index], adAt: index }
+    })
+  // A new one starts as a copy of the one being worked on, so only what differs is changed.
+  const addGroup = () => {
+    setErrors({})
+    setDraft((current) => {
+      const all = groupsOf(current).map((group, index) => ({
+        ...group,
+        groupName: group.groupName.trim() || t("slots.group", { n: index + 1 }),
+      }))
+      const copy = { ...all[current.groupAt], groupName: t("slots.group", { n: all.length + 1 }) }
+      return { ...current, groups: [...all, copy], ...copy, groupAt: all.length }
+    })
+  }
+  const addAd = () => {
+    setErrors({})
+    setDraft((current) => {
+      const all = adsOf(current).map((ad, index) => ({
+        ...ad,
+        adName: ad.adName.trim() || t("slots.ad", { n: index + 1 }),
+      }))
+      const copy = { ...all[current.adAt], adName: t("slots.ad", { n: all.length + 1 }) }
+      return { ...current, ads: [...all, copy], ...copy, adAt: all.length }
+    })
+  }
+  const removeGroup = (index: number) => {
+    setErrors({})
+    setDraft((current) => {
+      const all = groupsOf(current).filter((_, other) => other !== index)
+      const next = Math.min(
+        index < current.groupAt ? current.groupAt - 1 : current.groupAt,
+        all.length - 1
+      )
+      return { ...current, groups: all, ...all[next], groupAt: next }
+    })
+  }
+  const removeAd = (index: number) => {
+    setErrors({})
+    setDraft((current) => {
+      const all = adsOf(current).filter((_, other) => other !== index)
+      const next = Math.min(index < current.adAt ? current.adAt - 1 : current.adAt, all.length - 1)
+      return { ...current, ads: all, ...all[next], adAt: next }
+    })
+  }
   const minimumBudget = limits?.minDailyBudgets?.[draft.platform] ?? limits?.minDailyBudget ?? 20
   const headlineMax =
     draft.platform === "tiktok"
@@ -494,29 +686,43 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     }
     if (index === 1) {
       const minimum = minimumBudget
-      if (lifetime) {
-        if (runDays === 0) found.dailyBudget = t("errors.lifetimeEnd")
-        else if (!Number.isFinite(lifetimeBudget) || lifetimeBudget < minimum * runDays) {
-          found.dailyBudget = t("errors.lifetimeBudget", {
-            minimum: minimum * runDays,
-            days: runDays,
-            currency: currencyLabel,
-          })
+      // Every ad group is checked; the first one with something wrong is the one shown.
+      for (const [index, group] of groups.entries()) {
+        const wrong: Errors = {}
+        const whole = Number(group.lifetimeBudget)
+        const daily = dailyOf(group)
+        if (lifetime) {
+          if (runDays === 0) wrong.dailyBudget = t("errors.lifetimeEnd")
+          else if (!Number.isFinite(whole) || whole < minimum * runDays) {
+            wrong.dailyBudget = t("errors.lifetimeBudget", {
+              minimum: minimum * runDays,
+              days: runDays,
+              currency: currencyLabel,
+            })
+          }
+        } else if (!Number.isFinite(daily) || daily < minimum) {
+          wrong.dailyBudget = t("errors.budget", { minimum, currency: currencyLabel })
         }
-      } else if (!Number.isFinite(budget) || budget < minimum) {
-        found.dailyBudget = t("errors.budget", { minimum, currency: currencyLabel })
+        if (!isGoogle && group.maxAge !== NO_MAX_AGE && Number(group.maxAge) <= group.minAge) {
+          wrong.maxAge = t("errors.ageRange")
+        }
+        if (groups.length > 1 && group.groupName.trim().length < 2) {
+          wrong.groupName = t("errors.slotName")
+        }
+        if (Object.keys(wrong).length > 0) {
+          if (index !== groupAt) showGroup(index)
+          Object.assign(found, wrong)
+          break
+        }
       }
       if (!draft.startDate) found.startDate = t("errors.startDate")
       else if (draft.startDate < toLocalDay(new Date())) found.startDate = t("errors.startPast")
       if (draft.endDate && draft.endDate < draft.startDate) found.endDate = t("errors.endDate")
-      if (!isGoogle && draft.maxAge !== NO_MAX_AGE && Number(draft.maxAge) <= draft.minAge) {
-        found.maxAge = t("errors.ageRange")
-      }
       if (isSnapchat) {
         const dailyCap = Number(draft.campaignDailyCap)
         if (
           draft.campaignDailyCap &&
-          !(dailyCap >= SNAPCHAT_MIN_SPEND_CAP && dailyCap >= budget * 0.25)
+          !(dailyCap >= SNAPCHAT_MIN_SPEND_CAP && dailyCap >= totalBudget * 0.25)
         ) {
           found.campaignDailyCap = t("errors.dailyCap", {
             minimum: SNAPCHAT_MIN_SPEND_CAP,
@@ -526,7 +732,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
         const lifetimeCap = Number(draft.campaignLifetimeCap)
         if (
           draft.campaignLifetimeCap &&
-          !(lifetimeCap >= SNAPCHAT_MIN_SPEND_CAP && lifetimeCap >= budget)
+          !(lifetimeCap >= SNAPCHAT_MIN_SPEND_CAP && lifetimeCap >= totalBudget)
         ) {
           found.campaignLifetimeCap = t("errors.lifetimeCap", {
             minimum: SNAPCHAT_MIN_SPEND_CAP,
@@ -554,19 +760,31 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       if (keywords.length === 0) found.keywords = t("errors.keywords")
     }
     if (index === 2 && !isGoogle) {
-      if (!creative) found.creativeId = t("errors.creative")
-      else if (problemOf(creative)) {
-        found.creativeId = t(
-          draft.platform === "snapchat" ? "errors.creativeFit" : "errors.creativeFitOther"
-        )
-      }
       if (draft.platform !== "meta" && !draft.brandName.trim()) {
         found.brandName = t("errors.brandName")
       }
-      if (!draft.headline.trim()) found.headline = t("errors.headline")
       if (draft.platform === "meta" && !draft.text.trim()) found.text = t("errors.text")
+      // Every ad is checked; the first one with something wrong is the one shown.
+      for (const [at, ad] of ads.entries()) {
+        const wrong: Errors = {}
+        const file = creatives.find((entry) => entry.id === ad.creativeId) ?? null
+        if (!file) wrong.creativeId = t("errors.creative")
+        else if (problemOf(file)) {
+          wrong.creativeId = t(
+            draft.platform === "snapchat" ? "errors.creativeFit" : "errors.creativeFitOther"
+          )
+        }
+        if (!ad.headline.trim()) wrong.headline = t("errors.headline")
+        if (!/^https:\/\/[^\s.]+\.[^\s]+$/i.test(ad.url.trim())) wrong.url = t("errors.url")
+        if (ads.length > 1 && ad.adName.trim().length < 2) wrong.adName = t("errors.slotName")
+        if (Object.keys(wrong).length > 0) {
+          if (at !== adAt) showAd(at)
+          Object.assign(found, wrong)
+          break
+        }
+      }
     }
-    if (index === 2) {
+    if (index === 2 && isGoogle) {
       if (!/^https:\/\/[^\s.]+\.[^\s]+$/i.test(draft.url.trim())) found.url = t("errors.url")
     }
     return found
@@ -614,6 +832,11 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       }
     }
     if (!account || (!isGoogle && !creative)) return
+    // The first ad group and the first ad are the campaign's own; the rest go along with them.
+    const [firstGroup, ...moreGroups] = groups
+    const [firstAd, ...moreAds] = ads
+    const maxAgeOf = (group: GroupDraft) =>
+      group.maxAge === NO_MAX_AGE ? null : Number(group.maxAge)
     setSubmitting(true)
     setSubmitError(null)
     const common = {
@@ -621,19 +844,19 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       adAccountId: account.adAccountId,
       name: draft.name.trim(),
       objective,
-      dailyBudget: budget,
+      dailyBudget: dailyOf(firstGroup),
       startDate: draft.startDate,
       endDate: draft.endDate || null,
       countryCode: draft.countryCode,
       // A search ad is aimed by what people search, not by who they are.
-      minAge: isGoogle ? 18 : draft.minAge,
-      maxAge: isGoogle || draft.maxAge === NO_MAX_AGE ? null : Number(draft.maxAge),
-      gender: isGoogle ? ("all" as const) : draft.gender,
-      url: draft.url.trim(),
+      minAge: isGoogle ? 18 : firstGroup.minAge,
+      maxAge: isGoogle ? null : maxAgeOf(firstGroup),
+      gender: isGoogle ? ("all" as const) : firstGroup.gender,
+      url: (isGoogle ? draft.url : firstAd.url).trim(),
       tracking: resolveTracking(draft.platform, { campaign: draft.name }, draft.tracking),
       startActive: draft.startActive,
     }
-    const creativeId = creative?.id ?? ""
+    const creativeId = firstAd.creativeId
     try {
       setPublication(
         await campaignPublishingService.publish(
@@ -650,17 +873,17 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   ...common,
                   platform: "meta",
                   creativeId,
-                  headline: draft.headline.trim(),
+                  headline: firstAd.headline.trim(),
                   text: draft.text.trim(),
-                  callToAction: draft.callToAction,
+                  callToAction: firstAd.callToAction,
                 }
               : {
                   ...common,
                   platform: draft.platform,
                   creativeId,
                   brandName: draft.brandName.trim(),
-                  headline: draft.headline.trim(),
-                  callToAction: draft.callToAction,
+                  headline: firstAd.headline.trim(),
+                  callToAction: firstAd.callToAction,
                   ...(isSnapchat
                     ? {
                         goal,
@@ -672,13 +895,44 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                           : null,
                         bidStrategy: draft.bidStrategy,
                         bidAmount: draft.bidStrategy === "auto" ? null : Number(draft.bidAmount),
-                        regionIds: draft.regionIds,
-                        cityKeys: draft.cityKeys,
-                        languages: draft.languages,
-                        interestIds: draft.interestIds,
-                        deviceSystem: draft.deviceSystem,
-                        deviceConnection: draft.deviceConnection,
-                        lifetimeBudget: lifetime ? lifetimeBudget : null,
+                        regionIds: firstGroup.regionIds,
+                        cityKeys: firstGroup.cityKeys,
+                        languages: firstGroup.languages,
+                        interestIds: firstGroup.interestIds,
+                        deviceSystem: firstGroup.deviceSystem,
+                        deviceConnection: firstGroup.deviceConnection,
+                        lifetimeBudget: lifetime ? Number(firstGroup.lifetimeBudget) : null,
+                        ...(moreGroups.length > 0
+                          ? {
+                              adGroupName: groupLabel(firstGroup, 0),
+                              moreAdGroups: moreGroups.map((group, index) => ({
+                                name: groupLabel(group, index + 1),
+                                dailyBudget: dailyOf(group),
+                                lifetimeBudget: lifetime ? Number(group.lifetimeBudget) : null,
+                                minAge: group.minAge,
+                                maxAge: maxAgeOf(group),
+                                gender: group.gender,
+                                regionIds: group.regionIds,
+                                cityKeys: group.cityKeys,
+                                languages: group.languages,
+                                interestIds: group.interestIds,
+                                deviceSystem: group.deviceSystem,
+                                deviceConnection: group.deviceConnection,
+                              })),
+                            }
+                          : {}),
+                        ...(moreAds.length > 0
+                          ? {
+                              adName: adLabel(firstAd, 0),
+                              moreAds: moreAds.map((ad, index) => ({
+                                name: adLabel(ad, index + 1),
+                                creativeId: ad.creativeId,
+                                headline: ad.headline.trim(),
+                                callToAction: ad.callToAction as CallToAction,
+                                url: ad.url.trim(),
+                              })),
+                            }
+                          : {}),
                       }
                     : {}),
                 }
@@ -950,9 +1204,35 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     {
       label: t("review.budget"),
       value: lifetime
-        ? t("review.lifetimeBudgetValue", { amount: draft.lifetimeBudget, currency: currencyLabel })
-        : t("review.budgetValue", { amount: draft.dailyBudget, currency: currencyLabel }),
+        ? t("review.lifetimeBudgetValue", {
+            amount: groups.reduce((sum, group) => sum + (Number(group.lifetimeBudget) || 0), 0),
+            currency: currencyLabel,
+          })
+        : t("review.budgetValue", {
+            amount: groups.length > 1 ? totalBudget : draft.dailyBudget,
+            currency: currencyLabel,
+          }),
     },
+    ...(groups.length > 1
+      ? [
+          {
+            label: t("review.adGroups"),
+            value: groups.map((group, index) => groupLabel(group, index)).join("، "),
+          },
+        ]
+      : []),
+    ...(ads.length > 1 || groups.length > 1
+      ? [
+          {
+            label: t("review.ads"),
+            value: t("review.adsValue", {
+              ads: ads.length,
+              groups: groups.length,
+              total: ads.length * groups.length,
+            }),
+          },
+        ]
+      : []),
     {
       label: t("review.dates"),
       value: draft.endDate
@@ -1145,6 +1425,35 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
         {step === 1 ? (
           <>
             {isSnapchat ? (
+              <div className="space-y-3 rounded-xl border border-[#e1e7f0] bg-[#f7f9fd] p-4">
+                <p className={cn("text-[13px] font-bold", HEADING)}>{t("slots.groupsTitle")}</p>
+                <SlotTabs
+                  labels={groups.map((group, index) => groupLabel(group, index))}
+                  at={groupAt}
+                  onPick={(index) => {
+                    setErrors({})
+                    showGroup(index)
+                  }}
+                  onAdd={addGroup}
+                  onRemove={removeGroup}
+                  addLabel={t("slots.addGroup")}
+                  removeLabel={(label) => t("slots.remove", { name: label })}
+                />
+                <p className={cn("text-[12px] leading-5", MUTED)}>{t("slots.groupsNote")}</p>
+                {groups.length > 1 ? (
+                  <Field label={t("slots.groupName")} error={errors.groupName}>
+                    <AppInput
+                      className={FIELD}
+                      maxLength={120}
+                      value={draft.groupName}
+                      onChange={(event) => set("groupName", event.target.value)}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+            ) : null}
+
+            {isSnapchat ? (
               <div className="flex flex-wrap gap-2">
                 {(["daily", "lifetime"] as const).map((kind) => (
                   <button
@@ -1241,6 +1550,12 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                     regionIds: [],
                     cityKeys: [],
                     interestIds: [],
+                    groups: current.groups.map((group) => ({
+                      ...group,
+                      regionIds: [],
+                      cityKeys: [],
+                      interestIds: [],
+                    })),
                   })),
                 (limits?.countries ?? ["sa"]).map((code) => ({
                   value: code,
@@ -1252,7 +1567,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
             {isSnapchat && account ? (
               <Field label={t("places.label")}>
                 <CampaignLocationPicker
-                  key={`${account.connectionId}:${draft.countryCode}`}
+                  // Its own state (which way is open) belongs to the ad group being worked on.
+                  key={`${account.connectionId}:${draft.countryCode}:${groupAt}`}
                   connectionId={account.connectionId}
                   countryCode={draft.countryCode}
                   value={{ regionIds: draft.regionIds, cityKeys: draft.cityKeys }}
@@ -1614,6 +1930,38 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
         {step === 2 && !isGoogle ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="space-y-6">
+              {isSnapchat ? (
+                <div className="space-y-3 rounded-xl border border-[#e1e7f0] bg-[#f7f9fd] p-4">
+                  <p className={cn("text-[13px] font-bold", HEADING)}>{t("slots.adsTitle")}</p>
+                  <SlotTabs
+                    labels={ads.map((ad, index) => adLabel(ad, index))}
+                    at={adAt}
+                    onPick={(index) => {
+                      setErrors({})
+                      showAd(index)
+                    }}
+                    onAdd={addAd}
+                    onRemove={removeAd}
+                    addLabel={t("slots.addAd")}
+                    removeLabel={(label) => t("slots.remove", { name: label })}
+                  />
+                  <p className={cn("text-[12px] leading-5", MUTED)}>
+                    {groups.length > 1
+                      ? t("slots.adsNoteGroups", { groups: groups.length })
+                      : t("slots.adsNote")}
+                  </p>
+                  {ads.length > 1 ? (
+                    <Field label={t("slots.adName")} error={errors.adName}>
+                      <AppInput
+                        className={FIELD}
+                        maxLength={120}
+                        value={draft.adName}
+                        onChange={(event) => set("adName", event.target.value)}
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+              ) : null}
               <Field
                 label={t("ad.creative")}
                 hint={t(`ad.creativeHints.${shownPlatform}`)}
@@ -1852,7 +2200,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   onClick={() => set("startActive", true)}
                   title={t("review.startNow")}
                   description={t("review.startNowHint", {
-                    amount: draft.dailyBudget,
+                    // Every ad group together, and a whole-run budget as what it comes to a day.
+                    amount: Math.round(totalBudget),
                     currency: currencyLabel,
                   })}
                 />

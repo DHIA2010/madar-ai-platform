@@ -244,6 +244,31 @@ export type PublishCampaignInput =
       deviceSystem?: "all" | "ios" | "android" | null
       deviceConnection?: "all" | "wifi" | "cell" | null
       lifetimeBudget?: number | null
+      // Snapchat only: the names of the first ad group and ad, and more of each. Every ad is
+      // placed in every ad group.
+      adGroupName?: string | null
+      adName?: string | null
+      moreAdGroups?: Array<{
+        name: string
+        dailyBudget: number
+        lifetimeBudget?: number | null
+        minAge: number
+        maxAge?: number | null
+        gender: "all" | "male" | "female"
+        regionIds?: string[] | null
+        cityKeys?: string[] | null
+        languages?: string[] | null
+        interestIds?: string[] | null
+        deviceSystem?: "all" | "ios" | "android" | null
+        deviceConnection?: "all" | "wifi" | "cell" | null
+      }> | null
+      moreAds?: Array<{
+        name: string
+        creativeId: string
+        headline: string
+        callToAction: CallToAction
+        url: string
+      }> | null
     })
   | (PublishCommonInput & {
       platform: "meta"

@@ -965,6 +965,94 @@ describe("the creative library and the publish record", () => {
     expect(on.platformStatus).toBe("active")
   })
 
+  it("publishes several ad groups and several ads, every ad in every ad group", async () => {
+    const { publishing, snap } = service()
+    const first = await upload()
+    const second = await upload()
+    const group = {
+      name: "نساء جدة",
+      dailyBudget: 80,
+      minAge: 60,
+      maxAge: null,
+      gender: "female" as const,
+      cityKeys: ["jeddah"],
+      languages: ["ar"],
+      deviceSystem: "ios" as const,
+    }
+    const ad = {
+      name: "إعلان العرض",
+      creativeId: second.id,
+      headline: "عرض الشتاء",
+      callToAction: "SHOP_NOW" as const,
+      url: "https://example.com/winter",
+    }
+    const started = await publishing.publish(
+      actor,
+      request(first.id, {
+        adGroupName: "الجميع",
+        adName: "إعلان الكاشير",
+        moreAdGroups: [group],
+        moreAds: [ad],
+        // Held against both ad groups' budgets together: a quarter of 130.
+        campaignDailyCap: 40,
+      })
+    )
+    // The record's daily budget is the whole campaign's.
+    expect(started.dailyBudget).toBe(130)
+    await publishing.settled()
+    expect(await publishing.get(ORG, started.id)).toMatchObject({ status: "published" })
+
+    const posts = (path: string) =>
+      snap.calls.filter((call) => call.method === "POST" && call.path === path)
+    const squads = posts("/campaigns/camp-1/adsquads").map(
+      (call) => (call.body as { adsquads: Array<Record<string, unknown>> }).adsquads[0]
+    )
+    expect(squads.map((squad) => squad.name)).toEqual(["الجميع", "نساء جدة"])
+    expect(squads.map((squad) => squad.daily_budget_micro)).toEqual([50_000_000, 80_000_000])
+    expect(squads[1].targeting).toMatchObject({
+      // Snapchat's own top for the youngest age.
+      demographics: [{ min_age: "45", gender: "FEMALE", languages: ["ar"], operation: "INCLUDE" }],
+      devices: [{ os_type: "iOS", operation: "INCLUDE" }],
+      locations: [{ circles: [{ latitude: 21.5433, longitude: 39.1728 }] }],
+    })
+    // Each ad's file and creative once, then the ad in both ad groups.
+    expect(posts(`/adaccounts/${ACCOUNT}/media`)).toHaveLength(2)
+    const creatives = posts(`/adaccounts/${ACCOUNT}/creatives`).map(
+      (call) => (call.body as { creatives: Array<Record<string, unknown>> }).creatives[0]
+    )
+    expect(creatives.map((creative) => [creative.name, creative.headline])).toEqual([
+      ["إعلان الكاشير", "كاشير سريع"],
+      ["إعلان العرض", "عرض الشتاء"],
+    ])
+    expect(creatives[1]).toMatchObject({
+      call_to_action: "SHOP_NOW",
+      brand_name: "مدار",
+      web_view_properties: {
+        url: expect.stringContaining("example.com/winter?utm_source=snapchat"),
+      },
+    })
+    expect(posts("/adsquads/squad-1/ads")).toHaveLength(4)
+
+    // Refused before Snapchat is asked: a group under the floor, another kind of budget, a cap
+    // under a quarter of the whole, a link that is not secure, a creative that is not there.
+    const before = snap.calls.length
+    const refused: Array<[Partial<SnapchatInput>, string]> = [
+      [{ moreAdGroups: [{ ...group, dailyBudget: 5 }] }, "PUBLISH_BUDGET_TOO_LOW"],
+      [{ moreAdGroups: [{ ...group, lifetimeBudget: 900 }] }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      [{ moreAdGroups: [{ ...group, minAge: 30, maxAge: 25 }] }, "PUBLISH_AGE_RANGE"],
+      [{ moreAdGroups: [{ ...group, regionIds: ["12208"] }] }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      [{ moreAdGroups: [group], campaignDailyCap: 30 }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      [{ moreAds: [{ ...ad, url: "http://example.com" }] }, "PUBLISH_INVALID_URL"],
+      [{ moreAds: [{ ...ad, creativeId: randomUUID() }] }, "CREATIVE_NOT_FOUND"],
+    ]
+    for (const [overrides, code] of refused) {
+      await expect(publishing.publish(actor, request(first.id, overrides))).rejects.toMatchObject({
+        code,
+      })
+    }
+    expect(snap.calls.length).toBe(before)
+  })
+
   it("removes a published campaign from Snapchat and from the list", async () => {
     const { publishing, snap } = service()
     const creative = await upload()
