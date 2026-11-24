@@ -4,7 +4,18 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useLocale, useTranslations } from "next-intl"
 import { subDays } from "date-fns"
-import { ChevronDown, Loader2, Plus, Search, Trash2, Wallet } from "lucide-react"
+import {
+  ChevronDown,
+  Copy,
+  Eye,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Wallet,
+} from "lucide-react"
 import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
 
@@ -13,7 +24,16 @@ import { toLocalDay } from "@/lib/local-day"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-import { AppConfirmDialog, AppDateRangeFilter, AppSearchInput, AppSwitch } from "@/components/app"
+import {
+  AppConfirmDialog,
+  AppDateRangeFilter,
+  AppDropdownMenu,
+  AppDropdownMenuContent,
+  AppDropdownMenuItem,
+  AppDropdownMenuTrigger,
+  AppSearchInput,
+  AppSwitch,
+} from "@/components/app"
 
 import { Can } from "@/features/authentication"
 
@@ -31,6 +51,7 @@ import {
   canChangeAdGroupBudget,
 } from "./campaign-ad-group-actions"
 import { CampaignModuleNav } from "./campaign-module-nav"
+import { CampaignRowSettingsDialog, type RowSettingsMode } from "./campaign-row-settings"
 import { campaignStatusBucket, campaignStatusPill } from "./campaign-status-pill"
 
 import { cairo } from "@/components/design/fonts"
@@ -95,6 +116,13 @@ export function CampaignListScreen() {
   // The ad group a new ad is being added to, and the one whose daily budget is being changed.
   const [addingAdTo, setAddingAdTo] = useState<CampaignPerformanceRow | null>(null)
   const [budgetOf, setBudgetOf] = useState<CampaignPerformanceRow | null>(null)
+  // The row whose settings are open, and what is being done with them: view, edit or copy.
+  const [managing, setManaging] = useState<{
+    row: CampaignPerformanceRow
+    mode: RowSettingsMode
+  } | null>(null)
+  // Raised to load the campaigns again (after a campaign was copied).
+  const [reloads, setReloads] = useState(0)
 
   const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
   const endDay = dateRange?.to ?? dateRange?.from
@@ -128,10 +156,10 @@ export function CampaignListScreen() {
     return () => {
       cancelled = true
     }
-  }, [startDate, endDate])
+  }, [startDate, endDate, reloads])
 
   const loadChildren = useCallback(
-    async (row: CampaignPerformanceRow) => {
+    async (row: Pick<CampaignPerformanceRow, "id" | "level">) => {
       setChildren((current) => ({ ...current, [row.id]: "loading" }))
       try {
         const result =
@@ -254,6 +282,54 @@ export function CampaignListScreen() {
     { key: "controls", label: t("listScreen.controls.column") },
   ]
 
+  // The row's own menu: look at its settings, and where Madar can change the platform (Snapchat
+  // today), edit it or make a copy of it.
+  const rowMenu = (row: CampaignPerformanceRow) => {
+    const canChange = campaignRowPublishPlatform(row) === "snapchat"
+    const item =
+      "flex h-11 cursor-pointer items-center gap-2.5 rounded-[8px] px-3 text-[13px] font-semibold text-[#0b1738]"
+    return (
+      // Not modal: a modal menu that opens a window leaves the page unclickable once the window
+      // closes.
+      <AppDropdownMenu dir={dir} modal={false}>
+        <AppDropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={t("listScreen.controls.manage.menu", { name: row.name })}
+            title={t("listScreen.controls.manage.actions.view")}
+            className="flex size-10 items-center justify-center rounded-[10px] text-[#475467] transition-colors hover:bg-[#eef2f8]"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </AppDropdownMenuTrigger>
+        <AppDropdownMenuContent align="end" className="min-w-[180px] rounded-[12px] p-1.5">
+          <AppDropdownMenuItem className={item} onSelect={() => setManaging({ row, mode: "view" })}>
+            <Eye className="size-4 text-[#6b7b96]" />
+            {t("listScreen.controls.manage.actions.view")}
+          </AppDropdownMenuItem>
+          {canChange ? (
+            <Can permission="campaigns:create">
+              <AppDropdownMenuItem
+                className={item}
+                onSelect={() => setManaging({ row, mode: "edit" })}
+              >
+                <Pencil className="size-4 text-[#6b7b96]" />
+                {t("listScreen.controls.manage.actions.edit")}
+              </AppDropdownMenuItem>
+              <AppDropdownMenuItem
+                className={item}
+                onSelect={() => setManaging({ row, mode: "clone" })}
+              >
+                <Copy className="size-4 text-[#6b7b96]" />
+                {t("listScreen.controls.manage.actions.clone")}
+              </AppDropdownMenuItem>
+            </Can>
+          ) : null}
+        </AppDropdownMenuContent>
+      </AppDropdownMenu>
+    )
+  }
+
   // One row of the table at its depth: a campaign (0), an ad group (1) or an ad (2).
   const renderRow = (row: CampaignPerformanceRow, depth: number) => {
     const pill = campaignStatusPill(row.status, t)
@@ -350,66 +426,68 @@ export function CampaignListScreen() {
             {row.conversions > 0 ? formatMoney(row.cpa, row.currency, locale) : "—"}
           </td>
           <td className="px-3 py-2">
-            {canControlCampaignRow(row) ? (
-              <Can
-                permission="campaigns:create"
-                fallback={<span className={cn("text-[12px]", MUTED)}>—</span>}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  {row.level === "adGroup" && campaignRowPublishPlatform(row) ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAddingAdTo(row)}
-                        aria-label={t("listScreen.controls.addAd.buttonLabel", { name: row.name })}
-                        title={t("listScreen.controls.addAd.button")}
-                        className="flex size-10 items-center justify-center rounded-[10px] text-[#1d4fd8] transition-colors hover:bg-[#eef4ff]"
-                      >
-                        <Plus className="size-4" />
-                      </button>
-                      {canChangeAdGroupBudget(row) ? (
+            <div className="flex items-center justify-center gap-1">
+              {canControlCampaignRow(row) ? (
+                <Can permission="campaigns:create">
+                  <div className="flex items-center justify-center gap-2">
+                    {row.level === "adGroup" && campaignRowPublishPlatform(row) ? (
+                      <>
                         <button
                           type="button"
-                          onClick={() => setBudgetOf(row)}
-                          aria-label={t("listScreen.controls.budget.buttonLabel", {
+                          onClick={() => setAddingAdTo(row)}
+                          aria-label={t("listScreen.controls.addAd.buttonLabel", {
                             name: row.name,
                           })}
-                          title={t("listScreen.controls.budget.button")}
-                          className="flex size-10 items-center justify-center rounded-[10px] text-[#137a41] transition-colors hover:bg-[#e7f8ee]"
+                          title={t("listScreen.controls.addAd.button")}
+                          className="flex size-10 items-center justify-center rounded-[10px] text-[#1d4fd8] transition-colors hover:bg-[#eef4ff]"
                         >
-                          <Wallet className="size-4" />
+                          <Plus className="size-4" />
                         </button>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {switching === row.id ? (
-                    <Loader2 className="size-5 animate-spin text-[#98a2b3]" />
-                  ) : (
-                    <AppSwitch
-                      checked={on}
-                      onCheckedChange={(active) => void setActive(row, active)}
-                      aria-label={t("listScreen.controls.switchLabel", { name: row.name })}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(row)}
-                    aria-label={t("listScreen.controls.deleteLabel", { name: row.name })}
-                    title={t("listScreen.controls.delete")}
-                    className="flex size-10 items-center justify-center rounded-[10px] text-[#b42318] transition-colors hover:bg-[#fef3f2]"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </div>
-              </Can>
-            ) : (
-              <span
-                className={cn("whitespace-nowrap text-[11.5px]", MUTED)}
-                title={t("listScreen.controls.notSupportedHint")}
-              >
-                {t("listScreen.controls.notSupported")}
-              </span>
-            )}
+                        {canChangeAdGroupBudget(row) ? (
+                          <button
+                            type="button"
+                            onClick={() => setBudgetOf(row)}
+                            aria-label={t("listScreen.controls.budget.buttonLabel", {
+                              name: row.name,
+                            })}
+                            title={t("listScreen.controls.budget.button")}
+                            className="flex size-10 items-center justify-center rounded-[10px] text-[#137a41] transition-colors hover:bg-[#e7f8ee]"
+                          >
+                            <Wallet className="size-4" />
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {switching === row.id ? (
+                      <Loader2 className="size-5 animate-spin text-[#98a2b3]" />
+                    ) : (
+                      <AppSwitch
+                        checked={on}
+                        onCheckedChange={(active) => void setActive(row, active)}
+                        aria-label={t("listScreen.controls.switchLabel", { name: row.name })}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(row)}
+                      aria-label={t("listScreen.controls.deleteLabel", { name: row.name })}
+                      title={t("listScreen.controls.delete")}
+                      className="flex size-10 items-center justify-center rounded-[10px] text-[#b42318] transition-colors hover:bg-[#fef3f2]"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                </Can>
+              ) : (
+                <span
+                  className={cn("whitespace-nowrap text-[11.5px]", MUTED)}
+                  title={t("listScreen.controls.notSupportedHint")}
+                >
+                  {t("listScreen.controls.notSupported")}
+                </span>
+              )}
+              {row.level === "keyword" ? null : rowMenu(row)}
+            </div>
           </td>
         </tr>
         {open && !Array.isArray(under) ? (
@@ -613,6 +691,30 @@ export function CampaignListScreen() {
         row={budgetOf}
         onClose={() => setBudgetOf(null)}
         onSaved={(row, dailyBudget) => patchRow(row, (entry) => ({ ...entry, dailyBudget }))}
+      />
+      <CampaignRowSettingsDialog
+        row={managing?.row ?? null}
+        mode={managing?.mode ?? "view"}
+        onModeChange={(mode) => setManaging((current) => (current ? { ...current, mode } : null))}
+        onClose={() => setManaging(null)}
+        onEdited={(row, settings) =>
+          patchRow(row, (entry) => ({
+            ...entry,
+            name: settings.name,
+            status: settings.status || entry.status,
+            dailyBudget: settings.dailyBudget ?? entry.dailyBudget,
+          }))
+        }
+        onCloned={(row) => {
+          // The copy sits beside what it was copied from: a campaign in the list, an ad group
+          // under its campaign, an ad under its ad group.
+          if (row.parentId === null) setReloads((count) => count + 1)
+          else
+            void loadChildren({
+              id: row.parentId,
+              level: row.level === "ad" ? "adGroup" : "campaign",
+            })
+        }}
       />
       <AppConfirmDialog
         open={deleting !== null}

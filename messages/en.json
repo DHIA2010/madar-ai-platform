@@ -7904,6 +7904,106 @@
           "saved": "The budget was changed on the platform",
           "failed": "The budget could not be changed.",
           "tooLow": "The lowest daily budget is {minimum} {currency}."
+        },
+        "manage": {
+          "goals": {
+            "PIXEL_SIGNUP": "Sign-ups",
+            "PIXEL_PAGE_VIEW": "Page views",
+            "PIXEL_PURCHASE": "Purchases",
+            "PIXEL_ADD_TO_CART": "Adds to cart",
+            "SWIPES": "Taps on the ad",
+            "IMPRESSIONS": "Impressions",
+            "LANDING_PAGE_VIEW": "Page views",
+            "LEAD_FORM_SUBMISSIONS": "Lead form submissions"
+          },
+          "objectives": {
+            "LEADS": "Leads",
+            "TRAFFIC": "Website visits",
+            "SALES": "Sales",
+            "AWARENESS_AND_ENGAGEMENT": "Awareness and engagement",
+            "APP_PROMOTION": "App promotion"
+          },
+          "menu": "Options for “{name}”",
+          "actions": {
+            "view": "View settings",
+            "edit": "Edit",
+            "clone": "Copy"
+          },
+          "titles": {
+            "view": {
+              "campaign": "Settings of campaign “{name}”",
+              "adGroup": "Settings of ad group “{name}”",
+              "ad": "Settings of ad “{name}”"
+            },
+            "edit": {
+              "campaign": "Edit campaign “{name}”",
+              "adGroup": "Edit ad group “{name}”",
+              "ad": "Edit ad “{name}”"
+            },
+            "clone": {
+              "campaign": "Copy campaign “{name}”",
+              "adGroup": "Copy ad group “{name}”",
+              "ad": "Copy ad “{name}”"
+            }
+          },
+          "fields": {
+            "name": "Name",
+            "status": "Status",
+            "objective": "Objective",
+            "goal": "Optimised for",
+            "dailyBudget": "Daily budget",
+            "start": "Start date",
+            "end": "End date",
+            "countries": "Countries",
+            "ages": "Ages",
+            "maxAge": "Age to",
+            "gender": "Gender",
+            "brandName": "Brand name",
+            "headline": "Headline",
+            "text": "Ad text",
+            "callToAction": "Button",
+            "url": "Link"
+          },
+          "values": {
+            "noEnd": "No end",
+            "ageRange": "{from} to {to}",
+            "ageFrom": "{from} and older",
+            "noMaxAge": "No limit"
+          },
+          "source": {
+            "live": "These settings were read from {platform} just now.",
+            "synced": "These settings are from the last sync with {platform}. Editing and copying from Madar are available for Snapchat for now."
+          },
+          "copyName": "{name} - copy",
+          "cloneHints": {
+            "campaign": "The campaign is copied with all its ad groups and ads. The copy starts switched off and spends nothing until you switch it on.",
+            "adGroup": "The ad group is copied with all its ads, inside the same campaign. Change what you want first. The copy starts switched off.",
+            "ad": "The ad is copied inside the same ad group with the same creative. Change the text or the link if you want. The copy starts switched off."
+          },
+          "ageHint": "Snapchat takes an upper age up to {top}. Leave “Age to” empty to include everyone older.",
+          "urlFixed": "An ad's link does not change once it is published. To change it, copy the ad and put the new link in the copy.",
+          "urlHint": "It has to start with https://",
+          "reviewAgain": "Note: changing the audience or the ad's text sends the ads back to Snapchat's review, and they stop showing until approved.",
+          "notAvailable": "Editing and copying from Madar are available for Snapchat for now. This platform's settings can only be viewed.",
+          "problems": {
+            "name": "Write a name of at least two letters.",
+            "budget": "The lowest daily budget is {minimum} {currency}.",
+            "minAge": "“Age from” has to be between {from} and {to}.",
+            "maxAge": "“Age to” has to be above “Age from” and at most {top}, or left empty.",
+            "adText": "Write the brand name and the headline.",
+            "url": "The link has to start with https://"
+          },
+          "loadFailed": "The settings could not be loaded. Close the window and try again.",
+          "close": "Close",
+          "cancel": "Cancel",
+          "save": "Save changes",
+          "saving": "Saving…",
+          "makeCopy": "Copy",
+          "cloning": "Copying…",
+          "saved": "Changed on the platform",
+          "cloned": "Copied. The copy is switched off until you switch it on.",
+          "saveFailed": "The change could not be made.",
+          "cloneFailed": "The copy could not be made."
         }
       }
     },

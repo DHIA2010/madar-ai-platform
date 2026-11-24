@@ -304,7 +304,10 @@ import {
   renameCreativeSchema,
   campaignControlAddAdSchema,
   campaignControlBudgetSchema,
+  campaignControlCloneSchema,
   campaignControlDeleteSchema,
+  campaignControlEditSchema,
+  campaignControlSettingsSchema,
   campaignControlStatusSchema,
   uploadCreativeSchema,
   dailyReportSettingsSchema,
@@ -8167,11 +8170,29 @@ export function createIdentityApiServer(
         }
       }
 
+      // The settings of a campaign, ad group or ad from the campaigns list.
+      if (method === "GET" && url.pathname === "/v1/campaigns/control/settings") {
+        if (!campaignControlService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+        const target = campaignControlSettingsSchema.parse({
+          id: url.searchParams.get("id") ?? "",
+          level: url.searchParams.get("level") ?? "",
+        })
+        return send(200, await campaignControlService.settings(actor, target.id, target.level))
+      }
+
       // The campaigns list's own controls: switch a campaign, ad group or ad on or off on its
       // ad platform, or delete it there.
       if (
         method === "POST" &&
         (url.pathname === "/v1/campaigns/control/status" ||
+          url.pathname === "/v1/campaigns/control/edit" ||
+          url.pathname === "/v1/campaigns/control/clone" ||
           url.pathname === "/v1/campaigns/control/delete" ||
           url.pathname === "/v1/campaigns/control/ads" ||
           url.pathname === "/v1/campaigns/control/budget")
@@ -8187,6 +8208,19 @@ export function createIdentityApiServer(
         if (url.pathname.endsWith("/ads")) {
           const { id, ...ad } = campaignControlAddAdSchema.parse(await readJsonBody(request))
           return send(201, await campaignControlService.addAd(actor, id, ad))
+        }
+        // Changing its settings, or making a copy of it (with what is under it).
+        if (url.pathname.endsWith("/edit")) {
+          const { id, level, ...changes } = campaignControlEditSchema.parse(
+            await readJsonBody(request)
+          )
+          return send(200, await campaignControlService.edit(actor, id, level, changes))
+        }
+        if (url.pathname.endsWith("/clone")) {
+          const { id, level, ...copy } = campaignControlCloneSchema.parse(
+            await readJsonBody(request)
+          )
+          return send(201, await campaignControlService.clone(actor, id, level, copy))
         }
         if (url.pathname.endsWith("/budget")) {
           const payload = campaignControlBudgetSchema.parse(await readJsonBody(request))

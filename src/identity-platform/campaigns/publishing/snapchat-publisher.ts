@@ -128,6 +128,29 @@ const ENTITY_SHAPES: Record<
 }
 type Fetch = typeof fetch
 
+// What Snapchat fills in on a creative itself and does not take back.
+const CREATIVE_READ_ONLY = new Set([
+  "updated_at",
+  "created_at",
+  "packaging_status",
+  "review_status",
+  "review_status_details",
+  "forced_view_eligibility",
+])
+
+// A campaign or an ad set as the start of a copy: without its id and the fields only Snapchat
+// writes, and with dates that still make sense -- a start that has passed becomes now, an end
+// that has passed is dropped.
+function freshCopy(source: Json, readOnly: Set<string>, now = new Date()): Json {
+  const copy: Json = Object.fromEntries(
+    Object.entries(source).filter(([key]) => key !== "id" && !readOnly.has(key))
+  )
+  const at = (value: unknown) => (typeof value === "string" ? Date.parse(value) : Number.NaN)
+  if (!(at(copy.start_time) > now.getTime())) copy.start_time = now.toISOString()
+  if (copy.end_time !== undefined && !(at(copy.end_time) > now.getTime())) delete copy.end_time
+  return copy
+}
+
 const DEFAULT_API_BASE = "https://adsapi.snapchat.com/v1"
 const DEFAULT_PROFILE_API_BASE = "https://businessapi.snapchat.com/v1"
 const MEDIA_READY_ATTEMPTS = 20
@@ -638,6 +661,309 @@ export class SnapchatCampaignPublisher {
         }
       )
       if (stillThere) throw error
+    }
+  }
+
+  // ---- Viewing, editing and copying what is already on the account ----
+
+  // One campaign, ad set or ad as Snapchat holds it now.
+  async readEntity(input: {
+    accessToken: string
+    level: SnapchatEntityLevel
+    id: string
+  }): Promise<Json> {
+    const shape = ENTITY_SHAPES[input.level]
+    const gone = () =>
+      new SnapchatPublishError("status", "It is no longer on Snapchat.", "SNAPCHAT_GONE")
+    const body = await this.call(
+      "status",
+      input.accessToken,
+      "GET",
+      `/${shape.list}/${input.id}`
+    ).catch((error: unknown) => {
+      if (error instanceof SnapchatPublishError && error.code === "SNAPCHAT_ACCESS_DENIED") {
+        throw error
+      }
+      throw gone()
+    })
+    const current = (Array.isArray(body[shape.list]) ? (body[shape.list] as Json[]) : [])[0]?.[
+      shape.item
+    ] as Json | undefined
+    if (!current) throw gone()
+    return current
+  }
+
+  // The creative an ad shows: its text, its button and its link.
+  async readCreative(input: { accessToken: string; creativeId: string }): Promise<Json> {
+    const body = await this.call(
+      "creative",
+      input.accessToken,
+      "GET",
+      `/creatives/${input.creativeId}`
+    )
+    const creative = (Array.isArray(body.creatives) ? (body.creatives as Json[]) : [])[0]
+      ?.creative as Json | undefined
+    if (!creative) {
+      throw new SnapchatPublishError("creative", "The ad's creative was not found on Snapchat.")
+    }
+    return creative
+  }
+
+  // Everything under a parent (a campaign's ad sets, an ad set's ads), following Snapchat's pages.
+  private async listUnder(
+    token: string,
+    step: SnapchatPublishStep,
+    path: string,
+    listKey: string,
+    itemKey: string
+  ): Promise<Json[]> {
+    const found: Json[] = []
+    let next: string | null = `${path}?limit=100`
+    for (let page = 0; next && page < 20; page += 1) {
+      const body: Json = await this.call(step, token, "GET", next)
+      for (const entry of Array.isArray(body[listKey]) ? (body[listKey] as Json[]) : []) {
+        const item = entry[itemKey] as Json | undefined
+        if (item?.id) found.push(item)
+      }
+      const link = (body.paging as Json | undefined)?.next_link
+      // The next page comes as a whole address; only what follows the API's base is kept.
+      next =
+        typeof link === "string" && link.startsWith(this.base) ? link.slice(this.base.length) : null
+    }
+    return found
+  }
+
+  // Changes a campaign, an ad set or an ad. Snapchat takes the whole object back through its
+  // parent, so it is read first and `change` is given that copy (minus the fields only Snapchat
+  // writes) to return as it should be. Returns the object as Snapchat now holds it.
+  async updateEntity(input: {
+    accessToken: string
+    level: SnapchatEntityLevel
+    id: string
+    change: (current: Json) => Json
+  }): Promise<Json> {
+    const shape = ENTITY_SHAPES[input.level]
+    const step: SnapchatPublishStep = input.level
+    const current = await this.readEntity(input)
+    const parentId = current[shape.parentKey]
+    if (typeof parentId !== "string") {
+      throw new SnapchatPublishError(step, "Snapchat did not say what it belongs to.")
+    }
+    const next = input.change(
+      Object.fromEntries(Object.entries(current).filter(([key]) => !shape.readOnly.has(key)))
+    )
+    const saved = this.created(
+      step,
+      await this.call(
+        step,
+        input.accessToken,
+        "PUT",
+        `/${shape.parentList}/${parentId}/${shape.list}`,
+        {
+          [shape.list]: [next],
+        }
+      ),
+      shape.list,
+      shape.item
+    )
+    return { ...current, ...saved }
+  }
+
+  // Changes the text or the button of a creative. Snapchat reviews the ads that show it again.
+  async updateCreative(input: {
+    accessToken: string
+    creativeId: string
+    change: (current: Json) => Json
+  }): Promise<Json> {
+    const current = await this.readCreative(input)
+    const accountId = current.ad_account_id
+    if (typeof accountId !== "string") {
+      throw new SnapchatPublishError("creative", "Snapchat did not say whose creative it is.")
+    }
+    const next = input.change(
+      Object.fromEntries(Object.entries(current).filter(([key]) => !CREATIVE_READ_ONLY.has(key)))
+    )
+    const saved = this.created(
+      "creative",
+      await this.call("creative", input.accessToken, "PUT", `/adaccounts/${accountId}/creatives`, {
+        creatives: [next],
+      }),
+      "creatives",
+      "creative"
+    )
+    return { ...current, ...saved }
+  }
+
+  // A copy of an ad in an ad set: a new creative with the same file (and whatever text, button
+  // or link was changed for the copy), and a new ad that shows it. The copy has a creative of
+  // its own so changing it later never changes the ad it was copied from.
+  async cloneAd(input: {
+    accessToken: string
+    // The ad to copy, as Snapchat holds it (or its id, to be read).
+    source: Json | string
+    adSquadId: string
+    name?: string
+    status?: "ACTIVE" | "PAUSED"
+    creative?: { headline?: string; brandName?: string; callToAction?: string; url?: string }
+  }): Promise<{ ad: Json; creative: Json }> {
+    const token = input.accessToken
+    const source =
+      typeof input.source === "string"
+        ? await this.readEntity({ accessToken: token, level: "ad", id: input.source })
+        : input.source
+    const creativeId = source.creative_id
+    if (typeof creativeId !== "string") {
+      throw new SnapchatPublishError("ad", "The ad has no creative to copy.")
+    }
+    const original = await this.readCreative({ accessToken: token, creativeId })
+    const name = input.name ?? String(source.name ?? "")
+    const copy: Json = Object.fromEntries(
+      Object.entries(original).filter(([key]) => key !== "id" && !CREATIVE_READ_ONLY.has(key))
+    )
+    copy.name = name
+    const changed = input.creative ?? {}
+    if (changed.headline) copy.headline = changed.headline
+    if (changed.brandName) copy.brand_name = changed.brandName
+    if (changed.callToAction) copy.call_to_action = changed.callToAction
+    if (changed.url) {
+      copy.web_view_properties = {
+        ...((original.web_view_properties as Json) ?? {}),
+        url: changed.url,
+      }
+    }
+    const creative = this.created(
+      "creative",
+      await this.call(
+        "creative",
+        token,
+        "POST",
+        `/adaccounts/${original.ad_account_id}/creatives`,
+        {
+          creatives: [copy],
+        }
+      ),
+      "creatives",
+      "creative"
+    )
+    const ad: Json = Object.fromEntries(
+      Object.entries(source).filter(([key]) => key !== "id" && !ENTITY_SHAPES.ad.readOnly.has(key))
+    )
+    ad.ad_squad_id = input.adSquadId
+    ad.creative_id = creative.id
+    ad.name = name
+    ad.status = input.status ?? (source.status === "ACTIVE" ? "ACTIVE" : "PAUSED")
+    const made = this.created(
+      "ad",
+      await this.call("ad", token, "POST", `/adsquads/${input.adSquadId}/ads`, { ads: [ad] }),
+      "ads",
+      "ad"
+    )
+    return { ad: made, creative }
+  }
+
+  // A copy of an ad set with all its ads, in the same campaign or another. `change` is given the
+  // copy before it is sent (its name, budget, audience). If an ad cannot be copied, the new ad
+  // set is deleted so nothing half-built stays on the account.
+  async cloneAdSquad(input: {
+    accessToken: string
+    source: Json | string
+    campaignId?: string
+    status?: "ACTIVE" | "PAUSED"
+    change?: (copy: Json) => Json
+  }): Promise<{ adSquad: Json; ads: Json[] }> {
+    const token = input.accessToken
+    const source =
+      typeof input.source === "string"
+        ? await this.readEntity({ accessToken: token, level: "ad_set", id: input.source })
+        : input.source
+    const campaignId = input.campaignId ?? source.campaign_id
+    if (typeof campaignId !== "string") {
+      throw new SnapchatPublishError("ad_set", "Snapchat did not say which campaign it is in.")
+    }
+    let copy = freshCopy(source, ENTITY_SHAPES.ad_set.readOnly)
+    copy.campaign_id = campaignId
+    copy.status = input.status ?? (source.status === "ACTIVE" ? "ACTIVE" : "PAUSED")
+    if (input.change) copy = input.change(copy)
+    const adSquad = this.created(
+      "ad_set",
+      await this.call("ad_set", token, "POST", `/campaigns/${campaignId}/adsquads`, {
+        adsquads: [copy],
+      }),
+      "adsquads",
+      "adsquad"
+    )
+    try {
+      const ads: Json[] = []
+      const sources = await this.listUnder(token, "ad", `/adsquads/${source.id}/ads`, "ads", "ad")
+      for (const ad of sources) {
+        const made = await this.cloneAd({
+          accessToken: token,
+          source: ad,
+          adSquadId: adSquad.id as string,
+        })
+        ads.push(made.ad)
+      }
+      return { adSquad, ads }
+    } catch (error) {
+      await this.call("ad_set", token, "DELETE", `/adsquads/${adSquad.id}`).catch(() => undefined)
+      throw error
+    }
+  }
+
+  // A copy of a whole campaign: the campaign, its ad sets and their ads. The copy starts switched
+  // off, so nothing is spent until it is looked over and switched on. If any piece cannot be
+  // copied, the new campaign is deleted.
+  async cloneCampaign(input: {
+    accessToken: string
+    campaignId: string
+    name: string
+  }): Promise<{ campaign: Json; adSquads: Json[]; ads: Json[] }> {
+    const token = input.accessToken
+    const source = await this.readEntity({
+      accessToken: token,
+      level: "campaign",
+      id: input.campaignId,
+    })
+    const accountId = source.ad_account_id
+    if (typeof accountId !== "string") {
+      throw new SnapchatPublishError("campaign", "Snapchat did not say whose campaign it is.")
+    }
+    const copy = freshCopy(source, ENTITY_SHAPES.campaign.readOnly)
+    copy.name = input.name
+    copy.status = "PAUSED"
+    const campaign = this.created(
+      "campaign",
+      await this.call("campaign", token, "POST", `/adaccounts/${accountId}/campaigns`, {
+        campaigns: [copy],
+      }),
+      "campaigns",
+      "campaign"
+    )
+    try {
+      const adSquads: Json[] = []
+      const ads: Json[] = []
+      const sources = await this.listUnder(
+        token,
+        "ad_set",
+        `/campaigns/${input.campaignId}/adsquads`,
+        "adsquads",
+        "adsquad"
+      )
+      for (const adSquad of sources) {
+        const made = await this.cloneAdSquad({
+          accessToken: token,
+          source: adSquad,
+          campaignId: campaign.id as string,
+        })
+        adSquads.push(made.adSquad)
+        ads.push(...made.ads)
+      }
+      return { campaign, adSquads, ads }
+    } catch (error) {
+      await this.call("campaign", token, "DELETE", `/campaigns/${campaign.id}`).catch(
+        () => undefined
+      )
+      throw error
     }
   }
 

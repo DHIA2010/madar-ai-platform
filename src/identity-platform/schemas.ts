@@ -643,6 +643,34 @@ export const campaignControlBudgetSchema = z.object({
   id: z.string().min(1).max(300),
   dailyBudget: z.number().positive().max(100000),
 })
+// Changing or copying a campaign, an ad group or an ad from the campaigns list. A field left
+// out stays as it is (for a copy: as the original has it).
+const campaignControlChanges = {
+  dailyBudget: z.number().positive().max(100000).nullish(),
+  minAge: z.number().int().min(13).max(65).nullish(),
+  maxAge: z.number().int().min(14).max(65).nullish(),
+  gender: z.enum(["all", "male", "female"]).nullish(),
+  headline: z.string().trim().max(34).nullish(),
+  brandName: z.string().trim().max(25).nullish(),
+  callToAction: z.string().trim().max(32).nullish(),
+}
+export const campaignControlSettingsSchema = z.object(campaignControlTarget)
+export const campaignControlEditSchema = z.object({
+  ...campaignControlTarget,
+  ...campaignControlChanges,
+  name: z.string().trim().min(2).max(120).nullish(),
+  // The last day it runs; null removes the end.
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
+})
+export const campaignControlCloneSchema = z.object({
+  ...campaignControlTarget,
+  ...campaignControlChanges,
+  name: z.string().trim().min(2).max(120),
+  url: z.string().trim().url().max(1000).nullish(),
+})
 
 export const importCampaignsSchema = z.object({
   platform: z.enum(CAMPAIGN_PLATFORM_VALUES),

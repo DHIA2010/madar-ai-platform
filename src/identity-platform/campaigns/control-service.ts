@@ -20,6 +20,8 @@ import {
 import {
   creativeProblemFor,
   MIN_DAILY_BUDGETS,
+  SNAPCHAT_MAX_AGE_TOP,
+  SNAPCHAT_MIN_AGE_TOP,
   withCampaignTracking,
   type LinkTracking,
   type PublishPlatform,
@@ -74,6 +76,95 @@ export interface SnapchatControl {
     adSquadId: string
     dailyBudget: number
   }): Promise<Record<string, unknown>>
+  // Viewing, editing and copying (publishing/snapchat-publisher.ts).
+  readEntity?(input: {
+    accessToken: string
+    level: SnapchatEntityLevel
+    id: string
+  }): Promise<Record<string, unknown>>
+  readCreative?(input: {
+    accessToken: string
+    creativeId: string
+  }): Promise<Record<string, unknown>>
+  updateEntity?(input: {
+    accessToken: string
+    level: SnapchatEntityLevel
+    id: string
+    change: (current: Record<string, unknown>) => Record<string, unknown>
+  }): Promise<Record<string, unknown>>
+  updateCreative?(input: {
+    accessToken: string
+    creativeId: string
+    change: (current: Record<string, unknown>) => Record<string, unknown>
+  }): Promise<Record<string, unknown>>
+  cloneAd?(input: {
+    accessToken: string
+    source: Record<string, unknown> | string
+    adSquadId: string
+    name?: string
+    status?: "ACTIVE" | "PAUSED"
+    creative?: { headline?: string; brandName?: string; callToAction?: string; url?: string }
+  }): Promise<{ ad: Record<string, unknown>; creative: Record<string, unknown> }>
+  cloneAdSquad?(input: {
+    accessToken: string
+    source: Record<string, unknown> | string
+    campaignId?: string
+    status?: "ACTIVE" | "PAUSED"
+    change?: (copy: Record<string, unknown>) => Record<string, unknown>
+  }): Promise<{ adSquad: Record<string, unknown>; ads: Array<Record<string, unknown>> }>
+  cloneCampaign?(input: { accessToken: string; campaignId: string; name: string }): Promise<{
+    campaign: Record<string, unknown>
+    adSquads: Array<Record<string, unknown>>
+    ads: Array<Record<string, unknown>>
+  }>
+}
+
+// The settings of a campaign, an ad group or an ad, in one shape for every platform. A field
+// the level or the platform does not have is null. Snapchat is read from Snapchat itself at the
+// moment of asking (live); the others come from what the last sync brought.
+export interface ControlSettings {
+  id: string
+  level: ControlLevel
+  platform: PublishPlatform
+  live: boolean
+  // Whether Madar can change it or copy it on the platform (Snapchat only, for now).
+  canEdit: boolean
+  canClone: boolean
+  name: string
+  status: string
+  objective: string | null
+  goal: string | null
+  dailyBudget: number | null
+  startAt: string | null
+  endAt: string | null
+  countries: string[]
+  minAge: number | null
+  maxAge: number | null
+  gender: "all" | "male" | "female" | null
+  headline: string | null
+  brandName: string | null
+  text: string | null
+  callToAction: string | null
+  url: string | null
+}
+
+// What an edit may change. A field left out stays as it is; endDate null removes the end.
+export interface EditInput {
+  name?: string | null
+  dailyBudget?: number | null
+  endDate?: string | null
+  minAge?: number | null
+  maxAge?: number | null
+  gender?: "all" | "male" | "female" | null
+  headline?: string | null
+  brandName?: string | null
+  callToAction?: string | null
+}
+
+// A copy: its own name, and whatever of the original's settings the copy should have differently.
+export interface CloneInput extends Omit<EditInput, "endDate"> {
+  name: string
+  url?: string | null
 }
 
 // What adds an ad or changes a budget on TikTok, Meta and Google (their publishers).
@@ -633,13 +724,14 @@ export class CampaignControlService {
     table: string,
     target: Target,
     entityId: string,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    entityType = "ads"
   ) {
     await this.db
       .query(
         `INSERT INTO ${table}
            (id, connection_id, customer_id, entity_type, entity_id, record_date, payload)
-         VALUES ($1, $2, $3, 'ads', $4, $5::date, $6::jsonb)`,
+         VALUES ($1, $2, $3, $7, $4, $5::date, $6::jsonb)`,
         [
           randomUUID(),
           target.connectionId,
@@ -647,6 +739,7 @@ export class CampaignControlService {
           entityId,
           new Date().toISOString().slice(0, 10),
           JSON.stringify(payload),
+          entityType,
         ]
       )
       .catch((error: unknown) =>
@@ -925,4 +1018,458 @@ export class CampaignControlService {
     }
     return { id: target.rowId, dailyBudget }
   }
+
+  // ---- Viewing, editing and copying ----
+
+  // The settings of a campaign, an ad group or an ad. Snapchat is asked for them now; if it
+  // cannot be reached, and for the other platforms, Madar's copy from the last sync is shown.
+  async settings(
+    actor: AuthenticatedActor,
+    rowId: string,
+    level: ControlLevel
+  ): Promise<ControlSettings> {
+    const target = this.split(rowId, level)
+    const platform = SOURCE_PLATFORM[target.source]
+    if (!platform) throw notSupported()
+    const base = { id: rowId, level, platform, live: false, canEdit: false, canClone: false }
+
+    if (platform === "google") {
+      await this.googleTarget(actor, target)
+      const { table, idColumn } = GOOGLE_TABLE[level]
+      const found = await this.db.query<Record<string, unknown>>(
+        `SELECT * FROM ${table} WHERE connection_id = $1 AND customer_id = $2 AND ${idColumn} = $3`,
+        [target.connectionId, target.customerId, target.externalId]
+      )
+      return { ...base, ...googleSettings(level, found.rows[0] ?? {}) }
+    }
+
+    const owned = {
+      snapchat: ["snapchat_oauth_connections", "snapchat_records", SNAPCHAT_RECORD[level]],
+      tiktok: ["tiktok_ads_oauth_connections", "tiktok_ads_records", TIKTOK_RECORD[level]],
+      meta: ["meta_oauth_connections", "meta_records", META_RECORD[level]],
+    }[platform]
+    await this.ownConnection(actor, owned[0], target.connectionId)
+    const own = await this.record(owned[1], target, owned[2])
+    const copy = parse(own.payload)
+    if (platform === "tiktok") return { ...base, ...tiktokSettings(level, copy) }
+    if (platform === "meta") return { ...base, ...metaSettings(level, copy) }
+
+    const { access, api } = this.snapchat()
+    const can = Boolean(api.readEntity && api.updateEntity && api.cloneAd)
+    if (!api.readEntity) return { ...base, ...snapchatSettings(level, copy, null) }
+    const readEntity = api.readEntity.bind(api)
+    try {
+      const accessToken = await access.resolveAccessToken(target.connectionId)
+      const entity = await readEntity({
+        accessToken,
+        level: SNAPCHAT_LEVEL[level],
+        id: target.externalId,
+      })
+      const creative =
+        level === "ad" && api.readCreative && typeof entity.creative_id === "string"
+          ? await api.readCreative({ accessToken, creativeId: entity.creative_id })
+          : null
+      return {
+        ...base,
+        live: true,
+        canEdit: can,
+        canClone: can,
+        ...snapchatSettings(level, entity, creative),
+      }
+    } catch (error) {
+      // Snapchat could not be asked: what Madar last saw is still worth showing, read-only.
+      console.error("campaigns.control_settings_live_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return { ...base, ...snapchatSettings(level, copy, null) }
+    }
+  }
+
+  // Changes a campaign's, an ad group's or an ad's settings on Snapchat, then corrects Madar's
+  // copy. Only what differs from what Snapchat holds is sent, so an untouched audience or text
+  // is not sent back to review for nothing.
+  async edit(
+    actor: AuthenticatedActor,
+    rowId: string,
+    level: ControlLevel,
+    input: EditInput
+  ): Promise<ControlSettings> {
+    const target = this.split(rowId, level)
+    if (target.source !== "snapchat_ads") throw notSupported()
+    const { access, api } = this.snapchat()
+    if (!api.updateEntity || !api.updateCreative || !api.readEntity) throw notSupported()
+    const updateEntity = api.updateEntity.bind(api)
+    const updateCreative = api.updateCreative.bind(api)
+    const readEntity = api.readEntity.bind(api)
+    await this.ownConnection(actor, "snapchat_oauth_connections", target.connectionId)
+    const own = await this.record("snapchat_records", target, SNAPCHAT_RECORD[level])
+    const name = input.name?.trim()
+    if (level === "adGroup" && input.dailyBudget != null) {
+      this.budgetFloor("snapchat", input.dailyBudget)
+    }
+    ageOrder(input.minAge, input.maxAge)
+
+    const saved = await onPlatform(async () => {
+      const accessToken = await access.resolveAccessToken(target.connectionId)
+      const where = { accessToken, level: SNAPCHAT_LEVEL[level], id: target.externalId }
+      const change = (current: Record<string, unknown>) => {
+        const next = { ...current }
+        if (name) next.name = name
+        if (level !== "ad" && input.endDate !== undefined) {
+          if (input.endDate === null) delete next.end_time
+          else next.end_time = endOfRiyadhDay(input.endDate)
+        }
+        if (level === "adGroup") {
+          if (input.dailyBudget != null) {
+            next.daily_budget_micro = Math.round(input.dailyBudget * 1_000_000)
+          }
+          next.targeting = snapchatAudience(next.targeting, input)
+        }
+        return next
+      }
+      // An ad whose own name stays is only read: its text lives on its creative.
+      const entity =
+        level === "ad" && !name ? await readEntity(where) : await updateEntity({ ...where, change })
+      if (level !== "ad" || typeof entity.creative_id !== "string") return entity
+      const wanted = {
+        headline: input.headline?.trim(),
+        brand_name: input.brandName?.trim(),
+        call_to_action: input.callToAction?.trim(),
+      }
+      if (!Object.values(wanted).some(Boolean)) return entity
+      const creativeId = entity.creative_id
+      await updateCreative({
+        accessToken,
+        creativeId,
+        change: (current) => {
+          const next = { ...current }
+          for (const [key, value] of Object.entries(wanted)) if (value) next[key] = value
+          return next
+        },
+      })
+      // The ad is read again: changing its text sends it back to Snapchat's review.
+      return readEntity({ accessToken, level: "ad", id: target.externalId }).catch(() => entity)
+    })
+    await this.savePayload("snapchat_records", own.id, { ...parse(own.payload), ...saved })
+    if (level === "campaign" && name) {
+      for (const id of await this.publicationIds(actor.organizationId, target)) {
+        await this.db.query(
+          `UPDATE campaign_publications SET name = $2, updated_at = now() WHERE id = $1`,
+          [id, name]
+        )
+      }
+    }
+    return this.settings(actor, rowId, level)
+  }
+
+  private budgetFloor(platform: Exclude<PublishPlatform, "google">, dailyBudget: number) {
+    const minimum = MIN_DAILY_BUDGETS[platform]
+    if (!(dailyBudget >= minimum)) {
+      throw new IdentityError(
+        "PUBLISH_BUDGET_TOO_LOW",
+        422,
+        "validation",
+        `The daily budget starts at ${minimum}.`,
+        { minimum }
+      )
+    }
+  }
+
+  // A copy of a campaign (with its ad groups and ads), of an ad group (with its ads, in the same
+  // campaign) or of one ad (in the same ad group) on Snapchat. The copy starts switched off, and
+  // joins Madar's list at once.
+  async clone(
+    actor: AuthenticatedActor,
+    rowId: string,
+    level: ControlLevel,
+    input: CloneInput
+  ): Promise<{ id: string; level: ControlLevel }> {
+    const target = this.split(rowId, level)
+    if (target.source !== "snapchat_ads") throw notSupported()
+    const { access, api } = this.snapchat()
+    if (!api.cloneAd || !api.cloneAdSquad || !api.cloneCampaign) throw notSupported()
+    const cloneAd = api.cloneAd.bind(api)
+    const cloneAdSquad = api.cloneAdSquad.bind(api)
+    const cloneCampaign = api.cloneCampaign.bind(api)
+    await this.ownConnection(actor, "snapchat_oauth_connections", target.connectionId)
+    const own = await this.record("snapchat_records", target, SNAPCHAT_RECORD[level])
+    const source = parse(own.payload)
+    const name = input.name.trim()
+    if (level === "adGroup" && input.dailyBudget != null) {
+      this.budgetFloor("snapchat", input.dailyBudget)
+    }
+    ageOrder(input.minAge, input.maxAge)
+    const url = input.url?.trim()
+    if (url) {
+      let secure = false
+      try {
+        secure = new URL(url).protocol === "https:"
+      } catch {
+        secure = false
+      }
+      if (!secure) {
+        throw new IdentityError(
+          "PUBLISH_INVALID_URL",
+          422,
+          "validation",
+          "The website address has to start with https://."
+        )
+      }
+    }
+    const rowOf = (id: unknown) =>
+      `${target.source}:${target.connectionId}:${target.customerId}:${String(id)}`
+    const keep = (type: string, items: Array<Record<string, unknown>>) =>
+      Promise.all(
+        items.map((item) =>
+          this.insertRecord("snapchat_records", target, String(item.id), item, type)
+        )
+      )
+
+    if (level === "ad") {
+      const adSquadId = String(source.ad_squad_id ?? "")
+      if (!adSquadId) throw notFound()
+      const made = await onPlatform(async () =>
+        cloneAd({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          source: target.externalId,
+          adSquadId,
+          name,
+          status: "PAUSED",
+          creative: {
+            headline: input.headline?.trim() || undefined,
+            brandName: input.brandName?.trim() || undefined,
+            callToAction: input.callToAction?.trim() || undefined,
+            url: url || undefined,
+          },
+        })
+      )
+      await keep("ads", [made.ad])
+      return { id: rowOf(made.ad.id), level }
+    }
+
+    if (level === "adGroup") {
+      const made = await onPlatform(async () =>
+        cloneAdSquad({
+          accessToken: await access.resolveAccessToken(target.connectionId),
+          source: target.externalId,
+          status: "PAUSED",
+          change: (copy) => {
+            const next: Record<string, unknown> = { ...copy, name }
+            if (input.dailyBudget != null) {
+              next.daily_budget_micro = Math.round(input.dailyBudget * 1_000_000)
+            }
+            next.targeting = snapchatAudience(next.targeting, input)
+            return next
+          },
+        })
+      )
+      await keep("ad_squads", [made.adSquad])
+      await keep("ads", made.ads)
+      return { id: rowOf(made.adSquad.id), level }
+    }
+
+    const made = await onPlatform(async () =>
+      cloneCampaign({
+        accessToken: await access.resolveAccessToken(target.connectionId),
+        campaignId: target.externalId,
+        name,
+      })
+    )
+    await keep("campaigns", [made.campaign])
+    await keep("ad_squads", made.adSquads)
+    await keep("ads", made.ads)
+    return { id: rowOf(made.campaign.id), level }
+  }
+}
+
+// ---- Reading each platform's own words into one shape ----
+
+type Raw = Record<string, unknown>
+type SettingsBody = Omit<
+  ControlSettings,
+  "id" | "level" | "platform" | "live" | "canEdit" | "canClone"
+>
+
+const EMPTY: SettingsBody = {
+  name: "",
+  status: "",
+  objective: null,
+  goal: null,
+  dailyBudget: null,
+  startAt: null,
+  endAt: null,
+  countries: [],
+  minAge: null,
+  maxAge: null,
+  gender: null,
+  headline: null,
+  brandName: null,
+  text: null,
+  callToAction: null,
+  url: null,
+}
+
+const text = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value : null
+const amount = (value: unknown, divisor = 1): number | null => {
+  const number = Number(value)
+  return value != null && value !== "" && Number.isFinite(number) && number > 0
+    ? number / divisor
+    : null
+}
+const instant = (value: unknown): string | null => {
+  if (value instanceof Date) return value.toISOString()
+  const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null
+}
+const whole = (value: unknown): number | null => {
+  const number = Number.parseInt(String(value ?? ""), 10)
+  return Number.isFinite(number) ? number : null
+}
+
+function snapchatSettings(level: ControlLevel, entity: Raw, creative: Raw | null): SettingsBody {
+  const targeting = (entity.targeting ?? {}) as Raw
+  const demographic = ((targeting.demographics as Raw[] | undefined) ?? [])[0] ?? {}
+  const gender = String(demographic.gender ?? "").toLowerCase()
+  return {
+    ...EMPTY,
+    name: String(entity.name ?? ""),
+    status: String(entity.status ?? ""),
+    objective:
+      text((entity.objective_v2_properties as Raw | undefined)?.objective_v2_type) ??
+      text(entity.objective),
+    goal: text(entity.optimization_goal),
+    dailyBudget: amount(entity.daily_budget_micro, 1_000_000),
+    startAt: instant(entity.start_time),
+    endAt: instant(entity.end_time),
+    countries: ((targeting.geos as Raw[] | undefined) ?? [])
+      .map((geo) => String(geo.country_code ?? "").toUpperCase())
+      .filter(Boolean),
+    minAge: level === "adGroup" ? whole(demographic.min_age) : null,
+    maxAge: level === "adGroup" ? whole(demographic.max_age) : null,
+    gender: level !== "adGroup" ? null : gender === "male" || gender === "female" ? gender : "all",
+    headline: text(creative?.headline),
+    brandName: text(creative?.brand_name),
+    callToAction: text(creative?.call_to_action),
+    url: text((creative?.web_view_properties as Raw | undefined)?.url),
+  }
+}
+
+function tiktokSettings(level: ControlLevel, copy: Raw): SettingsBody {
+  const ages = ((copy.age_groups as string[] | undefined) ?? [])
+    .flatMap((group) => String(group).match(/\d+/g) ?? [])
+    .map(Number)
+  const gender = String(copy.gender ?? "")
+  return {
+    ...EMPTY,
+    name: String(copy.campaign_name ?? copy.adgroup_name ?? copy.ad_name ?? ""),
+    status: String(copy.operation_status ?? ""),
+    objective: text(copy.objective_type),
+    goal: text(copy.optimization_goal),
+    dailyBudget: String(copy.budget_mode ?? "").includes("TOTAL") ? null : amount(copy.budget),
+    startAt: instant(copy.schedule_start_time),
+    endAt: instant(copy.schedule_end_time),
+    minAge: level === "adGroup" && ages.length ? Math.min(...ages) : null,
+    maxAge: level === "adGroup" && ages.length > 1 ? Math.max(...ages) : null,
+    gender:
+      level !== "adGroup"
+        ? null
+        : gender === "GENDER_MALE"
+          ? "male"
+          : gender === "GENDER_FEMALE"
+            ? "female"
+            : "all",
+    text: text(copy.ad_text),
+    callToAction: text(copy.call_to_action),
+    url: text(copy.landing_page_url),
+  }
+}
+
+function metaSettings(level: ControlLevel, copy: Raw): SettingsBody {
+  const targeting = (copy.targeting ?? {}) as Raw
+  const genders = (targeting.genders as number[] | undefined) ?? []
+  return {
+    ...EMPTY,
+    name: String(copy.name ?? ""),
+    status: String(copy.effective_status ?? copy.status ?? ""),
+    objective: text(copy.objective),
+    goal: text(copy.optimization_goal),
+    // Meta keeps money in the currency's smallest unit.
+    dailyBudget: amount(copy.daily_budget, 100),
+    startAt: instant(copy.start_time),
+    endAt: instant(copy.end_time ?? copy.stop_time),
+    countries: (
+      ((targeting.geo_locations as Raw | undefined)?.countries as string[] | undefined) ?? []
+    ).map(String),
+    minAge: level === "adGroup" ? whole(targeting.age_min) : null,
+    maxAge: level === "adGroup" ? whole(targeting.age_max) : null,
+    gender:
+      level !== "adGroup"
+        ? null
+        : genders.length === 1
+          ? genders[0] === 1
+            ? "male"
+            : "female"
+          : "all",
+  }
+}
+
+function googleSettings(level: ControlLevel, row: Raw): SettingsBody {
+  return {
+    ...EMPTY,
+    name: String(row.name ?? row.headline ?? ""),
+    status: String(row.status ?? ""),
+    objective: text(row.channel_type),
+    goal: text(row.bidding_strategy_type),
+    dailyBudget: level === "campaign" ? amount(row.budget_micros, 1_000_000) : null,
+    startAt: instant(row.start_date),
+    endAt: instant(row.end_date),
+    headline: level === "ad" ? text(row.headline) : null,
+  }
+}
+
+// The last minute of a day in Riyadh (UTC+3, no daylight saving), as Snapchat is given an end.
+function endOfRiyadhDay(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00+03:00`) + 24 * 60 * 60_000 - 60_000).toISOString()
+}
+
+function ageOrder(minAge?: number | null, maxAge?: number | null) {
+  if (minAge != null && maxAge != null && maxAge <= minAge) {
+    throw new IdentityError(
+      "PUBLISH_INVALID_AGES",
+      422,
+      "validation",
+      "The oldest age has to be above the youngest."
+    )
+  }
+}
+
+// An ad group's audience with the ages and the gender asked for; everything else about it (its
+// countries, interests, devices) stays as it is. Returns the very same object when nothing
+// differs, so an unchanged audience is sent back exactly as Snapchat gave it.
+function snapchatAudience(
+  current: unknown,
+  input: Pick<EditInput, "minAge" | "maxAge" | "gender">
+): unknown {
+  if (input.minAge === undefined && input.maxAge === undefined && input.gender === undefined) {
+    return current
+  }
+  const targeting = { ...((current ?? {}) as Raw) }
+  const demographics = [...((targeting.demographics as Raw[] | undefined) ?? [])]
+  const before = demographics[0] ?? { operation: "INCLUDE" }
+  const first: Raw = { ...before }
+  if (input.minAge != null) first.min_age = String(Math.min(input.minAge, SNAPCHAT_MIN_AGE_TOP))
+  if (input.maxAge !== undefined) {
+    // Above Snapchat's highest closed age there is no upper limit to send.
+    if (input.maxAge === null || input.maxAge > SNAPCHAT_MAX_AGE_TOP) delete first.max_age
+    else first.max_age = String(input.maxAge)
+  }
+  if (input.gender != null) {
+    if (input.gender === "all") delete first.gender
+    else first.gender = input.gender.toUpperCase()
+  }
+  if (JSON.stringify(first) === JSON.stringify(before)) return current
+  demographics[0] = first
+  targeting.demographics = demographics
+  return targeting
 }

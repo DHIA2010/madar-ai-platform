@@ -254,6 +254,54 @@ const CONTROL_ENDPOINT = {
   remove: ["", "v1", "campaigns", "control", "delete"].join(String.fromCharCode(47)),
   ads: ["", "v1", "campaigns", "control", "ads"].join(String.fromCharCode(47)),
   budget: ["", "v1", "campaigns", "control", "budget"].join(String.fromCharCode(47)),
+  settings: ["", "v1", "campaigns", "control", "settings"].join(String.fromCharCode(47)),
+  edit: ["", "v1", "campaigns", "control", "edit"].join(String.fromCharCode(47)),
+  clone: ["", "v1", "campaigns", "control", "clone"].join(String.fromCharCode(47)),
+}
+
+// The settings of a campaign, an ad group or an ad (backend: campaigns/control-service.ts). A
+// field its level or its platform does not have is null. `live` says they were read from the
+// platform just now and not from the last sync.
+export interface CampaignControlSettings {
+  id: string
+  level: CampaignControlLevel
+  platform: "snapchat" | "tiktok" | "meta" | "google"
+  live: boolean
+  canEdit: boolean
+  canClone: boolean
+  name: string
+  status: string
+  objective: string | null
+  goal: string | null
+  dailyBudget: number | null
+  startAt: string | null
+  endAt: string | null
+  countries: string[]
+  minAge: number | null
+  maxAge: number | null
+  gender: "all" | "male" | "female" | null
+  headline: string | null
+  brandName: string | null
+  text: string | null
+  callToAction: string | null
+  url: string | null
+}
+
+// What an edit or a copy may set. Left out: stays as it is (a copy: as the original has it).
+export interface CampaignControlChanges {
+  name?: string
+  dailyBudget?: number
+  // The last day it runs (YYYY-MM-DD); null removes the end. Edits only.
+  endDate?: string | null
+  minAge?: number
+  // null: no upper age.
+  maxAge?: number | null
+  gender?: "all" | "male" | "female"
+  headline?: string
+  brandName?: string
+  callToAction?: string
+  // Copies of an ad only.
+  url?: string
 }
 
 // A new ad for an ad group that already exists. Snapchat, TikTok and Meta take a creative with
@@ -413,6 +461,41 @@ export const campaignPerformanceService = {
       { id: adGroupId, ...ad },
       // A video is uploaded to the platform and processed before the ad is made.
       { timeoutMs: 3 * 60_000 }
+    )
+  },
+
+  async getSettings(id: string, level: CampaignControlLevel): Promise<CampaignControlSettings> {
+    return client.get<CampaignControlSettings>(
+      `${CONTROL_ENDPOINT.settings}?id=${encodeURIComponent(id)}&level=${level}`
+    )
+  },
+
+  // Changes its settings on the ad platform; answers with the settings as they now are.
+  async edit(
+    id: string,
+    level: CampaignControlLevel,
+    changes: CampaignControlChanges
+  ): Promise<CampaignControlSettings> {
+    return client.post<
+      CampaignControlChanges & { id: string; level: CampaignControlLevel },
+      CampaignControlSettings
+    >(CONTROL_ENDPOINT.edit, { id, level, ...changes }, { timeoutMs: 60_000 })
+  },
+
+  // Makes a copy of it on the ad platform, with what is under it. The copy starts switched off.
+  async clone(
+    id: string,
+    level: CampaignControlLevel,
+    copy: CampaignControlChanges & { name: string }
+  ): Promise<{ id: string; level: CampaignControlLevel }> {
+    return client.post<
+      CampaignControlChanges & { id: string; level: CampaignControlLevel },
+      { id: string; level: CampaignControlLevel }
+    >(
+      CONTROL_ENDPOINT.clone,
+      { id, level, ...copy },
+      // A campaign with many ads is copied piece by piece.
+      { timeoutMs: 5 * 60_000 }
     )
   },
 
