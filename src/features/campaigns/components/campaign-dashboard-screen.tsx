@@ -64,6 +64,7 @@ import {
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { CampaignSpendDonut } from "./campaign-spend-donut"
 import { campaignStatusPill } from "./campaign-status-pill"
+import { ariaSort, SortHeading, sortRows, useTableSort } from "./campaign-table-sort"
 
 import { cairo } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
@@ -719,9 +720,21 @@ export function CampaignDashboardScreen() {
     ]
   }, [summary, t, locale])
 
+  const tableSort = useTableSort<string>()
   const totalPages = Math.max(1, Math.ceil(searchedRows.length / pageSize))
   const currentPage = Math.min(page, totalPages)
-  const paginatedRows = searchedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  // The rows in the order chosen from a column's heading, before they are cut into pages.
+  const sortedRows = useMemo(
+    () =>
+      sortRows(searchedRows, tableSort.sort, (row, column) => {
+        if (column === "entity") return row.entityName
+        const held = (row as unknown as Record<string, unknown>)[column]
+        if (typeof held === "string") return held
+        return typeof held === "number" ? held : null
+      }),
+    [searchedRows, tableSort.sort]
+  )
+  const paginatedRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   // Spend by row for the chart view -- the same real rows the table shows, not a separate
   // series. Rows with no spend are dropped so the donut has nothing empty to draw.
@@ -1208,13 +1221,24 @@ export function CampaignDashboardScreen() {
                     {columns.map((column) => (
                       <th
                         key={column.key}
+                        aria-sort={ariaSort(tableSort.sort, column.key)}
                         className={cn(
-                          "border-b border-[#eef2f8] px-3 py-3 text-[11px] font-semibold",
+                          "border-b border-[#eef2f8] px-3 py-2 text-[11px] font-semibold",
                           MUTED,
                           column.key === "entity" ? "text-right" : "text-center"
                         )}
                       >
-                        {column.label}
+                        <SortHeading
+                          label={column.label}
+                          column={column.key}
+                          sort={tableSort.sort}
+                          onSort={(key, first) => {
+                            tableSort.toggle(key, first)
+                            // The new order starts from its first page.
+                            setPage(1)
+                          }}
+                          text={["entity", "platform", "status"].includes(column.key)}
+                        />
                       </th>
                     ))}
                   </tr>

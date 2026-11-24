@@ -16,6 +16,8 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { ariaSort, SortHeading, sortRows, useTableSort } from "@/features/campaigns"
+
 import {
   type CampaignLinkAttributionDetailRecord,
   type CampaignLinkSummaryRecord,
@@ -76,6 +78,8 @@ function matchMethodLabel(method: string, t: DetailPanelTranslator): string {
   return t(`matchMethods.${method}` as "matchMethods.explicit_id")
 }
 
+type DailyColumn = "date" | "clicks" | "orders" | "revenue"
+
 export function CampaignLinkDetailPanel({
   link,
   open,
@@ -85,6 +89,7 @@ export function CampaignLinkDetailPanel({
   const locale = useLocale() as Locale
   const [detail, setDetail] = useState<CampaignLinkAttributionDetailRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const dailySort = useTableSort<DailyColumn>()
 
   useEffect(() => {
     if (!open || !link) {
@@ -162,14 +167,32 @@ export function CampaignLinkDetailPanel({
               <AppTable>
                 <AppTableHeader>
                   <AppTableRow>
-                    <AppTableHead>{t("tableHeaders.date")}</AppTableHead>
-                    <AppTableHead>{t("tableHeaders.clicks")}</AppTableHead>
-                    <AppTableHead>{t("tableHeaders.orders")}</AppTableHead>
-                    <AppTableHead>{t("tableHeaders.revenue")}</AppTableHead>
+                    {(
+                      [
+                        ["date", t("tableHeaders.date")],
+                        ["clicks", t("tableHeaders.clicks")],
+                        ["orders", t("tableHeaders.orders")],
+                        ["revenue", t("tableHeaders.revenue")],
+                      ] as Array<[DailyColumn, string]>
+                    ).map(([column, label]) => (
+                      <AppTableHead key={column} aria-sort={ariaSort(dailySort.sort, column)}>
+                        <SortHeading
+                          label={label}
+                          column={column}
+                          sort={dailySort.sort}
+                          onSort={dailySort.toggle}
+                        />
+                      </AppTableHead>
+                    ))}
                   </AppTableRow>
                 </AppTableHeader>
                 <AppTableBody>
-                  {detail.daily.map((point) => (
+                  {sortRows(detail.daily, dailySort.sort, (point, column) => {
+                    if (column === "date") return Date.parse(point.metricDate)
+                    if (column === "clicks") return point.clicks ?? 0
+                    if (column === "orders") return point.ordersCount ?? 0
+                    return point.revenue ?? 0
+                  }).map((point) => (
                     <AppTableRow key={point.metricDate}>
                       <AppTableCell>{formatMetricDate(point.metricDate, locale)}</AppTableCell>
                       <AppTableCell>{point.clicks ?? 0}</AppTableCell>

@@ -45,6 +45,7 @@ import {
   useCreativeUploader,
 } from "./campaign-creative-shared"
 import { CampaignModuleNav } from "./campaign-module-nav"
+import { ariaSort, SortHeading, sortRows, useTableSort } from "./campaign-table-sort"
 
 import { cairo } from "@/components/design/fonts"
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -59,12 +60,15 @@ const KIND_FILTERS: KindFilter[] = ["all", "image", "video"]
 type SortKey = "newest" | "performance" | "usage"
 const SORT_KEYS: SortKey[] = ["newest", "performance", "usage"]
 
+// One number with its label, the number centred under the label. The value keeps its own
+// reading order (a percentage, an amount with its currency) without being pushed to the far
+// side of its column.
 function Figure({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 text-center">
       <p className={cn("truncate text-[11px]", MUTED)}>{label}</p>
-      <p className={cn("mt-0.5 truncate text-[14px] font-extrabold", HEADING)} dir="ltr">
-        {value}
+      <p className={cn("mt-0.5 truncate text-[14px] font-extrabold", HEADING)}>
+        <bdi>{value}</bdi>
       </p>
     </div>
   )
@@ -100,6 +104,13 @@ function RankBadge({ insights }: { insights: CreativeInsights | undefined }) {
   )
 }
 
+type UsageColumn = "campaign" | "ad" | "impressions" | "clicks" | "spend" | "signUps"
+function usageValue(use: CreativeInsights["campaigns"][number], column: UsageColumn) {
+  if (column === "campaign") return use.name
+  if (column === "ad") return use.adName
+  return use[column]
+}
+
 export function CampaignCreativeLibraryScreen() {
   const t = useTranslations("campaigns.creativeLibrary")
   const locale = useLocale() as Locale
@@ -116,6 +127,8 @@ export function CampaignCreativeLibraryScreen() {
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [savingName, setSavingName] = useState(false)
   const [preview, setPreview] = useState<Creative | null>(null)
+  // The order of the "where it is used" tables (one order for all of them).
+  const usageSort = useTableSort<UsageColumn>()
 
   const load = useCallback(() => {
     setLoadFailed(false)
@@ -617,26 +630,34 @@ export function CampaignCreativeLibraryScreen() {
                           <table className="w-full min-w-[620px] text-[12px]">
                             <thead>
                               <tr className={cn("text-start", MUTED)}>
-                                <th className="py-1 text-start font-semibold">
-                                  {t("usage.campaign")}
-                                </th>
-                                <th className="py-1 text-start font-semibold">{t("usage.ad")}</th>
-                                <th className="py-1 text-start font-semibold">
-                                  {t("numbers.impressions")}
-                                </th>
-                                <th className="py-1 text-start font-semibold">
-                                  {t("numbers.clicks")}
-                                </th>
-                                <th className="py-1 text-start font-semibold">
-                                  {t("numbers.spend")}
-                                </th>
-                                <th className="py-1 text-start font-semibold">
-                                  {t("numbers.signUps")}
-                                </th>
+                                {(
+                                  [
+                                    ["campaign", t("usage.campaign")],
+                                    ["ad", t("usage.ad")],
+                                    ["impressions", t("numbers.impressions")],
+                                    ["clicks", t("numbers.clicks")],
+                                    ["spend", t("numbers.spend")],
+                                    ["signUps", t("numbers.signUps")],
+                                  ] as Array<[UsageColumn, string]>
+                                ).map(([column, label]) => (
+                                  <th
+                                    key={column}
+                                    aria-sort={ariaSort(usageSort.sort, column)}
+                                    className="py-1 text-start font-semibold"
+                                  >
+                                    <SortHeading
+                                      label={label}
+                                      column={column}
+                                      sort={usageSort.sort}
+                                      onSort={usageSort.toggle}
+                                      text={column === "campaign" || column === "ad"}
+                                    />
+                                  </th>
+                                ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {used.map((campaign) => (
+                              {sortRows(used, usageSort.sort, usageValue).map((campaign) => (
                                 <tr
                                   key={campaign.adId ?? campaign.publicationId}
                                   className="text-[#3b4a66]"

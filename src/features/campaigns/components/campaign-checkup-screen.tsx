@@ -20,6 +20,7 @@ import {
   campaignPerformanceService,
 } from "../services/campaign-performance.service"
 import { CampaignModuleNav } from "./campaign-module-nav"
+import { ariaSort, SortHeading, sortRows, useTableSort } from "./campaign-table-sort"
 
 import { cairo } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
@@ -174,6 +175,26 @@ function FunnelStep(props: { label: string; value: string; note?: string; last?:
 // The ad account check-up (GET /v1/campaigns/performance/checkup): what a media buyer reads off
 // an ad account, laid out for a merchant who is not one -- is each campaign running, where people
 // drop between the ad and a result, and which ad or campaign needs a decision, with the numbers.
+// The ads table's columns, and what an ad holds for each (nothing where the number means
+// nothing: page views a platform does not report, the cost of a result when there was none).
+type AdColumn =
+  | "ad"
+  | "spend"
+  | "share"
+  | "impressions"
+  | "clicks"
+  | "ctr"
+  | "pageViews"
+  | "results"
+  | "cpa"
+function adValue(ad: CampaignCheckup["ads"][number], column: AdColumn) {
+  if (column === "ad") return ad.name
+  if (column === "share") return ad.spendShare
+  if (column === "results") return ad.conversions
+  if (column === "cpa") return ad.conversions > 0 ? ad.cpa : null
+  return ad[column]
+}
+
 export function CampaignCheckupScreen() {
   const t = useTranslations("campaigns.checkupScreen")
   const tc = useTranslations("campaigns")
@@ -189,6 +210,8 @@ export function CampaignCheckupScreen() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [checkup, setCheckup] = useState<CampaignCheckup | null>(null)
+  // The ads table can be ordered by any of its columns.
+  const adsSort = useTableSort<AdColumn>()
 
   const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
   const endDay = dateRange?.to ?? dateRange?.from
@@ -445,32 +468,41 @@ export function CampaignCheckupScreen() {
                   <table className="w-full min-w-[980px] text-center">
                     <thead>
                       <tr>
-                        {[
-                          { key: "ad", label: t("columns.ad"), align: "text-start" },
-                          { key: "spend", label: tc("metrics.columns.spend") },
-                          { key: "share", label: t("columns.share") },
-                          { key: "impressions", label: tc("metrics.columns.impressions") },
-                          { key: "clicks", label: tc("metrics.columns.clicks") },
-                          { key: "ctr", label: tc("metrics.columns.ctr") },
-                          { key: "pageViews", label: t("columns.pageViews") },
-                          { key: "results", label: t("columns.results") },
-                          { key: "cpa", label: t("columns.costPerResult") },
-                        ].map((column) => (
+                        {(
+                          [
+                            { key: "ad", label: t("columns.ad"), align: "text-start" },
+                            { key: "spend", label: tc("metrics.columns.spend") },
+                            { key: "share", label: t("columns.share") },
+                            { key: "impressions", label: tc("metrics.columns.impressions") },
+                            { key: "clicks", label: tc("metrics.columns.clicks") },
+                            { key: "ctr", label: tc("metrics.columns.ctr") },
+                            { key: "pageViews", label: t("columns.pageViews") },
+                            { key: "results", label: t("columns.results") },
+                            { key: "cpa", label: t("columns.costPerResult") },
+                          ] as Array<{ key: AdColumn; label: string; align?: string }>
+                        ).map((column) => (
                           <th
                             key={column.key}
+                            aria-sort={ariaSort(adsSort.sort, column.key)}
                             className={cn(
-                              "border-b border-[#eef2f8] px-3 py-3 text-[11px] font-semibold",
+                              "border-b border-[#eef2f8] px-3 py-2 text-[11px] font-semibold",
                               MUTED,
                               column.align ?? "text-center"
                             )}
                           >
-                            {column.label}
+                            <SortHeading
+                              label={column.label}
+                              column={column.key}
+                              sort={adsSort.sort}
+                              onSort={adsSort.toggle}
+                              text={column.key === "ad"}
+                            />
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {checkup.ads.map((ad) => (
+                      {sortRows(checkup.ads, adsSort.sort, adValue).map((ad) => (
                         <tr key={ad.id} className="border-b border-[#f4f7fb] hover:bg-[#f8fafd]">
                           <td className="px-3 py-3 text-start">
                             <div className="flex items-center gap-2.5">

@@ -39,6 +39,7 @@ import { useWorkspace } from "@/features/workspace"
 
 import { useCampaignList } from "../hooks"
 import { CampaignStatusBadge } from "./campaign-status-badge"
+import { ariaSort, SortHeading, sortRows, useTableSort } from "./campaign-table-sort"
 
 import { type Locale } from "@/i18n/locales"
 
@@ -386,6 +387,19 @@ export function CampaignTopCampaignsCard({
   const t = useTranslations("campaigns")
   const locale = useLocale() as Locale
   const router = useRouter()
+  type Column = "name" | "spend" | "revenue" | "roas" | "ctr" | "status"
+  const tableSort = useTableSort<Column>()
+  const heading = (column: Column, label: string) => (
+    <AppTableHead aria-sort={ariaSort(tableSort.sort, column)}>
+      <SortHeading
+        label={label}
+        column={column}
+        sort={tableSort.sort}
+        onSort={tableSort.toggle}
+        text={column === "name" || column === "status"}
+      />
+    </AppTableHead>
+  )
 
   return (
     <AppCard
@@ -396,39 +410,41 @@ export function CampaignTopCampaignsCard({
       <AppTable>
         <AppTableHeader>
           <AppTableRow>
-            <AppTableHead>{t("dashboardWidgets.topCampaignsCard.columns.campaign")}</AppTableHead>
-            <AppTableHead>{t("metrics.columns.spend")}</AppTableHead>
-            <AppTableHead>{t("metrics.columns.revenue")}</AppTableHead>
-            <AppTableHead>{t("metrics.columns.roas")}</AppTableHead>
-            <AppTableHead>{t("metrics.columns.ctr")}</AppTableHead>
-            <AppTableHead>{t("metrics.columns.status")}</AppTableHead>
+            {heading("name", t("dashboardWidgets.topCampaignsCard.columns.campaign"))}
+            {heading("spend", t("metrics.columns.spend"))}
+            {heading("revenue", t("metrics.columns.revenue"))}
+            {heading("roas", t("metrics.columns.roas"))}
+            {heading("ctr", t("metrics.columns.ctr"))}
+            {heading("status", t("metrics.columns.status"))}
             <AppTableHead className="text-right">
               {t("dashboardWidgets.topCampaignsCard.columns.quickAction")}
             </AppTableHead>
           </AppTableRow>
         </AppTableHeader>
         <AppTableBody>
-          {topCampaigns.map((campaign) => (
-            <AppTableRow key={campaign.id}>
-              <AppTableCell>{campaign.name}</AppTableCell>
-              <AppTableCell>{formatCurrency(campaign.spend, locale)}</AppTableCell>
-              <AppTableCell>{formatCurrency(campaign.revenue, locale)}</AppTableCell>
-              <AppTableCell>{campaign.roas.toFixed(2)}x</AppTableCell>
-              <AppTableCell>{campaign.ctr.toFixed(2)}%</AppTableCell>
-              <AppTableCell>
-                <CampaignStatusBadge status={campaign.status} />
-              </AppTableCell>
-              <AppTableCell className="text-right">
-                <AppButton
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
-                >
-                  {t("dashboardWidgets.topCampaignsCard.openAction")}
-                </AppButton>
-              </AppTableCell>
-            </AppTableRow>
-          ))}
+          {sortRows(topCampaigns, tableSort.sort, (campaign, column) => campaign[column]).map(
+            (campaign) => (
+              <AppTableRow key={campaign.id}>
+                <AppTableCell>{campaign.name}</AppTableCell>
+                <AppTableCell>{formatCurrency(campaign.spend, locale)}</AppTableCell>
+                <AppTableCell>{formatCurrency(campaign.revenue, locale)}</AppTableCell>
+                <AppTableCell>{campaign.roas.toFixed(2)}x</AppTableCell>
+                <AppTableCell>{campaign.ctr.toFixed(2)}%</AppTableCell>
+                <AppTableCell>
+                  <CampaignStatusBadge status={campaign.status} />
+                </AppTableCell>
+                <AppTableCell className="text-right">
+                  <AppButton
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
+                  >
+                    {t("dashboardWidgets.topCampaignsCard.openAction")}
+                  </AppButton>
+                </AppTableCell>
+              </AppTableRow>
+            )
+          )}
         </AppTableBody>
       </AppTable>
     </AppCard>

@@ -57,6 +57,7 @@ import { CreativeThumb, useCreativeImport } from "./campaign-creative-shared"
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { CampaignRowSettingsDialog, type RowSettingsMode } from "./campaign-row-settings"
 import { campaignStatusBucket, campaignStatusPill } from "./campaign-status-pill"
+import { ariaSort, SortHeading, sortRows, useTableSort } from "./campaign-table-sort"
 
 import { cairo } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
@@ -96,6 +97,24 @@ type Children = "loading" | "error" | CampaignPerformanceRow[]
 // into, so one can be found by name, platform or state. A campaign opens to its ad groups and an
 // ad group to its ads; where the platform's connection allows it (Snapchat, TikTok, Google), each
 // of the three can be switched on or off, or deleted, right from its row.
+// The list's sortable columns, and what a row holds for each. The same order is kept at every
+// depth: campaigns, the ad groups under one, the ads under an ad group.
+type ListColumn =
+  | "campaign"
+  | "status"
+  | "spend"
+  | "impressions"
+  | "clicks"
+  | "ctr"
+  | "results"
+  | "cpa"
+function listValue(row: CampaignPerformanceRow, column: ListColumn) {
+  if (column === "campaign") return row.name
+  if (column === "results") return row.conversions
+  if (column === "cpa") return row.conversions > 0 ? row.cpa : null
+  return row[column]
+}
+
 export function CampaignListScreen() {
   const t = useTranslations("campaigns")
   const locale = useLocale() as Locale
@@ -132,6 +151,8 @@ export function CampaignListScreen() {
   const [fetchingCreative, setFetchingCreative] = useState<string | null>(null)
   // Raised to load the campaigns again (after a campaign was copied).
   const [reloads, setReloads] = useState(0)
+  // Largest spend first until another column's heading is pressed.
+  const tableSort = useTableSort<ListColumn>({ key: "spend", direction: "desc" })
 
   const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
   const endDay = dateRange?.to ?? dateRange?.from
@@ -307,12 +328,12 @@ export function CampaignListScreen() {
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    return (rows ?? [])
+    const shown = (rows ?? [])
       .filter((row) => statusFilter === "all" || campaignStatusBucket(row.status) === statusFilter)
       .filter((row) => platformFilter === "all" || row.platform === platformFilter)
       .filter((row) => !needle || row.name.toLowerCase().includes(needle))
-      .sort((a, b) => b.spend - a.spend)
-  }, [rows, search, statusFilter, platformFilter])
+    return sortRows(shown, tableSort.sort, listValue)
+  }, [rows, search, statusFilter, platformFilter, tableSort.sort])
 
   const columns = [
     { key: "campaign", label: t("metrics.entity.campaign"), align: "text-start" },
@@ -587,7 +608,9 @@ export function CampaignListScreen() {
             </td>
           </tr>
         ) : null}
-        {open && Array.isArray(under) ? under.map((child) => renderRow(child, depth + 1)) : null}
+        {open && Array.isArray(under)
+          ? sortRows(under, tableSort.sort, listValue).map((child) => renderRow(child, depth + 1))
+          : null}
       </Fragment>
     )
   }
@@ -694,13 +717,28 @@ export function CampaignListScreen() {
                   {columns.map((column) => (
                     <th
                       key={column.key}
+                      aria-sort={
+                        column.key === "controls"
+                          ? undefined
+                          : ariaSort(tableSort.sort, column.key as ListColumn)
+                      }
                       className={cn(
-                        "border-b border-[#eef2f8] px-3 py-3 text-[11.5px] font-semibold",
+                        "border-b border-[#eef2f8] px-3 py-2 text-[11.5px] font-semibold",
                         MUTED,
                         column.align ?? "text-center"
                       )}
                     >
-                      {column.label}
+                      {column.key === "controls" ? (
+                        column.label
+                      ) : (
+                        <SortHeading
+                          label={column.label}
+                          column={column.key as ListColumn}
+                          sort={tableSort.sort}
+                          onSort={tableSort.toggle}
+                          text={column.key === "campaign" || column.key === "status"}
+                        />
+                      )}
                     </th>
                   ))}
                 </tr>

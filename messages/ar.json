@@ -9026,6 +9026,11 @@
         "description": "احصل على تحليل أعمق لأداء حملاتك التسويقية من مركز الذكاء الاصطناعي.",
         "viewRecommendations": "عرض التوصيات"
       }
+    },
+    "tableSort": {
+      "sortBy": "رتّب حسب {column}",
+      "sortedAscending": "{column}: من الأصغر إلى الأكبر. اضغط للعكس",
+      "sortedDescending": "{column}: من الأكبر إلى الأصغر. اضغط للعكس"
     }
   },
   "integrations": {

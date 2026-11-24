@@ -9030,6 +9030,11 @@
         "description": "Get deeper analysis of your marketing campaigns' performance from the AI center.",
         "viewRecommendations": "View Recommendations"
       }
+    },
+    "tableSort": {
+      "sortBy": "Sort by {column}",
+      "sortedAscending": "{column}: smallest first. Press to reverse",
+      "sortedDescending": "{column}: largest first. Press to reverse"
     }
   },
   "integrations": {

@@ -26,6 +26,8 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { ariaSort, SortHeading, sortRows, useTableSort } from "@/features/campaigns"
+
 import type { CampaignLinkSummaryRecord } from "../services/link-list.service"
 
 import { type Locale } from "@/i18n/locales"
@@ -101,22 +103,44 @@ export function CampaignLinksTable({
 }: CampaignLinksTableProps) {
   const t = useTranslations("campaignLinks.table")
   const locale = useLocale() as Locale
+  type Column = "link" | "campaign" | "status" | "clicks" | "orders" | "revenue" | "createdAt"
+  const tableSort = useTableSort<Column>()
+  const shown = sortRows(rows, tableSort.sort, (row, column) => {
+    if (column === "link") return row.name
+    if (column === "campaign") return campaignNameById[row.campaignId] ?? null
+    if (column === "status") return row.enabled ? 1 : 0
+    if (column === "clicks") return row.clicks ?? 0
+    if (column === "orders") return row.ordersCount ?? 0
+    if (column === "revenue") return row.revenue ?? 0
+    return Date.parse(row.createdAt)
+  })
+  const heading = (column: Column, label: string) => (
+    <AppTableHead className={HEAD_CLASSNAME} aria-sort={ariaSort(tableSort.sort, column)}>
+      <SortHeading
+        label={label}
+        column={column}
+        sort={tableSort.sort}
+        onSort={tableSort.toggle}
+        text={column === "link" || column === "campaign"}
+      />
+    </AppTableHead>
+  )
   return (
     <AppTable>
       <AppTableHeader>
         <AppTableRow className="border-[#E2E8F0] hover:bg-transparent">
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.link")}</AppTableHead>
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.campaign")}</AppTableHead>
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.status")}</AppTableHead>
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.clicks")}</AppTableHead>
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.orders")}</AppTableHead>
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.revenue")}</AppTableHead>
-          <AppTableHead className={HEAD_CLASSNAME}>{t("headers.createdAt")}</AppTableHead>
+          {heading("link", t("headers.link"))}
+          {heading("campaign", t("headers.campaign"))}
+          {heading("status", t("headers.status"))}
+          {heading("clicks", t("headers.clicks"))}
+          {heading("orders", t("headers.orders"))}
+          {heading("revenue", t("headers.revenue"))}
+          {heading("createdAt", t("headers.createdAt"))}
           <AppTableHead className={`${HEAD_CLASSNAME} w-10`}>{t("headers.actions")}</AppTableHead>
         </AppTableRow>
       </AppTableHeader>
       <AppTableBody>
-        {rows.map((row) => {
+        {shown.map((row) => {
           const created = formatCreatedAt(row.createdAt, locale)
           return (
             <AppTableRow

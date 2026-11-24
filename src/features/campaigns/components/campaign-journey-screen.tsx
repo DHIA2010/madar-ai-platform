@@ -15,6 +15,7 @@ import {
   campaignPerformanceService,
 } from "../services/campaign-performance.service"
 import { CampaignModuleNav } from "./campaign-module-nav"
+import { ariaSort, SortHeading, sortRows, useTableSort } from "./campaign-table-sort"
 
 import { cairo } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
@@ -68,6 +69,24 @@ function statusPill(status: string, t: CampaignsTranslator) {
 // (see OrderAttributionService). A row with no campaignId is an ad-platform campaign that hasn't
 // been imported into Madar's shared campaigns table yet (no sales side to join); a row with
 // platform === null is the reverse -- real matched orders with no ad-KPI row in this date range.
+type JourneyColumn =
+  | "campaign"
+  | "status"
+  | "spend"
+  | "impressions"
+  | "clicks"
+  | "ctr"
+  | "orders"
+  | "revenue"
+  | "roas"
+  | "cpa"
+// What a row holds for a column; a return or a cost per order of zero means "none".
+function journeyValue(row: CampaignJourneyRow, column: JourneyColumn) {
+  if (column === "campaign") return row.name
+  if (column === "roas" || column === "cpa") return row[column] > 0 ? row[column] : null
+  return row[column]
+}
+
 export function CampaignJourneyScreen() {
   const t = useTranslations("campaigns")
   const locale = useLocale() as Locale
@@ -80,6 +99,7 @@ export function CampaignJourneyScreen() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [rows, setRows] = useState<CampaignJourneyRow[]>([])
+  const tableSort = useTableSort<JourneyColumn>()
 
   const startDate = dateRange?.from ? toLocalDay(dateRange.from) : undefined
   const endDay = dateRange?.to ?? dateRange?.from
@@ -163,27 +183,36 @@ export function CampaignJourneyScreen() {
             <table className="w-full min-w-[1100px] text-center">
               <thead>
                 <tr>
-                  {[
-                    { key: "campaign", label: t("metrics.entity.campaign"), align: "text-right" },
-                    { key: "status", label: t("metrics.columns.status") },
-                    { key: "spend", label: t("metrics.columns.spend") },
-                    { key: "impressions", label: t("metrics.columns.impressions") },
-                    { key: "clicks", label: t("metrics.columns.clicks") },
-                    { key: "ctr", label: t("metrics.columns.ctr") },
-                    { key: "orders", label: t("journeyScreen.kpis.orders") },
-                    { key: "revenue", label: t("metrics.columns.revenue") },
-                    { key: "roas", label: t("metrics.columns.roas") },
-                    { key: "cpa", label: t("metrics.columns.cpa") },
-                  ].map((column) => (
+                  {(
+                    [
+                      { key: "campaign", label: t("metrics.entity.campaign"), align: "text-right" },
+                      { key: "status", label: t("metrics.columns.status") },
+                      { key: "spend", label: t("metrics.columns.spend") },
+                      { key: "impressions", label: t("metrics.columns.impressions") },
+                      { key: "clicks", label: t("metrics.columns.clicks") },
+                      { key: "ctr", label: t("metrics.columns.ctr") },
+                      { key: "orders", label: t("journeyScreen.kpis.orders") },
+                      { key: "revenue", label: t("metrics.columns.revenue") },
+                      { key: "roas", label: t("metrics.columns.roas") },
+                      { key: "cpa", label: t("metrics.columns.cpa") },
+                    ] as Array<{ key: JourneyColumn; label: string; align?: string }>
+                  ).map((column) => (
                     <th
                       key={column.key}
+                      aria-sort={ariaSort(tableSort.sort, column.key)}
                       className={cn(
-                        "border-b border-[#eef2f8] px-3 py-3 text-[11px] font-semibold",
+                        "border-b border-[#eef2f8] px-3 py-2 text-[11px] font-semibold",
                         MUTED,
                         column.align ?? "text-center"
                       )}
                     >
-                      {column.label}
+                      <SortHeading
+                        label={column.label}
+                        column={column.key}
+                        sort={tableSort.sort}
+                        onSort={tableSort.toggle}
+                        text={column.key === "campaign" || column.key === "status"}
+                      />
                     </th>
                   ))}
                 </tr>
@@ -215,7 +244,7 @@ export function CampaignJourneyScreen() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row, index) => {
+                  sortRows(rows, tableSort.sort, journeyValue).map((row, index) => {
                     const pill = statusPill(row.status, t)
                     return (
                       <tr
