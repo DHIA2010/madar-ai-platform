@@ -354,6 +354,46 @@ describe("viewing, editing and copying from the campaigns list", () => {
     })
   })
 
+  it("narrows an ad group to regions, then to cities, then back to the whole country", async () => {
+    const { service, account } = control()
+    const sentTargeting = () =>
+      (account.writes().at(-1)?.body?.adsquads as Json[])[0].targeting as Json
+
+    const withRegions = await service.edit(actor, rowId("squad-1"), "adGroup", {
+      regionIds: ["12208", "12207"],
+      cityKeys: [],
+    })
+    expect(sentTargeting()).toMatchObject({
+      geos: [{ country_code: "sa", region_id: ["12208", "12207"], operation: "INCLUDE" }],
+      // The rest of the audience is as it was.
+      demographics: [{ min_age: "25", operation: "INCLUDE" }],
+      interests: [{ category_id: ["SLC_1"], operation: "INCLUDE" }],
+    })
+    expect(withRegions.regions.map((region) => region.id)).toEqual(["12208", "12207"])
+
+    const withCities = await service.edit(actor, rowId("squad-1"), "adGroup", {
+      regionIds: [],
+      cityKeys: ["riyadh"],
+    })
+    expect(sentTargeting().geos).toEqual([{ country_code: "sa", operation: "INCLUDE" }])
+    expect(sentTargeting().locations).toMatchObject([
+      { circles: [{ latitude: 24.7136, longitude: 46.6753, radius: 45, unit: "KILOMETERS" }] },
+    ])
+    expect(withCities.cities).toEqual([{ key: "riyadh", name: "Riyadh", nameAr: "الرياض" }])
+    expect(withCities.regions).toEqual([])
+
+    await service.edit(actor, rowId("squad-1"), "adGroup", { regionIds: [], cityKeys: [] })
+    expect(sentTargeting().geos).toEqual([{ country_code: "sa", operation: "INCLUDE" }])
+    expect(sentTargeting()).not.toHaveProperty("locations")
+
+    await expect(
+      service.edit(actor, rowId("squad-1"), "adGroup", {
+        regionIds: ["12208"],
+        cityKeys: ["riyadh"],
+      })
+    ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
+  })
+
   it("leaves the audience untouched when only the name changes", async () => {
     const { service, account } = control()
     const before = structuredClone(account.store.adsquads.get("squad-1")?.targeting)

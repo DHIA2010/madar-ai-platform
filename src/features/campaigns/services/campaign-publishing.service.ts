@@ -134,6 +134,23 @@ export type AnyCallToAction = CallToAction | (typeof OTHER_CALLS_TO_ACTION)[numb
 export const callsToActionFor = (platform: PublishPlatform): readonly AnyCallToAction[] =>
   platform === "snapchat" ? CALLS_TO_ACTION : OTHER_CALLS_TO_ACTION
 
+// The places inside a country a Snapchat campaign can be narrowed to (backend: campaigns/
+// publishing/snapchat-geo.ts): Snapchat's own regions, and the cities Madar offers.
+export interface PublishRegion {
+  id: string
+  name: string
+  nameAr: string | null
+}
+export interface PublishCity {
+  key: string
+  name: string
+  nameAr: string
+}
+export interface PublishLocations {
+  regions: PublishRegion[]
+  cities: PublishCity[]
+}
+
 export interface PublishAccount {
   connectionId: string
   adAccountId: string
@@ -200,6 +217,9 @@ export type PublishCampaignInput =
       campaignLifetimeCap?: number | null
       bidStrategy?: SnapchatBidStrategy | null
       bidAmount?: number | null
+      // Snapchat only: some of the country's regions, or some of its cities.
+      regionIds?: string[] | null
+      cityKeys?: string[] | null
     })
   | (PublishCommonInput & {
       platform: "meta"
@@ -399,6 +419,12 @@ export const campaignPublishingService = {
 
   async options(): Promise<PublishOptions> {
     return client.get<PublishOptions>(path("publish", "options"))
+  },
+
+  async locations(connectionId: string, countryCode: string): Promise<PublishLocations> {
+    return client.get<PublishLocations>(
+      `${path("publish", "locations")}?connectionId=${encodeURIComponent(connectionId)}&country=${encodeURIComponent(countryCode)}`
+    )
   },
 
   async listPublications(): Promise<Publication[]> {

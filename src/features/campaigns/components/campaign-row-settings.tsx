@@ -26,6 +26,7 @@ import {
   campaignPerformanceService,
 } from "../services/campaign-performance.service"
 import { CALLS_TO_ACTION } from "../services/campaign-publishing.service"
+import { CampaignLocationPicker } from "./campaign-location-picker"
 import {
   CAMPAIGN_SELECT_CONTENT_CLASSNAME,
   CAMPAIGN_SELECT_ITEM_CLASSNAME,
@@ -78,6 +79,8 @@ interface Draft {
   brandName: string
   callToAction: string
   url: string
+  regionIds: string[]
+  cityKeys: string[]
 }
 
 function draftOf(settings: CampaignControlSettings, name: string): Draft {
@@ -92,6 +95,8 @@ function draftOf(settings: CampaignControlSettings, name: string): Draft {
     brandName: settings.brandName ?? "",
     callToAction: settings.callToAction ?? "",
     url: settings.url ?? "",
+    regionIds: settings.regions.map((region) => region.id),
+    cityKeys: settings.cities.map((city) => city.key),
   }
 }
 
@@ -113,6 +118,11 @@ function changesOf(
     if (draft.minAge !== start.minAge && draft.minAge) changes.minAge = Number(draft.minAge)
     if (draft.maxAge !== start.maxAge) changes.maxAge = draft.maxAge ? Number(draft.maxAge) : null
     if (draft.gender !== start.gender) changes.gender = draft.gender
+    const same = (a: string[], b: string[]) => [...a].sort().join() === [...b].sort().join()
+    if (!same(draft.regionIds, start.regionIds) || !same(draft.cityKeys, start.cityKeys)) {
+      changes.regionIds = draft.regionIds
+      changes.cityKeys = draft.cityKeys
+    }
   }
   if (level === "ad") {
     if (draft.headline.trim() !== start.headline) changes.headline = draft.headline.trim()
@@ -294,6 +304,20 @@ function SettingsBody({
         t("fields.countries"),
         settings.countries.length ? settings.countries.map(country).join("، ") : null,
       ],
+      [
+        t("fields.regions"),
+        settings.regions.length
+          ? settings.regions
+              .map((region) => (locale === "ar" ? region.nameAr : null) ?? region.name)
+              .join("، ")
+          : null,
+      ],
+      [
+        t("fields.cities"),
+        settings.cities.length
+          ? settings.cities.map((city) => (locale === "ar" ? city.nameAr : city.name)).join("، ")
+          : null,
+      ],
       [t("fields.ages"), ages],
       [t("fields.gender"), settings.gender ? p(`audience.genders.${settings.gender}`) : null],
       [t("fields.brandName"), settings.brandName],
@@ -437,7 +461,8 @@ function SettingsBody({
       changes.headline !== undefined ||
       changes.brandName !== undefined ||
       changes.callToAction !== undefined ||
-      changes.url !== undefined)
+      changes.url !== undefined ||
+      changes.regionIds !== undefined)
 
   return (
     <div className="space-y-5" dir={dir}>
@@ -521,6 +546,20 @@ function SettingsBody({
             </div>
           </div>
           <p className={HINT}>{t("ageHint", { top: MAX_AGE_TOP })}</p>
+          {settings.countries.length === 1 ? (
+            <div>
+              <label className={LABEL}>{p("places.label")}</label>
+              <CampaignLocationPicker
+                // The row's id carries its connection: "<source>:<connection>:<account>:<id>".
+                connectionId={row.id.split(":")[1] ?? ""}
+                countryCode={settings.countries[0].toLowerCase()}
+                value={{ regionIds: draft.regionIds, cityKeys: draft.cityKeys }}
+                onChange={(places) =>
+                  setDraft((current) => (current ? { ...current, ...places } : current))
+                }
+              />
+            </div>
+          ) : null}
         </>
       ) : null}
 

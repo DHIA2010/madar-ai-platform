@@ -277,6 +277,9 @@ export interface CampaignControlSettings {
   startAt: string | null
   endAt: string | null
   countries: string[]
+  // An ad group's regions and cities, when it is narrowed to some.
+  regions: Array<{ id: string; name: string; nameAr: string | null }>
+  cities: Array<{ key: string; name: string; nameAr: string }>
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -300,6 +303,9 @@ export interface CampaignControlChanges {
   headline?: string
   brandName?: string
   callToAction?: string
+  // An ad group's regions or cities; both empty is the whole country.
+  regionIds?: string[]
+  cityKeys?: string[]
   // Copies of an ad only.
   url?: string
 }

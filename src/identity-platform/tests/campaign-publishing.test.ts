@@ -21,6 +21,11 @@ import {
 } from "../campaigns/publishing/service"
 import { PlatformPublishError } from "../campaigns/publishing/platform"
 import {
+  readSnapchatPlaces,
+  snapchatCities,
+  snapchatPlacesProblem,
+} from "../campaigns/publishing/snapchat-geo"
+import {
   SnapchatCampaignPublisher,
   SnapchatPublishError,
   type SnapchatPublishInput,
@@ -309,6 +314,86 @@ describe("publishing to Snapchat", () => {
       optimization_goal: "PIXEL_SIGNUP",
       pixel_id: "pixel-1",
     })
+  })
+
+  it("narrows the audience to regions or to cities, and reads them back", async () => {
+    const adSet = async (overrides: Partial<SnapchatPublishInput>) => {
+      const { calls, publisher } = fakeSnapchat()
+      await publisher.publish(snapInput(overrides))
+      return (
+        calls.find((call) => call.path === "/campaigns/camp-1/adsquads")?.body as {
+          adsquads: Array<{ targeting: Record<string, unknown> }>
+        }
+      ).adsquads[0].targeting
+    }
+    // Nothing chosen: the whole country, as before.
+    const whole = await adSet({})
+    expect(whole.geos).toEqual([{ country_code: "sa", operation: "INCLUDE" }])
+    expect(whole).not.toHaveProperty("locations")
+
+    // Regions go in the country's own entry, the way a live ad set holds them.
+    const regions = await adSet({ regionIds: ["12208", "12207", "12208"] })
+    expect(regions.geos).toEqual([
+      { country_code: "sa", region_id: ["12208", "12207"], operation: "INCLUDE" },
+    ])
+    expect(regions).not.toHaveProperty("locations")
+    expect(readSnapchatPlaces(regions)).toEqual({
+      countryCode: "sa",
+      regionIds: ["12208", "12207"],
+      cityKeys: [],
+    })
+
+    // A city is a circle around its centre, inside the country.
+    const cities = await adSet({ cityKeys: ["riyadh", "jeddah", "atlantis"] })
+    expect(cities.geos).toEqual([{ country_code: "sa", operation: "INCLUDE" }])
+    expect(cities.locations).toEqual([
+      {
+        circles: [
+          { latitude: 24.7136, longitude: 46.6753, radius: 45, unit: "KILOMETERS" },
+          { latitude: 21.5433, longitude: 39.1728, radius: 40, unit: "KILOMETERS" },
+        ],
+        operation: "INCLUDE",
+      },
+    ])
+    expect(readSnapchatPlaces(cities).cityKeys).toEqual(["riyadh", "jeddah"])
+    // No circle is wider than Snapchat allows.
+    expect(snapchatCities("sa").every((city) => city.radiusKm <= 100)).toBe(true)
+
+    expect(snapchatPlacesProblem("sa", ["12208"], ["riyadh"])).toBe("both")
+    expect(snapchatPlacesProblem("sa", [], ["atlantis"])).toBe("city")
+    expect(snapchatPlacesProblem("ae", [], ["riyadh"])).toBe("city")
+    expect(snapchatPlacesProblem("sa", ["12208"], [])).toBeNull()
+    expect(
+      snapchatSettingsProblem({
+        objective: "traffic",
+        dailyBudget: 50,
+        countryCode: "sa",
+        regionIds: ["12208"],
+        cityKeys: ["riyadh"],
+      })
+    ).toBe("places")
+  })
+
+  it("lists a country's regions as Snapchat names them, with the Arabic names Madar knows", async () => {
+    const publisher = new SnapchatCampaignPublisher({
+      apiBaseUrl: "https://snap.test/v1",
+      fetch: (async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe("https://snap.test/v1/targeting/geo/sa/region")
+        return new Response(
+          JSON.stringify({
+            status: "success",
+            targeting_dimensions: [
+              { region: { region: { id: "12208", code: "01", name: "Riyadh" } } },
+              { region: { region: { id: "99", code: "77", name: "Somewhere" } } },
+            ],
+          })
+        )
+      }) as typeof fetch,
+    })
+    expect(await publisher.listRegions({ accessToken: "token", countryCode: "SA" })).toEqual([
+      { id: "12208", name: "Riyadh", nameAr: "منطقة الرياض" },
+      { id: "99", name: "Somewhere", nameAr: null },
+    ])
   })
 
   it("judges a campaign's Snapchat settings before Snapchat is asked", () => {

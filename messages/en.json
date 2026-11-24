@@ -7969,7 +7969,9 @@
             "headline": "Headline",
             "text": "Ad text",
             "callToAction": "Button",
-            "url": "Link"
+            "url": "Link",
+            "regions": "Regions",
+            "cities": "Cities"
           },
           "values": {
             "noEnd": "No end",
@@ -7990,7 +7992,7 @@
           "ageHint": "Snapchat takes an upper age up to {top}. Leave “Age to” empty to include everyone older.",
           "urlFixed": "An ad's link does not change once it is published. To change it, copy the ad and put the new link in the copy.",
           "urlHint": "It has to start with https://",
-          "reviewAgain": "Note: changing the audience, or the ad's text or link, sends the ads back to Snapchat's review, and they stop showing until approved.",
+          "reviewAgain": "Note: changing the audience (including its regions and cities), or the ad's text or link, sends the ads back to Snapchat's review, and they stop showing until approved.",
           "notAvailable": "Editing and copying from Madar are available for Snapchat for now. This platform's settings can only be viewed.",
           "problems": {
             "name": "Write a name of at least two letters.",
@@ -8416,6 +8418,22 @@
           "target_cost": "You give the cost you want per result, and Snapchat tries to stay close to it.",
           "max_bid": "Snapchat never bids above this amount. A low amount can mean fewer views."
         }
+      },
+      "places": {
+        "label": "Where in the country is the ad shown?",
+        "ways": {
+          "all": "The whole country",
+          "regions": "Some regions",
+          "cities": "Some cities"
+        },
+        "hints": {
+          "all": "The ad is shown across the whole country.",
+          "regions": "Pick one region or more. These are the regions as Snapchat knows them.",
+          "cities": "Pick one city or more. The ad is shown inside the city and around it."
+        },
+        "onlyCountry": "This country has no regions or cities to pick, so the ad is shown across all of it.",
+        "regionsCount": "{count, plural, one {# region} other {# regions}}",
+        "citiesCount": "{count, plural, one {# city} other {# cities}}"
       }
     },
     "metrics": {

@@ -8158,6 +8158,7 @@ export function createIdentityApiServer(
       // campaign's progress, and its on/off switch.
       if (
         url.pathname === "/v1/campaigns/publish/options" ||
+        url.pathname === "/v1/campaigns/publish/locations" ||
         url.pathname.startsWith("/v1/campaigns/publications")
       ) {
         if (!campaignPublishingService) {
@@ -8169,6 +8170,22 @@ export function createIdentityApiServer(
         if (method === "GET" && url.pathname === "/v1/campaigns/publish/options") {
           if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
           return send(200, await campaignPublishingService.options(actor))
+        }
+        // The regions and cities of a country, for narrowing a Snapchat campaign's audience.
+        if (method === "GET" && url.pathname === "/v1/campaigns/publish/locations") {
+          if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+          const country = (url.searchParams.get("country") ?? "").toLowerCase()
+          if (!/^[a-z]{2}$/.test(country)) {
+            throw ERRORS.validation({ country: "A two-letter country code is needed." })
+          }
+          return send(
+            200,
+            await campaignPublishingService.locations(
+              actor,
+              url.searchParams.get("connectionId") ?? "",
+              country
+            )
+          )
         }
         if (url.pathname === "/v1/campaigns/publications") {
           if (method === "GET") {

@@ -27,6 +27,12 @@ import {
   type PublishPlatform,
 } from "./publishing/service"
 import {
+  readSnapchatPlaces,
+  snapchatCities,
+  snapchatPlaces,
+  type SnapchatRegion,
+} from "./publishing/snapchat-geo"
+import {
   SnapchatPublishError,
   type SnapchatCallToAction,
   type SnapchatEntityLevel,
@@ -76,6 +82,7 @@ export interface SnapchatControl {
     adSquadId: string
     dailyBudget: number
   }): Promise<Record<string, unknown>>
+  listRegions?(input: { accessToken: string; countryCode: string }): Promise<SnapchatRegion[]>
   // Viewing, editing and copying (publishing/snapchat-publisher.ts).
   readEntity?(input: {
     accessToken: string
@@ -138,6 +145,9 @@ export interface ControlSettings {
   startAt: string | null
   endAt: string | null
   countries: string[]
+  // An ad group's regions and cities, when it is narrowed to some (snapchat-geo.ts).
+  regions: SnapchatRegion[]
+  cities: Array<{ key: string; name: string; nameAr: string }>
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -161,6 +171,9 @@ export interface EditInput {
   callToAction?: string | null
   // An ad's link.
   url?: string | null
+  // An ad group's regions or cities. Both given empty: the whole country.
+  regionIds?: string[] | null
+  cityKeys?: string[] | null
 }
 
 // A copy: its own name, and whatever of the original's settings the copy should have differently.
@@ -1095,13 +1108,17 @@ export class CampaignControlService {
         level === "ad" && api.readCreative && typeof entity.creative_id === "string"
           ? await api.readCreative({ accessToken, creativeId: entity.creative_id })
           : null
-      return {
-        ...base,
-        live: true,
-        canEdit: can,
-        canClone: can,
-        ...snapchatSettings(level, entity, creative),
+      const settings = snapchatSettings(level, entity, creative)
+      // The regions are named from Snapchat's own list; without it their ids are shown.
+      if (level === "adGroup" && settings.regions.length > 0 && api.listRegions) {
+        const country = readSnapchatPlaces(entity.targeting).countryCode ?? "sa"
+        const named = await api
+          .listRegions({ accessToken, countryCode: country })
+          .catch(() => [] as SnapchatRegion[])
+        const byId = new Map(named.map((region) => [region.id, region]))
+        settings.regions = settings.regions.map((region) => byId.get(region.id) ?? region)
       }
+      return { ...base, live: true, canEdit: can, canClone: can, ...settings }
     } catch (error) {
       // Snapchat could not be asked: what Madar last saw is still worth showing, read-only.
       console.error("campaigns.control_settings_live_failed", {
@@ -1134,6 +1151,7 @@ export class CampaignControlService {
       this.budgetFloor("snapchat", input.dailyBudget)
     }
     ageOrder(input.minAge, input.maxAge)
+    placesFit(input)
     const url = level === "ad" ? secureUrl(input.url) : null
 
     const saved = await onPlatform(async () => {
@@ -1232,6 +1250,7 @@ export class CampaignControlService {
       this.budgetFloor("snapchat", input.dailyBudget)
     }
     ageOrder(input.minAge, input.maxAge)
+    placesFit(input)
     const url = secureUrl(input.url)
     const rowOf = (id: unknown) =>
       `${target.source}:${target.connectionId}:${target.customerId}:${String(id)}`
@@ -1316,6 +1335,8 @@ const EMPTY: SettingsBody = {
   startAt: null,
   endAt: null,
   countries: [],
+  regions: [],
+  cities: [],
   minAge: null,
   maxAge: null,
   gender: null,
@@ -1348,6 +1369,7 @@ function snapchatSettings(level: ControlLevel, entity: Raw, creative: Raw | null
   const targeting = (entity.targeting ?? {}) as Raw
   const demographic = ((targeting.demographics as Raw[] | undefined) ?? [])[0] ?? {}
   const gender = String(demographic.gender ?? "").toLowerCase()
+  const places = readSnapchatPlaces(entity.targeting)
   return {
     ...EMPTY,
     name: String(entity.name ?? ""),
@@ -1359,9 +1381,21 @@ function snapchatSettings(level: ControlLevel, entity: Raw, creative: Raw | null
     dailyBudget: amount(entity.daily_budget_micro, 1_000_000),
     startAt: instant(entity.start_time),
     endAt: instant(entity.end_time),
-    countries: ((targeting.geos as Raw[] | undefined) ?? [])
-      .map((geo) => String(geo.country_code ?? "").toUpperCase())
-      .filter(Boolean),
+    countries: [
+      ...new Set(
+        ((targeting.geos as Raw[] | undefined) ?? [])
+          .map((geo) => String(geo.country_code ?? "").toUpperCase())
+          .filter(Boolean)
+      ),
+    ],
+    regions:
+      level === "adGroup" ? places.regionIds.map((id) => ({ id, name: id, nameAr: null })) : [],
+    cities:
+      level === "adGroup"
+        ? snapchatCities(places.countryCode ?? "")
+            .filter((city) => places.cityKeys.includes(city.key))
+            .map(({ key, name, nameAr }) => ({ key, name, nameAr }))
+        : [],
     minAge: level === "adGroup" ? whole(demographic.min_age) : null,
     maxAge: level === "adGroup" ? whole(demographic.max_age) : null,
     gender: level !== "adGroup" ? null : gender === "male" || gender === "female" ? gender : "all",
@@ -1471,6 +1505,19 @@ function endOfRiyadhDay(day: string): string {
   return new Date(Date.parse(`${day}T00:00:00+03:00`) + 24 * 60 * 60_000 - 60_000).toISOString()
 }
 
+// Regions and cities are one or the other, and a city has to be one Madar offers.
+function placesFit(input: Pick<EditInput, "regionIds" | "cityKeys">) {
+  if ((input.regionIds?.length ?? 0) > 0 && (input.cityKeys?.length ?? 0) > 0) {
+    throw new IdentityError(
+      "PUBLISH_SETTINGS_NOT_SUITABLE",
+      422,
+      "validation",
+      "Choose regions or cities, not both.",
+      { problem: "places" }
+    )
+  }
+}
+
 function ageOrder(minAge?: number | null, maxAge?: number | null) {
   if (minAge != null && maxAge != null && maxAge <= minAge) {
     throw new IdentityError(
@@ -1486,6 +1533,34 @@ function ageOrder(minAge?: number | null, maxAge?: number | null) {
 // countries, interests, devices) stays as it is. Returns the very same object when nothing
 // differs, so an unchanged audience is sent back exactly as Snapchat gave it.
 function snapchatAudience(
+  current: unknown,
+  input: Pick<EditInput, "minAge" | "maxAge" | "gender" | "regionIds" | "cityKeys">
+): unknown {
+  return snapchatDemographics(snapchatWhere(current, input), input)
+}
+
+// The audience's places: the ad group's own country, narrowed to the regions or the cities asked
+// for (both empty: the whole country). Untouched when neither was sent or nothing differs.
+function snapchatWhere(
+  current: unknown,
+  input: Pick<EditInput, "regionIds" | "cityKeys">
+): unknown {
+  if (input.regionIds == null && input.cityKeys == null) return current
+  const before = readSnapchatPlaces(current)
+  const regionIds = input.regionIds ?? []
+  const cityKeys = input.cityKeys ?? []
+  const same = (a: string[], b: string[]) =>
+    a.length === b.length && [...a].sort().join() === [...b].sort().join()
+  if (same(before.regionIds, regionIds) && same(before.cityKeys, cityKeys)) return current
+  const places = snapchatPlaces(before.countryCode ?? "sa", regionIds, cityKeys)
+  const targeting = { ...((current ?? {}) as Raw) }
+  targeting.geos = places.geos
+  if (places.locations) targeting.locations = places.locations
+  else delete targeting.locations
+  return targeting
+}
+
+function snapchatDemographics(
   current: unknown,
   input: Pick<EditInput, "minAge" | "maxAge" | "gender">
 ): unknown {

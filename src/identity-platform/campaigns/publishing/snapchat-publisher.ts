@@ -88,6 +88,10 @@ export interface SnapchatPublishInput {
   // Whether the campaign starts spending as soon as Snapchat approves the ad, or waits switched
   // off for the merchant to turn it on.
   startActive: boolean
+  // Where inside the country: some of its regions (Snapchat's own ids) or some of its cities
+  // (snapchat-geo.ts). Left out or empty: the whole country.
+  regionIds?: string[] | null
+  cityKeys?: string[] | null
   // What the ad set is delivered for; left out, the objective's own first choice.
   goal?: SnapchatGoal | null
   // The most the whole campaign may spend in a day, and over its life. Left out: no cap.
@@ -134,6 +138,8 @@ export class SnapchatPublishError extends Error {
     this.name = "SnapchatPublishError"
   }
 }
+
+import { regionNameAr, snapchatPlaces, type SnapchatRegion } from "./snapchat-geo"
 
 type Json = Record<string, unknown>
 
@@ -470,6 +476,7 @@ export class SnapchatCampaignPublisher {
     const campaignId = campaign.id as string
 
     try {
+      const places = snapchatPlaces(input.countryCode, input.regionIds, input.cityKeys)
       const demographic: Json = { min_age: String(input.minAge), operation: "INCLUDE" }
       if (input.maxAge) demographic.max_age = String(input.maxAge)
       if (input.gender !== "all") demographic.gender = input.gender.toUpperCase()
@@ -484,7 +491,8 @@ export class SnapchatCampaignPublisher {
               type: "SNAP_ADS",
               targeting: {
                 regulated_content: false,
-                geos: [{ country_code: input.countryCode.toLowerCase(), operation: "INCLUDE" }],
+                geos: places.geos,
+                ...(places.locations ? { locations: places.locations } : {}),
                 demographics: [demographic],
               },
               placement_v2: { config: "AUTOMATIC" },
@@ -783,6 +791,33 @@ export class SnapchatCampaignPublisher {
       throw new SnapchatPublishError("creative", "The ad's creative was not found on Snapchat.")
     }
     return creative
+  }
+
+  // The regions Snapchat knows in a country, for choosing where an ad set is shown.
+  async listRegions(input: {
+    accessToken: string
+    countryCode: string
+  }): Promise<SnapchatRegion[]> {
+    const country = input.countryCode.toLowerCase()
+    const body = await this.call(
+      "account",
+      input.accessToken,
+      "GET",
+      `/targeting/geo/${encodeURIComponent(country)}/region`
+    )
+    const found: SnapchatRegion[] = []
+    for (const entry of Array.isArray(body.targeting_dimensions)
+      ? (body.targeting_dimensions as Json[])
+      : []) {
+      const region = (entry.region as Json | undefined)?.region as Json | undefined
+      if (!region?.id) continue
+      found.push({
+        id: String(region.id),
+        name: String(region.name ?? region.id),
+        nameAr: regionNameAr(country, String(region.code ?? "")),
+      })
+    }
+    return found
   }
 
   // The file a creative shows (its image or video): its kind, its size on screen and the link

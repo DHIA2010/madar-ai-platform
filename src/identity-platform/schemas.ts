@@ -552,6 +552,16 @@ const linkTrackingSchema = z
     content: trackingWord,
   })
   .nullish()
+// Where inside the country a Snapchat ad set is shown: Snapchat's own region ids, or the keys of
+// the cities Madar offers (campaigns/publishing/snapchat-geo.ts).
+const snapchatRegionIds = z
+  .array(z.string().regex(/^\d{1,12}$/))
+  .max(60)
+  .nullish()
+const snapchatCityKeys = z
+  .array(z.string().regex(/^[a-z_]{2,40}$/))
+  .max(40)
+  .nullish()
 const publishCommon = {
   tracking: linkTrackingSchema,
   connectionId: z.string().uuid(),
@@ -599,6 +609,8 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
     campaignLifetimeCap: z.number().positive().max(100_000_000).nullish(),
     bidStrategy: z.enum(["auto", "target_cost", "max_bid"]).nullish(),
     bidAmount: z.number().positive().max(100_000).nullish(),
+    regionIds: snapchatRegionIds,
+    cityKeys: snapchatCityKeys,
     creativeId: z.string().uuid(),
     brandName: z.string().trim().min(1).max(25),
     headline: z.string().trim().min(1).max(34),
@@ -673,6 +685,9 @@ const campaignControlChanges = {
   callToAction: z.string().trim().max(32).nullish(),
   // An ad's link.
   url: z.string().trim().url().max(1000).nullish(),
+  // An ad group's regions or cities; both empty is the whole country.
+  regionIds: snapchatRegionIds,
+  cityKeys: snapchatCityKeys,
 }
 export const campaignControlSettingsSchema = z.object(campaignControlTarget)
 export const campaignControlEditSchema = z.object({

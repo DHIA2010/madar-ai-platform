@@ -73,6 +73,7 @@ import {
   SnapchatFitBadge,
   useCreativeUploader,
 } from "./campaign-creative-shared"
+import { CampaignLocationPicker } from "./campaign-location-picker"
 import {
   CAMPAIGN_SELECT_CONTENT_CLASSNAME,
   CAMPAIGN_SELECT_ITEM_CLASSNAME,
@@ -140,6 +141,9 @@ interface Draft {
   campaignLifetimeCap: string
   bidStrategy: SnapchatBidStrategy
   bidAmount: string
+  // Snapchat only: some of the country's regions, or some of its cities. Empty: all of it.
+  regionIds: string[]
+  cityKeys: string[]
   dailyBudget: string
   startDate: string
   endDate: string
@@ -292,6 +296,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     campaignLifetimeCap: "",
     bidStrategy: "auto",
     bidAmount: "",
+    regionIds: [],
+    cityKeys: [],
     dailyBudget: "50",
     startDate: toLocalDay(new Date()),
     endDate: "",
@@ -623,6 +629,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                           : null,
                         bidStrategy: draft.bidStrategy,
                         bidAmount: draft.bidStrategy === "auto" ? null : Number(draft.bidAmount),
+                        regionIds: draft.regionIds,
+                        cityKeys: draft.cityKeys,
                       }
                     : {}),
                 }
@@ -905,7 +913,13 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       label: t("review.audience"),
       value: isGoogle
         ? t(`countries.${draft.countryCode}`)
-        : `${t(`countries.${draft.countryCode}`)} · ${ageLabel} · ${t(`audience.genders.${draft.gender}`)}`,
+        : `${t(`countries.${draft.countryCode}`)}${
+            isSnapchat && draft.regionIds.length > 0
+              ? ` (${t("places.regionsCount", { count: draft.regionIds.length })})`
+              : isSnapchat && draft.cityKeys.length > 0
+                ? ` (${t("places.citiesCount", { count: draft.cityKeys.length })})`
+                : ""
+          } · ${ageLabel} · ${t(`audience.genders.${draft.gender}`)}`,
     },
     { label: t("review.headline"), value: isGoogle ? draft.headlines[0] : draft.headline },
     ...(isGoogle ? [{ label: t("review.keywords"), value: keywords.join("، ") }] : []),
@@ -1130,13 +1144,32 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
             <Field label={t("audience.country")}>
               {selectField(
                 draft.countryCode,
-                (value) => set("countryCode", value),
+                // Another country has its own regions and cities.
+                (value) =>
+                  setDraft((current) => ({
+                    ...current,
+                    countryCode: value,
+                    regionIds: [],
+                    cityKeys: [],
+                  })),
                 (limits?.countries ?? ["sa"]).map((code) => ({
                   value: code,
                   label: t(`countries.${code}`),
                 }))
               )}
             </Field>
+
+            {isSnapchat && account ? (
+              <Field label={t("places.label")}>
+                <CampaignLocationPicker
+                  key={`${account.connectionId}:${draft.countryCode}`}
+                  connectionId={account.connectionId}
+                  countryCode={draft.countryCode}
+                  value={{ regionIds: draft.regionIds, cityKeys: draft.cityKeys }}
+                  onChange={(places) => setDraft((current) => ({ ...current, ...places }))}
+                />
+              </Field>
+            ) : null}
 
             {isGoogle ? (
               <p className="rounded-xl border border-[#e1e7f0] bg-[#f7f9fd] px-4 py-3 text-[12.5px] leading-6 text-[#475467]">

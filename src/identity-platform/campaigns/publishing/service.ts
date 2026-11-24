@@ -23,6 +23,12 @@ import {
   type TikTokPublishInput,
 } from "./platform"
 import {
+  snapchatCities,
+  snapchatPlacesProblem,
+  type SnapchatCity,
+  type SnapchatRegion,
+} from "./snapchat-geo"
+import {
   SNAPCHAT_BRAND_NAME_MAX,
   SNAPCHAT_HEADLINE_MAX,
   SnapchatPublishError,
@@ -99,6 +105,9 @@ export type PublishCampaignInput =
       campaignLifetimeCap?: number | null
       bidStrategy?: SnapchatBidStrategy | null
       bidAmount?: number | null
+      // Where inside the country: some regions or some cities. Empty: the whole country.
+      regionIds?: string[] | null
+      cityKeys?: string[] | null
     })
   | (PublishCommonInput & {
       platform: "tiktok"
@@ -136,6 +145,8 @@ export interface PublicationDetails {
   campaignLifetimeCap?: number
   bidStrategy?: string
   bidAmount?: number
+  regionIds?: string[]
+  cityKeys?: string[]
 }
 
 export interface PublicationView {
@@ -206,6 +217,13 @@ export interface SnapchatPublisher {
     active: boolean
   }): Promise<void>
   deleteCampaign(input: { accessToken: string; campaignId: string }): Promise<void>
+  listRegions?(input: { accessToken: string; countryCode: string }): Promise<SnapchatRegion[]>
+}
+
+// The places inside a country a Snapchat campaign can be narrowed to.
+export interface PublishLocations {
+  regions: SnapchatRegion[]
+  cities: Array<Pick<SnapchatCity, "key" | "name" | "nameAr">>
 }
 
 interface TokenAccess {
@@ -326,8 +344,12 @@ export function snapchatSettingsProblem(
     | "campaignLifetimeCap"
     | "bidStrategy"
     | "bidAmount"
-  >
-): "goal" | "daily_cap" | "lifetime_cap" | "bid_amount" | "target_cost_goal" | null {
+  > &
+    Partial<Pick<SnapchatInput, "countryCode" | "regionIds" | "cityKeys">>
+): "goal" | "daily_cap" | "lifetime_cap" | "bid_amount" | "target_cost_goal" | "places" | null {
+  if (snapchatPlacesProblem(input.countryCode ?? "sa", input.regionIds, input.cityKeys)) {
+    return "places"
+  }
   const goals = SNAPCHAT_GOALS[input.objective]
   if (!goals) return "goal"
   const goal = input.goal ?? goals[0]
@@ -367,6 +389,8 @@ function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
     details.bidStrategy = input.bidStrategy
     if (input.bidAmount) details.bidAmount = input.bidAmount
   }
+  if (input.regionIds?.length) details.regionIds = input.regionIds
+  if (input.cityKeys?.length) details.cityKeys = input.cityKeys
   return Object.keys(details).length > 0 ? details : null
 }
 
@@ -557,6 +581,8 @@ const SELECT = `SELECT id, platform, connection_id, ad_account_id, name, objecti
 export class CampaignPublishingService {
   // Publishes still running in this process, so tests (and a graceful stop) can wait for them.
   private readonly running = new Set<Promise<void>>()
+  // Snapchat's regions per country, kept for a day.
+  private readonly regions = new Map<string, { regions: SnapchatRegion[]; until: number }>()
 
   constructor(
     private readonly db: PostgresDatabase,
@@ -646,6 +672,36 @@ export class CampaignPublishingService {
         googleDescriptionMax: GOOGLE_DESCRIPTION_MAX,
       },
     }
+  }
+
+  // The regions and cities a Snapchat campaign in this country can be narrowed to. The regions
+  // are Snapchat's own list, asked for through one of the organization's connections and kept
+  // for a day (they do not change).
+  async locations(
+    actor: AuthenticatedActor,
+    connectionId: string,
+    countryCode: string
+  ): Promise<PublishLocations> {
+    const country = countryCode.toLowerCase()
+    const cities = snapchatCities(country).map(({ key, name, nameAr }) => ({ key, name, nameAr }))
+    const own = (await this.accounts(actor, "snapchat")).accounts.some(
+      (entry) => entry.connectionId === connectionId
+    )
+    if (!own) throw invalid("PUBLISH_ACCOUNT_NOT_CONNECTED", "That ad account is not connected.")
+    const kept = this.regions.get(country)
+    if (kept && kept.until > this.now().getTime()) return { regions: kept.regions, cities }
+    if (!this.snapchat.listRegions) return { regions: [], cities }
+    const regions = await this.snapchat
+      .listRegions({
+        accessToken: await this.snapchatAccess.resolveAccessToken(connectionId),
+        countryCode: country,
+      })
+      // Without the list the campaign can still be aimed at the whole country or at cities.
+      .catch(() => [] as SnapchatRegion[])
+    if (regions.length > 0) {
+      this.regions.set(country, { regions, until: this.now().getTime() + 24 * 60 * 60_000 })
+    }
+    return { regions, cities }
   }
 
   async list(organizationId: string): Promise<PublicationView[]> {
@@ -928,6 +984,8 @@ export class CampaignPublishingService {
       campaignLifetimeCap: input.campaignLifetimeCap ?? null,
       bidStrategy: input.bidStrategy ?? null,
       bidAmount: input.bidAmount ?? null,
+      regionIds: input.regionIds ?? null,
+      cityKeys: input.cityKeys ?? null,
       minAge: Math.min(shown.minAge, SNAPCHAT_MIN_AGE_TOP),
       maxAge: shown.maxAge && shown.maxAge <= SNAPCHAT_MAX_AGE_TOP ? shown.maxAge : null,
       accessToken: await this.snapchatAccess.resolveAccessToken(input.connectionId),
