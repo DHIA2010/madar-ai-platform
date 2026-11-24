@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Copy,
   Eye,
+  ImageIcon,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -27,6 +28,7 @@ import { ROUTES } from "@/constants/routes"
 import {
   AppConfirmDialog,
   AppDateRangeFilter,
+  AppDialog,
   AppDropdownMenu,
   AppDropdownMenuContent,
   AppDropdownMenuItem,
@@ -44,12 +46,14 @@ import {
   canControlCampaignRow,
   isCampaignRowSwitchedOn,
 } from "../services/campaign-performance.service"
+import { campaignPublishingService, type Creative } from "../services/campaign-publishing.service"
 import {
   AdGroupAddAdDialog,
   AdGroupBudgetDialog,
   campaignRowPublishPlatform,
   canChangeAdGroupBudget,
 } from "./campaign-ad-group-actions"
+import { CreativeThumb, useCreativeImport } from "./campaign-creative-shared"
 import { CampaignModuleNav } from "./campaign-module-nav"
 import { CampaignRowSettingsDialog, type RowSettingsMode } from "./campaign-row-settings"
 import { campaignStatusBucket, campaignStatusPill } from "./campaign-status-pill"
@@ -121,6 +125,11 @@ export function CampaignListScreen() {
     row: CampaignPerformanceRow
     mode: RowSettingsMode
   } | null>(null)
+  // The image or video each ad shows, by the ad's row id; the one opened full-size; and the ad
+  // whose creative is being fetched because Madar had not seen it yet.
+  const [adCreatives, setAdCreatives] = useState<Map<string, Creative>>(new Map())
+  const [showing, setShowing] = useState<Creative | null>(null)
+  const [fetchingCreative, setFetchingCreative] = useState<string | null>(null)
   // Raised to load the campaigns again (after a campaign was copied).
   const [reloads, setReloads] = useState(0)
 
@@ -157,6 +166,41 @@ export function CampaignListScreen() {
       cancelled = true
     }
   }, [startDate, endDate, reloads])
+
+  const loadAdCreatives = useCallback(() => {
+    campaignPublishingService
+      .adCreatives()
+      .then((items) => setAdCreatives(new Map(items.map((item) => [item.adRowId, item.creative]))))
+      // The pictures are an extra: the list works without them.
+      .catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    loadAdCreatives()
+  }, [loadAdCreatives])
+  // The creatives of ads made outside Madar come in quietly while the list is open.
+  useCreativeImport(loadAdCreatives)
+
+  const openCreative = async (row: CampaignPerformanceRow) => {
+    const known = adCreatives.get(row.id)
+    if (known) {
+      setShowing(known)
+      return
+    }
+    setFetchingCreative(row.id)
+    try {
+      const creative = await campaignPublishingService.creativeOfAd(row.id)
+      if (creative) {
+        setAdCreatives((current) => new Map(current).set(row.id, creative))
+        setShowing(creative)
+      } else {
+        toast.info(t("listScreen.controls.creative.none"))
+      }
+    } catch {
+      toast.error(t("listScreen.controls.creative.failed"))
+    } finally {
+      setFetchingCreative(null)
+    }
+  }
 
   const loadChildren = useCallback(
     async (row: Pick<CampaignPerformanceRow, "id" | "level">) => {
@@ -380,6 +424,28 @@ export function CampaignListScreen() {
                   className="size-9"
                   iconClassName="size-[18px]"
                 />
+              ) : null}
+              {row.level === "ad" && campaignRowPublishPlatform(row) === "snapchat" ? (
+                <button
+                  type="button"
+                  onClick={() => void openCreative(row)}
+                  disabled={fetchingCreative === row.id}
+                  aria-label={t("listScreen.controls.creative.open", { name: row.name })}
+                  title={t("listScreen.controls.creative.hint")}
+                  className="flex h-[52px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-[#eef2f8] text-[#6b7b96] ring-1 ring-[#e1e7f0] transition hover:ring-2 hover:ring-[#1d4fd8]"
+                >
+                  {fetchingCreative === row.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : adCreatives.has(row.id) ? (
+                    <CreativeThumb
+                      creative={adCreatives.get(row.id) as Creative}
+                      className="size-full"
+                      compact
+                    />
+                  ) : (
+                    <ImageIcon className="size-4" />
+                  )}
+                </button>
               ) : null}
               <div className="min-w-0">
                 <p className={cn("max-w-[320px] truncate text-[13px] font-bold", HEADING)}>
@@ -692,6 +758,30 @@ export function CampaignListScreen() {
         onClose={() => setBudgetOf(null)}
         onSaved={(row, dailyBudget) => patchRow(row, (entry) => ({ ...entry, dailyBudget }))}
       />
+      <AppDialog
+        open={showing !== null}
+        onOpenChange={(open) => {
+          if (!open) setShowing(null)
+        }}
+        title={showing?.name}
+        contentClassName="max-w-[26rem]"
+      >
+        {showing ? (
+          <div className="space-y-3">
+            <CreativeThumb
+              creative={showing}
+              controls
+              className="mx-auto aspect-[9/16] max-h-[66dvh] rounded-[12px]"
+            />
+            <Link
+              href={`${ROUTES.campaigns}/creative-library`}
+              className="flex h-11 items-center justify-center rounded-[10px] bg-[#eef4ff] text-[13px] font-bold text-[#1d4fd8] transition-colors hover:bg-[#e0eaff]"
+            >
+              {t("listScreen.controls.creative.library")}
+            </Link>
+          </div>
+        ) : null}
+      </AppDialog>
       <CampaignRowSettingsDialog
         row={managing?.row ?? null}
         mode={managing?.mode ?? "view"}

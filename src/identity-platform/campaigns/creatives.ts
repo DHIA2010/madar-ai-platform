@@ -29,7 +29,26 @@ export interface CreativeView {
   height: number | null
   durationSeconds: number | null
   url: string
+  // Uploaded in Madar, or brought in from an ad that already runs on an ad platform.
+  source: CreativeSource
   createdAt: string
+}
+
+export type CreativeSource = "upload" | "snapchat"
+
+// A file brought in from an ad platform: the ad's own image or video.
+export interface AdoptCreativeInput {
+  organizationId: string
+  workspaceId: string | null
+  name: string
+  bytes: Buffer
+  width?: number | null
+  height?: number | null
+  durationSeconds?: number | null
+  source: Exclude<CreativeSource, "upload">
+  sourceConnectionId: string
+  sourceAccountId: string
+  sourceMediaId: string
 }
 
 export interface UploadCreativeInput {
@@ -93,6 +112,7 @@ interface CreativeRow {
   duration_seconds: number | string | null
   storage_key: string
   url: string
+  source?: string | null
   created_at: Date | string
   [key: string]: unknown
 }
@@ -108,13 +128,14 @@ function mapCreative(row: CreativeRow): CreativeView {
     height: row.height === null ? null : Number(row.height),
     durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
     url: row.url,
+    source: row.source === "snapchat" ? "snapchat" : "upload",
     createdAt:
       row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
   }
 }
 
 const SELECT = `SELECT id, name, kind, content_type, size_bytes, width, height, duration_seconds,
-  storage_key, url, created_at FROM campaign_creatives`
+  storage_key, url, source, created_at FROM campaign_creatives`
 
 const positiveOrNull = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null
@@ -182,6 +203,66 @@ export class CampaignCreativesService {
         key,
         url,
         input.userId,
+      ]
+    )
+    return this.get(input.organizationId, id)
+  }
+
+  // What a file is, read from its first bytes: the ad platforms' own labels are not reliable.
+  static contentTypeOf(bytes: Buffer): CreativeContentType | null {
+    return CREATIVE_CONTENT_TYPES.find((type) => matchesContentType(bytes, type)) ?? null
+  }
+
+  // The library creative that is this platform file, if it was brought in before.
+  async findBySourceMedia(organizationId: string, mediaId: string): Promise<CreativeView | null> {
+    const result = await this.db.query<CreativeRow>(
+      `${SELECT} WHERE organization_id = $1 AND source_media_id = $2 AND deleted_at IS NULL
+        ORDER BY created_at LIMIT 1`,
+      [organizationId, mediaId]
+    )
+    return result.rows[0] ? mapCreative(result.rows[0]) : null
+  }
+
+  // Keeps an ad platform's own file in the library, noting where it came from. The same file is
+  // kept once: asking again answers with the creative already there.
+  async adopt(input: AdoptCreativeInput): Promise<CreativeView> {
+    if (!this.storage) throw ERRORS.unavailable()
+    const existing = await this.findBySourceMedia(input.organizationId, input.sourceMediaId)
+    if (existing) return existing
+    const contentType = CampaignCreativesService.contentTypeOf(input.bytes)
+    if (!contentType) throw ERRORS.notThatFile()
+    const kind: CreativeKind = contentType === "video/mp4" ? "video" : "image"
+    if (input.bytes.length > MAX_CREATIVE_VIDEO_BYTES) throw ERRORS.tooLarge("video")
+    const id = randomUUID()
+    const extension =
+      contentType === "image/png" ? "png" : contentType === "image/jpeg" ? "jpg" : "mp4"
+    const key = `campaign-creatives/${input.organizationId}/${id}.${extension}`
+    const url = await this.storage.uploadPublicObject({ key, body: input.bytes, contentType })
+    const width = positiveOrNull(input.width)
+    const height = positiveOrNull(input.height)
+    await this.db.query(
+      `INSERT INTO campaign_creatives
+         (id, organization_id, workspace_id, name, kind, content_type, size_bytes, width, height,
+          duration_seconds, storage_key, url, source, source_connection_id, source_account_id,
+          source_media_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+      [
+        id,
+        input.organizationId,
+        input.workspaceId,
+        input.name.trim().slice(0, 120) || "creative",
+        kind,
+        contentType,
+        input.bytes.length,
+        width === null ? null : Math.round(width),
+        height === null ? null : Math.round(height),
+        kind === "video" ? positiveOrNull(input.durationSeconds) : null,
+        key,
+        url,
+        input.source,
+        input.sourceConnectionId,
+        input.sourceAccountId,
+        input.sourceMediaId,
       ]
     )
     return this.get(input.organizationId, id)

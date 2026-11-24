@@ -15,6 +15,7 @@ import { CampaignCreativesService } from "../campaigns/creatives"
 import {
   CampaignPublishingService,
   snapchatCreativeProblem,
+  snapchatSettingsProblem,
   withCampaignTracking,
   type PublishCampaignInput,
 } from "../campaigns/publishing/service"
@@ -231,6 +232,115 @@ const snapInput = (overrides: Partial<SnapchatPublishInput> = {}): SnapchatPubli
 })
 
 describe("publishing to Snapchat", () => {
+  it("publishes each objective with its own goal, the spend caps and the bid", async () => {
+    const sent = async (overrides: Partial<SnapchatPublishInput>) => {
+      const { calls, publisher } = fakeSnapchat()
+      await publisher.publish(snapInput(overrides))
+      const body = (path: string) =>
+        (
+          calls.find((call) => call.method === "POST" && call.path === path)?.body as Record<
+            string,
+            Array<Record<string, unknown>>
+          >
+        )[path.split("/").pop() as string][0]
+      return {
+        campaign: body(`/adaccounts/${ACCOUNT}/campaigns`),
+        adSet: body("/campaigns/camp-1/adsquads"),
+        askedForPixel: calls.some((call) => call.path.endsWith("/pixels")),
+      }
+    }
+
+    // Awareness: delivered for views, with no pixel and no caps unless asked for.
+    const awareness = await sent({ objective: "awareness" })
+    expect(awareness.campaign).toMatchObject({
+      objective_v2_properties: { objective_v2_type: "AWARENESS_AND_ENGAGEMENT" },
+    })
+    expect(awareness.campaign).not.toHaveProperty("daily_budget_micro")
+    expect(awareness.campaign).not.toHaveProperty("lifetime_spend_cap_micro")
+    expect(awareness.adSet).toMatchObject({
+      optimization_goal: "IMPRESSIONS",
+      auto_bid: true,
+      bid_strategy: "AUTO_BID",
+    })
+    expect(awareness.adSet).not.toHaveProperty("pixel_id")
+    expect(awareness.askedForPixel).toBe(false)
+
+    // Sales: measured by the pixel's purchases, capped, and bid around a target cost.
+    const sales = await sent({
+      objective: "sales",
+      campaignDailyCap: 300,
+      campaignLifetimeCap: 5000,
+      bidStrategy: "target_cost",
+      bidAmount: 60,
+    })
+    expect(sales.campaign).toMatchObject({
+      objective_v2_properties: { objective_v2_type: "SALES" },
+      daily_budget_micro: 300_000_000,
+      lifetime_spend_cap_micro: 5_000_000_000,
+    })
+    expect(sales.adSet).toMatchObject({
+      optimization_goal: "PIXEL_PURCHASE",
+      pixel_id: "pixel-1",
+      conversion_window: "SWIPE_28DAY_VIEW_1DAY",
+      auto_bid: false,
+      target_bid: true,
+      bid_strategy: "TARGET_COST",
+      bid_micro: 60_000_000,
+    })
+
+    // A goal chosen over the objective's own, with a ceiling on the bid.
+    const leads = await sent({
+      objective: "leads",
+      goal: "SWIPES",
+      bidStrategy: "max_bid",
+      bidAmount: 2.5,
+    })
+    expect(leads.campaign).toMatchObject({
+      objective_v2_properties: { objective_v2_type: "LEADS" },
+    })
+    expect(leads.adSet).toMatchObject({
+      optimization_goal: "SWIPES",
+      bid_strategy: "LOWEST_COST_WITH_MAX_BID",
+      target_bid: false,
+      bid_micro: 2_500_000,
+    })
+    expect(leads.askedForPixel).toBe(false)
+    expect((await sent({ objective: "leads" })).adSet).toMatchObject({
+      optimization_goal: "PIXEL_SIGNUP",
+      pixel_id: "pixel-1",
+    })
+  })
+
+  it("judges a campaign's Snapchat settings before Snapchat is asked", () => {
+    const base = { objective: "traffic" as const, dailyBudget: 100 }
+    expect(snapchatSettingsProblem(base)).toBeNull()
+    expect(snapchatSettingsProblem({ ...base, goal: "PIXEL_PURCHASE" })).toBe("goal")
+    expect(
+      snapchatSettingsProblem({ ...base, objective: "sales", goal: "PIXEL_PURCHASE" })
+    ).toBeNull()
+    // A cap under Snapchat's floor, or under a quarter of the day's budget.
+    expect(snapchatSettingsProblem({ ...base, campaignDailyCap: 10 })).toBe("daily_cap")
+    expect(snapchatSettingsProblem({ ...base, dailyBudget: 400, campaignDailyCap: 50 })).toBe(
+      "daily_cap"
+    )
+    expect(snapchatSettingsProblem({ ...base, campaignDailyCap: 25 })).toBeNull()
+    expect(snapchatSettingsProblem({ ...base, campaignLifetimeCap: 60 })).toBe("lifetime_cap")
+    expect(snapchatSettingsProblem({ ...base, campaignLifetimeCap: 1000 })).toBeNull()
+    expect(snapchatSettingsProblem({ ...base, bidStrategy: "max_bid" })).toBe("bid_amount")
+    expect(
+      snapchatSettingsProblem({ ...base, bidStrategy: "target_cost", bidAmount: 5 })
+    ).toBeNull()
+    // Snapchat takes no target cost when the ad set is delivered for views.
+    expect(
+      snapchatSettingsProblem({
+        ...base,
+        objective: "awareness",
+        bidStrategy: "target_cost",
+        bidAmount: 5,
+      })
+    ).toBe("target_cost_goal")
+  })
+
   it("creates the campaign, ad set, media, creative and ad, in that order", async () => {
     const { calls, publisher } = fakeSnapchat()
     const ids = await publisher.publish(snapInput())
@@ -927,6 +1037,8 @@ describe("the creative library and the publish record", () => {
     const cases: Array<[Partial<SnapchatInput>, string]> = [
       [{ adAccountId: "someone-else" }, "PUBLISH_ACCOUNT_NOT_CONNECTED"],
       [{ dailyBudget: 5 }, "PUBLISH_BUDGET_TOO_LOW"],
+      [{ campaignDailyCap: 5 }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
+      [{ objective: "awareness", goal: "PIXEL_PURCHASE" }, "PUBLISH_SETTINGS_NOT_SUITABLE"],
       [{ startDate: "2026-01-14" }, "PUBLISH_START_IN_PAST"],
       [{ endDate: "2026-01-10" }, "PUBLISH_END_BEFORE_START"],
       [{ minAge: 30, maxAge: 25 }, "PUBLISH_AGE_RANGE"],
@@ -1305,6 +1417,10 @@ describe("the creative library and the publish record", () => {
       code: "PUBLISH_CREATIVE_NOT_SUITABLE",
       details: { problem: "video_only" },
     })
+    // The wider choice of objectives is Snapchat's only, for now.
+    await expect(
+      publishing.publish(actor, { ...tiktok, objective: "sales" })
+    ).rejects.toMatchObject({ code: "PUBLISH_OBJECTIVE_NOT_SUPPORTED" })
     await expect(publishing.publish(actor, { ...tiktok, dailyBudget: 50 })).rejects.toMatchObject({
       code: "PUBLISH_BUDGET_TOO_LOW",
       details: { minimum: 75 },

@@ -26,7 +26,12 @@ import {
   SNAPCHAT_BRAND_NAME_MAX,
   SNAPCHAT_HEADLINE_MAX,
   SnapchatPublishError,
+  SNAPCHAT_GOALS,
+  SNAPCHAT_MIN_SPEND_CAP,
+  SNAPCHAT_TARGET_COST_GOALS,
+  type SnapchatBidStrategy,
   type SnapchatCallToAction,
+  type SnapchatGoal,
   type SnapchatObjective,
   type SnapchatPublishedIds,
   type SnapchatPublishInput,
@@ -89,6 +94,11 @@ export type PublishCampaignInput =
       brandName: string
       headline: string
       callToAction: SnapchatCallToAction
+      goal?: SnapchatGoal | null
+      campaignDailyCap?: number | null
+      campaignLifetimeCap?: number | null
+      bidStrategy?: SnapchatBidStrategy | null
+      bidAmount?: number | null
     })
   | (PublishCommonInput & {
       platform: "tiktok"
@@ -120,6 +130,12 @@ export interface PublicationDetails {
   headlines?: string[]
   descriptions?: string[]
   keywords?: string[]
+  // Snapchat's own settings, when they were chosen.
+  goal?: string
+  campaignDailyCap?: number
+  campaignLifetimeCap?: number
+  bidStrategy?: string
+  bidAmount?: number
 }
 
 export interface PublicationView {
@@ -295,6 +311,65 @@ const invalid = (code: string, message: string, details?: Record<string, unknown
 
 const riyadhDay = (date: Date) =>
   new Date(date.getTime() + RIYADH_OFFSET_MS).toISOString().slice(0, 10)
+type SnapchatInput = Extract<PublishCampaignInput, { platform: "snapchat" }>
+
+// Why a campaign's Snapchat settings cannot be published, judged before Snapchat is asked:
+// a goal that does not belong to the objective, a spend cap under Snapchat's floor or under a
+// quarter of the day's budget (Snapchat's own rule), or a bid that is missing or not allowed.
+export function snapchatSettingsProblem(
+  input: Pick<
+    SnapchatInput,
+    | "objective"
+    | "goal"
+    | "dailyBudget"
+    | "campaignDailyCap"
+    | "campaignLifetimeCap"
+    | "bidStrategy"
+    | "bidAmount"
+  >
+): "goal" | "daily_cap" | "lifetime_cap" | "bid_amount" | "target_cost_goal" | null {
+  const goals = SNAPCHAT_GOALS[input.objective]
+  if (!goals) return "goal"
+  const goal = input.goal ?? goals[0]
+  if (!goals.includes(goal)) return "goal"
+  if (input.campaignDailyCap != null) {
+    if (
+      input.campaignDailyCap < SNAPCHAT_MIN_SPEND_CAP ||
+      input.campaignDailyCap < input.dailyBudget * 0.25
+    ) {
+      return "daily_cap"
+    }
+  }
+  if (
+    input.campaignLifetimeCap != null &&
+    (input.campaignLifetimeCap < SNAPCHAT_MIN_SPEND_CAP ||
+      input.campaignLifetimeCap < input.dailyBudget)
+  ) {
+    return "lifetime_cap"
+  }
+  const strategy = input.bidStrategy ?? "auto"
+  if (strategy !== "auto") {
+    if (!(Number(input.bidAmount) > 0)) return "bid_amount"
+    if (strategy === "target_cost" && !SNAPCHAT_TARGET_COST_GOALS.has(goal)) {
+      return "target_cost_goal"
+    }
+  }
+  return null
+}
+
+// The Snapchat settings that were chosen, kept with the record. Nothing chosen: nothing kept.
+function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
+  const details: PublicationDetails = {}
+  if (input.goal) details.goal = input.goal
+  if (input.campaignDailyCap) details.campaignDailyCap = input.campaignDailyCap
+  if (input.campaignLifetimeCap) details.campaignLifetimeCap = input.campaignLifetimeCap
+  if (input.bidStrategy && input.bidStrategy !== "auto") {
+    details.bidStrategy = input.bidStrategy
+    if (input.bidAmount) details.bidAmount = input.bidAmount
+  }
+  return Object.keys(details).length > 0 ? details : null
+}
+
 const riyadhMidnight = (day: string) =>
   new Date(new Date(`${day}T00:00:00.000Z`).getTime() - RIYADH_OFFSET_MS)
 
@@ -624,6 +699,21 @@ export class CampaignPublishingService {
     if (input.maxAge && input.maxAge <= input.minAge) {
       throw invalid("PUBLISH_AGE_RANGE", "The oldest age has to be above the youngest.")
     }
+    if (input.platform === "snapchat") {
+      const problem = snapchatSettingsProblem(input)
+      if (problem) {
+        throw invalid(
+          "PUBLISH_SETTINGS_NOT_SUITABLE",
+          "A campaign setting does not fit Snapchat.",
+          {
+            problem,
+          }
+        )
+      }
+    } else if (input.objective !== "traffic" && input.objective !== "leads") {
+      // The other platforms are published with two objectives for now.
+      throw invalid("PUBLISH_OBJECTIVE_NOT_SUPPORTED", "That objective is not available there yet.")
+    }
     let url: string
     try {
       const parsed = new URL(input.url)
@@ -657,7 +747,9 @@ export class CampaignPublishingService {
           }
         : input.platform === "meta"
           ? { text: input.text.trim() }
-          : null
+          : input.platform === "snapchat"
+            ? snapchatDetails(input)
+            : null
 
     // Today: a few minutes from now, so the start is never already in the past when Snapchat
     // reads it. A later day: its first minute in Riyadh.
@@ -675,10 +767,10 @@ export class CampaignPublishingService {
       `INSERT INTO campaign_publications
          (id, organization_id, workspace_id, platform, connection_id, ad_account_id, name,
           objective, currency, daily_budget, start_at, end_at, targeting, creative_id, brand_name,
-          headline, call_to_action, destination_url, status, platform_status, created_by, platform,
+          headline, call_to_action, destination_url, status, platform_status, created_by,
           details)
        VALUES ($1, $2, $3, $20, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15,
-               $16, $17, 'publishing', $18, $19, $20, $21)`,
+               $16, $17, 'publishing', $18, $19, $21)`,
       [
         id,
         actor.organizationId,
@@ -765,7 +857,8 @@ export class CampaignPublishingService {
   ): Promise<{ campaignId: string }> {
     const common = {
       name: input.name.trim(),
-      objective: input.objective,
+      // Checked in publish(): only Snapchat is given the wider choice.
+      objective: (input.objective === "leads" ? "leads" : "traffic") as "traffic" | "leads",
       dailyBudget: input.dailyBudget,
       url,
       startActive: input.startActive,
@@ -829,6 +922,12 @@ export class CampaignPublishingService {
     // above that is "and older", which is said by leaving the oldest age out.
     return this.snapchat.publish({
       ...shown,
+      objective: input.objective,
+      goal: input.goal ?? null,
+      campaignDailyCap: input.campaignDailyCap ?? null,
+      campaignLifetimeCap: input.campaignLifetimeCap ?? null,
+      bidStrategy: input.bidStrategy ?? null,
+      bidAmount: input.bidAmount ?? null,
       minAge: Math.min(shown.minAge, SNAPCHAT_MIN_AGE_TOP),
       maxAge: shown.maxAge && shown.maxAge <= SNAPCHAT_MAX_AGE_TOP ? shown.maxAge : null,
       accessToken: await this.snapchatAccess.resolveAccessToken(input.connectionId),

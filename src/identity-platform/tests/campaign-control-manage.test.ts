@@ -92,6 +92,8 @@ function snapchatAccount(options: { refuseCreativeNumber?: number } = {}) {
       profile_properties: { profile_id: "profile-1" },
       review_status: "APPROVED",
       packaging_status: "SUCCESS",
+      semantic_id: "-1302359884",
+      render_type: "STATIC",
       updated_at: "x",
     })
     put("ads", {
@@ -366,8 +368,13 @@ describe("viewing, editing and copying from the campaigns list", () => {
     const saved = await service.edit(actor, rowId("ad-1"), "ad", {
       headline: "جرّب مدار مجانًا",
       callToAction: "MORE",
+      url: "https://www.madar.my/contact-sales/?lp=pos",
     })
-    expect(saved).toMatchObject({ headline: "جرّب مدار مجانًا", callToAction: "MORE" })
+    expect(saved).toMatchObject({
+      headline: "جرّب مدار مجانًا",
+      callToAction: "MORE",
+      url: "https://www.madar.my/contact-sales/?lp=pos",
+    })
     const writes = account.writes()
     expect(writes).toHaveLength(1)
     expect(writes[0]).toMatchObject({ method: "PUT", path: `/adaccounts/${ACCOUNT}/creatives` })
@@ -378,9 +385,16 @@ describe("viewing, editing and copying from the campaigns list", () => {
       call_to_action: "MORE",
       brand_name: "مدار",
       top_snap_media_id: "media-1",
+      web_view_properties: { url: "https://www.madar.my/contact-sales/?lp=pos" },
+      profile_properties: { profile_id: "profile-1" },
     })
-    expect(sent).not.toHaveProperty("review_status")
-    expect(sent).not.toHaveProperty("packaging_status")
+    // Only the fields Snapchat takes back are sent.
+    for (const key of ["review_status", "packaging_status", "semantic_id", "render_type"]) {
+      expect(sent).not.toHaveProperty(key)
+    }
+    await expect(
+      service.edit(actor, rowId("ad-1"), "ad", { url: "http://not-secure.test" })
+    ).rejects.toMatchObject({ code: "PUBLISH_INVALID_URL" })
   })
 
   it("copies an ad with a creative of its own, switched off, and lists it at once", async () => {
@@ -402,6 +416,7 @@ describe("viewing, editing and copying from the campaigns list", () => {
       profile_properties: { profile_id: "profile-1" },
     })
     expect(sentCreative).not.toHaveProperty("id")
+    expect(sentCreative).not.toHaveProperty("semantic_id")
     expect(ad).toMatchObject({ method: "POST", path: "/adsquads/squad-1/ads" })
     const sentAd = (ad.body?.ads as Json[])[0]
     expect(sentAd).toMatchObject({

@@ -581,6 +581,24 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
   z.object({
     ...publishCommon,
     platform: z.literal("snapchat"),
+    // Snapchat's own objectives, and the settings only it is given (campaigns/publishing/
+    // snapchat-publisher.ts). Whether they fit together is checked by the service.
+    objective: z.enum(["awareness", "traffic", "leads", "sales"]),
+    goal: z
+      .enum([
+        "IMPRESSIONS",
+        "SWIPES",
+        "VIDEO_VIEWS",
+        "PIXEL_PAGE_VIEW",
+        "PIXEL_SIGNUP",
+        "PIXEL_ADD_TO_CART",
+        "PIXEL_PURCHASE",
+      ])
+      .nullish(),
+    campaignDailyCap: z.number().positive().max(1_000_000).nullish(),
+    campaignLifetimeCap: z.number().positive().max(100_000_000).nullish(),
+    bidStrategy: z.enum(["auto", "target_cost", "max_bid"]).nullish(),
+    bidAmount: z.number().positive().max(100_000).nullish(),
     creativeId: z.string().uuid(),
     brandName: z.string().trim().min(1).max(25),
     headline: z.string().trim().min(1).max(34),
@@ -653,6 +671,8 @@ const campaignControlChanges = {
   headline: z.string().trim().max(34).nullish(),
   brandName: z.string().trim().max(25).nullish(),
   callToAction: z.string().trim().max(32).nullish(),
+  // An ad's link.
+  url: z.string().trim().url().max(1000).nullish(),
 }
 export const campaignControlSettingsSchema = z.object(campaignControlTarget)
 export const campaignControlEditSchema = z.object({
@@ -669,7 +689,6 @@ export const campaignControlCloneSchema = z.object({
   ...campaignControlTarget,
   ...campaignControlChanges,
   name: z.string().trim().min(2).max(120),
-  url: z.string().trim().url().max(1000).nullish(),
 })
 
 export const importCampaignsSchema = z.object({

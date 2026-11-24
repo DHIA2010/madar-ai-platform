@@ -3,7 +3,7 @@
 // The pieces the creative library and the campaign wizard share: checking a file before it is
 // sent, uploading files one after another, and drawing a creative's thumbnail.
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslations } from "next-intl"
 import { CheckCircle2, Play, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
@@ -78,15 +78,67 @@ export function useCreativeUploader(onUploaded: (creative: Creative) => void) {
   return { upload, progress }
 }
 
+// Brings the creatives of the ads already on Snapchat into the library, a few ads per request,
+// until none is left (backend: campaigns/creative-import.ts). `onStep` is told each time some
+// arrived, so the screen can show them. Answers with how many ads still wait, or null when there
+// is nothing (left) to bring in.
+export function useCreativeImport(onStep: () => void): number | null {
+  const [remaining, setRemaining] = useState<number | null>(null)
+  const step = useRef(onStep)
+  useEffect(() => {
+    step.current = onStep
+  }, [onStep])
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      let waited = false
+      // Bounded, so a screen left open never asks for ever.
+      for (let round = 0; round < 80 && !cancelled; round += 1) {
+        let progress
+        try {
+          progress = await campaignPublishingService.importCreatives()
+        } catch {
+          break
+        }
+        if (cancelled) return
+        if (progress.done > 0) step.current()
+        // Nothing left, or nothing could be brought in this time: stop and leave it for later.
+        if (progress.remaining === 0 || (progress.done === 0 && !progress.busy)) {
+          // What another screen brought in meanwhile is shown too.
+          if (waited) step.current()
+          break
+        }
+        setRemaining(progress.remaining)
+        // Another screen is already at it: look again in a moment.
+        if (progress.busy) {
+          waited = true
+          await new Promise((resolve) => setTimeout(resolve, 4000))
+        }
+      }
+      if (!cancelled) setRemaining(null)
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return remaining
+}
+
 // The creative itself, cropped to fill its box. A video shows its first frame with a play mark.
 export function CreativeThumb({
   creative,
   className,
   controls = false,
+  compact = false,
 }: {
   creative: Pick<Creative, "kind" | "url" | "name">
   className?: string
   controls?: boolean
+  // A very small box (a table row): the play mark shrinks with it.
+  compact?: boolean
 }) {
   return (
     <div className={cn("relative overflow-hidden bg-[#0b1738]", className)}>
@@ -102,8 +154,13 @@ export function CreativeThumb({
           />
           {controls ? null : (
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="flex size-10 items-center justify-center rounded-full bg-black/55 text-white">
-                <Play className="size-4 fill-current" />
+              <span
+                className={cn(
+                  "flex items-center justify-center rounded-full bg-black/55 text-white",
+                  compact ? "size-5" : "size-10"
+                )}
+              >
+                <Play className={cn("fill-current", compact ? "size-2.5" : "size-4")} />
               </span>
             </span>
           )}

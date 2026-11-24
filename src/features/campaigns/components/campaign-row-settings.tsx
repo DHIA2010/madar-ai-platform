@@ -118,7 +118,7 @@ function changesOf(
     if (draft.headline.trim() !== start.headline) changes.headline = draft.headline.trim()
     if (draft.brandName.trim() !== start.brandName) changes.brandName = draft.brandName.trim()
     if (draft.callToAction !== start.callToAction) changes.callToAction = draft.callToAction
-    if (mode === "clone" && draft.url.trim() !== start.url) changes.url = draft.url.trim()
+    if (draft.url.trim() !== start.url) changes.url = draft.url.trim()
   }
   return changes
 }
@@ -383,7 +383,7 @@ function SettingsBody({
     }
     if (level === "ad") {
       if (!draft.headline.trim() || !draft.brandName.trim()) return t("problems.adText")
-      if (mode === "clone" && !/^https:\/\/[^\s.]+\.[^\s]+$/i.test(draft.url.trim())) {
+      if (!/^https:\/\/[^\s.]+\.[^\s]+$/i.test(draft.url.trim())) {
         return t("problems.url")
       }
     }
@@ -436,7 +436,8 @@ function SettingsBody({
       changes.gender !== undefined ||
       changes.headline !== undefined ||
       changes.brandName !== undefined ||
-      changes.callToAction !== undefined)
+      changes.callToAction !== undefined ||
+      changes.url !== undefined)
 
   return (
     <div className="space-y-5" dir={dir}>
@@ -585,14 +586,13 @@ function SettingsBody({
           <div>
             <label className={LABEL}>{t("fields.url")}</label>
             <AppInput
-              className={cn(FIELD, "text-start", mode === "edit" && "bg-[#f7f9fd] text-[#6b7b96]")}
+              className={cn(FIELD, "text-start")}
               dir="ltr"
               inputMode="url"
-              readOnly={mode === "edit"}
               value={draft.url}
               onChange={(event) => set("url", event.target.value)}
             />
-            <p className={HINT}>{t(mode === "edit" ? "urlFixed" : "urlHint")}</p>
+            <p className={HINT}>{t("urlHint")}</p>
           </div>
         </>
       ) : null}

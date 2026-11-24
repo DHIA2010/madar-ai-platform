@@ -3,8 +3,9 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 // What each creative in the library has done: the campaigns it was used in, the numbers the ad
 // platform counted for its ads, and where it stands against the organization's other creatives.
 //
-// A creative is tied to an ad only when the campaign was published from Madar -- that is where
-// Madar learns which ad carries which file (campaign_publications.external_ids). The numbers are
+// A creative is tied to an ad in two ways: the campaign was published from Madar (campaign_
+// publications.external_ids says which ad carries which file), or the ad was found on the platform
+// and its file brought into the library (campaign_creative_ads, creative-import.ts). The numbers are
 // the ad's own daily figures from the Snapchat sync (snapchat_records, level "ad"), so they are
 // as fresh as the last sync and cover the ad's whole life.
 
@@ -17,8 +18,13 @@ export interface CreativeNumbers {
   signUps: number
 }
 
+// One ad that shows the creative: the campaign it is in, and the ad's own numbers.
 export interface CreativeCampaignUse extends CreativeNumbers {
-  publicationId: string
+  // The campaign's record of being published from Madar, when it was.
+  publicationId: string | null
+  adId: string | null
+  adName: string | null
+  // The campaign's name.
   name: string
   platform: string
   platformStatus: "active" | "paused"
@@ -109,6 +115,29 @@ export class CreativeInsightsService {
     return totals
   }
 
+  // The names and states of a connection's campaigns, ad sets and ads, as the last sync saw them.
+  private async adDetails(connectionId: string) {
+    const result = await this.db.query<{
+      entity_type: string
+      entity_id: string
+      payload: unknown
+      [key: string]: unknown
+    }>(
+      `SELECT entity_type, entity_id, payload FROM snapchat_records
+        WHERE connection_id = $1 AND entity_type IN ('campaigns', 'ad_squads', 'ads')`,
+      [connectionId]
+    )
+    const byType: Record<string, Map<string, Record<string, unknown>>> = {
+      campaigns: new Map(),
+      ad_squads: new Map(),
+      ads: new Map(),
+    }
+    for (const row of result.rows) {
+      byType[row.entity_type]?.set(row.entity_id, parse<Record<string, unknown>>(row.payload, {}))
+    }
+    return byType
+  }
+
   async forOrganization(organizationId: string): Promise<CreativeInsights[]> {
     const publications = await this.db.query<PublicationRow>(
       `SELECT id, name, platform, connection_id, creative_id, currency, platform_status,
@@ -118,33 +147,88 @@ export class CreativeInsightsService {
         ORDER BY created_at DESC`,
       [organizationId]
     )
-    const used = publications.rows
-      .map((row) => ({
-        row,
-        adId: parse<{ adId?: string }>(row.external_ids, {}).adId ?? null,
-      }))
-      .filter((entry) => entry.row.creative_id)
+    // Every ad that shows a library creative: the ads tied to one (campaign_creative_ads --
+    // brought in from the platform, or added from Madar), and the ads of campaigns published
+    // from Madar that have no tie yet.
+    const ties = await this.db.query<{
+      creative_id: string
+      connection_id: string
+      ad_id: string
+      [key: string]: unknown
+    }>(
+      `SELECT creative_id, connection_id, ad_id FROM campaign_creative_ads
+        WHERE organization_id = $1 AND platform = 'snapchat' AND creative_id IS NOT NULL
+        ORDER BY created_at`,
+      [organizationId]
+    )
+    interface Use {
+      creativeId: string
+      connectionId: string
+      adId: string | null
+      publication: PublicationRow | null
+    }
+    const publicationOfAd = new Map<string, PublicationRow>()
+    for (const row of publications.rows) {
+      const adId = parse<{ adId?: string }>(row.external_ids, {}).adId
+      if (adId) publicationOfAd.set(`${row.connection_id}:${adId}`, row)
+    }
+    const used: Use[] = []
+    const seen = new Set<string>()
+    for (const tie of ties.rows) {
+      const key = `${tie.connection_id}:${tie.ad_id}`
+      seen.add(key)
+      used.push({
+        creativeId: tie.creative_id,
+        connectionId: tie.connection_id,
+        adId: tie.ad_id,
+        publication: publicationOfAd.get(key) ?? null,
+      })
+    }
+    for (const row of publications.rows) {
+      if (!row.creative_id) continue
+      const adId = parse<{ adId?: string }>(row.external_ids, {}).adId ?? null
+      if (adId && seen.has(`${row.connection_id}:${adId}`)) continue
+      used.push({
+        creativeId: row.creative_id,
+        connectionId: row.connection_id,
+        adId,
+        publication: row,
+      })
+    }
 
     const adIdsByConnection = new Map<string, Set<string>>()
     for (const entry of used) {
       if (!entry.adId) continue
-      const ids = adIdsByConnection.get(entry.row.connection_id) ?? new Set<string>()
+      const ids = adIdsByConnection.get(entry.connectionId) ?? new Set<string>()
       ids.add(entry.adId)
-      adIdsByConnection.set(entry.row.connection_id, ids)
+      adIdsByConnection.set(entry.connectionId, ids)
     }
     const numbersByAd = new Map<string, CreativeNumbers>()
+    const detailsByConnection = new Map<string, Awaited<ReturnType<typeof this.adDetails>>>()
+    const currencyByConnection = new Map<string, string | null>()
     for (const [connectionId, adIds] of adIdsByConnection) {
       for (const [adId, numbers] of await this.adNumbers(connectionId, adIds)) {
         numbersByAd.set(adId, numbers)
       }
+      detailsByConnection.set(connectionId, await this.adDetails(connectionId))
+      const account = await this.db.query<{ currency_code: string | null }>(
+        `SELECT currency_code FROM snapchat_ads_accounts WHERE connection_id = $1 LIMIT 1`,
+        [connectionId]
+      )
+      currencyByConnection.set(connectionId, account.rows[0]?.currency_code ?? null)
     }
 
     const byCreative = new Map<string, CreativeInsights>()
-    for (const { row, adId } of used) {
-      const creativeId = row.creative_id as string
+    for (const { creativeId, connectionId, adId, publication } of used) {
+      const details = detailsByConnection.get(connectionId)
+      const ad = adId ? details?.ads.get(adId) : undefined
+      // An ad tied to a creative but deleted on the platform since is no longer a use of it.
+      if (!ad && !publication) continue
+      const adSet = ad ? details?.ad_squads.get(String(ad.ad_squad_id ?? "")) : undefined
+      const campaign = adSet ? details?.campaigns.get(String(adSet.campaign_id ?? "")) : undefined
       const insights = byCreative.get(creativeId) ?? {
         creativeId,
-        currency: row.currency,
+        currency: publication?.currency ?? currencyByConnection.get(connectionId) ?? null,
         campaigns: [],
         ...NO_NUMBERS,
         clickRate: null,
@@ -153,11 +237,19 @@ export class CreativeInsightsService {
         rankedOutOf: 0,
       }
       const numbers = (adId ? numbersByAd.get(adId) : undefined) ?? { ...NO_NUMBERS }
+      const running = ad
+        ? String(ad.status ?? "").toUpperCase() === "ACTIVE"
+        : publication?.platform_status === "active"
       insights.campaigns.push({
-        publicationId: row.id,
-        name: row.name,
-        platform: row.platform,
-        platformStatus: row.platform_status === "active" ? "active" : "paused",
+        publicationId: publication?.id ?? null,
+        adId,
+        adName: ad && typeof ad.name === "string" ? ad.name : null,
+        name:
+          (campaign && typeof campaign.name === "string" ? campaign.name : null) ??
+          publication?.name ??
+          "",
+        platform: publication?.platform ?? "snapchat",
+        platformStatus: running ? "active" : "paused",
         ...numbers,
       })
       add(insights, numbers)

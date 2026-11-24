@@ -205,6 +205,7 @@ import {
 import { CampaignControlService } from "../../campaigns/control-service"
 import { GoogleAdsAuthProvider } from "../../google-ads/auth-provider"
 import { GoogleAdsClient } from "../../google-ads/client"
+import { CreativeImportService } from "../../campaigns/creative-import"
 import { CreativeInsightsService } from "../../campaigns/creative-insights"
 import { CampaignCreativesService } from "../../campaigns/creatives"
 import { CampaignPublishingService } from "../../campaigns/publishing/service"
@@ -1462,6 +1463,18 @@ export function createIdentityApiServer(
         container.infrastructure.objectStorage ?? null
       )
     : null
+  // Bringing the creatives of ads that already run on Snapchat into the library.
+  const creativeImportService =
+    container.infrastructure.database && campaignCreativesService
+      ? new CreativeImportService(container.infrastructure.database, campaignCreativesService, {
+          snapchat: {
+            access: new SnapchatOAuthService(
+              new SnapchatOAuthRepository(container.infrastructure.database)
+            ),
+            api: new SnapchatCampaignPublisher(),
+          },
+        })
+      : null
   const campaignPublishingService =
     container.infrastructure.database && campaignCreativesService
       ? new CampaignPublishingService(
@@ -8083,6 +8096,31 @@ export function createIdentityApiServer(
             container.infrastructure.database
           ).forOrganization(actor.organizationId),
         })
+      }
+      // The creatives of ads already on the ad platform (campaigns/creative-import.ts): which ad
+      // shows which library creative, one ad's creative, and bringing the next few in.
+      if (
+        url.pathname === "/v1/campaigns/creatives/ads" ||
+        url.pathname === "/v1/campaigns/creatives/of-ad" ||
+        url.pathname === "/v1/campaigns/creatives/import"
+      ) {
+        if (!creativeImportService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) throw ERRORS.forbidden()
+        if (method === "GET" && url.pathname.endsWith("/ads")) {
+          return send(200, { items: await creativeImportService.adCreatives(actor) })
+        }
+        if (method === "GET" && url.pathname.endsWith("/of-ad")) {
+          const id = (url.searchParams.get("id") ?? "").slice(0, 300)
+          return send(200, { creative: await creativeImportService.forAd(actor, id) })
+        }
+        if (method === "POST" && url.pathname.endsWith("/import")) {
+          return send(200, await creativeImportService.importNext(actor))
+        }
       }
       const campaignCreativeMatch = url.pathname.match(/^\/v1\/campaigns\/creatives\/([^/]+)$/)
       if (campaignCreativeMatch && method === "PATCH") {

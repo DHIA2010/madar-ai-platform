@@ -7905,6 +7905,13 @@
           "failed": "The budget could not be changed.",
           "tooLow": "The lowest daily budget is {minimum} {currency}."
         },
+        "creative": {
+          "open": "Show the creative of ad “{name}”",
+          "hint": "Tap to see the image or video",
+          "none": "This ad has no image or video that can be shown.",
+          "failed": "The ad's creative could not be fetched. Try again.",
+          "library": "Open it in the creative library"
+        },
         "manage": {
           "goals": {
             "PIXEL_SIGNUP": "Sign-ups",
@@ -7983,7 +7990,7 @@
           "ageHint": "Snapchat takes an upper age up to {top}. Leave “Age to” empty to include everyone older.",
           "urlFixed": "An ad's link does not change once it is published. To change it, copy the ad and put the new link in the copy.",
           "urlHint": "It has to start with https://",
-          "reviewAgain": "Note: changing the audience or the ad's text sends the ads back to Snapchat's review, and they stop showing until approved.",
+          "reviewAgain": "Note: changing the audience, or the ad's text or link, sends the ads back to Snapchat's review, and they stop showing until approved.",
           "notAvailable": "Editing and copying from Madar are available for Snapchat for now. This platform's settings can only be viewed.",
           "problems": {
             "name": "Write a name of at least two letters.",
@@ -8011,6 +8018,11 @@
       "ariaLabel": "Performance trend chart"
     },
     "creativeLibrary": {
+      "source": {
+        "upload": "Uploaded in Madar",
+        "snapchat": "From an ad on Snapchat"
+      },
+      "importing": "Bringing in your Snapchat ads' creatives… {remaining} left",
       "title": "Creative library",
       "subtitle": "Your ad images and videos in one place. Upload once, use in any campaign.",
       "upload": "Upload a creative",
@@ -8043,7 +8055,7 @@
       "saveName": "Save name",
       "renamed": "The name was changed",
       "renameFailed": "The name could not be changed. Try again.",
-      "numbersNote": "Numbers come only from campaigns you published from Madar, and update with every Snapchat sync.",
+      "numbersNote": "The numbers are those of the ads that show each creative on Snapchat, and update with every sync.",
       "sort": {
         "label": "Sort:",
         "newest": "Newest",
@@ -8053,7 +8065,8 @@
       "usage": {
         "none": "Not used in a campaign yet",
         "count": "{count, plural, one {Used in 1 campaign:} other {Used in # campaigns:}}",
-        "campaign": "Campaign"
+        "campaign": "Campaign",
+        "ad": "Ad"
       },
       "numbers": {
         "impressions": "Views",
@@ -8134,17 +8147,31 @@
         "name": "Campaign name",
         "nameHint": "A name that helps you tell it apart. People don't see it.",
         "namePlaceholder": "Example: Winter offers",
-        "objective": "What do you want from the campaign?"
+        "objective": "What do you want from the campaign?",
+        "objectiveHint": "The same objectives Snapchat has. Pick the result you want from the campaign."
       },
       "objectives": {
+        "awareness": {
+          "title": "Awareness and engagement",
+          "hint": "Shown to as many people as possible so they know your brand. Outcome: many views at a low cost, not direct orders."
+        },
         "traffic": {
           "title": "Visits to my website",
-          "hint": "The ad is shown to people likely to tap and visit your website."
+          "hint": "Shown to people likely to tap and visit your website. Outcome: website visits."
         },
         "leads": {
-          "title": "Sign-ups and orders",
-          "hint": "The ad is shown to people likely to sign up or order. It needs the Snap Pixel installed on your website."
-        }
+          "title": "Sign-ups and requests",
+          "hint": "Shown to people likely to sign up or ask. Outcome: leads. Needs the Snap Pixel on your website."
+        },
+        "sales": {
+          "title": "Sales",
+          "hint": "Shown to people likely to buy from your website. Outcome: purchases. Needs a Snap Pixel that records purchases."
+        },
+        "app": {
+          "title": "App promotion",
+          "hint": "Outcome: installs of your app. Not available from Madar yet: it needs the app's store details."
+        },
+        "format": "Ad format: a full-screen image or video with your website link"
       },
       "audience": {
         "budget": "Daily budget",
@@ -8166,7 +8193,9 @@
           "female": "Women"
         },
         "googleNote": "Google search ads are shown by what people search for, not by age or gender. Choosing the country is enough.",
-        "snapchatAgeNote": "Snapchat targets a youngest age up to 45 and an oldest age up to 49 only; above that it knows only \"and older\". So on Snapchat your ad will be published for these ages: {ages}."
+        "snapchatAgeNote": "Snapchat targets a youngest age up to 45 and an oldest age up to 49 only; above that it knows only \"and older\". So on Snapchat your ad will be published for these ages: {ages}.",
+        "goal": "What do you want more of?",
+        "goalHint": "Snapchat shows the ad to people likely to do this. We picked the best fit for your objective; you can change it."
       },
       "countries": {
         "sa": "Saudi Arabia",
@@ -8252,7 +8281,8 @@
         "startPausedHint": "The campaign is created on the platform and spends nothing until you switch it on from Madar.",
         "startNow": "Start as soon as it is approved",
         "startNowHint": "It starts spending ({amount} {currency} a day) once the platform approves the ad.",
-        "keywords": "Search words"
+        "keywords": "Search words",
+        "goal": "Optimised for"
       },
       "errors": {
         "account": "Choose the ad account.",
@@ -8271,7 +8301,11 @@
         "text": "Write the text shown above the picture.",
         "headlines": "Write all three headlines.",
         "descriptions": "Write both description lines.",
-        "keywords": "Write at least one search word."
+        "keywords": "Write at least one search word.",
+        "dailyCap": "The daily spend cap has to be at least {minimum} {currency} and at least a quarter of the day's budget.",
+        "lifetimeCap": "The lifetime spend cap has to be at least {minimum} {currency} and at least one day's budget.",
+        "bidAmount": "Enter the bid amount.",
+        "targetCostGoal": "A target cost is not available with what you chose under “What do you want more of?”. Pick automatic bidding or a maximum bid."
       },
       "requestErrors": {
         "PUBLISH_ACCOUNT_NOT_CONNECTED": "The ad account is not connected. Reconnect the platform and try again.",
@@ -8284,7 +8318,9 @@
         "CREATIVE_NOT_FOUND": "The chosen file is no longer in the library. Choose another.",
         "forbidden": "You don't have permission to publish campaigns.",
         "generic": "Publishing could not start. Try again.",
-        "PUBLISH_TEXT_NOT_SUITABLE": "The ad's text does not fit Google. Check the headlines, description and search words."
+        "PUBLISH_TEXT_NOT_SUITABLE": "The ad's text does not fit Google. Check the headlines, description and search words.",
+        "PUBLISH_SETTINGS_NOT_SUITABLE": "A campaign setting does not fit Snapchat. Check the spend caps and the bidding.",
+        "PUBLISH_OBJECTIVE_NOT_SUPPORTED": "That objective is not available for this platform yet. Pick visits or sign-ups."
       },
       "result": {
         "publishingTitle": "Publishing your campaign…",
@@ -8350,6 +8386,36 @@
         "content": "Ad (utm_content)",
         "preview": "The link as the platform will get it",
         "previewEmpty": "Write your website link first"
+      },
+      "goals": {
+        "IMPRESSIONS": "As many views as possible",
+        "VIDEO_VIEWS": "Video views",
+        "SWIPES": "Taps on the ad",
+        "PIXEL_PAGE_VIEW": "Website page views (pixel)",
+        "PIXEL_SIGNUP": "Sign-ups (pixel)",
+        "PIXEL_ADD_TO_CART": "Adds to cart (pixel)",
+        "PIXEL_PURCHASE": "Purchases (pixel)"
+      },
+      "advanced": {
+        "title": "Advanced options (optional)",
+        "hint": "Leave them as they are if you do not need them. They are all in Snapchat itself.",
+        "none": "No cap",
+        "dailyCap": "Campaign daily spend cap",
+        "dailyCapHint": "The most the whole campaign spends in one day.",
+        "lifetimeCap": "Campaign lifetime spend cap",
+        "lifetimeCapHint": "The campaign stops once it has spent this amount.",
+        "bidStrategy": "Bidding",
+        "bidAmount": "Bid amount",
+        "bidStrategies": {
+          "auto": "Automatic (recommended)",
+          "target_cost": "Target cost per result",
+          "max_bid": "Maximum bid"
+        },
+        "bidStrategyHints": {
+          "auto": "Snapchat picks the bid to get the most results within your budget.",
+          "target_cost": "You give the cost you want per result, and Snapchat tries to stay close to it.",
+          "max_bid": "Snapchat never bids above this amount. A low amount can mean fewer views."
+        }
       }
     },
     "metrics": {

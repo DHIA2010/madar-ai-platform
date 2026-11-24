@@ -22,7 +22,23 @@ export interface Creative {
   height: number | null
   durationSeconds: number | null
   url: string
+  // Uploaded in Madar, or brought in from an ad that already runs on Snapchat.
+  source?: "upload" | "snapchat"
   createdAt: string
+}
+
+// An ad on the campaigns list and the library creative it shows (backend: campaigns/
+// creative-import.ts).
+export interface AdCreative {
+  adRowId: string
+  creative: Creative
+}
+
+// How far bringing the ads' creatives into the library has got.
+export interface CreativeImportProgress {
+  done: number
+  remaining: number
+  busy: boolean
 }
 
 // What a creative has done (backend: campaigns/creative-insights.ts). Only campaigns published
@@ -35,8 +51,11 @@ export interface CreativeNumbers {
   signUps: number
 }
 
+// One ad that shows the creative: its campaign's name and the ad's own numbers.
 export interface CreativeCampaignUse extends CreativeNumbers {
-  publicationId: string
+  publicationId: string | null
+  adId: string | null
+  adName: string | null
   name: string
   platform: string
   platformStatus: "active" | "paused"
@@ -57,7 +76,35 @@ export const CREATIVE_LIMITS = {
   videoBytes: 30 * 1024 * 1024,
 } as const
 
-export type PublishObjective = "traffic" | "leads"
+// Snapchat is published with four objectives; the other platforms with traffic and leads.
+export type PublishObjective = "awareness" | "traffic" | "leads" | "sales"
+export const SNAPCHAT_OBJECTIVES: PublishObjective[] = ["awareness", "traffic", "leads", "sales"]
+// What a Snapchat ad set is delivered for, per objective; the first is Madar's own pick. The
+// PIXEL_ ones need the account's Snap Pixel. (The same lists the server holds.)
+export type SnapchatGoal =
+  | "IMPRESSIONS"
+  | "SWIPES"
+  | "VIDEO_VIEWS"
+  | "PIXEL_PAGE_VIEW"
+  | "PIXEL_SIGNUP"
+  | "PIXEL_ADD_TO_CART"
+  | "PIXEL_PURCHASE"
+export const SNAPCHAT_GOALS: Record<PublishObjective, SnapchatGoal[]> = {
+  awareness: ["IMPRESSIONS", "VIDEO_VIEWS", "SWIPES"],
+  traffic: ["SWIPES", "PIXEL_PAGE_VIEW"],
+  leads: ["PIXEL_SIGNUP", "SWIPES"],
+  sales: ["PIXEL_PURCHASE", "PIXEL_ADD_TO_CART", "PIXEL_PAGE_VIEW"],
+}
+export type SnapchatBidStrategy = "auto" | "target_cost" | "max_bid"
+// Snapchat takes a target cost only for these goals.
+export const SNAPCHAT_TARGET_COST_GOALS: SnapchatGoal[] = [
+  "SWIPES",
+  "PIXEL_PAGE_VIEW",
+  "PIXEL_SIGNUP",
+  "PIXEL_ADD_TO_CART",
+  "PIXEL_PURCHASE",
+]
+export const SNAPCHAT_MIN_SPEND_CAP = 20
 export type PublishGender = "all" | "male" | "female"
 export const CALLS_TO_ACTION = [
   "MORE",
@@ -147,6 +194,12 @@ export type PublishCampaignInput =
       // Snapchat: the ad's headline. TikTok: the text shown with the video.
       headline: string
       callToAction: AnyCallToAction
+      // Snapchat only: what the ad set is delivered for, the campaign's spend caps and the bid.
+      goal?: SnapchatGoal | null
+      campaignDailyCap?: number | null
+      campaignLifetimeCap?: number | null
+      bidStrategy?: SnapchatBidStrategy | null
+      bidAmount?: number | null
     })
   | (PublishCommonInput & {
       platform: "meta"
@@ -313,6 +366,31 @@ export const campaignPublishingService = {
 
   async creativeInsights(): Promise<CreativeInsights[]> {
     return (await client.get<{ items: CreativeInsights[] }>(path("creatives", "insights"))).items
+  },
+
+  // The ads tied to a library creative, for showing an ad's image or video on the campaigns list.
+  async adCreatives(): Promise<AdCreative[]> {
+    return (await client.get<{ items: AdCreative[] }>(path("creatives", "ads"))).items
+  },
+
+  // One ad's creative, brought into the library now if it was not yet. Null when the ad has no
+  // image or video Madar can show.
+  async creativeOfAd(adRowId: string): Promise<Creative | null> {
+    return (
+      await client.get<{ creative: Creative | null }>(
+        `${path("creatives", "of-ad")}?id=${encodeURIComponent(adRowId)}`,
+        { timeoutMs: 90_000 }
+      )
+    ).creative
+  },
+
+  // Brings the next few ads' creatives into the library. Called until nothing remains.
+  async importCreatives(): Promise<CreativeImportProgress> {
+    return client.post<Record<string, never>, CreativeImportProgress>(
+      path("creatives", "import"),
+      {},
+      { timeoutMs: 3 * 60_000 }
+    )
   },
 
   async removeCreative(id: string): Promise<void> {

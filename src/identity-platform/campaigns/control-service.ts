@@ -70,7 +70,7 @@ export interface SnapchatControl {
     headline: string
     callToAction: SnapchatCallToAction
     url: string
-  }): Promise<{ adId: string; ad: Record<string, unknown> }>
+  }): Promise<{ adId: string; ad: Record<string, unknown>; mediaId?: string; creativeId?: string }>
   setAdSquadBudget?(input: {
     accessToken: string
     adSquadId: string
@@ -159,12 +159,13 @@ export interface EditInput {
   headline?: string | null
   brandName?: string | null
   callToAction?: string | null
+  // An ad's link.
+  url?: string | null
 }
 
 // A copy: its own name, and whatever of the original's settings the copy should have differently.
 export interface CloneInput extends Omit<EditInput, "endDate"> {
   name: string
-  url?: string | null
 }
 
 // What adds an ad or changes a budget on TikTok, Meta and Google (their publishers).
@@ -880,6 +881,31 @@ export class CampaignControlService {
         status: "ACTIVE",
         ad_squad_id: target.externalId,
       })
+      // The new ad is tied to the library creative it was made from (creative-import.ts), so
+      // the library counts it at once and the file is never brought in again as a new one.
+      await this.db
+        .query(
+          `INSERT INTO campaign_creative_ads
+             (id, organization_id, creative_id, platform, connection_id, account_id, ad_id,
+              platform_creative_id, media_id)
+           VALUES ($1, $2, $3, 'snapchat', $4, $5, $6, $7, $8)
+           ON CONFLICT (platform, connection_id, ad_id) DO NOTHING`,
+          [
+            randomUUID(),
+            actor.organizationId,
+            input.creativeId,
+            target.connectionId,
+            target.customerId,
+            made.adId,
+            made.creativeId ?? null,
+            made.mediaId ?? null,
+          ]
+        )
+        .catch((error: unknown) =>
+          console.error("campaigns.control_add_ad_tie_failed", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+        )
       return { adId: made.adId }
     }
 
@@ -1108,6 +1134,7 @@ export class CampaignControlService {
       this.budgetFloor("snapchat", input.dailyBudget)
     }
     ageOrder(input.minAge, input.maxAge)
+    const url = level === "ad" ? secureUrl(input.url) : null
 
     const saved = await onPlatform(async () => {
       const accessToken = await access.resolveAccessToken(target.connectionId)
@@ -1136,7 +1163,7 @@ export class CampaignControlService {
         brand_name: input.brandName?.trim(),
         call_to_action: input.callToAction?.trim(),
       }
-      if (!Object.values(wanted).some(Boolean)) return entity
+      if (!Object.values(wanted).some(Boolean) && !url) return entity
       const creativeId = entity.creative_id
       await updateCreative({
         accessToken,
@@ -1144,6 +1171,12 @@ export class CampaignControlService {
         change: (current) => {
           const next = { ...current }
           for (const [key, value] of Object.entries(wanted)) if (value) next[key] = value
+          if (url) {
+            next.web_view_properties = {
+              ...((next.web_view_properties as Record<string, unknown> | undefined) ?? {}),
+              url,
+            }
+          }
           return next
         },
       })
@@ -1199,23 +1232,7 @@ export class CampaignControlService {
       this.budgetFloor("snapchat", input.dailyBudget)
     }
     ageOrder(input.minAge, input.maxAge)
-    const url = input.url?.trim()
-    if (url) {
-      let secure = false
-      try {
-        secure = new URL(url).protocol === "https:"
-      } catch {
-        secure = false
-      }
-      if (!secure) {
-        throw new IdentityError(
-          "PUBLISH_INVALID_URL",
-          422,
-          "validation",
-          "The website address has to start with https://."
-        )
-      }
-    }
+    const url = secureUrl(input.url)
     const rowOf = (id: unknown) =>
       `${target.source}:${target.connectionId}:${target.customerId}:${String(id)}`
     const keep = (type: string, items: Array<Record<string, unknown>>) =>
@@ -1426,6 +1443,27 @@ function googleSettings(level: ControlLevel, row: Raw): SettingsBody {
     endAt: instant(row.end_date),
     headline: level === "ad" ? text(row.headline) : null,
   }
+}
+
+// A link as it may be sent to the platform: https only. Null when none was given.
+function secureUrl(value: string | null | undefined): string | null {
+  const url = value?.trim()
+  if (!url) return null
+  let secure = false
+  try {
+    secure = new URL(url).protocol === "https:"
+  } catch {
+    secure = false
+  }
+  if (!secure) {
+    throw new IdentityError(
+      "PUBLISH_INVALID_URL",
+      422,
+      "validation",
+      "The website address has to start with https://."
+    )
+  }
+  return url
 }
 
 // The last minute of a day in Riyadh (UTC+3, no daylight saving), as Snapchat is given an end.

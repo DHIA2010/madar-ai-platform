@@ -6,7 +6,52 @@
 // Snapchat answers each write with { request_status, <items>: [{ sub_request_status, sub_request
 // _error_reason, <item> }] } -- a 200 can still carry a refused item, so both are checked.
 
-export type SnapchatObjective = "traffic" | "leads"
+// Snapchat's campaign objectives a web advertiser can be published with. (Its fifth, promoting
+// an app, needs the app's store details and an app-install ad, which Madar does not build yet.)
+export type SnapchatObjective = "awareness" | "traffic" | "leads" | "sales"
+export const SNAPCHAT_OBJECTIVES: readonly SnapchatObjective[] = [
+  "awareness",
+  "traffic",
+  "leads",
+  "sales",
+]
+const OBJECTIVE_TYPE: Record<SnapchatObjective, string> = {
+  awareness: "AWARENESS_AND_ENGAGEMENT",
+  traffic: "TRAFFIC",
+  leads: "LEADS",
+  sales: "SALES",
+}
+
+// What an ad set is delivered for: who Snapchat shows the ad to. Each objective has its own
+// choices; the first is what Madar picks when none is chosen. The PIXEL_ ones are measured by
+// the account's Snap Pixel, so the account has to have one.
+export type SnapchatGoal =
+  | "IMPRESSIONS"
+  | "SWIPES"
+  | "VIDEO_VIEWS"
+  | "PIXEL_PAGE_VIEW"
+  | "PIXEL_SIGNUP"
+  | "PIXEL_ADD_TO_CART"
+  | "PIXEL_PURCHASE"
+export const SNAPCHAT_GOALS: Record<SnapchatObjective, readonly SnapchatGoal[]> = {
+  awareness: ["IMPRESSIONS", "VIDEO_VIEWS", "SWIPES"],
+  traffic: ["SWIPES", "PIXEL_PAGE_VIEW"],
+  leads: ["PIXEL_SIGNUP", "SWIPES"],
+  sales: ["PIXEL_PURCHASE", "PIXEL_ADD_TO_CART", "PIXEL_PAGE_VIEW"],
+}
+
+// How Snapchat bids for the ad set: on its own, around a cost per result to aim for, or never
+// above a ceiling. Snapchat only takes a target cost for some goals.
+export type SnapchatBidStrategy = "auto" | "target_cost" | "max_bid"
+export const SNAPCHAT_TARGET_COST_GOALS: ReadonlySet<SnapchatGoal> = new Set([
+  "SWIPES",
+  "PIXEL_PAGE_VIEW",
+  "PIXEL_SIGNUP",
+  "PIXEL_ADD_TO_CART",
+  "PIXEL_PURCHASE",
+])
+// Snapchat's floor for a campaign's daily or lifetime spend cap, in the account's currency.
+export const SNAPCHAT_MIN_SPEND_CAP = 20
 
 export const SNAPCHAT_CALLS_TO_ACTION = [
   "MORE",
@@ -43,6 +88,15 @@ export interface SnapchatPublishInput {
   // Whether the campaign starts spending as soon as Snapchat approves the ad, or waits switched
   // off for the merchant to turn it on.
   startActive: boolean
+  // What the ad set is delivered for; left out, the objective's own first choice.
+  goal?: SnapchatGoal | null
+  // The most the whole campaign may spend in a day, and over its life. Left out: no cap.
+  campaignDailyCap?: number | null
+  campaignLifetimeCap?: number | null
+  // Left out: Snapchat bids on its own.
+  bidStrategy?: SnapchatBidStrategy | null
+  // The cost per result to aim for, or the ceiling, in the account's currency.
+  bidAmount?: number | null
 }
 
 export interface SnapchatPublishedIds {
@@ -128,15 +182,26 @@ const ENTITY_SHAPES: Record<
 }
 type Fetch = typeof fetch
 
-// What Snapchat fills in on a creative itself and does not take back.
-const CREATIVE_READ_ONLY = new Set([
-  "updated_at",
-  "created_at",
-  "packaging_status",
-  "review_status",
-  "review_status_details",
-  "forced_view_eligibility",
+// What a creative is sent back with when it is changed or copied: the fields a change was
+// accepted with on a live account (its text, its button, its file, its link and its profile),
+// and whatever "..._properties" its kind carries. Everything else Snapchat fills in itself.
+const CREATIVE_WRITABLE = new Set([
+  "id",
+  "ad_account_id",
+  "name",
+  "type",
+  "headline",
+  "brand_name",
+  "shareable",
+  "call_to_action",
+  "top_snap_media_id",
 ])
+const writableCreative = (creative: Json): Json =>
+  Object.fromEntries(
+    Object.entries(creative).filter(
+      ([key]) => CREATIVE_WRITABLE.has(key) || key.endsWith("_properties")
+    )
+  )
 
 // A campaign or an ad set as the start of a copy: without its id and the fields only Snapchat
 // writes, and with dates that still make sense -- a start that has passed becomes now, an end
@@ -363,7 +428,20 @@ export class SnapchatCampaignPublisher {
     // Everything the campaign depends on is looked up first, so a missing piece stops the publish
     // before anything is created.
     const profileId = await this.publicProfileId(token, account)
-    const pixelId = input.objective === "leads" ? await this.pixelId(token, account) : null
+    const goal = input.goal ?? SNAPCHAT_GOALS[input.objective][0]
+    const pixelId = goal.startsWith("PIXEL_") ? await this.pixelId(token, account) : null
+    const micro = (amount: number) => Math.round(amount * 1_000_000)
+    const bidStrategy = input.bidStrategy ?? "auto"
+    const bidding: Json =
+      bidStrategy === "auto" || !input.bidAmount
+        ? { auto_bid: true, bid_strategy: "AUTO_BID" }
+        : {
+            auto_bid: false,
+            target_bid: bidStrategy === "target_cost",
+            bid_strategy:
+              bidStrategy === "target_cost" ? "TARGET_COST" : "LOWEST_COST_WITH_MAX_BID",
+            bid_micro: micro(input.bidAmount),
+          }
 
     const campaign = this.created(
       "campaign",
@@ -376,9 +454,13 @@ export class SnapchatCampaignPublisher {
             start_time: input.startAt,
             ...(input.endAt ? { end_time: input.endAt } : {}),
             buy_model: "AUCTION",
-            objective_v2_properties: {
-              objective_v2_type: input.objective === "leads" ? "LEADS" : "TRAFFIC",
-            },
+            objective_v2_properties: { objective_v2_type: OBJECTIVE_TYPE[input.objective] },
+            ...(input.campaignDailyCap
+              ? { daily_budget_micro: micro(input.campaignDailyCap) }
+              : {}),
+            ...(input.campaignLifetimeCap
+              ? { lifetime_spend_cap_micro: micro(input.campaignLifetimeCap) }
+              : {}),
           },
         ],
       }),
@@ -407,21 +489,15 @@ export class SnapchatCampaignPublisher {
               },
               placement_v2: { config: "AUTOMATIC" },
               billing_event: "IMPRESSION",
-              auto_bid: true,
-              bid_strategy: "AUTO_BID",
-              daily_budget_micro: Math.round(input.dailyBudget * 1_000_000),
+              ...bidding,
+              daily_budget_micro: micro(input.dailyBudget),
               delivery_constraint: "DAILY_BUDGET",
               pacing_type: "STANDARD",
               child_ad_type: "REMOTE_WEBPAGE",
               start_time: input.startAt,
               ...(input.endAt ? { end_time: input.endAt } : {}),
-              ...(pixelId
-                ? {
-                    optimization_goal: "PIXEL_SIGNUP",
-                    pixel_id: pixelId,
-                    conversion_window: "SWIPE_28DAY_VIEW_1DAY",
-                  }
-                : { optimization_goal: "SWIPES" }),
+              optimization_goal: goal,
+              ...(pixelId ? { pixel_id: pixelId, conversion_window: "SWIPE_28DAY_VIEW_1DAY" } : {}),
             },
           ],
         }),
@@ -709,6 +785,17 @@ export class SnapchatCampaignPublisher {
     return creative
   }
 
+  // The file a creative shows (its image or video): its kind, its size on screen and the link
+  // Snapchat serves it from.
+  async readMedia(input: { accessToken: string; mediaId: string }): Promise<Json> {
+    const body = await this.call("media", input.accessToken, "GET", `/media/${input.mediaId}`)
+    const media = (Array.isArray(body.media) ? (body.media as Json[]) : [])[0]?.media as
+      | Json
+      | undefined
+    if (!media) throw new SnapchatPublishError("media", "The ad's file was not found on Snapchat.")
+    return media
+  }
+
   // Everything under a parent (a campaign's ad sets, an ad set's ads), following Snapchat's pages.
   private async listUnder(
     token: string,
@@ -780,9 +867,7 @@ export class SnapchatCampaignPublisher {
     if (typeof accountId !== "string") {
       throw new SnapchatPublishError("creative", "Snapchat did not say whose creative it is.")
     }
-    const next = input.change(
-      Object.fromEntries(Object.entries(current).filter(([key]) => !CREATIVE_READ_ONLY.has(key)))
-    )
+    const next = input.change(writableCreative(current))
     const saved = this.created(
       "creative",
       await this.call("creative", input.accessToken, "PUT", `/adaccounts/${accountId}/creatives`, {
@@ -817,9 +902,8 @@ export class SnapchatCampaignPublisher {
     }
     const original = await this.readCreative({ accessToken: token, creativeId })
     const name = input.name ?? String(source.name ?? "")
-    const copy: Json = Object.fromEntries(
-      Object.entries(original).filter(([key]) => key !== "id" && !CREATIVE_READ_ONLY.has(key))
-    )
+    const copy = writableCreative(original)
+    delete copy.id
     copy.name = name
     const changed = input.creative ?? {}
     if (changed.headline) copy.headline = changed.headline

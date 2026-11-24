@@ -22,9 +22,12 @@ import {
   CircleAlert,
   ImagePlus,
   Loader2,
+  Megaphone,
   MousePointerClick,
   PlugZap,
   Plus,
+  ShoppingCart,
+  Smartphone,
   Trash2,
   TriangleAlert,
   UserPlus,
@@ -57,6 +60,12 @@ import {
   type PublishObjective,
   type PublishOptions,
   type PublishPlatform,
+  SNAPCHAT_GOALS,
+  SNAPCHAT_MIN_SPEND_CAP,
+  SNAPCHAT_OBJECTIVES,
+  SNAPCHAT_TARGET_COST_GOALS,
+  type SnapchatBidStrategy,
+  type SnapchatGoal,
 } from "../services/campaign-publishing.service"
 import {
   CREATIVE_ACCEPT,
@@ -124,6 +133,13 @@ interface Draft {
   accountKey: string
   name: string
   objective: PublishObjective
+  // Snapchat only: what the ad set is delivered for ("" is Madar's own pick for the objective),
+  // the campaign's spend caps and how Snapchat bids. Empty boxes mean "not set".
+  goal: SnapchatGoal | ""
+  campaignDailyCap: string
+  campaignLifetimeCap: string
+  bidStrategy: SnapchatBidStrategy
+  bidAmount: string
   dailyBudget: string
   startDate: string
   endDate: string
@@ -185,12 +201,21 @@ function Field({
   )
 }
 
+// Each objective's icon and colour.
+const OBJECTIVE_LOOK: Record<PublishObjective, { icon: typeof Megaphone; className: string }> = {
+  awareness: { icon: Megaphone, className: "bg-[#fff4e5] text-[#b54708]" },
+  traffic: { icon: MousePointerClick, className: "bg-[#eef4ff] text-[#1d4fd8]" },
+  leads: { icon: UserPlus, className: "bg-[#e7f8ee] text-[#137a41]" },
+  sales: { icon: ShoppingCart, className: "bg-[#f4ebff] text-[#6941c6]" },
+}
+
 function Choice({
   selected,
   onClick,
   icon,
   title,
   description,
+  note,
   disabled,
   badge,
 }: {
@@ -199,6 +224,8 @@ function Choice({
   icon?: ReactNode
   title: string
   description?: string
+  // A second, quieter line under the description.
+  note?: string
   disabled?: boolean
   badge?: string
 }) {
@@ -221,6 +248,11 @@ function Choice({
         <span className={cn("block truncate text-[14px] font-bold", HEADING)}>{title}</span>
         {description ? (
           <span className={cn("mt-0.5 block text-[12px] leading-5", MUTED)}>{description}</span>
+        ) : null}
+        {note ? (
+          <span className="mt-1 block text-[11.5px] font-semibold leading-5 text-[#475467]">
+            {note}
+          </span>
         ) : null}
       </span>
       {badge ? (
@@ -255,6 +287,11 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     accountKey: "",
     name: "",
     objective: "traffic",
+    goal: "",
+    campaignDailyCap: "",
+    campaignLifetimeCap: "",
+    bidStrategy: "auto",
+    bidAmount: "",
     dailyBudget: "50",
     startDate: toLocalDay(new Date()),
     endDate: "",
@@ -350,6 +387,13 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     ? PUBLISH_PLATFORMS.some((entry) => options[entry].accounts.length > 0)
     : false
   const isGoogle = draft.platform === "google"
+  const isSnapchat = draft.platform === "snapchat"
+  // The other platforms are published with traffic or leads only.
+  const objective: PublishObjective =
+    isSnapchat || draft.objective === "leads" ? draft.objective : "traffic"
+  const goals = SNAPCHAT_GOALS[objective]
+  // A goal chosen for another objective falls back to this objective's own pick.
+  const goal: SnapchatGoal = draft.goal && goals.includes(draft.goal) ? draft.goal : goals[0]
   const shownPlatform = draft.platform === "google" ? "snapchat" : draft.platform
   const problemOf = (entry: Creative) => creativeProblemFor(shownPlatform, entry)
   const keywords = keywordsOf(draft.keywords)
@@ -419,6 +463,37 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       if (!isGoogle && draft.maxAge !== NO_MAX_AGE && Number(draft.maxAge) <= draft.minAge) {
         found.maxAge = t("errors.ageRange")
       }
+      if (isSnapchat) {
+        const dailyCap = Number(draft.campaignDailyCap)
+        if (
+          draft.campaignDailyCap &&
+          !(dailyCap >= SNAPCHAT_MIN_SPEND_CAP && dailyCap >= budget * 0.25)
+        ) {
+          found.campaignDailyCap = t("errors.dailyCap", {
+            minimum: SNAPCHAT_MIN_SPEND_CAP,
+            currency: currencyLabel,
+          })
+        }
+        const lifetimeCap = Number(draft.campaignLifetimeCap)
+        if (
+          draft.campaignLifetimeCap &&
+          !(lifetimeCap >= SNAPCHAT_MIN_SPEND_CAP && lifetimeCap >= budget)
+        ) {
+          found.campaignLifetimeCap = t("errors.lifetimeCap", {
+            minimum: SNAPCHAT_MIN_SPEND_CAP,
+            currency: currencyLabel,
+          })
+        }
+        if (draft.bidStrategy !== "auto") {
+          if (!(Number(draft.bidAmount) > 0)) found.bidAmount = t("errors.bidAmount")
+          else if (
+            draft.bidStrategy === "target_cost" &&
+            !SNAPCHAT_TARGET_COST_GOALS.includes(goal)
+          ) {
+            found.bidStrategy = t("errors.targetCostGoal")
+          }
+        }
+      }
     }
     if (index === 2 && isGoogle) {
       if (draft.headlines.filter((entry) => entry.trim()).length < 3) {
@@ -471,6 +546,8 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       "PUBLISH_INVALID_URL",
       "PUBLISH_CREATIVE_NOT_SUITABLE",
       "PUBLISH_TEXT_NOT_SUITABLE",
+      "PUBLISH_SETTINGS_NOT_SUITABLE",
+      "PUBLISH_OBJECTIVE_NOT_SUPPORTED",
       "CREATIVE_NOT_FOUND",
     ]
     if (known.includes(code)) return t(`requestErrors.${code}`)
@@ -494,7 +571,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       connectionId: account.connectionId,
       adAccountId: account.adAccountId,
       name: draft.name.trim(),
-      objective: draft.objective,
+      objective,
       dailyBudget: budget,
       startDate: draft.startDate,
       endDate: draft.endDate || null,
@@ -535,6 +612,19 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                   brandName: draft.brandName.trim(),
                   headline: draft.headline.trim(),
                   callToAction: draft.callToAction,
+                  ...(isSnapchat
+                    ? {
+                        goal,
+                        campaignDailyCap: draft.campaignDailyCap
+                          ? Number(draft.campaignDailyCap)
+                          : null,
+                        campaignLifetimeCap: draft.campaignLifetimeCap
+                          ? Number(draft.campaignLifetimeCap)
+                          : null,
+                        bidStrategy: draft.bidStrategy,
+                        bidAmount: draft.bidStrategy === "auto" ? null : Number(draft.bidAmount),
+                      }
+                    : {}),
                 }
         )
       )
@@ -772,7 +862,35 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       value: `${t(`platforms.${draft.platform}`)} · ${account?.name ?? ""}`,
     },
     { label: t("review.name"), value: draft.name },
-    { label: t("review.objective"), value: t(`objectives.${draft.objective}.title`) },
+    { label: t("review.objective"), value: t(`objectives.${objective}.title`) },
+    ...(isSnapchat
+      ? [
+          { label: t("review.goal"), value: t(`goals.${goal}`) },
+          ...(draft.campaignDailyCap
+            ? [
+                {
+                  label: t("advanced.dailyCap"),
+                  value: `${draft.campaignDailyCap} ${currencyLabel}`,
+                },
+              ]
+            : []),
+          ...(draft.campaignLifetimeCap
+            ? [
+                {
+                  label: t("advanced.lifetimeCap"),
+                  value: `${draft.campaignLifetimeCap} ${currencyLabel}`,
+                },
+              ]
+            : []),
+          {
+            label: t("advanced.bidStrategy"),
+            value:
+              draft.bidStrategy === "auto"
+                ? t("advanced.bidStrategies.auto")
+                : `${t(`advanced.bidStrategies.${draft.bidStrategy}`)} · ${draft.bidAmount} ${currencyLabel}`,
+          },
+        ]
+      : []),
     {
       label: t("review.budget"),
       value: t("review.budgetValue", { amount: draft.dailyBudget, currency: currencyLabel }),
@@ -902,30 +1020,51 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
               />
             </Field>
 
-            <Field label={t("basics.objective")}>
+            <Field
+              label={t("basics.objective")}
+              hint={isSnapchat ? t("basics.objectiveHint") : undefined}
+            >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Choice
-                  selected={draft.objective === "traffic"}
-                  onClick={() => set("objective", "traffic")}
-                  icon={
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef4ff] text-[#1d4fd8]">
-                      <MousePointerClick className="size-5" />
-                    </span>
+                {(isSnapchat ? SNAPCHAT_OBJECTIVES : (["traffic", "leads"] as const)).map(
+                  (entry) => {
+                    const look = OBJECTIVE_LOOK[entry]
+                    return (
+                      <Choice
+                        key={entry}
+                        selected={objective === entry}
+                        onClick={() => set("objective", entry)}
+                        icon={
+                          <span
+                            className={cn(
+                              "flex size-10 shrink-0 items-center justify-center rounded-xl",
+                              look.className
+                            )}
+                          >
+                            <look.icon className="size-5" />
+                          </span>
+                        }
+                        title={t(`objectives.${entry}.title`)}
+                        description={t(`objectives.${entry}.hint`)}
+                        note={isSnapchat ? t("objectives.format") : undefined}
+                      />
+                    )
                   }
-                  title={t("objectives.traffic.title")}
-                  description={t("objectives.traffic.hint")}
-                />
-                <Choice
-                  selected={draft.objective === "leads"}
-                  onClick={() => set("objective", "leads")}
-                  icon={
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e7f8ee] text-[#137a41]">
-                      <UserPlus className="size-5" />
-                    </span>
-                  }
-                  title={t("objectives.leads.title")}
-                  description={t("objectives.leads.hint")}
-                />
+                )}
+                {isSnapchat ? (
+                  // Snapchat's fifth objective, shown so the list is whole; not published yet.
+                  <Choice
+                    selected={false}
+                    disabled
+                    badge={t("platforms.soon")}
+                    icon={
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f1f4f9] text-[#6b7b96]">
+                        <Smartphone className="size-5" />
+                      </span>
+                    }
+                    title={t("objectives.app.title")}
+                    description={t("objectives.app.hint")}
+                  />
+                ) : null}
               </div>
             </Field>
           </>
@@ -1059,6 +1198,113 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                 </div>
               </Field>
             </div>
+
+            {isSnapchat ? (
+              <>
+                <Field label={t("audience.goal")} hint={t("audience.goalHint")}>
+                  {selectField(
+                    goal,
+                    (value) => set("goal", value as SnapchatGoal),
+                    goals.map((entry) => ({ value: entry, label: t(`goals.${entry}`) }))
+                  )}
+                </Field>
+
+                <div className="space-y-5 rounded-xl border border-[#e1e7f0] bg-[#fafbfe] p-4">
+                  <div>
+                    <p className={cn("text-[14px] font-bold", HEADING)}>{t("advanced.title")}</p>
+                    <p className={cn("mt-1 text-[12px] leading-5", MUTED)}>{t("advanced.hint")}</p>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field
+                      label={t("advanced.dailyCap")}
+                      hint={t("advanced.dailyCapHint")}
+                      error={errors.campaignDailyCap}
+                    >
+                      <div className="relative">
+                        <AppInput
+                          className={cn(FIELD, "pe-16")}
+                          type="number"
+                          inputMode="decimal"
+                          placeholder={t("advanced.none")}
+                          value={draft.campaignDailyCap}
+                          onChange={(event) => set("campaignDailyCap", event.target.value)}
+                        />
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold",
+                            MUTED
+                          )}
+                        >
+                          {currencyLabel}
+                        </span>
+                      </div>
+                    </Field>
+                    <Field
+                      label={t("advanced.lifetimeCap")}
+                      hint={t("advanced.lifetimeCapHint")}
+                      error={errors.campaignLifetimeCap}
+                    >
+                      <div className="relative">
+                        <AppInput
+                          className={cn(FIELD, "pe-16")}
+                          type="number"
+                          inputMode="decimal"
+                          placeholder={t("advanced.none")}
+                          value={draft.campaignLifetimeCap}
+                          onChange={(event) => set("campaignLifetimeCap", event.target.value)}
+                        />
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold",
+                            MUTED
+                          )}
+                        >
+                          {currencyLabel}
+                        </span>
+                      </div>
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field
+                      label={t("advanced.bidStrategy")}
+                      hint={t(`advanced.bidStrategyHints.${draft.bidStrategy}`)}
+                      error={errors.bidStrategy}
+                    >
+                      {selectField(
+                        draft.bidStrategy,
+                        (value) => set("bidStrategy", value as SnapchatBidStrategy),
+                        (["auto", "target_cost", "max_bid"] as const).map((entry) => ({
+                          value: entry,
+                          label: t(`advanced.bidStrategies.${entry}`),
+                        }))
+                      )}
+                    </Field>
+                    {draft.bidStrategy === "auto" ? null : (
+                      <Field label={t("advanced.bidAmount")} error={errors.bidAmount}>
+                        <div className="relative">
+                          <AppInput
+                            className={cn(FIELD, "pe-16")}
+                            type="number"
+                            inputMode="decimal"
+                            placeholder={t("advanced.none")}
+                            value={draft.bidAmount}
+                            onChange={(event) => set("bidAmount", event.target.value)}
+                          />
+                          <span
+                            className={cn(
+                              "pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold",
+                              MUTED
+                            )}
+                          >
+                            {currencyLabel}
+                          </span>
+                        </div>
+                      </Field>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : null}
           </>
         ) : null}
 

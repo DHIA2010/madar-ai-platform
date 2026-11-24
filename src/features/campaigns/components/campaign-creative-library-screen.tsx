@@ -41,6 +41,7 @@ import {
   CreativeThumb,
   formatBytes,
   SnapchatFitBadge,
+  useCreativeImport,
   useCreativeUploader,
 } from "./campaign-creative-shared"
 import { CampaignModuleNav } from "./campaign-module-nav"
@@ -132,6 +133,8 @@ export function CampaignCreativeLibraryScreen() {
   useEffect(() => {
     load()
   }, [load])
+  // The creatives of ads already running on Snapchat come in while the library is open.
+  const importing = useCreativeImport(load)
 
   const { upload, progress } = useCreativeUploader(
     useCallback((creative: Creative) => {
@@ -355,6 +358,12 @@ export function CampaignCreativeLibraryScreen() {
             </div>
           </div>
           <p className={cn("mt-3 text-[11.5px] leading-5", MUTED)}>{t("numbersNote")}</p>
+          {importing ? (
+            <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#eef4ff] px-3 py-1.5 text-[12px] font-semibold text-[#1d4fd8]">
+              <Loader2 className="size-3.5 animate-spin" />
+              {t("importing", { remaining: importing })}
+            </p>
+          ) : null}
 
           <div className="mt-3">
             {loadFailed ? (
@@ -389,6 +398,8 @@ export function CampaignCreativeLibraryScreen() {
                 {visible.map((creative) => {
                   const own = insights.get(creative.id)
                   const used = own?.campaigns ?? []
+                  // An ad group can show the creative in several ads: each campaign is named once.
+                  const usedIn = [...new Set(used.map((use) => use.name).filter(Boolean))]
                   const editing = renaming?.id === creative.id
                   return (
                     <li
@@ -473,6 +484,16 @@ export function CampaignCreativeLibraryScreen() {
                               </div>
                             )}
                             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span
+                                className={cn(
+                                  "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                                  creative.source === "snapchat"
+                                    ? "bg-[#fffbe0] text-[#7a6200]"
+                                    : "bg-[#f1f4f9] text-[#475467]"
+                                )}
+                              >
+                                {t(`source.${creative.source ?? "upload"}`)}
+                              </span>
                               <SnapchatFitBadge creative={creative} />
                               <span className={cn("text-[11.5px]", MUTED)} dir="ltr">
                                 {creative.width && creative.height
@@ -493,9 +514,12 @@ export function CampaignCreativeLibraryScreen() {
                               ) : (
                                 <>
                                   <span className="font-bold text-[#3b4a66]">
-                                    {t("usage.count", { count: used.length })}
+                                    {t("usage.count", { count: Math.max(usedIn.length, 1) })}
                                   </span>{" "}
-                                  {used.map((campaign) => campaign.name).join("، ")}
+                                  {usedIn.join("، ")}
+                                  {used.length === 1 && used[0].adName
+                                    ? ` · ${used[0].adName}`
+                                    : ""}
                                 </>
                               )}
                             </p>
@@ -590,12 +614,13 @@ export function CampaignCreativeLibraryScreen() {
 
                       {used.length > 1 ? (
                         <div className="mt-3 overflow-x-auto border-t border-[#eef1f6] pt-2">
-                          <table className="w-full min-w-[520px] text-[12px]">
+                          <table className="w-full min-w-[620px] text-[12px]">
                             <thead>
                               <tr className={cn("text-start", MUTED)}>
                                 <th className="py-1 text-start font-semibold">
                                   {t("usage.campaign")}
                                 </th>
+                                <th className="py-1 text-start font-semibold">{t("usage.ad")}</th>
                                 <th className="py-1 text-start font-semibold">
                                   {t("numbers.impressions")}
                                 </th>
@@ -612,8 +637,12 @@ export function CampaignCreativeLibraryScreen() {
                             </thead>
                             <tbody>
                               {used.map((campaign) => (
-                                <tr key={campaign.publicationId} className="text-[#3b4a66]">
+                                <tr
+                                  key={campaign.adId ?? campaign.publicationId}
+                                  className="text-[#3b4a66]"
+                                >
                                   <td className="py-1 font-semibold">{campaign.name}</td>
+                                  <td className="py-1">{campaign.adName ?? "—"}</td>
                                   <td className="py-1">{whole.format(campaign.impressions)}</td>
                                   <td className="py-1">{whole.format(campaign.clicks)}</td>
                                   <td className="py-1">
