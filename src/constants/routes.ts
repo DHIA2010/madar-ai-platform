@@ -191,6 +191,7 @@ export const ROUTES = {
   madarAdminCrmActivations: "/madar-admin/crm/activations",
   madarAdminCrmInvoice: (invoiceId: string) => `/madar-admin/crm/invoice?id=${invoiceId}`,
   payInvoice: (token: string) => `/pay/invoice?token=${token}`,
+  viewQuote: (token: string) => `/view/quote?token=${token}`,
   auth: {
     basic: {
       login: "/auth/basic/login",

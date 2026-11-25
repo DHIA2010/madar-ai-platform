@@ -255,6 +255,10 @@ export const crmService = {
   ): Promise<{ quote: CrmQuote; seller: SellerInfo }> {
     return client.post(`${ENDPOINT}/quotes/${encodeURIComponent(id)}/status`, { status })
   },
+  // The quote's link for the customer (made on first use).
+  shareQuote(id: string): Promise<{ quote: CrmQuote; seller: SellerInfo }> {
+    return client.post(`${ENDPOINT}/quotes/${encodeURIComponent(id)}/share`, {})
+  },
   deleteQuote(id: string): Promise<void> {
     return client.delete(`${ENDPOINT}/quotes/${encodeURIComponent(id)}`)
   },

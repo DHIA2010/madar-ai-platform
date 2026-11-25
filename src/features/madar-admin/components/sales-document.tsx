@@ -13,7 +13,24 @@ import type {
   SalesDocumentTotals,
   SalesParty,
   SellerInfo,
+  VatMode,
 } from "../types/crm.types"
+
+// The VAT choice on a quote or invoice, and how its totals are labelled.
+export const VAT_MODE_OPTIONS: { value: VatMode; label: string; hint: string }[] = [
+  { value: "added", label: "تُضاف الضريبة على السعر", hint: "15٪ فوق الأسعار" },
+  { value: "included", label: "السعر شامل الضريبة", hint: "الـ 15٪ داخل الأسعار" },
+  { value: "none", label: "بدون ضريبة", hint: "الضريبة صفر" },
+]
+
+export function vatRowLabel(mode: VatMode) {
+  if (mode === "included") return "ضريبة القيمة المضافة 15٪ (مشمولة)"
+  if (mode === "none") return "ضريبة القيمة المضافة (غير محتسبة)"
+  return "ضريبة القيمة المضافة (15٪)"
+}
+
+export const totalRowLabel = (mode: VatMode) =>
+  mode === "included" ? "الإجمالي شامل الضريبة" : "الإجمالي"
 
 const money = (amount: number) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
@@ -59,7 +76,12 @@ export function toDocumentItems(items: SalesDocumentItem[]) {
 // A quote or invoice as the customer sees it -- on screen and printed (the same markup).
 export const SalesDocument = forwardRef<HTMLDivElement, SalesDocumentProps>(
   function SalesDocument(props, ref) {
-    const title = props.kind === "quote" ? "عرض سعر" : "فاتورة ضريبية"
+    const title =
+      props.kind === "quote"
+        ? "عرض سعر"
+        : props.totals.vatMode === "none"
+          ? "فاتورة"
+          : "فاتورة ضريبية"
     return (
       <div
         ref={ref}
@@ -180,11 +202,11 @@ export const SalesDocument = forwardRef<HTMLDivElement, SalesDocumentProps>(
               </div>
             ) : null}
             <div className="flex justify-between">
-              <dt className="text-slate-500">ضريبة القيمة المضافة (15٪)</dt>
+              <dt className="text-slate-500">{vatRowLabel(props.totals.vatMode)}</dt>
               <dd className="font-semibold">{money(props.totals.vat)} ر.س</dd>
             </div>
             <div className="flex justify-between border-t-2 border-slate-200 pt-2.5 text-[16px] font-black">
-              <dt>الإجمالي</dt>
+              <dt>{totalRowLabel(props.totals.vatMode)}</dt>
               <dd>{money(props.totals.total)} ر.س</dd>
             </div>
           </dl>

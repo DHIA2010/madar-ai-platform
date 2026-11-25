@@ -63,11 +63,16 @@ export type InvoicePaymentMethod = "card" | "bank_transfer" | "cash" | "other"
 export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "converted"
 export type InvoiceStatus = "unpaid" | "paid" | "void"
 
+// How VAT applies: added on top of the prices (15%), already included in them, or none at all.
+export type VatMode = "added" | "included" | "none"
+export const VAT_MODES: VatMode[] = ["added", "included", "none"]
+
 export interface SalesDocumentTotals {
   subtotal: number
   discount: number
   vat: number
   total: number
+  vatMode: VatMode
 }
 
 export interface SalesParty {
@@ -102,8 +107,24 @@ export interface QuoteView {
   invoiceId: string | null
   // Its own terms and conditions, when changed for this quote (else the seller's quoteTerms).
   terms: string | null
+  // The secret in the link the customer opens it from (sent on WhatsApp).
+  shareToken: string | null
   createdAt: string
   updatedAt: string
+}
+
+// What the customer sees from the quote's link -- no internal ids.
+export interface PublicQuoteView {
+  number: string
+  status: QuoteStatus
+  items: { description: string; quantity: number; unitPrice: number; total: number }[]
+  totals: SalesDocumentTotals
+  validUntil: string | null
+  issuedAt: string
+  notes: string | null
+  terms: string
+  customer: SalesParty
+  seller: SellerInfo
 }
 
 export interface InvoiceView {
@@ -171,6 +192,8 @@ export interface SalesItemInput {
 
 type QuoteRow = {
   terms?: string | null
+  vat_mode?: string | null
+  share_token?: string | null
   id: string
   number: string
   lead_id: string
@@ -188,6 +211,7 @@ type QuoteRow = {
 
 type InvoiceRow = {
   terms?: string | null
+  vat_mode?: string | null
   id: string
   number: string
   quote_id: string | null
@@ -231,12 +255,25 @@ const day = (value: string | Date | null) =>
   value === null ? null : new Date(value).toISOString().slice(0, 10)
 const sar = (halalas: number) => Number(halalas) / 100
 
-// Subtotal of the lines, less the discount, plus 15% VAT on what's left.
-export function computeTotals(items: SalesDocumentItem[], discountHalalas: number) {
+export const vatModeOf = (value: string | null | undefined): VatMode =>
+  value === "included" || value === "none" ? value : "added"
+
+// Subtotal of the lines, less the discount, then VAT: 15% on top of what's left (added), the 15%
+// already inside it broken out (included -- the total stays what's left), or none.
+export function computeTotals(
+  items: SalesDocumentItem[],
+  discountHalalas: number,
+  vatMode: VatMode = "added"
+) {
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPriceHalalas, 0)
   const discount = Math.min(Math.max(0, discountHalalas), subtotal)
-  const vat = Math.round((subtotal - discount) * VAT_RATE)
-  return { subtotal, discount, vat, total: subtotal - discount + vat }
+  const net = subtotal - discount
+  if (vatMode === "none") return { subtotal, discount, vat: 0, total: net }
+  if (vatMode === "included") {
+    return { subtotal, discount, vat: net - Math.round(net / (1 + VAT_RATE)), total: net }
+  }
+  const vat = Math.round(net * VAT_RATE)
+  return { subtotal, discount, vat, total: net + vat }
 }
 
 function totalsView(row: {
@@ -244,12 +281,14 @@ function totalsView(row: {
   discount_halalas: number
   vat_halalas: number
   total_halalas: number
+  vat_mode?: string | null
 }): SalesDocumentTotals {
   return {
     subtotal: sar(row.subtotal_halalas),
     discount: sar(row.discount_halalas),
     vat: sar(row.vat_halalas),
     total: sar(row.total_halalas),
+    vatMode: vatModeOf(row.vat_mode),
   }
 }
 
@@ -671,6 +710,7 @@ export class SalesDocumentsService {
       customer: party(lead),
       invoiceId,
       terms: row.terms ?? null,
+      shareToken: row.share_token ?? null,
       createdAt: iso(row.created_at) as string,
       updatedAt: iso(row.updated_at) as string,
     }
@@ -810,18 +850,20 @@ export class SalesDocumentsService {
       discount?: number
       validUntil?: string | null
       notes?: string | null
+      vatMode?: VatMode
     }
   ) {
     requirePlatformPermission(actor, "crm:manage")
     await this.lead(leadId)
     const items = await this.resolveItems(input.items)
-    const totals = computeTotals(items, Math.round((input.discount ?? 0) * 100))
+    const vatMode = input.vatMode ?? "added"
+    const totals = computeTotals(items, Math.round((input.discount ?? 0) * 100), vatMode)
     const id = randomUUID()
     const number = await nextNumber(this.db, "crm_quotes", "Q")
     await this.db.query(
       `INSERT INTO crm_quotes (id, number, lead_id, status, items, discount_halalas, subtotal_halalas,
-         vat_halalas, total_halalas, valid_until, notes, created_by_user_id)
-       VALUES ($1, $2, $3, 'draft', $4::jsonb, $5, $6, $7, $8, $9, $10, $11)`,
+         vat_halalas, total_halalas, valid_until, notes, created_by_user_id, vat_mode, share_token)
+       VALUES ($1, $2, $3, 'draft', $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         id,
         number,
@@ -834,6 +876,8 @@ export class SalesDocumentsService {
         input.validUntil ?? null,
         input.notes ?? null,
         actor.userId,
+        vatMode,
+        randomBytes(24).toString("base64url"),
       ]
     )
     await addActivity(this.db, {
@@ -853,6 +897,7 @@ export class SalesDocumentsService {
       discount?: number
       validUntil?: string | null
       notes?: string | null
+      vatMode?: VatMode
     }
   ) {
     requirePlatformPermission(actor, "crm:manage")
@@ -861,10 +906,12 @@ export class SalesDocumentsService {
       throw ERRORS.validation({ status: "A quote already converted to an invoice can't change." })
     }
     const items = await this.resolveItems(input.items)
-    const totals = computeTotals(items, Math.round((input.discount ?? 0) * 100))
+    const vatMode = input.vatMode ?? quote.totals.vatMode
+    const totals = computeTotals(items, Math.round((input.discount ?? 0) * 100), vatMode)
     await this.db.query(
       `UPDATE crm_quotes SET items = $2::jsonb, discount_halalas = $3, subtotal_halalas = $4,
-         vat_halalas = $5, total_halalas = $6, valid_until = $7, notes = $8, updated_at = now()
+         vat_halalas = $5, total_halalas = $6, valid_until = $7, notes = $8, vat_mode = $9,
+         updated_at = now()
        WHERE id = $1`,
       [
         id,
@@ -875,9 +922,49 @@ export class SalesDocumentsService {
         totals.total,
         input.validUntil ?? null,
         input.notes ?? null,
+        vatMode,
       ]
     )
     return this.getQuote(actor, id)
+  }
+
+  // The quote's link for the customer (made on first use for quotes from before links existed).
+  async shareQuote(actor: AuthenticatedActor, id: string) {
+    requirePlatformPermission(actor, "crm:manage")
+    const { quote } = await this.getQuote(actor, id)
+    if (!quote.shareToken) {
+      await this.db.query(
+        "UPDATE crm_quotes SET share_token = $2 WHERE id = $1 AND share_token IS NULL",
+        [id, randomBytes(24).toString("base64url")]
+      )
+    }
+    return this.getQuote(actor, id)
+  }
+
+  async publicQuote(token: string): Promise<PublicQuoteView> {
+    const rows = await this.db.query<QuoteRow>("SELECT * FROM crm_quotes WHERE share_token = $1", [
+      token,
+    ])
+    const row = rows.rows[0]
+    if (!row) throw ERRORS.notFound("Quote")
+    const lead = await this.lead(String(row.lead_id))
+    return {
+      number: row.number,
+      status: row.status,
+      items: (row.items ?? []).map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: sar(item.unitPriceHalalas),
+        total: sar(item.quantity * item.unitPriceHalalas),
+      })),
+      totals: totalsView(row),
+      validUntil: day(row.valid_until),
+      issuedAt: iso(row.created_at) as string,
+      notes: row.notes,
+      terms: row.terms ?? (await this.settings.get()).quoteTerms,
+      customer: party(lead),
+      seller: await this.seller(),
+    }
   }
 
   async setQuoteStatus(
@@ -932,8 +1019,9 @@ export class SalesDocumentsService {
     const number = await nextNumber(this.db, "crm_invoices", "INV")
     await this.db.query(
       `INSERT INTO crm_invoices (id, number, quote_id, lead_id, status, items, discount_halalas,
-         subtotal_halalas, vat_halalas, total_halalas, due_date, notes, pay_token, created_by_user_id)
-       VALUES ($1, $2, $3, $4, 'unpaid', $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13)`,
+         subtotal_halalas, vat_halalas, total_halalas, due_date, notes, pay_token, created_by_user_id,
+         vat_mode)
+       VALUES ($1, $2, $3, $4, 'unpaid', $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         invoiceId,
         number,
@@ -948,6 +1036,7 @@ export class SalesDocumentsService {
         quote.notes,
         randomBytes(24).toString("base64url"),
         actor.userId,
+        vatModeOf(quote.vat_mode),
       ]
     )
     await this.db.query(
@@ -977,18 +1066,21 @@ export class SalesDocumentsService {
       discount?: number
       dueDate?: string | null
       notes?: string | null
+      vatMode?: VatMode
     }
   ) {
     requirePlatformPermission(actor, "crm:manage")
     await this.lead(leadId)
     const items = await this.resolveItems(input.items)
-    const totals = computeTotals(items, Math.round((input.discount ?? 0) * 100))
+    const vatMode = input.vatMode ?? "added"
+    const totals = computeTotals(items, Math.round((input.discount ?? 0) * 100), vatMode)
     const invoiceId = randomUUID()
     const number = await nextNumber(this.db, "crm_invoices", "INV")
     await this.db.query(
       `INSERT INTO crm_invoices (id, number, quote_id, lead_id, status, items, discount_halalas,
-         subtotal_halalas, vat_halalas, total_halalas, due_date, notes, pay_token, created_by_user_id)
-       VALUES ($1, $2, NULL, $3, 'unpaid', $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12)`,
+         subtotal_halalas, vat_halalas, total_halalas, due_date, notes, pay_token, created_by_user_id,
+         vat_mode)
+       VALUES ($1, $2, NULL, $3, 'unpaid', $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         invoiceId,
         number,
@@ -1002,6 +1094,7 @@ export class SalesDocumentsService {
         input.notes ?? null,
         randomBytes(24).toString("base64url"),
         actor.userId,
+        vatMode,
       ]
     )
     await addActivity(this.db, {
@@ -1377,7 +1470,7 @@ export class SalesDocumentsService {
         : Math.min(coupon.discountValue, base)
     // Never below the smallest card charge.
     const discount = Math.max(0, Math.min(raw, subtotal - salesDiscount - MINIMUM_CHARGE_HALALAS))
-    const totals = computeTotals(items, salesDiscount + discount)
+    const totals = computeTotals(items, salesDiscount + discount, vatModeOf(row.vat_mode))
     await this.db.query(
       `UPDATE crm_invoices SET coupon_id = $2, coupon_code = $3, coupon_discount_halalas = $4,
          discount_halalas = $5, subtotal_halalas = $6, vat_halalas = $7, total_halalas = $8,
@@ -1401,7 +1494,7 @@ export class SalesDocumentsService {
     const row = await this.invoiceByToken(token)
     if (row.status !== "unpaid" || !row.coupon_id) return this.publicInvoice(token)
     const salesDiscount = Number(row.discount_halalas) - Number(row.coupon_discount_halalas ?? 0)
-    const totals = computeTotals(row.items ?? [], salesDiscount)
+    const totals = computeTotals(row.items ?? [], salesDiscount, vatModeOf(row.vat_mode))
     await this.db.query(
       `UPDATE crm_invoices SET coupon_id = NULL, coupon_code = NULL, coupon_discount_halalas = 0,
          discount_halalas = $2, subtotal_halalas = $3, vat_halalas = $4, total_halalas = $5,

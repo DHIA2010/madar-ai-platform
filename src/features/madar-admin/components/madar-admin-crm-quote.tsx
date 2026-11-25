@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, FileText, Package, PenLine, Plus, Printer, Trash2 } from "lucide-react"
+import {
+  ArrowRight,
+  FileText,
+  MessageCircle,
+  Package,
+  PenLine,
+  Plus,
+  Printer,
+  Trash2,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -33,12 +42,17 @@ import type {
   SalesInterval,
   SalesItemInput,
   SellerInfo,
+  VatMode,
 } from "../types/crm.types"
+import { whatsappUrl } from "./crm-ui"
 import {
   DocumentTermsCard,
   printSalesDocument,
   SalesDocument,
   toDocumentItems,
+  totalRowLabel,
+  VAT_MODE_OPTIONS,
+  vatRowLabel,
 } from "./sales-document"
 
 export const QUOTE_STATUS_META: Record<QuoteStatus, { label: string; chip: string }> = {
@@ -89,6 +103,13 @@ export function MadarAdminCrmQuote() {
   const [converting, setConverting] = useState(false)
   const [dueDate, setDueDate] = useState("")
   const [deleting, setDeleting] = useState(false)
+  const [vatMode, setVatMode] = useState<VatMode>("added")
+  // Sending the quote's link on WhatsApp: to this number, with this message.
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false)
+  const [preparingWhatsapp, setPreparingWhatsapp] = useState(false)
+  const [whatsappPhone, setWhatsappPhone] = useState("")
+  const [whatsappText, setWhatsappText] = useState("")
+  const [savePhone, setSavePhone] = useState(false)
 
   useEffect(() => {
     crmService
@@ -130,6 +151,7 @@ export function MadarAdminCrmQuote() {
           setDiscount(loaded.totals.discount ? String(loaded.totals.discount) : "")
           setValidUntil(loaded.validUntil ?? "")
           setNotes(loaded.notes ?? "")
+          setVatMode(loaded.totals.vatMode ?? "added")
           return crmService.getLead(loaded.leadId)
         })
         .then((detail) => {
@@ -171,8 +193,16 @@ export function MadarAdminCrmQuote() {
   })
   const subtotal = priced.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)
   const discountValue = Math.min(Math.max(0, Number(discount) || 0), subtotal)
-  const vat = Math.round((subtotal - discountValue) * 15) / 100
-  const total = subtotal - discountValue + vat
+  // Mirrors computeTotals on the server (crm/sales-documents.ts), in halalas.
+  const netHalalas = Math.round((subtotal - discountValue) * 100)
+  const vatHalalas =
+    vatMode === "none"
+      ? 0
+      : vatMode === "included"
+        ? netHalalas - Math.round(netHalalas / 1.15)
+        : Math.round(netHalalas * 0.15)
+  const vat = vatHalalas / 100
+  const total = (netHalalas + (vatMode === "added" ? vatHalalas : 0)) / 100
 
   const locked = quote?.status === "converted"
 
@@ -226,6 +256,7 @@ export function MadarAdminCrmQuote() {
       discount: discountValue,
       validUntil: validUntil || null,
       notes: notes.trim() || null,
+      vatMode,
     }
     try {
       if (quote) {
@@ -239,6 +270,7 @@ export function MadarAdminCrmQuote() {
           discount: input.discount,
           dueDate: input.validUntil,
           notes: input.notes,
+          vatMode,
         })
         toast.success(`أُنشئت الفاتورة ${result.invoice.number}.`)
         router.replace(ROUTES.madarAdminCrmInvoice(result.invoice.id))
@@ -262,6 +294,30 @@ export function MadarAdminCrmQuote() {
       toast.success(`أصبح عرض السعر «${QUOTE_STATUS_META[status].label}».`)
     } catch {
       toast.error("تعذر تحديث الحالة.")
+    }
+  }
+
+  // Opens the WhatsApp box with the quote's link (made on first send) in a ready message.
+  async function openWhatsapp() {
+    if (!quote) return
+    setPreparingWhatsapp(true)
+    try {
+      const shared = quote.shareToken ? { quote } : await crmService.shareQuote(quote.id)
+      if (!quote.shareToken) setQuote(shared.quote)
+      const link = new URL(
+        ROUTES.viewQuote(shared.quote.shareToken ?? ""),
+        window.location.origin
+      ).toString()
+      setWhatsappPhone(shared.quote.customer.phone ?? "")
+      setSavePhone(!shared.quote.customer.phone)
+      setWhatsappText(
+        `مرحبًا ${shared.quote.customer.contactName ?? shared.quote.customer.companyName}، هذا عرض سعر مدار ${shared.quote.number} بقيمة ${money(shared.quote.totals.total)} ر.س${shared.quote.totals.vatMode === "included" ? " شامل الضريبة" : ""}. يمكنك الاطلاع عليه من الرابط: ${link}`
+      )
+      setSendingWhatsapp(true)
+    } catch {
+      toast.error("تعذر تجهيز رابط عرض السعر.")
+    } finally {
+      setPreparingWhatsapp(false)
     }
   }
 
@@ -351,6 +407,14 @@ export function MadarAdminCrmQuote() {
                 عرض الفاتورة
               </AppButton>
             ) : null}
+            <AppButton
+              icon={<MessageCircle className="size-4" />}
+              className="h-10 rounded-[10px] bg-emerald-600 text-white hover:bg-emerald-700"
+              loading={preparingWhatsapp}
+              onClick={() => void openWhatsapp()}
+            >
+              إرسال عبر واتساب
+            </AppButton>
             <AppButton
               variant="outline"
               icon={<Printer className="size-4" />}
@@ -553,9 +617,34 @@ export function MadarAdminCrmQuote() {
                 </AppButton>
               </div>
 
+              <div className="mt-5 border-t border-border/60 pt-5">
+                <span className="text-sm font-semibold">ضريبة القيمة المضافة</span>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  {VAT_MODE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={vatMode === option.value}
+                      onClick={() => setVatMode(option.value)}
+                      className={cn(
+                        "flex flex-col items-start rounded-xl border-2 px-3.5 py-2.5 text-start transition-colors",
+                        vatMode === option.value
+                          ? "border-primary bg-primary/5"
+                          : "border-border/60 hover:border-primary/40"
+                      )}
+                    >
+                      <span className="text-sm font-bold">{option.label}</span>
+                      <span className="text-xs text-muted-foreground">{option.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-5 grid gap-4 border-t border-border/60 pt-5 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-semibold">الخصم (ر.س، قبل الضريبة)</span>
+                  <span className="text-sm font-semibold">
+                    {vatMode === "added" ? "الخصم (ر.س، قبل الضريبة)" : "الخصم (ر.س)"}
+                  </span>
                   <AppInput
                     value={discount}
                     onChange={(event) => setDiscount(event.target.value)}
@@ -648,11 +737,13 @@ export function MadarAdminCrmQuote() {
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">ضريبة القيمة المضافة 15٪</dt>
+              <dt className="text-muted-foreground">
+                {vatRowLabel(locked ? quote!.totals.vatMode : vatMode)}
+              </dt>
               <dd className="font-semibold">{money(locked ? quote!.totals.vat : vat)} ر.س</dd>
             </div>
             <div className="flex justify-between border-t border-border/60 pt-3 text-lg font-black">
-              <dt>الإجمالي</dt>
+              <dt>{totalRowLabel(locked ? quote!.totals.vatMode : vatMode)}</dt>
               <dd>{money(locked ? quote!.totals.total : total)} ر.س</dd>
             </div>
           </dl>
@@ -705,6 +796,91 @@ export function MadarAdminCrmQuote() {
           <span className="text-sm font-semibold">تاريخ الاستحقاق (اختياري)</span>
           <AppDateField value={dueDate} onChange={setDueDate} />
         </label>
+      </AppDialog>
+
+      <AppDialog
+        open={sendingWhatsapp}
+        onOpenChange={setSendingWhatsapp}
+        title={<span dir="rtl">إرسال عرض السعر عبر واتساب</span>}
+        contentClassName="[direction:rtl] max-w-[30rem] gap-5 p-6"
+        footer={
+          <div className="flex w-full gap-2">
+            <AppButton
+              className="h-11 flex-1 rounded-[10px] bg-emerald-600 hover:bg-emerald-700"
+              icon={<MessageCircle className="size-4" />}
+              disabled={whatsappPhone.replace(/\D/g, "").length < 9 || !whatsappText.trim()}
+              onClick={() => {
+                if (!quote) return
+                const phone = whatsappPhone.trim()
+                window.open(
+                  `${whatsappUrl(phone)}?text=${encodeURIComponent(whatsappText)}`,
+                  "_blank",
+                  "noopener"
+                )
+                setSendingWhatsapp(false)
+                // A draft sent to the customer is now "sent".
+                if (quote.status === "draft") void setStatus("sent")
+                if (savePhone && phone !== quote.customer.phone) {
+                  crmService
+                    .updateLead(quote.leadId, { phone })
+                    .then(() => {
+                      setQuote((current) =>
+                        current ? { ...current, customer: { ...current.customer, phone } } : current
+                      )
+                      toast.success("حُفظ الرقم في بيانات العميل.")
+                    })
+                    .catch(() => toast.error("تعذر حفظ الرقم."))
+                }
+              }}
+            >
+              فتح واتساب
+            </AppButton>
+            <AppButton
+              variant="outline"
+              className="h-11 flex-1 rounded-[10px]"
+              onClick={() => setSendingWhatsapp(false)}
+            >
+              إلغاء
+            </AppButton>
+          </div>
+        }
+      >
+        <div dir="rtl" className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-semibold">رقم الجوال</span>
+            <AppInput
+              type="tel"
+              dir="ltr"
+              value={whatsappPhone}
+              placeholder="05XXXXXXXX"
+              onChange={(event) => setWhatsappPhone(event.target.value)}
+              className="h-11 rounded-[10px] text-right"
+            />
+          </label>
+          {whatsappPhone.trim() && whatsappPhone.trim() !== (quote?.customer.phone ?? "") ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={savePhone}
+                onChange={(event) => setSavePhone(event.target.checked)}
+                className="size-4 accent-emerald-600"
+              />
+              حفظ الرقم في بيانات العميل
+            </label>
+          ) : null}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-semibold">الرسالة</span>
+            <AppTextarea
+              rows={5}
+              value={whatsappText}
+              onChange={(event) => setWhatsappText(event.target.value)}
+              className="rounded-[10px] text-sm leading-6"
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            يُفتح واتساب برسالة جاهزة فيها رابط عرض السعر، راجعها ثم اضغط إرسال.
+          </p>
+        </div>
       </AppDialog>
 
       <AppConfirmDialog

@@ -20,7 +20,14 @@ interface PublicInvoice {
   number: string
   status: "unpaid" | "paid"
   items: { description: string; quantity: number; unitPrice: number; total: number }[]
-  totals: { subtotal: number; discount: number; vat: number; total: number }
+  totals: {
+    subtotal: number
+    discount: number
+    vat: number
+    total: number
+    // added: 15% on top; included: inside the prices; none: no VAT.
+    vatMode?: "added" | "included" | "none"
+  }
   dueDate: string | null
   issuedAt: string
   paidAt: string | null
@@ -218,7 +225,9 @@ export function InvoicePayPage() {
             <>
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5">
                 <div>
-                  <p className="text-xs font-bold text-slate-500">فاتورة ضريبية</p>
+                  <p className="text-xs font-bold text-slate-500">
+                    {invoice.totals.vatMode === "none" ? "فاتورة" : "فاتورة ضريبية"}
+                  </p>
                   <p className="mt-1 font-mono text-lg font-black text-[#0b1738]" dir="ltr">
                     {invoice.number}
                   </p>
@@ -290,11 +299,19 @@ export function InvoicePayPage() {
                   </div>
                 ) : null}
                 <div className="flex justify-between text-slate-600">
-                  <dt>ضريبة القيمة المضافة 15٪</dt>
+                  <dt>
+                    {invoice.totals.vatMode === "included"
+                      ? "ضريبة القيمة المضافة 15٪ (مشمولة)"
+                      : invoice.totals.vatMode === "none"
+                        ? "ضريبة القيمة المضافة (غير محتسبة)"
+                        : "ضريبة القيمة المضافة 15٪"}
+                  </dt>
                   <dd>{money(invoice.totals.vat)} ر.س</dd>
                 </div>
                 <div className="flex justify-between pt-2 text-lg font-black text-[#0b1738]">
-                  <dt>الإجمالي</dt>
+                  <dt>
+                    {invoice.totals.vatMode === "included" ? "الإجمالي شامل الضريبة" : "الإجمالي"}
+                  </dt>
                   <dd>{money(invoice.totals.total)} ر.س</dd>
                 </div>
               </dl>

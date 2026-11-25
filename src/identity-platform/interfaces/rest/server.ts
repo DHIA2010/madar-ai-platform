@@ -2438,6 +2438,26 @@ export function createIdentityApiServer(
         return send(204, null)
       }
 
+      // Public: a quote from Madar's sales team, opened from the link sent with it (the secret
+      // token is the key).
+      const publicQuoteMatch = url.pathname.match(
+        /^\/v1\/public\/crm-quotes\/([A-Za-z0-9_-]{20,64})$/
+      )
+      if (publicQuoteMatch && method === "GET") {
+        if (!salesDocumentsService) {
+          return send(503, { code: "QUOTES_UNAVAILABLE", message: "Unavailable." })
+        }
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `public_quote:${context.ipAddress}`,
+          60,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "QUOTES_RATE_LIMITED", message: "Too many requests." })
+        }
+        return send(200, await salesDocumentsService.publicQuote(publicQuoteMatch[1]))
+      }
+
       // Public: an invoice from Madar's sales team, opened from the link in it (the secret token
       // is the key), and paying it by card.
       const publicInvoiceMatch = url.pathname.match(

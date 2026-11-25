@@ -285,11 +285,15 @@ export interface SalesDocumentItem {
   interval?: SalesInterval
 }
 
+// How VAT applies: added on top of the prices (15%), already included in them, or none.
+export type VatMode = "added" | "included" | "none"
+
 export interface SalesDocumentTotals {
   subtotal: number
   discount: number
   vat: number
   total: number
+  vatMode: VatMode
 }
 
 export interface SalesParty {
@@ -324,6 +328,8 @@ export interface CrmQuote {
   invoiceId: string | null
   // Its own terms and conditions, when changed for this quote (else seller.quoteTerms).
   terms: string | null
+  // The secret in the link the customer opens it from (made on first send).
+  shareToken: string | null
   createdAt: string
   updatedAt: string
 }
@@ -375,4 +381,19 @@ export interface CrmQuoteInput {
   discount?: number
   validUntil?: string | null
   notes?: string | null
+  vatMode?: VatMode
+}
+
+// A quote as the customer sees it from its link (GET /v1/public/crm-quotes/:token).
+export interface PublicCrmQuote {
+  number: string
+  status: QuoteStatus
+  items: { description: string; quantity: number; unitPrice: number; total: number }[]
+  totals: SalesDocumentTotals
+  validUntil: string | null
+  issuedAt: string
+  notes: string | null
+  terms: string
+  customer: SalesParty
+  seller: SellerInfo
 }

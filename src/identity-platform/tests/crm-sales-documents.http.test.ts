@@ -212,6 +212,7 @@ describe("CRM quotes and invoices", () => {
       discount: 50,
       vat: Math.round((subtotal - 50) * 15) / 100,
       total: subtotal - 50 + Math.round((subtotal - 50) * 15) / 100,
+      vatMode: "added",
     })
     expect(quote.items[0]).toMatchObject({ kind: "package", application: "pos" })
 
@@ -230,6 +231,119 @@ describe("CRM quotes and invoices", () => {
     expect(
       (await call("POST", staff.token, `/crm/leads/${leadId}/quotes`, { items: [] })).status
     ).toBe(400)
+  })
+
+  it("takes VAT on top, inside the prices, or none -- and keeps it on the invoice", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const leadId = await newLead(staff.token, "صالون الندى", "salon@shop.test")
+    const items = [{ kind: "custom", description: "إعداد النظام", quantity: 1, unitPrice: 1150 }]
+
+    const included = await call<{ quote: Quote }>(
+      "POST",
+      staff.token,
+      `/crm/leads/${leadId}/quotes`,
+      { items, discount: 0, vatMode: "included" }
+    )
+    expect(included.status).toBe(201)
+    expect(included.body.quote.totals).toEqual({
+      subtotal: 1150,
+      discount: 0,
+      vat: 150,
+      total: 1150,
+      vatMode: "included",
+    })
+
+    // Editing without a VAT choice keeps the quote's; a new one changes it.
+    const id = included.body.quote.id
+    const kept = await call<{ quote: Quote }>("PATCH", staff.token, `/crm/quotes/${id}`, {
+      items,
+      discount: 100,
+    })
+    expect(kept.body.quote.totals).toMatchObject({ vat: 136.96, total: 1050, vatMode: "included" })
+    const none = await call<{ quote: Quote }>("PATCH", staff.token, `/crm/quotes/${id}`, {
+      items,
+      discount: 100,
+      vatMode: "none",
+    })
+    expect(none.body.quote.totals).toEqual({
+      subtotal: 1150,
+      discount: 100,
+      vat: 0,
+      total: 1050,
+      vatMode: "none",
+    })
+
+    const converted = await call<{ invoice: Invoice }>(
+      "POST",
+      staff.token,
+      `/crm/quotes/${id}/convert`,
+      {}
+    )
+    expect(converted.body.invoice.totals).toEqual(none.body.quote.totals)
+
+    const direct = await call<{ invoice: Invoice }>(
+      "POST",
+      staff.token,
+      `/crm/leads/${leadId}/invoices`,
+      { items, vatMode: "included" }
+    )
+    expect(direct.body.invoice.totals).toMatchObject({ vat: 150, total: 1150, vatMode: "included" })
+    expect(
+      (
+        await call("POST", staff.token, `/crm/leads/${leadId}/quotes`, {
+          items,
+          vatMode: "half",
+        })
+      ).status
+    ).toBe(400)
+  })
+
+  it("gives a quote a link the customer opens it from", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    const leadId = await newLead(staff.token, "مقهى الركن", "corner@cafe.test")
+    const created = await call<{ quote: Quote & { shareToken: string | null } }>(
+      "POST",
+      staff.token,
+      `/crm/leads/${leadId}/quotes`,
+      {
+        items: [{ kind: "custom", description: "تدريب", quantity: 1, unitPrice: 200 }],
+        notes: "يشمل التدريب",
+      }
+    )
+    const quote = created.body.quote
+    expect(quote.shareToken).toMatch(/^[A-Za-z0-9_-]{20,64}$/)
+
+    // A quote from before links existed gets one when it's first shared.
+    await database.query("update crm_quotes set share_token = null where id = $1", [quote.id])
+    const shared = await call<{ quote: { shareToken: string } }>(
+      "POST",
+      staff.token,
+      `/crm/quotes/${quote.id}/share`
+    )
+    expect(shared.status).toBe(200)
+    const token = shared.body.quote.shareToken
+    expect(token).toMatch(/^[A-Za-z0-9_-]{20,64}$/)
+    const again = await call<{ quote: { shareToken: string } }>(
+      "POST",
+      staff.token,
+      `/crm/quotes/${quote.id}/share`
+    )
+    expect(again.body.quote.shareToken).toBe(token)
+
+    const view = await fetch(`${baseUrl}/v1/public/crm-quotes/${token}`)
+    expect(view.status).toBe(200)
+    const publicQuote = (await view.json()) as Record<string, unknown>
+    expect(publicQuote).toMatchObject({
+      number: quote.number,
+      notes: "يشمل التدريب",
+      customer: { companyName: "مقهى الركن" },
+      totals: { subtotal: 200, vat: 30, total: 230, vatMode: "added" },
+    })
+    expect(publicQuote).not.toHaveProperty("id")
+    expect(publicQuote).not.toHaveProperty("leadId")
+    expect((await fetch(`${baseUrl}/v1/public/crm-quotes/not-a-real-token-123456`)).status).toBe(
+      404
+    )
   })
 
   it("converts a quote to an invoice; a confirmed bank transfer activates the apps and wins the lead", async () => {

@@ -560,7 +560,7 @@ async function handleCrmRoute(input: {
     const kind = termsMatch[1] === "quotes" ? "quote" : "invoice"
     return send(200, await docs.setTerms(actor, kind, termsMatch[2], terms))
   }
-  const quoteMatch = route.match(/^\/quotes\/([0-9a-f-]{36})(\/status|\/convert)?$/)
+  const quoteMatch = route.match(/^\/quotes\/([0-9a-f-]{36})(\/status|\/convert|\/share)?$/)
   if (quoteMatch) {
     const [, quoteId, action] = quoteMatch
     if (!action && method === "GET") return send(200, await docs.getQuote(actor, quoteId))
@@ -575,6 +575,9 @@ async function handleCrmRoute(input: {
     if (action === "/status" && method === "POST") {
       const body = crmQuoteStatusSchema.parse(await readJsonBody())
       return send(200, await docs.setQuoteStatus(actor, quoteId, body.status))
+    }
+    if (action === "/share" && method === "POST") {
+      return send(200, await docs.shareQuote(actor, quoteId))
     }
     if (action === "/convert" && method === "POST") {
       const body = crmConvertQuoteSchema.parse(await readJsonBody())

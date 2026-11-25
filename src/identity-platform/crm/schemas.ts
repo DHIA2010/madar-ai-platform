@@ -146,6 +146,7 @@ export const crmQuoteInputSchema = z.object({
   discount: z.number().min(0).max(10_000_000).optional(),
   validUntil: z.string().date().nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
+  vatMode: z.enum(["added", "included", "none"]).optional(),
 })
 
 export const crmQuoteStatusSchema = z.object({
@@ -227,4 +228,5 @@ export const crmInvoiceInputSchema = z.object({
   discount: z.number().min(0).max(10_000_000).optional(),
   dueDate: z.string().date().nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
+  vatMode: z.enum(["added", "included", "none"]).optional(),
 })
