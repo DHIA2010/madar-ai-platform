@@ -78,6 +78,7 @@ import {
   UNASSIGNED,
   useCrmOwners,
   useCrmStages,
+  useLeadSources,
 } from "./crm-ui"
 
 const SELECT_TRIGGER = "h-10 w-[160px] rounded-[10px] text-sm"
@@ -187,6 +188,16 @@ function boardColumns(
       ...owners.map((person) => ({ key: person.id, label: person.name })),
     ]
   }
+  if (groupBy === "leadSource") {
+    const seen = new Map<string, number>()
+    for (const lead of leads) {
+      const key = lead.leadSource ?? NONE
+      seen.set(key, (seen.get(key) ?? 0) + 1)
+    }
+    return [...seen.entries()]
+      .sort((left, right) => (left[0] === NONE ? 1 : right[0] === NONE ? -1 : right[1] - left[1]))
+      .map(([key]) => ({ key, label: key === NONE ? "بدون مصدر" : key }))
+  }
   if (groupBy === "source") {
     return (Object.keys(SOURCE_LABEL) as (keyof typeof SOURCE_LABEL)[]).map((source) => ({
       key: source,
@@ -222,6 +233,7 @@ function columnKeys(lead: CrmLead, groupBy: GroupBy, step: DateStep): string[] {
   }
   if (groupBy === "owner") return [lead.owner?.id ?? UNASSIGNED]
   if (groupBy === "source") return [lead.source]
+  if (groupBy === "leadSource") return [lead.leadSource ?? NONE]
   if (groupBy === "interest") return lead.interests.length ? lead.interests : [NONE]
   if (groupBy.startsWith("custom:")) {
     const value = lead.customFields[groupBy.slice("custom:".length)]
@@ -342,6 +354,7 @@ function LeadCard({
 export function MadarAdminCrmPipeline() {
   const router = useRouter()
   const owners = useCrmOwners()
+  const leadSources = useLeadSources()
   const stages = useCrmStages()
   const [managingStages, setManagingStages] = useState(false)
   const [customFields] = useCrmCustomFields()
@@ -357,8 +370,8 @@ export function MadarAdminCrmPipeline() {
   const dragged = useRef<{ lead: CrmLead; from: string } | null>(null)
 
   const filterFields = useMemo(
-    () => leadFilterFields(owners, customFields, stages),
-    [owners, customFields, stages]
+    () => leadFilterFields(owners, customFields, stages, leadSources),
+    [owners, customFields, stages, leadSources]
   )
   const [dateStep, setDateStep] = useState<DateStep>("week")
   const selectFields = customFields.filter((field) => field.type === "select")
@@ -637,7 +650,8 @@ export function MadarAdminCrmPipeline() {
             [
               ["stage", "المرحلة"],
               ["owner", "المسؤول"],
-              ["source", "المصدر"],
+              ["leadSource", "مصدر العميل"],
+              ["source", "طريقة الإضافة"],
               ["interest", "الاهتمام"],
               ["campaign", "الحملة"],
               ...selectFields.map((field) => [`custom:${field.id}`, field.label]),
@@ -782,7 +796,7 @@ export function MadarAdminCrmPipeline() {
                 <AppTableHead>الشركة</AppTableHead>
                 <AppTableHead>التواصل</AppTableHead>
                 <AppTableHead>المرحلة</AppTableHead>
-                <AppTableHead>المصدر</AppTableHead>
+                <AppTableHead>مصدر العميل</AppTableHead>
                 <AppTableHead>القيمة</AppTableHead>
                 <AppTableHead>المتابعة القادمة</AppTableHead>
                 <AppTableHead>المسؤول</AppTableHead>
@@ -806,7 +820,14 @@ export function MadarAdminCrmPipeline() {
                     <StageBadge stage={lead.stage} />
                   </AppTableCell>
                   <AppTableCell>
-                    <SourceChip source={lead.source} />
+                    <div className="flex flex-col items-start gap-1">
+                      {lead.leadSource ? (
+                        <span className="text-sm font-semibold text-foreground">
+                          {lead.leadSource}
+                        </span>
+                      ) : null}
+                      <SourceChip source={lead.source} />
+                    </div>
                   </AppTableCell>
                   <AppTableCell className="text-sm font-semibold">
                     {formatSarAmount(lead.wonValue ?? lead.expectedValue)}

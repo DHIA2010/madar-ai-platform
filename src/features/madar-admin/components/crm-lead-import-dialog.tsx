@@ -13,6 +13,7 @@ import {
   type ParsedLeadFile,
   readLeadFile,
 } from "../services/crm-import.service"
+import { LeadSourcePicker, useLeadSources } from "./crm-ui"
 
 type Column = "companyName" | "contactName" | "phone" | "email"
 const COLUMNS: { key: Column; label: string }[] = [
@@ -46,6 +47,8 @@ export function LeadImportDialog({
     email: -1,
   })
   const [tag, setTag] = useState(`استيراد ${today()}`)
+  const [leadSource, setLeadSource] = useState("")
+  const sources = useLeadSources()
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CrmImportResult | null>(null)
 
@@ -86,7 +89,12 @@ export function LeadImportDialog({
     if (!file) return
     setBusy(true)
     try {
-      const outcome = await crmImportService.importLeads(tag.trim(), mapLeadRows(file, columns))
+      const outcome = await crmImportService.importLeads(
+        tag.trim(),
+        mapLeadRows(file, columns),
+        undefined,
+        leadSource || null
+      )
       setResult(outcome)
       if (outcome.created > 0) onImported()
     } catch {
@@ -249,6 +257,14 @@ export function LeadImportDialog({
                 يُكتب على كل عميل من هذا الملف، لتجد القائمة لاحقًا من الفلاتر.
               </span>
             </label>
+            <div className="block text-sm">
+              <span className="mb-1 block font-bold text-foreground">مصدر العملاء</span>
+              <LeadSourcePicker value={leadSource} sources={sources} onChange={setLeadSource} />
+              <span className="mt-1 block text-[12.5px] text-muted-foreground">
+                من أين جاءت هذه القائمة، مثل سناب شات أو معرض. اختر من القائمة أو اكتب مصدرًا
+                جديدًا.
+              </span>
+            </div>
           </>
         )}
       </div>

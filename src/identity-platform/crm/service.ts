@@ -36,6 +36,7 @@ import {
 import type { LeadAttribution } from "../schemas"
 import type { CrmLeadImportInput } from "./import-schema"
 import { type FieldValue, type FilterCondition, matchesAll, withinDays } from "./filters"
+import { autoLeadSource } from "./lead-sources"
 
 type LeadRow = {
   id: string
@@ -54,6 +55,7 @@ type LeadRow = {
   meeting_source: "website_form" | "booking_link" | null
   call_at: string | Date | null
   attribution: CrmAttribution | null
+  lead_source: string | null
   stage_changed_at: string | Date
   won_at: string | Date | null
   created_at: string | Date
@@ -92,6 +94,8 @@ export interface CrmLeadInput {
   email?: string | null
   expectedValue?: number | null
   ownerUserId?: string | null
+  // Where the lead came from (Snapchat, Google, a referral...); null works it out from its ads.
+  leadSource?: string | null
   interests?: string[]
   tags?: string[]
   // Values by custom field id; null clears one.
@@ -642,6 +646,8 @@ function leadField(row: LeadRow, field: string): FieldValue {
       return row.stage
     case "source":
       return row.source
+    case "leadSource":
+      return leadSourceOf(row)
     case "owner":
       return row.owner_user_id ? String(row.owner_user_id) : "unassigned"
     case "interests":
@@ -697,6 +703,19 @@ function matchesLead(row: LeadRow, filters: CrmLeadFilters) {
     withinDays(row.created_at, filters.from, filters.to) &&
     matchesAll((field) => leadField(row, field), filters.conditions ?? [])
   )
+}
+
+// Where a lead came from: the name the team chose, else the one its ad tags point to.
+function leadSourceOf(row: LeadRow) {
+  return row.lead_source || autoLeadSource(row.attribution)
+}
+
+// Keeps a lead source name in the dropdown's list (a new one typed there).
+async function rememberLeadSource(db: PostgresDatabase, name: string | null | undefined) {
+  if (!name) return
+  await db.query("INSERT INTO crm_lead_sources (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [
+    name,
+  ])
 }
 
 // ---- What Madar Admin's CRM pages use (crm:manage). ----
@@ -764,6 +783,8 @@ export class CrmService {
         phone: row.phone,
         email: row.email,
         source: row.source,
+        leadSource: leadSourceOf(row),
+        leadSourceChosen: Boolean(row.lead_source),
         stage: row.stage,
         owner: row.owner_user_id ? (people.get(String(row.owner_user_id)) ?? null) : null,
         expectedValue: sar(row.expected_value_halalas),
@@ -825,6 +846,26 @@ export class CrmService {
   async owners(actor: AuthenticatedActor): Promise<CrmPerson[]> {
     requirePlatformPermission(actor, "crm:manage")
     return this.listSalesStaff()
+  }
+
+  // The names the "lead source" dropdown offers: the saved list, then any other name already on
+  // a lead (chosen by hand, or worked out from its ads).
+  async leadSources(actor: AuthenticatedActor): Promise<string[]> {
+    requirePlatformPermission(actor, "crm:manage")
+    const [saved, leads] = await Promise.all([
+      this.db.query<{ name: string }>(
+        "SELECT name FROM crm_lead_sources ORDER BY position, created_at, name"
+      ),
+      this.db.query<LeadRow>(
+        "SELECT lead_source, attribution FROM crm_leads ORDER BY created_at DESC LIMIT 5000"
+      ),
+    ])
+    const names = saved.rows.map((row) => row.name)
+    for (const row of leads.rows) {
+      const name = leadSourceOf(row)
+      if (name && !names.includes(name)) names.push(name)
+    }
+    return names
   }
 
   async listLeads(
@@ -939,8 +980,8 @@ export class CrmService {
     await this.db.query(
       `INSERT INTO crm_leads
          (id, company_name, contact_name, phone, email, source, stage, owner_user_id,
-          expected_value_halalas, created_by_user_id)
-       VALUES ($1, $2, $3, $4, $5, 'manual', 'new', $6, $7, $8)`,
+          expected_value_halalas, created_by_user_id, lead_source)
+       VALUES ($1, $2, $3, $4, $5, 'manual', 'new', $6, $7, $8, $9)`,
       [
         id,
         input.companyName,
@@ -950,8 +991,10 @@ export class CrmService {
         input.ownerUserId ?? actor.userId,
         halalas(input.expectedValue),
         actor.userId,
+        input.leadSource ?? null,
       ]
     )
+    await rememberLeadSource(this.db, input.leadSource)
     await addActivity(this.db, {
       leadId: id,
       kind: "created",
@@ -994,6 +1037,8 @@ export class CrmService {
       if (email) seen.add(`e:${email}`)
     }
     const source = input.source ?? "import"
+    const leadSource = input.leadSource || null
+    await rememberLeadSource(this.db, leadSource)
     let created = 0
     let duplicates = 0
     let invalid = 0
@@ -1015,8 +1060,8 @@ export class CrmService {
       await this.db.query(
         `INSERT INTO crm_leads
            (id, company_name, contact_name, phone, email, source, stage, owner_user_id,
-            created_by_user_id, tags)
-         VALUES ($1, $2, $3, $4, $5, $8, 'new', $6, $6, $7::jsonb)`,
+            created_by_user_id, tags, lead_source)
+         VALUES ($1, $2, $3, $4, $5, $8, 'new', $6, $6, $7::jsonb, $9)`,
         [
           id,
           name,
@@ -1026,6 +1071,7 @@ export class CrmService {
           actor.userId,
           JSON.stringify([input.tag]),
           source,
+          leadSource,
         ]
       )
       await addActivity(this.db, {
@@ -1056,6 +1102,7 @@ export class CrmService {
           ? halalas(patch.expectedValue)
           : row.expected_value_halalas,
       owner_user_id: patch.ownerUserId !== undefined ? patch.ownerUserId : row.owner_user_id,
+      lead_source: patch.leadSource !== undefined ? patch.leadSource : row.lead_source,
       interests: patch.interests ?? row.interests ?? [],
       tags: patch.tags ?? row.tags ?? [],
       custom_fields: patch.customFields
@@ -1065,7 +1112,7 @@ export class CrmService {
     await this.db.query(
       `UPDATE crm_leads SET company_name = $2, contact_name = $3, phone = $4, email = $5,
          expected_value_halalas = $6, owner_user_id = $7, interests = $8::jsonb, tags = $9::jsonb,
-         custom_fields = $10::jsonb, updated_at = now()
+         custom_fields = $10::jsonb, lead_source = $11, updated_at = now()
        WHERE id = $1`,
       [
         id,
@@ -1078,8 +1125,10 @@ export class CrmService {
         JSON.stringify([...new Set(next.interests)]),
         JSON.stringify([...new Set(next.tags.map((tag) => tag.trim()).filter(Boolean))]),
         JSON.stringify(next.custom_fields),
+        next.lead_source,
       ]
     )
+    if (patch.leadSource !== undefined) await rememberLeadSource(this.db, patch.leadSource)
     if (String(next.owner_user_id ?? "") !== String(row.owner_user_id ?? "")) {
       await addActivity(this.db, {
         leadId: id,

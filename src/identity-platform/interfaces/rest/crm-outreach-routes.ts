@@ -30,7 +30,9 @@ const campaignSchema = z.object({
 const leadsQuerySchema = z.object({
   tag: z.string().trim().max(60).optional(),
   source: z.string().trim().max(20).optional(),
-  status: z.enum(["pending", "sent", "interested", "stopped", "all"]).optional(),
+  status: z
+    .enum(["pending", "sent", "clicked", "replied", "interested", "advanced", "stopped", "all"])
+    .optional(),
 })
 const imageSchema = z.object({
   contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),

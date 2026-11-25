@@ -662,6 +662,7 @@ async function handleCrmRoute(input: {
   if (viewMatch && method === "DELETE") return send(200, await crm.deleteView(actor, viewMatch[1]))
 
   if (method === "GET" && route === "/owners") return send(200, await crm.owners(actor))
+  if (method === "GET" && route === "/lead-sources") return send(200, await crm.leadSources(actor))
   if (method === "GET" && route === "/dashboard") {
     const { rangeDays } = crmDashboardQuerySchema.parse(query)
     return send(200, await crm.dashboard(actor, rangeDays))

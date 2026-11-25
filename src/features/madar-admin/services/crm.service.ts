@@ -81,6 +81,9 @@ export const crmService = {
   owners(): Promise<CrmPerson[]> {
     return client.get(`${ENDPOINT}/owners`)
   },
+  leadSources(): Promise<string[]> {
+    return client.get(`${ENDPOINT}/lead-sources`)
+  },
   dashboard(rangeDays: number): Promise<CrmDashboard> {
     return client.get(`${ENDPOINT}/dashboard${toQuery({ rangeDays })}`)
   },

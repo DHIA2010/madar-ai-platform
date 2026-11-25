@@ -36,7 +36,19 @@ const OUTREACH_STAGES: Record<string, { label: string; color: string; position: 
 // The stages a tap may move a lead out of: one with a meeting booked, on trial, won or lost
 // stays where it is.
 const EARLY_STAGES = ["new", OUTREACH_STAGE, "contacted"]
-export type OutreachStatus = "pending" | "sent" | "interested" | "stopped" | "all"
+export type OutreachStatus =
+  | "pending"
+  | "sent"
+  | "clicked"
+  | "replied"
+  | "interested"
+  | "advanced"
+  | "stopped"
+  | "all"
+
+// The stages that count as having moved forward after a message: talked to, interested, a
+// meeting, a trial, or won.
+const ADVANCED_STAGES = new Set(["contacted", INTERESTED_STAGE, "meeting", "trial", "won"])
 const SITE_URL = "https://www.madar.my"
 const NAME = "{الاسم}"
 const BUSINESS = "{النشاط}"
@@ -173,7 +185,6 @@ export class CrmOutreach {
       [row.id]
     )
     const today = startOfRiyadhDay(this.now()).getTime()
-    const advancedStages = new Set(["contacted", INTERESTED_STAGE, "meeting", "trial", "won"])
     return {
       id: String(row.id),
       name: String(row.name),
@@ -191,7 +202,7 @@ export class CrmOutreach {
         clicked: sends.rows.filter((send) => Number(send.clicks) > 0).length,
         clicks: sends.rows.reduce((sum, send) => sum + Number(send.clicks), 0),
         replied: sends.rows.filter((send) => send.replied_at).length,
-        advanced: sends.rows.filter((send) => advancedStages.has(String(send.stage))).length,
+        advanced: sends.rows.filter((send) => ADVANCED_STAGES.has(String(send.stage))).length,
         stopped: sends.rows.filter((send) => send.stopped_at).length,
         interested: sends.rows.filter((send) => send.interested_at).length,
       },
@@ -265,9 +276,10 @@ export class CrmOutreach {
   }
 
   // The leads a campaign can go to, with what has already happened for each. Narrowed by tag
-  // and source; "pending" leaves out the ones already sent, "sent" keeps only those,
-  // "interested" only those who tapped "interested" and "stopped" only those who asked for no
-  // more messages.
+  // and source; "pending" leaves out the ones already sent, "sent" keeps only those, "clicked"
+  // only those who opened their link, "replied" those marked as having answered, "interested"
+  // those who tapped "interested", "advanced" those now further along the pipeline and
+  // "stopped" those who asked for no more messages.
   async leads(
     actor: AuthenticatedActor,
     id: string,
@@ -306,7 +318,10 @@ export class CrmOutreach {
       if (!send) pending += 1
       const status = filter.status ?? "all"
       if ((status === "pending" && send) || (status === "sent" && !send)) continue
+      if (status === "clicked" && !(Number(send?.clicks ?? 0) > 0)) continue
+      if (status === "replied" && !send?.replied_at) continue
       if (status === "interested" && !send?.interested_at) continue
+      if (status === "advanced" && !(send && ADVANCED_STAGES.has(String(lead.stage)))) continue
       if (status === "stopped" && !(send && (send.stopped_at || stopped))) continue
       items.push({
         leadId: String(lead.id),

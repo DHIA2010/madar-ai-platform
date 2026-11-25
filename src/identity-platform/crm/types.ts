@@ -59,6 +59,10 @@ export interface CrmLeadView {
   phone: string | null
   email: string | null
   source: CrmSource
+  // Where the lead came from (Snapchat, Google, a referral...): the name chosen for it, else the
+  // one its ad tags point to. leadSourceChosen says which.
+  leadSource: string | null
+  leadSourceChosen: boolean
   stage: CrmStage
   owner: CrmPerson | null
   expectedValue: number | null

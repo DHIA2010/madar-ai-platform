@@ -45,7 +45,10 @@ const BLANK: OutreachCampaignInput = {
 const STATUS_TABS: { key: OutreachStatus; label: string }[] = [
   { key: "pending", label: "بانتظار الإرسال" },
   { key: "sent", label: "أُرسلت" },
+  { key: "clicked", label: "ضغطوا الرابط" },
+  { key: "replied", label: "ردّوا" },
   { key: "interested", label: "مهتمون" },
+  { key: "advanced", label: "تقدّموا في المسار" },
   { key: "stopped", label: "طلبوا الإيقاف" },
   { key: "all", label: "الكل" },
 ]
@@ -81,13 +84,40 @@ function Bubble({ campaign }: { campaign: OutreachCampaignInput }) {
   )
 }
 
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+function Tile({
+  label,
+  value,
+  hint,
+  active,
+  onClick,
+}: {
+  label: string
+  value: string
+  hint?: string
+  active?: boolean
+  onClick?: () => void
+}) {
+  const body = (
+    <>
       <p className="text-[12.5px] font-semibold text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-black text-foreground">{value}</p>
       {hint ? <p className="mt-0.5 text-[11.5px] text-muted-foreground">{hint}</p> : null}
-    </div>
+    </>
+  )
+  const box = "rounded-2xl border bg-card p-4 text-start shadow-sm"
+  if (!onClick) return <div className={cn(box, "border-border/60")}>{body}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        box,
+        "transition hover:border-[#1d4fd8]/50",
+        active ? "border-[#1d4fd8] ring-1 ring-[#1d4fd8]" : "border-border/60"
+      )}
+    >
+      {body}
+    </button>
   )
 }
 
@@ -358,27 +388,46 @@ export function MadarAdminCrmOutreach() {
                       value={`${selected.stats.sentToday} / ${selected.dailyLimit}`}
                       hint="حد اليوم"
                     />
-                    <Tile label="إجمالي المُرسل" value={String(selected.stats.sent)} />
+                    <Tile
+                      label="إجمالي المُرسل"
+                      value={String(selected.stats.sent)}
+                      active={status === "sent"}
+                      onClick={() => setStatus("sent")}
+                    />
                     <Tile
                       label="ضغطوا الرابط"
                       value={String(selected.stats.clicked)}
                       hint={`${selected.stats.clicks} ضغطة`}
+                      active={status === "clicked"}
+                      onClick={() => setStatus("clicked")}
                     />
-                    <Tile label="ردّوا" value={String(selected.stats.replied)} hint="تحدده أنت" />
+                    <Tile
+                      label="ردّوا"
+                      value={String(selected.stats.replied)}
+                      hint="تحدده أنت"
+                      active={status === "replied"}
+                      onClick={() => setStatus("replied")}
+                    />
                     <Tile
                       label="مهتمون"
                       value={String(selected.stats.interested)}
                       hint="ضغطوا «مهتم»"
+                      active={status === "interested"}
+                      onClick={() => setStatus("interested")}
                     />
                     <Tile
                       label="أوقفوا الرسائل"
                       value={String(selected.stats.stopped)}
                       hint="ضغطوا رابط الإيقاف"
+                      active={status === "stopped"}
+                      onClick={() => setStatus("stopped")}
                     />
                     <Tile
                       label="تقدّموا في المسار"
                       value={String(selected.stats.advanced)}
                       hint="تواصل أو اجتماع أو تجربة"
+                      active={status === "advanced"}
+                      onClick={() => setStatus("advanced")}
                     />
                   </div>
                   <p className="rounded-xl bg-muted/50 px-4 py-3 text-[12.5px] leading-6 text-muted-foreground">
@@ -396,7 +445,7 @@ export function MadarAdminCrmOutreach() {
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
-                <div className="flex rounded-[10px] border border-border/60 p-1">
+                <div className="flex flex-wrap rounded-[10px] border border-border/60 p-1">
                   {STATUS_TABS.map((tab) => (
                     <button
                       key={tab.key}
@@ -406,8 +455,9 @@ export function MadarAdminCrmOutreach() {
                     >
                       {tab.label}
                       {tab.key === "pending" && leads ? ` (${leads.pending})` : ""}
-                      {tab.key === "interested" ? ` (${selected.stats.interested})` : ""}
-                      {tab.key === "stopped" ? ` (${selected.stats.stopped})` : ""}
+                      {tab.key === "pending" || tab.key === "all"
+                        ? ""
+                        : ` (${selected.stats[tab.key]})`}
                     </button>
                   ))}
                 </div>

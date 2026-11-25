@@ -133,7 +133,8 @@ const needsValue = (op: CrmConditionOperator) => op !== "is_set" && op !== "is_e
 export function leadFilterFields(
   owners: CrmPerson[],
   customFields: CrmCustomField[],
-  stages: CrmStageDef[]
+  stages: CrmStageDef[],
+  leadSources: string[] = []
 ): FilterField[] {
   return [
     {
@@ -143,8 +144,14 @@ export function leadFilterFields(
       options: stages.map((stage) => ({ value: stage.key, label: stage.label })),
     },
     {
+      key: "leadSource",
+      label: "مصدر العميل",
+      type: "select",
+      options: leadSources.map((name) => ({ value: name, label: name })),
+    },
+    {
       key: "source",
-      label: "المصدر",
+      label: "طريقة الإضافة",
       type: "select",
       options: (Object.keys(SOURCE_LABEL) as (keyof typeof SOURCE_LABEL)[]).map((source) => ({
         value: source,

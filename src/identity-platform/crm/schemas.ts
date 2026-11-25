@@ -45,6 +45,7 @@ export const crmLeadInputSchema = z.object({
     .transform((value) => (value ? value : value === undefined ? undefined : null)),
   expectedValue: z.number().min(0).max(100_000_000).nullable().optional(),
   ownerUserId: z.guid().nullable().optional(),
+  leadSource: optionalText(80),
   interests: labelList.optional(),
   tags: labelList.optional(),
   customFields: z

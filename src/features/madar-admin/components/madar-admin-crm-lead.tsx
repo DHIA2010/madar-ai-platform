@@ -316,6 +316,14 @@ export function MadarAdminCrmLead() {
               <h1 className="text-2xl font-bold text-foreground">{lead.companyName}</h1>
               <StageBadge stage={lead.stage} />
               <SourceChip source={lead.source} />
+              {lead.leadSource ? (
+                <span
+                  title={lead.leadSourceChosen ? "مصدر العميل" : "مصدر العميل (من الإعلان)"}
+                  className="inline-flex rounded-md bg-[#eef3ff] px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-[#1d4fd8]"
+                >
+                  {lead.leadSource}
+                </span>
+              ) : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               أُضيف {formatRelative(lead.createdAt)} • آخر تغيير للمرحلة{" "}

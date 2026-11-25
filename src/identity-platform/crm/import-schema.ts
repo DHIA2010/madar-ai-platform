@@ -15,6 +15,8 @@ export const crmLeadImportSchema = z.object({
   tag: z.string().trim().min(1).max(40),
   // Where the rows came from: a file (the default), the free directory, or a Google Maps search.
   source: z.enum(["import", "directory", "google_maps"]).optional(),
+  // Where these leads came from, as the team names it (Snapchat, an exhibition...).
+  leadSource: z.string().trim().max(80).nullish(),
   rows: z
     .array(
       z.object({

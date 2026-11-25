@@ -591,6 +591,92 @@ describe("CRM", () => {
     expect(again.body).toEqual({ created: 0, duplicates: 4, invalid: 2 })
   })
 
+  it("keeps where a lead came from: chosen by hand, from a file, or from its ad tags", async () => {
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    type SourcedLead = Lead & { leadSource: string | null; leadSourceChosen: boolean }
+    const touch = (source: string | null, clickIdType: string | null = null) => ({
+      source,
+      medium: null,
+      campaign: null,
+      content: null,
+      term: null,
+      clickId: clickIdType ? "abc" : null,
+      clickIdType,
+      referrer: null,
+      landingPage: "/",
+      at: new Date().toISOString(),
+    })
+    await submitWebsiteLead({
+      companyName: "من سناب",
+      phone: "0551110011",
+      attribution: { first: touch("snapchat"), last: touch("snapchat") },
+    })
+    await submitWebsiteLead({
+      companyName: "من جوجل",
+      phone: "0551110012",
+      attribution: { first: touch(null, "google"), last: touch(null, "google") },
+    })
+    await submitWebsiteLead({
+      companyName: "من لينكدإن",
+      phone: "0551110013",
+      attribution: { first: touch("linkedin"), last: touch("linkedin") },
+    })
+
+    // Typed by hand: a new name joins the dropdown's list.
+    const manual = await call<{ lead: SourcedLead }>("POST", staff.token, "/crm/leads", {
+      companyName: "من المعرض",
+      phone: "0551110014",
+      leadSource: "معرض الرياض",
+    })
+    expect(manual.body.lead).toMatchObject({ leadSource: "معرض الرياض", leadSourceChosen: true })
+    await call("POST", staff.token, "/crm/leads/import", {
+      tag: "قائمة سناب",
+      leadSource: "سناب شات",
+      rows: [{ companyName: "مطعم من الملف", phone: "0551110015" }],
+    })
+
+    const leads = await call<{ items: SourcedLead[] }>("GET", staff.token, "/crm/leads")
+    const sourceOf = (name: string) =>
+      leads.body.items.find((lead) => lead.companyName === name)?.leadSource
+    expect(sourceOf("من سناب")).toBe("سناب شات")
+    expect(sourceOf("من جوجل")).toBe("جوجل")
+    expect(sourceOf("من لينكدإن")).toBe("linkedin")
+    expect(sourceOf("مطعم من الملف")).toBe("سناب شات")
+
+    // A name chosen by hand wins over the ad tags; clearing it goes back to them.
+    const snap = leads.body.items.find((lead) => lead.companyName === "من سناب")!
+    const changed = await call<{ lead: SourcedLead }>(
+      "PATCH",
+      staff.token,
+      `/crm/leads/${snap.id}`,
+      { leadSource: "توصية" }
+    )
+    expect(changed.body.lead).toMatchObject({ leadSource: "توصية", leadSourceChosen: true })
+    const cleared = await call<{ lead: SourcedLead }>(
+      "PATCH",
+      staff.token,
+      `/crm/leads/${snap.id}`,
+      { leadSource: null }
+    )
+    expect(cleared.body.lead).toMatchObject({ leadSource: "سناب شات", leadSourceChosen: false })
+
+    const sources = await call<string[]>("GET", staff.token, "/crm/lead-sources")
+    expect(sources.body.slice(0, 4)).toEqual(["سناب شات", "جوجل", "تيك توك", "ميتا"])
+    expect(sources.body).toEqual(expect.arrayContaining(["معرض الرياض", "linkedin"]))
+
+    const conditions = encodeURIComponent(
+      JSON.stringify([{ field: "leadSource", op: "is", value: "سناب شات" }])
+    )
+    const fromSnap = await call<{ items: Lead[] }>(
+      "GET",
+      staff.token,
+      `/crm/leads?conditions=${conditions}`
+    )
+    expect(fromSnap.body.items.map((lead) => lead.companyName).sort()).toEqual(
+      ["مطعم من الملف", "من سناب"].sort()
+    )
+  })
+
   it("adds leads by hand, logs calls, moves stages and tracks follow-ups", async () => {
     const staff = await signIn(STAFF_EMAIL, "Madar HQ")
     const created = await call<LeadDetail>("POST", staff.token, "/crm/leads", {

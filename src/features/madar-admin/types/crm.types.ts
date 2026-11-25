@@ -48,6 +48,10 @@ export interface CrmLead {
   phone: string | null
   email: string | null
   source: CrmSource
+  // Where the lead came from (Snapchat, Google, a referral...): chosen by hand, else worked out
+  // from its ad tags (leadSourceChosen false).
+  leadSource: string | null
+  leadSourceChosen: boolean
   stage: CrmStage
   owner: CrmPerson | null
   expectedValue: number | null
@@ -238,6 +242,7 @@ export interface CrmLeadInput {
   email?: string | null
   expectedValue?: number | null
   ownerUserId?: string | null
+  leadSource?: string | null
   interests?: string[]
   tags?: string[]
   customFields?: Record<string, CrmFieldValue>

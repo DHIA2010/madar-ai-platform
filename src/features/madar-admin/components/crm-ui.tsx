@@ -8,6 +8,7 @@ import {
   AppButton,
   AppDialog,
   AppInput,
+  AppSearchableSelect,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
@@ -252,6 +253,53 @@ export function useCrmOwners() {
 
 export const UNASSIGNED = "unassigned"
 
+// The names the "lead source" dropdown offers, loaded once per page.
+export function useLeadSources() {
+  const [sources, setSources] = useState<string[]>([])
+  useEffect(() => {
+    crmService
+      .leadSources()
+      .then(setSources)
+      .catch(() => setSources([]))
+  }, [])
+  return sources
+}
+
+// مصدر العميل: pick where a lead came from, or type a new name and add it from the same list.
+export function LeadSourcePicker({
+  value,
+  sources,
+  onChange,
+  placeholder = "اختر المصدر",
+}: {
+  value: string
+  sources: string[]
+  onChange: (next: string) => void
+  placeholder?: string
+}) {
+  const [added, setAdded] = useState<string[]>([])
+  const names = [...new Set([...sources, ...added, ...(value ? [value] : [])])]
+  return (
+    <AppSearchableSelect
+      value={value}
+      options={[
+        ...(value ? [{ value: "", label: "بدون مصدر" }] : []),
+        ...names.map((name) => ({ value: name, label: name })),
+      ]}
+      onChange={onChange}
+      placeholder={placeholder}
+      searchPlaceholder="ابحث أو اكتب مصدرًا جديدًا"
+      ariaLabel="مصدر العميل"
+      onCreate={(draft) => {
+        const name = draft.slice(0, 80)
+        setAdded((current) => [...current, name])
+        onChange(name)
+      }}
+      createLabel={(draft) => `إضافة مصدر جديد «${draft}»`}
+    />
+  )
+}
+
 // Add a lead by hand, or edit one's details.
 export function LeadFormDialog({
   open,
@@ -273,7 +321,9 @@ export function LeadFormDialog({
     email: "",
     expectedValue: "",
     ownerUserId: "",
+    leadSource: "",
   })
+  const sources = useLeadSources()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -287,6 +337,7 @@ export function LeadFormDialog({
       email: lead?.email ?? "",
       expectedValue: lead?.expectedValue != null ? String(lead.expectedValue) : "",
       ownerUserId: lead?.owner?.id ?? "",
+      leadSource: lead?.leadSourceChosen ? (lead.leadSource ?? "") : "",
     })
   }, [open, lead])
 
@@ -311,6 +362,7 @@ export function LeadFormDialog({
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         expectedValue: value,
+        leadSource: form.leadSource || null,
         ...(form.ownerUserId
           ? { ownerUserId: form.ownerUserId === UNASSIGNED ? null : form.ownerUserId }
           : {}),
@@ -385,7 +437,20 @@ export function LeadFormDialog({
             className="h-11 text-right"
           />
         </label>
-        <label className="flex flex-col gap-1.5 sm:col-span-2">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold">مصدر العميل</span>
+          <LeadSourcePicker
+            value={form.leadSource}
+            sources={sources}
+            onChange={(next) => setForm((current) => ({ ...current, leadSource: next }))}
+            placeholder={
+              lead && !lead.leadSourceChosen && lead.leadSource
+                ? `${lead.leadSource} (من الإعلان)`
+                : "اختر المصدر"
+            }
+          />
+        </div>
+        <label className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold">المسؤول</span>
           <AppSelect
             value={form.ownerUserId || (lead ? UNASSIGNED : "")}

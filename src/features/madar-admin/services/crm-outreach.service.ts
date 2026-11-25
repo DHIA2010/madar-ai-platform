@@ -52,7 +52,15 @@ export interface OutreachLead {
     stoppedAt: string | null
   } | null
 }
-export type OutreachStatus = "pending" | "sent" | "interested" | "stopped" | "all"
+export type OutreachStatus =
+  | "pending"
+  | "sent"
+  | "clicked"
+  | "replied"
+  | "interested"
+  | "advanced"
+  | "stopped"
+  | "all"
 
 export const crmOutreachService = {
   async list(): Promise<OutreachCampaign[]> {

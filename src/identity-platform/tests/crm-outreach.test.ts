@@ -345,6 +345,11 @@ describe("WhatsApp outreach from the CRM", () => {
     const interestedOnly = await outreach.leads(actor, campaign.id, { status: "interested" })
     expect(interestedOnly.items.map((item) => item.leadId)).toEqual([reem])
     expect((await outreach.leads(actor, campaign.id, { status: "stopped" })).items).toEqual([])
+    const ids = async (status: "clicked" | "advanced" | "replied") =>
+      (await outreach.leads(actor, campaign.id, { status })).items.map((item) => item.leadId)
+    expect(await ids("clicked")).toEqual([reem])
+    expect(await ids("advanced")).toEqual([reem])
+    expect(await ids("replied")).toEqual([])
     const row = (await outreach.leads(actor, campaign.id, { status: "sent" })).items[0]
     expect(row.send?.interestedAt).toBeTruthy()
 
