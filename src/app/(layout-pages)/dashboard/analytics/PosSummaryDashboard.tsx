@@ -19,6 +19,7 @@ import {
 import { ReadyReportFilterBar } from "@/features/reports/components/ready-report-filter-bar"
 import { PosSummaryPaymentDonut } from "@/features/reports/components/pos-summary-payment-donut"
 import { PosSummaryTrendChart } from "@/features/reports/components/pos-summary-trend-chart"
+import { HomeTargetCard } from "./HomeTargetCard"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
@@ -145,6 +146,50 @@ export default function PosSummaryDashboard() {
               }
             />
           </div>
+
+          <HomeTargetCard
+            scope="pos"
+            defaultKpi="totalSales"
+            kpis={[
+              {
+                key: "totalSales",
+                label: t("kpis.totalSales"),
+                value: data.kpis.totalSales.value,
+                format: "currency",
+              },
+              {
+                key: "netSales",
+                label: t("kpis.netSales"),
+                value: data.kpis.netSales.value,
+                format: "currency",
+              },
+              {
+                key: "invoiceCount",
+                label: t("kpis.invoiceCount"),
+                value: data.kpis.invoiceCount.value,
+                format: "count",
+              },
+              {
+                key: "avgInvoiceValue",
+                label: t("kpis.avgInvoiceValue"),
+                value: data.kpis.avgInvoiceValue.value,
+                format: "currency",
+              },
+              {
+                key: "customerCount",
+                label: t("kpis.customerCount"),
+                value: data.kpis.customerCount.value,
+                format: "count",
+              },
+              {
+                key: "returns",
+                label: t("kpis.returns"),
+                value: data.kpis.returns.value,
+                format: "currency",
+                lowerIsBetter: true,
+              },
+            ]}
+          />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <PosSummaryPaymentDonut rows={data.paymentBreakdown} nameByCode={paymentMethodNames} />

@@ -41,6 +41,8 @@ import { CrmProspectFinder } from "../../crm/prospects"
 import { handleAccountingRoute } from "./accounting-routes"
 import { handleBookingRoute, handlePublicBookingRoute } from "./booking-routes"
 import { handleLoyaltyRoute, handlePublicLoyaltyRoute } from "./loyalty-routes"
+import { handleHomeTargetRoute } from "./home-target-routes"
+import { HomeTargets } from "../../home-targets/service"
 import { handleInvoicingRoute, handlePublicInvoicingRoute } from "./invoicing-routes"
 import { AccountingService } from "../../accounting/service"
 import {
@@ -985,6 +987,9 @@ export function createIdentityApiServer(
     : null
   // The Loyalty app: one points programme per business, which the Booking app and the cashier
   // both earn into. Wallet cards are there only where a pass certificate is set up.
+  const homeTargets = container.infrastructure.database
+    ? new HomeTargets(container.infrastructure.database)
+    : null
   const loyaltyService = container.infrastructure.database
     ? new LoyaltyService(container.infrastructure.database)
     : null
@@ -3286,6 +3291,21 @@ export function createIdentityApiServer(
         readJsonBody: () => readJsonBody(request),
       })
       if (handledByPlatformAdmin) return
+
+      // The home page's targets (home-targets/): before the subscription check, since the
+      // tabs it serves are already shown only for the applications the organization has.
+      if (
+        await handleHomeTargetRoute({
+          method,
+          url,
+          actor,
+          service: homeTargets,
+          send,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
 
       // POS, Ads and E-commerce answer only for an organization subscribed to them
       // (subscriptions/app-access.ts).

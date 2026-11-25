@@ -57,6 +57,8 @@ import {
   TOOLTIP_STYLE,
 } from "@/features/reports/components/chart-constants"
 
+import { HomeTargetCard } from "./HomeTargetCard"
+
 import { type Locale, localeDirection } from "@/i18n/locales"
 
 function formatPlainNumber(value: number, locale: Locale): string {
@@ -422,6 +424,60 @@ export default function CampaignsSummaryDashboard() {
               trailing={<ReadyReportTrendBadge changePercent={summary.cpcChangePct} />}
             />
           </div>
+
+          <HomeTargetCard
+            scope="campaigns"
+            defaultKpi="conversions"
+            kpis={[
+              {
+                key: "conversions",
+                label: locale === "ar" ? "النتائج (التحويلات)" : "Results (conversions)",
+                value: summary.conversions,
+                format: "count",
+              },
+              {
+                key: "revenue",
+                label: locale === "ar" ? "الإيرادات" : "Revenue",
+                value: summary.revenue,
+                format: "currency",
+              },
+              {
+                key: "roas",
+                label: locale === "ar" ? "العائد على الإنفاق (ROAS)" : "ROAS",
+                value: summary.roas,
+                format: "ratio",
+              },
+              { key: "spend", label: t("kpis.cost"), value: summary.spend, format: "currency" },
+              {
+                key: "impressions",
+                label: t("kpis.impressions"),
+                value: summary.impressions,
+                format: "count",
+              },
+              { key: "clicks", label: t("kpis.clicks"), value: summary.clicks, format: "count" },
+              { key: "ctr", label: t("kpis.ctr"), value: summary.ctr, format: "percent" },
+              {
+                key: "cpc",
+                label: t("kpis.cpc"),
+                value: summary.cpc,
+                format: "currency",
+                lowerIsBetter: true,
+              },
+              {
+                key: "cpa",
+                label: locale === "ar" ? "تكلفة النتيجة" : "Cost per result",
+                value: summary.cpa,
+                format: "currency",
+                lowerIsBetter: true,
+              },
+              {
+                key: "conversionRate",
+                label: locale === "ar" ? "معدل التحويل" : "Conversion rate",
+                value: summary.conversionRate,
+                format: "percent",
+              },
+            ]}
+          />
 
           <div className={cn(PANEL, "p-4")}>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

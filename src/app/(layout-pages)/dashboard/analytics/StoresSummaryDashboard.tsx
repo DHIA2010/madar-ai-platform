@@ -18,6 +18,7 @@ import { Loader2, Package, Receipt, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import { AppDateRangeFilter } from "@/components/app"
+import { HomeTargetCard } from "./HomeTargetCard"
 import {
   orderListService,
   type OrderRecord,
@@ -216,6 +217,31 @@ export default function StoresSummaryDashboard() {
               }
             />
           </div>
+
+          <HomeTargetCard
+            scope="stores"
+            defaultKpi="totalSales"
+            kpis={[
+              {
+                key: "totalSales",
+                label: t("kpis.totalSales"),
+                value: summary.totalSales,
+                format: "currency",
+              },
+              {
+                key: "totalOrders",
+                label: t("kpis.orderCount"),
+                value: summary.totalOrders,
+                format: "count",
+              },
+              {
+                key: "averageOrderValue",
+                label: t("kpis.avgOrderValue"),
+                value: summary.averageOrderValue,
+                format: "currency",
+              },
+            ]}
+          />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className={cn(PANEL, "p-4")}>
