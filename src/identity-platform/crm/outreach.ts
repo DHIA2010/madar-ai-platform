@@ -426,6 +426,9 @@ export class CrmOutreach {
       .split(INTERESTED)
       .join(`${trackedUrl}/yes`)
     message = hadLink ? message.split(LINK).join(trackedUrl) : `${message.trim()}\n${trackedUrl}`
+    // With a picture, its own link goes first: WhatsApp makes the card from the first link, so
+    // tapping the picture opens the picture, not the "interested" link.
+    if (text(campaign.image_url)) message = `${trackedUrl}/pic\n\n${message.trim()}`
     return {
       message,
       phone,

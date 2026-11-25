@@ -93,7 +93,7 @@ describe("WhatsApp outreach from the CRM", () => {
     expect(sent.phone).toBe("966553334444")
     expect(sent.trackedUrl).toMatch(/^https:\/\/www\.madar\.my\/o\/[A-Za-z0-9_-]{8}$/)
     expect(sent.message).toBe(
-      `مرحبًا سارة، هل يستخدم مطعم الريم كاشيرًا متوافقًا مع الزكاة؟\n${sent.trackedUrl}`
+      `${sent.trackedUrl}/pic\n\nمرحبًا سارة، هل يستخدم مطعم الريم كاشيرًا متوافقًا مع الزكاة؟\n${sent.trackedUrl}`
     )
     expect(sent.whatsappUrl).toBe(
       `https://wa.me/966553334444?text=${encodeURIComponent(sent.message)}`
@@ -112,8 +112,13 @@ describe("WhatsApp outreach from the CRM", () => {
     expect((await outreach.list(actor))[0].stats).toMatchObject({ sent: 1, sentToday: 1 })
 
     // With no person's name the business's name stands in; with no {الرابط} the link is added
-    // at the end; a lead further along stays in its stage.
-    const plain = await outreach.create(actor, { ...CAMPAIGN, message: "أهلًا {الاسم}" })
+    // at the end; with no picture there is no picture link; a lead further along stays in its
+    // stage.
+    const plain = await outreach.create(actor, {
+      ...CAMPAIGN,
+      message: "أهلًا {الاسم}",
+      imageUrl: null,
+    })
     const nakheel = await lead({ company: "مقهى النخيل", phone: "+966557778888", stage: "meeting" })
     const second = await outreach.send(actor, plain.id, nakheel)
     expect(second.message).toBe(`أهلًا مقهى النخيل\n${second.trackedUrl}`)
@@ -234,7 +239,7 @@ describe("WhatsApp outreach from the CRM", () => {
 
     const sent = await outreach.send(actor, campaign.id, reem)
     expect(sent.message).toBe(
-      `مرحبًا الريم\n${sent.trackedUrl}\nلإيقاف الرسائل: ${sent.trackedUrl}/stop`
+      `${sent.trackedUrl}/pic\n\nمرحبًا الريم\n${sent.trackedUrl}\nلإيقاف الرسائل: ${sent.trackedUrl}/stop`
     )
     const code = sent.trackedUrl.split("/").pop() as string
 
@@ -302,7 +307,7 @@ describe("WhatsApp outreach from the CRM", () => {
     const sent = await outreach.send(actor, campaign.id, reem)
     // Two links as written, and no third one added at the end.
     expect(sent.message).toBe(
-      `مرحبًا الريم\nمهتم؟ ${sent.trackedUrl}/yes\nغير مهتم؟ ${sent.trackedUrl}/stop`
+      `${sent.trackedUrl}/pic\n\nمرحبًا الريم\nمهتم؟ ${sent.trackedUrl}/yes\nغير مهتم؟ ${sent.trackedUrl}/stop`
     )
     expect(await stageOf(reem)).toBe("whatsapp_sent")
     const code = sent.trackedUrl.split("/").pop() as string
