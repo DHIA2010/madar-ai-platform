@@ -56,14 +56,14 @@ const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
 const normalizePhone = (value: string) =>
   value.replace(/[٠-٩]/g, (digit) => String(ARABIC_DIGITS.indexOf(digit))).replace(/[\s-]/g, "")
 
-function validate(values: Record<Field, string>) {
+function validate(values: Record<Field, string>, askBusinessType: boolean) {
   const errors: Partial<Record<Field, string>> = {}
   if (values.companyName.trim().length < 2) errors.companyName = "اكتب اسم الشركة"
   if (!/^\+?\d{7,15}$/.test(normalizePhone(values.phone.trim())))
     errors.phone = "اكتب رقم جوال صحيح"
   if (values.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim()))
     errors.email = "اكتب بريدًا إلكترونيًا صحيحًا أو اتركه فارغًا"
-  if (!values.businessType) errors.businessType = "اختر نوع نشاطك"
+  if (askBusinessType && !values.businessType) errors.businessType = "اختر نوع نشاطك"
   return errors
 }
 
@@ -94,6 +94,21 @@ const HEADLINES: Record<string, string> = {
   restaurant: "كاشير للمطاعم والكافيهات",
   booking: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
   "whatsapp-invoices": "أرسل فواتير عملائك عبر واتساب",
+  campaigns: "أدر حملاتك الإعلانية كلها من مدار",
+}
+
+// A topic about another app than the cashier also carries its own line and points beneath the
+// headline (the default ones speak of the cashier).
+// noBusinessType: the "type of business" question is left off (it doesn't fit that audience).
+const TOPIC_PAGES: Record<
+  string,
+  Pick<typeof PAGE, "subtitle" | "points"> & { noBusinessType?: boolean }
+> = {
+  campaigns: {
+    subtitle: "سناب شات وتيك توك وجوجل وميتا في لوحة واحدة، وأنشئ حملات سناب شات من داخل مدار.",
+    points: ["كل المنصات في لوحة واحدة", "العائد على الإنفاق (ROAS)", "أي إعلان جاب مبيعات"],
+    noBusinessType: true,
+  },
 }
 
 // madar.my's "talk to sales" page, and the landing page of every ad: deliberately nothing but
@@ -110,6 +125,9 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
   // and passes it in, so the headline is part of the page as sent -- not swapped in after the
   // page's code has loaded.
   const title = (topic ? HEADLINES[topic] : null) ?? PAGE.title
+  const topicPage = topic ? TOPIC_PAGES[topic] : undefined
+  const { subtitle, points } = topicPage ?? PAGE
+  const askBusinessType = !topicPage?.noBusinessType
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
   // After the form: choose (meeting or call) → booking (calendar) or calling (day and time).
   const [status, setStatus] = useState<
@@ -226,7 +244,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    const found = validate(values)
+    const found = validate(values, askBusinessType)
     setErrors(found)
     if (Object.keys(found).length > 0) return
     setStatus("sending")
@@ -240,7 +258,7 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
           email: values.email.trim(),
           website,
           attribution: readAttribution(),
-          businessType: values.businessType,
+          businessType: values.businessType || undefined,
         }),
       })
       if (!response.ok) {
@@ -471,11 +489,9 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
               <h1 className="text-center text-[24px] leading-tight font-black text-[#0b1738]">
                 {title}
               </h1>
-              <p className="mt-2 text-center text-[15px] leading-7 text-slate-600">
-                {PAGE.subtitle}
-              </p>
+              <p className="mt-2 text-center text-[15px] leading-7 text-slate-600">{subtitle}</p>
               <ul className="mt-3 flex flex-wrap justify-center gap-2">
-                {PAGE.points.map((point) => (
+                {points.map((point) => (
                   <li
                     key={point}
                     className="flex items-center gap-1.5 rounded-full bg-[#f3f7ff] px-3 py-1.5 text-[13px] font-bold text-[#0b1738]"
@@ -550,41 +566,47 @@ export function ContactSalesPage({ topic }: { topic?: string | null }) {
                   ) : null}
                 </div>
 
-                <div>
-                  <p className="mb-1.5 text-[14px] font-bold text-[#0b1738]">
-                    نوع نشاطك <span className="text-rose-500">*</span>
-                  </p>
-                  <div role="radiogroup" aria-label="نوع نشاطك" className="flex flex-wrap gap-1.5">
-                    {BUSINESS_TYPES.map(([id, label]) => {
-                      const picked = values.businessType === id
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          role="radio"
-                          aria-checked={picked}
-                          onClick={() => {
-                            setValues((current) => ({ ...current, businessType: id }))
-                            setErrors((current) => ({ ...current, businessType: undefined }))
-                          }}
-                          className={cn(
-                            "h-10 rounded-full border-2 px-3.5 text-[14px] font-bold transition-colors",
-                            picked
-                              ? "border-[#2878ff] bg-[#eef4ff] text-[#1d4fd8]"
-                              : "border-slate-200 bg-white text-[#0b1738] hover:border-slate-300"
-                          )}
-                        >
-                          {label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {errors.businessType ? (
-                    <p className="mt-1 text-[13px] font-semibold text-rose-600">
-                      {errors.businessType}
+                {askBusinessType ? (
+                  <div>
+                    <p className="mb-1.5 text-[14px] font-bold text-[#0b1738]">
+                      نوع نشاطك <span className="text-rose-500">*</span>
                     </p>
-                  ) : null}
-                </div>
+                    <div
+                      role="radiogroup"
+                      aria-label="نوع نشاطك"
+                      className="flex flex-wrap gap-1.5"
+                    >
+                      {BUSINESS_TYPES.map(([id, label]) => {
+                        const picked = values.businessType === id
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            role="radio"
+                            aria-checked={picked}
+                            onClick={() => {
+                              setValues((current) => ({ ...current, businessType: id }))
+                              setErrors((current) => ({ ...current, businessType: undefined }))
+                            }}
+                            className={cn(
+                              "h-10 rounded-full border-2 px-3.5 text-[14px] font-bold transition-colors",
+                              picked
+                                ? "border-[#2878ff] bg-[#eef4ff] text-[#1d4fd8]"
+                                : "border-slate-200 bg-white text-[#0b1738] hover:border-slate-300"
+                            )}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {errors.businessType ? (
+                      <p className="mt-1 text-[13px] font-semibold text-rose-600">
+                        {errors.businessType}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {/* Hidden from people; only bots fill it in. */}
                 <input
