@@ -147,6 +147,37 @@ export function sourceLabel(attribution: LeadAttribution | null | undefined): st
   return touch.campaign ? `${touch.source} / ${touch.campaign}` : touch.source
 }
 
+// Every UTM of the visit that brought the lead (the last touch), named as in the link:
+// "source: snapchat · medium: paid_social · campaign: x · content: y". One line, for the template.
+const UTM_KEYS = ["source", "medium", "campaign", "content", "term"] as const
+function utmParts(attribution: LeadAttribution | null | undefined): string[] {
+  const touch = attribution?.last ?? attribution?.first
+  if (!touch?.source) return []
+  return UTM_KEYS.flatMap((key) => {
+    const value = (touch[key] ?? "").replace(/\s+/g, " ").trim()
+    return value ? [`${key}: ${value.length > 60 ? `${value.slice(0, 57)}...` : value}`] : []
+  })
+}
+export function utmLine(attribution: LeadAttribution | null | undefined): string {
+  const parts = utmParts(attribution)
+  if (parts.length === 0) return "مباشر"
+  const line = parts.join(" · ")
+  return line.length > 300 ? `${line.slice(0, 297)}...` : line
+}
+
+// The same, one UTM per line, for the direct message (which can hold line breaks).
+function utmBlock(attribution: LeadAttribution | null | undefined): string {
+  const parts = utmParts(attribution)
+  return parts.length === 0 ? "مباشر" : `\n${parts.map((part) => `   ${part}`).join("\n")}`
+}
+
+// The mobile as WhatsApp turns into a tap (call, chat, save), and a wa.me link that opens the
+// chat with them straight away.
+function phoneParam(phone: string | null | undefined): string {
+  const number = phone ? toWhatsAppNumber(phone) : null
+  return number ? `+${number} · https://wa.me/${number}` : param(phone)
+}
+
 // The template's five body parameters, in order.
 export function leadAlertParameters(lead: LeadAlert): string[] {
   return [
@@ -160,9 +191,9 @@ export function leadAlertParameters(lead: LeadAlert): string[] {
           )
         : KIND_LABEL[lead.kind],
     param(lead.name),
-    param(lead.phone),
+    phoneParam(lead.phone),
     param(lead.email),
-    param(lead.interestedIn ? `واتساب / ${lead.interestedIn}` : sourceLabel(lead.attribution)),
+    lead.interestedIn ? param(`واتساب / ${lead.interestedIn}`) : utmLine(lead.attribution),
   ]
 }
 
@@ -179,11 +210,14 @@ export class WhatsAppLeadAlertsService {
     try {
       const phones = await this.platform.leadAlertPhones()
       if (phones.length > 0) {
+        const parameters = leadAlertParameters(lead)
         await this.send(
           phones,
-          leadAlertParameters(lead),
+          parameters,
           lead.kind,
-          lead.interestedIn ? INTEREST_HEADING : lead.appointment ? APPOINTMENT_HEADING : null
+          lead.interestedIn ? INTEREST_HEADING : lead.appointment ? APPOINTMENT_HEADING : null,
+          // The direct message lists the UTMs one per line.
+          lead.interestedIn ? parameters : [...parameters.slice(0, 4), utmBlock(lead.attribution)]
         )
       }
     } catch (error) {
@@ -370,13 +404,14 @@ export class WhatsAppLeadAlertsService {
     phones: string[],
     parameters: string[],
     kind: LeadAlert["kind"],
-    heading: string | null = null
+    heading: string | null = null,
+    directParameters: string[] = parameters
   ): Promise<LeadAlertSendResult> {
     const context = await this.platform.sendingContext()
     const open = await this.openWindows(new Date())
     const filled = filledBody(
       kind === "signup" ? SIGNUP_ALERT_TEMPLATE : LEAD_ALERT_TEMPLATE,
-      parameters
+      directParameters
     )
     // A direct message can say what it is; the template's own heading can't be changed.
     const text = heading ? filled.replace(NEW_LEAD_HEADING, heading) : filled

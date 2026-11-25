@@ -165,13 +165,19 @@ describe("leadAlertParameters", () => {
         email: null,
         attribution: null,
       })
-    ).toEqual(["طلب تواصل مع المبيعات", "مؤسسة الريم", "0551234567", "—", "مباشر"])
+    ).toEqual([
+      "طلب تواصل مع المبيعات",
+      "مؤسسة الريم",
+      "+966551234567 · https://wa.me/966551234567",
+      "—",
+      "مباشر",
+    ])
 
     const touch = {
       source: "snapchat",
       medium: "paid_social",
       campaign: "sales_leads",
-      content: null,
+      content: "offer_149_video",
       term: null,
       clickId: null,
       clickIdType: null,
@@ -190,7 +196,7 @@ describe("leadAlertParameters", () => {
       "Reem Trading",
       "—",
       "owner@reem.sa",
-      "snapchat / sales_leads",
+      "source: snapchat · medium: paid_social · campaign: sales_leads · content: offer_149_video",
     ])
     expect(signup).toHaveLength(SIGNUP_ALERT_TEMPLATE.bodyExamples.length)
     expect(signup).toHaveLength(LEAD_ALERT_TEMPLATE.bodyExamples.length)
@@ -233,7 +239,7 @@ describe("WhatsAppLeadAlertsService", () => {
     expect(sent[0].template.components[0].parameters.map((parameter) => parameter.text)).toEqual([
       "طلب تواصل مع المبيعات",
       "مؤسسة الريم",
-      "0551112222",
+      "+966551112222 · https://wa.me/966551112222",
       "—",
       "مباشر",
     ])
@@ -377,7 +383,7 @@ describe("direct alerts in the 24 hours after a number wrote to Madar", () => {
         "النوع: طلب تواصل مع المبيعات",
         "",
         "• الاسم: مؤسسة الريم",
-        "• الجوال: 0551112222",
+        "• الجوال: +966551112222 · https://wa.me/966551112222",
         "• البريد: —",
         "• المصدر: مباشر",
         "",
@@ -399,6 +405,33 @@ describe("direct alerts in the 24 hours after a number wrote to Madar", () => {
     expect(sent[3].interactive?.body.text).toContain("تنبيه من حسابك في مدار")
     expect(sent[3].interactive?.body.text).toContain("• النوع: تسجيل حساب جديد")
     expect(sent[4].template.name).toBe("madar_account_alert")
+
+    // With UTMs, the direct message lists them one per line; the template has them on one line.
+    sent.length = 0
+    const touch = {
+      source: "snapchat",
+      medium: "paid_social",
+      campaign: "pos_leads",
+      content: "offer_149_video",
+      term: null,
+      clickId: null,
+      clickIdType: null,
+      referrer: null,
+      landingPage: null,
+      at: "2026-11-25T10:00:00+03:00",
+    }
+    await alerts.notify({
+      kind: "website",
+      name: "مؤسسة الريم",
+      phone: "0551112222",
+      attribution: { first: touch, last: touch },
+    })
+    expect(sent[0].interactive?.body.text).toContain(
+      "• المصدر: \n   source: snapchat\n   medium: paid_social\n   campaign: pos_leads\n   content: offer_149_video\n"
+    )
+    expect(sent[1].template.components[0].parameters[4].text).toBe(
+      "source: snapchat · medium: paid_social · campaign: pos_leads · content: offer_149_video"
+    )
   })
 
   it("needs no approved template for a number that wrote", async () => {
