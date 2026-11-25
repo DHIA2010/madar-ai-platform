@@ -67,7 +67,10 @@ import {
   SNAPCHAT_MIN_SPEND_CAP,
   SNAPCHAT_OBJECTIVES,
   SNAPCHAT_TARGET_COST_GOALS,
+  SNAPCHAT_WINDOW_GOALS,
+  SNAPCHAT_WINDOWS,
   type SnapchatBidStrategy,
+  type SnapchatConversionWindow,
   type SnapchatGoal,
 } from "../services/campaign-publishing.service"
 import {
@@ -150,6 +153,7 @@ interface Draft {
   campaignLifetimeCap: string
   bidStrategy: SnapchatBidStrategy
   bidAmount: string
+  conversionWindow: SnapchatConversionWindow
   // Snapchat only: some of the country's regions, or some of its cities. Empty: all of it.
   regionIds: string[]
   cityKeys: string[]
@@ -428,6 +432,7 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
       campaignLifetimeCap: "",
       bidStrategy: "auto",
       bidAmount: "",
+      conversionWindow: "SWIPE_28DAY_VIEW_1DAY",
       regionIds: [],
       cityKeys: [],
       languages: [],
@@ -954,6 +959,9 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                           : null,
                         bidStrategy: draft.bidStrategy,
                         bidAmount: draft.bidStrategy === "auto" ? null : Number(draft.bidAmount),
+                        conversionWindow: SNAPCHAT_WINDOW_GOALS.includes(goal)
+                          ? draft.conversionWindow
+                          : null,
                         regionIds: firstGroup.regionIds,
                         cityKeys: firstGroup.cityKeys,
                         languages: firstGroup.languages,
@@ -1245,6 +1253,14 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
     ...(isSnapchat
       ? [
           { label: t("review.goal"), value: t(`goals.${goal}`) },
+          ...(SNAPCHAT_WINDOW_GOALS.includes(goal)
+            ? [
+                {
+                  label: t("optimization.window"),
+                  value: t(`optimization.windows.${draft.conversionWindow}`),
+                },
+              ]
+            : []),
           ...(draft.campaignDailyCap
             ? [
                 {
@@ -1800,20 +1816,102 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
 
             {isSnapchat ? (
               <>
-                <Field
-                  label={t("audience.goal")}
-                  hint={
-                    goal === "APP_INSTALLS"
-                      ? t("audience.goalHintInstalls")
-                      : t("audience.goalHint")
-                  }
-                >
-                  {selectField(
-                    goal,
-                    (value) => set("goal", value as SnapchatGoal),
-                    goals.map((entry) => ({ value: entry, label: t(`goals.${entry}`) }))
-                  )}
-                </Field>
+                <div className="space-y-5 rounded-xl border border-[#e1e7f0] bg-white p-4">
+                  <div>
+                    <p className={cn("text-[14px] font-bold", HEADING)}>
+                      {t("optimization.title")}
+                    </p>
+                    <p className={cn("mt-1 text-[12px] leading-5", MUTED)}>
+                      {t("optimization.hint")}
+                    </p>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field
+                      label={t("audience.goal")}
+                      hint={
+                        goal.startsWith("APP_")
+                          ? t("audience.goalHintInstalls")
+                          : t("audience.goalHint")
+                      }
+                    >
+                      {selectField(
+                        goal,
+                        (value) => set("goal", value as SnapchatGoal),
+                        goals.map((entry) => ({ value: entry, label: t(`goals.${entry}`) }))
+                      )}
+                    </Field>
+                    <Field
+                      label={t("optimization.window")}
+                      hint={
+                        SNAPCHAT_WINDOW_GOALS.includes(goal)
+                          ? t("optimization.windowHint")
+                          : t("optimization.windowFixed")
+                      }
+                    >
+                      {SNAPCHAT_WINDOW_GOALS.includes(goal) ? (
+                        selectField(
+                          draft.conversionWindow,
+                          (value) => set("conversionWindow", value as SnapchatConversionWindow),
+                          SNAPCHAT_WINDOWS.map((entry) => ({
+                            value: entry,
+                            label: t(`optimization.windows.${entry}`),
+                          }))
+                        )
+                      ) : (
+                        <p
+                          className={cn("flex h-12 items-center text-[14px] font-semibold", MUTED)}
+                        >
+                          {t("optimization.windows.SWIPE_28DAY_VIEW_1DAY")}
+                        </p>
+                      )}
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field
+                      label={t("advanced.bidStrategy")}
+                      hint={t(`advanced.bidStrategyHints.${draft.bidStrategy}`)}
+                      error={errors.bidStrategy}
+                    >
+                      {selectField(
+                        draft.bidStrategy,
+                        (value) => set("bidStrategy", value as SnapchatBidStrategy),
+                        (["auto", "target_cost", "max_bid"] as const).map((entry) => ({
+                          value: entry,
+                          label: t(`advanced.bidStrategies.${entry}`),
+                        }))
+                      )}
+                    </Field>
+                    {draft.bidStrategy === "auto" ? null : (
+                      <Field
+                        label={
+                          draft.bidStrategy === "target_cost"
+                            ? t("optimization.targetCost", { goal: t(`goals.${goal}`) })
+                            : t("advanced.bidAmount")
+                        }
+                        error={errors.bidAmount}
+                      >
+                        <div className="relative">
+                          <AppInput
+                            className={cn(FIELD, "pe-16")}
+                            type="number"
+                            inputMode="decimal"
+                            placeholder={t("advanced.none")}
+                            value={draft.bidAmount}
+                            onChange={(event) => set("bidAmount", event.target.value)}
+                          />
+                          <span
+                            className={cn(
+                              "pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold",
+                              MUTED
+                            )}
+                          >
+                            {currencyLabel}
+                          </span>
+                        </div>
+                      </Field>
+                    )}
+                  </div>
+                </div>
 
                 <div className="space-y-5 rounded-xl border border-[#e1e7f0] bg-[#fafbfe] p-4">
                   <div>
@@ -1869,44 +1967,6 @@ export function CampaignPublishWizard({ onPublished }: { onPublished?: () => voi
                         </span>
                       </div>
                     </Field>
-                  </div>
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <Field
-                      label={t("advanced.bidStrategy")}
-                      hint={t(`advanced.bidStrategyHints.${draft.bidStrategy}`)}
-                      error={errors.bidStrategy}
-                    >
-                      {selectField(
-                        draft.bidStrategy,
-                        (value) => set("bidStrategy", value as SnapchatBidStrategy),
-                        (["auto", "target_cost", "max_bid"] as const).map((entry) => ({
-                          value: entry,
-                          label: t(`advanced.bidStrategies.${entry}`),
-                        }))
-                      )}
-                    </Field>
-                    {draft.bidStrategy === "auto" ? null : (
-                      <Field label={t("advanced.bidAmount")} error={errors.bidAmount}>
-                        <div className="relative">
-                          <AppInput
-                            className={cn(FIELD, "pe-16")}
-                            type="number"
-                            inputMode="decimal"
-                            placeholder={t("advanced.none")}
-                            value={draft.bidAmount}
-                            onChange={(event) => set("bidAmount", event.target.value)}
-                          />
-                          <span
-                            className={cn(
-                              "pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold",
-                              MUTED
-                            )}
-                          >
-                            {currencyLabel}
-                          </span>
-                        </div>
-                      </Field>
-                    )}
                   </div>
                 </div>
               </>

@@ -475,6 +475,50 @@ describe("viewing, editing and copying from the campaigns list", () => {
     ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
   })
 
+  it("changes an ad group's bid, and shows its goal, window and bid", async () => {
+    const { service, account } = control()
+    const sent = () => (account.writes().at(-1)?.body?.adsquads as Json[])[0]
+    const squad = account.store.adsquads.get("squad-1") as Json
+    squad.auto_bid = true
+    squad.conversion_window = "SWIPE_7DAY"
+    expect(await service.settings(actor, rowId("squad-1"), "adGroup")).toMatchObject({
+      goal: "PIXEL_SIGNUP",
+      conversionWindow: "SWIPE_7DAY",
+      bidStrategy: "auto",
+      bidAmount: null,
+    })
+
+    const saved = await service.edit(actor, rowId("squad-1"), "adGroup", {
+      bidStrategy: "target_cost",
+      bidAmount: 250,
+    })
+    expect(sent()).toMatchObject({ bid_strategy: "TARGET_COST", bid_micro: 250_000_000 })
+    // Snapchat wants its retired fields left off an update.
+    expect(sent()).not.toHaveProperty("auto_bid")
+    expect(sent()).not.toHaveProperty("target_bid")
+    expect(saved).toMatchObject({ bidStrategy: "target_cost", bidAmount: 250 })
+
+    // Only the amount: the strategy it has stays.
+    await service.edit(actor, rowId("squad-1"), "adGroup", { bidAmount: 180 })
+    expect(sent()).toMatchObject({ bid_strategy: "TARGET_COST", bid_micro: 180_000_000 })
+
+    await service.edit(actor, rowId("squad-1"), "adGroup", { bidStrategy: "auto" })
+    expect(sent()).toMatchObject({ bid_strategy: "AUTO_BID" })
+    expect(sent()).not.toHaveProperty("bid_micro")
+
+    // A ceiling needs an amount; a target cost needs a goal Snapchat takes one with.
+    const writes = account.writes().length
+    await expect(
+      service.edit(actor, rowId("squad-1"), "adGroup", { bidStrategy: "max_bid" })
+    ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
+    // (Each save replaces the stand-in's copy, so the current one is changed.)
+    ;(account.store.adsquads.get("squad-1") as Json).optimization_goal = "IMPRESSIONS"
+    await expect(
+      service.edit(actor, rowId("squad-1"), "adGroup", { bidStrategy: "target_cost", bidAmount: 5 })
+    ).rejects.toMatchObject({ code: "PUBLISH_SETTINGS_NOT_SUITABLE" })
+    expect(account.writes().length).toBe(writes)
+  })
+
   it("leaves the audience untouched when only the name changes", async () => {
     const { service, account } = control()
     const before = structuredClone(account.store.adsquads.get("squad-1")?.targeting)

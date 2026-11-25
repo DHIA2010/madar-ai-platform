@@ -271,9 +271,13 @@ describe("publishing to Snapchat", () => {
     expect(awareness.campaign).not.toHaveProperty("lifetime_spend_cap_micro")
     expect(awareness.adSet).toMatchObject({
       optimization_goal: "IMPRESSIONS",
-      auto_bid: true,
       bid_strategy: "AUTO_BID",
     })
+    // Snapchat retired auto_bid and target_bid; only bid_strategy is sent.
+    expect(awareness.adSet).not.toHaveProperty("auto_bid")
+    expect(awareness.adSet).not.toHaveProperty("target_bid")
+    // No window is sent for a goal that has only Snapchat's default one.
+    expect(awareness.adSet).not.toHaveProperty("conversion_window")
     expect(awareness.adSet).not.toHaveProperty("pixel_id")
     expect(awareness.askedForPixel).toBe(false)
 
@@ -294,8 +298,6 @@ describe("publishing to Snapchat", () => {
       optimization_goal: "PIXEL_PURCHASE",
       pixel_id: "pixel-1",
       conversion_window: "SWIPE_28DAY_VIEW_1DAY",
-      auto_bid: false,
-      target_bid: true,
       bid_strategy: "TARGET_COST",
       bid_micro: 60_000_000,
     })
@@ -313,7 +315,6 @@ describe("publishing to Snapchat", () => {
     expect(leads.adSet).toMatchObject({
       optimization_goal: "SWIPES",
       bid_strategy: "LOWEST_COST_WITH_MAX_BID",
-      target_bid: false,
       bid_micro: 2_500_000,
     })
     expect(leads.askedForPixel).toBe(false)
@@ -321,6 +322,62 @@ describe("publishing to Snapchat", () => {
       optimization_goal: "PIXEL_SIGNUP",
       pixel_id: "pixel-1",
     })
+
+    // Sales optimized for sign-ups, counted over 7 days after a tap (Snapchat's other window).
+    expect(
+      (await sent({ objective: "sales", goal: "PIXEL_SIGNUP", conversionWindow: "SWIPE_7DAY" }))
+        .adSet
+    ).toMatchObject({
+      optimization_goal: "PIXEL_SIGNUP",
+      pixel_id: "pixel-1",
+      conversion_window: "SWIPE_7DAY",
+    })
+    // A landing page view uses the pixel when there is one, and takes a target cost.
+    expect(
+      (
+        await sent({
+          objective: "traffic",
+          goal: "LANDING_PAGE_VIEW",
+          bidStrategy: "target_cost",
+          bidAmount: 1.5,
+        })
+      ).adSet
+    ).toMatchObject({
+      optimization_goal: "LANDING_PAGE_VIEW",
+      pixel_id: "pixel-1",
+      bid_strategy: "TARGET_COST",
+      bid_micro: 1_500_000,
+    })
+  })
+
+  it("checks the goal, the window and the bid fit Snapchat before publishing", () => {
+    const base = {
+      objective: "sales" as const,
+      dailyBudget: 100,
+      campaignDailyCap: null,
+      campaignLifetimeCap: null,
+    }
+    expect(snapchatSettingsProblem({ ...base, goal: "PIXEL_SIGNUP" })).toBeNull()
+    expect(snapchatSettingsProblem({ ...base, goal: "SWIPES" })).toBe("goal")
+    expect(
+      snapchatSettingsProblem({ ...base, goal: "PIXEL_SIGNUP", conversionWindow: "SWIPE_7DAY" })
+    ).toBeNull()
+    expect(
+      snapchatSettingsProblem({
+        ...base,
+        goal: "LANDING_PAGE_VIEW",
+        conversionWindow: "SWIPE_7DAY",
+      })
+    ).toBe("window_goal")
+    expect(
+      snapchatSettingsProblem({
+        ...base,
+        objective: "awareness",
+        goal: "IMPRESSIONS",
+        bidStrategy: "target_cost",
+        bidAmount: 5,
+      })
+    ).toBe("target_cost_goal")
   })
 
   it("narrows the audience to regions or to cities, and reads them back", async () => {
@@ -641,7 +698,7 @@ describe("publishing to Snapchat", () => {
     expect(body("/campaigns/camp-1/adsquads").adsquads[0]).toMatchObject({
       daily_budget_micro: 50_000_000,
       optimization_goal: "SWIPES",
-      auto_bid: true,
+      bid_strategy: "AUTO_BID",
       targeting: {
         geos: [{ country_code: "sa", operation: "INCLUDE" }],
         demographics: [{ min_age: "25", max_age: "44", gender: "MALE", operation: "INCLUDE" }],

@@ -288,6 +288,10 @@ export interface CampaignControlSettings {
   deviceSystem: "all" | "ios" | "android" | null
   deviceConnection: "all" | "wifi" | "cell" | null
   lifetimeBudget: number | null
+  // A Snapchat ad group's bid, and the window its results count in (fixed once made).
+  bidStrategy: "auto" | "target_cost" | "max_bid" | null
+  bidAmount: number | null
+  conversionWindow: string | null
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -321,6 +325,9 @@ export interface CampaignControlChanges {
   deviceConnection?: "all" | "wifi" | "cell"
   // For an ad group whose budget is for its whole run.
   lifetimeBudget?: number
+  // A Snapchat ad group's bid; the amount is the target cost or ceiling (not with "auto").
+  bidStrategy?: "auto" | "target_cost" | "max_bid"
+  bidAmount?: number
   // Copies of an ad only.
   url?: string
 }

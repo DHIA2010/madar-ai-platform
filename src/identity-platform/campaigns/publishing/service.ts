@@ -42,6 +42,8 @@ import {
   SNAPCHAT_MIN_SPEND_CAP,
   SNAPCHAT_TARGET_COST_GOALS,
   type SnapchatBidStrategy,
+  type SnapchatConversionWindow,
+  SNAPCHAT_WINDOW_GOALS,
   type SnapchatCallToAction,
   type SnapchatGoal,
   type SnapchatObjective,
@@ -187,6 +189,8 @@ export type PublishCampaignInput =
       campaignLifetimeCap?: number | null
       bidStrategy?: SnapchatBidStrategy | null
       bidAmount?: number | null
+      // Over how long a result counts (pixel and app goals only); Snapchat's default when left out.
+      conversionWindow?: SnapchatConversionWindow | null
       // Where inside the country: some regions or some cities. Empty: the whole country.
       regionIds?: string[] | null
       cityKeys?: string[] | null
@@ -246,6 +250,7 @@ export interface PublicationDetails {
   campaignLifetimeCap?: number
   bidStrategy?: string
   bidAmount?: number
+  conversionWindow?: string
   regionIds?: string[]
   cityKeys?: string[]
   languages?: string[]
@@ -472,9 +477,18 @@ export function snapchatSettingsProblem(
     | "campaignLifetimeCap"
     | "bidStrategy"
     | "bidAmount"
+    | "conversionWindow"
   > &
     Partial<Pick<SnapchatInput, "countryCode" | "regionIds" | "cityKeys">>
-): "goal" | "daily_cap" | "lifetime_cap" | "bid_amount" | "target_cost_goal" | "places" | null {
+):
+  | "goal"
+  | "daily_cap"
+  | "lifetime_cap"
+  | "bid_amount"
+  | "target_cost_goal"
+  | "window_goal"
+  | "places"
+  | null {
   if (snapchatPlacesProblem(input.countryCode ?? "sa", input.regionIds, input.cityKeys)) {
     return "places"
   }
@@ -504,6 +518,10 @@ export function snapchatSettingsProblem(
       return "target_cost_goal"
     }
   }
+  // Only some goals take the 7-day window.
+  if (input.conversionWindow === "SWIPE_7DAY" && !SNAPCHAT_WINDOW_GOALS.has(goal)) {
+    return "window_goal"
+  }
   return null
 }
 
@@ -517,6 +535,7 @@ function snapchatDetails(input: SnapchatInput): PublicationDetails | null {
     details.bidStrategy = input.bidStrategy
     if (input.bidAmount) details.bidAmount = input.bidAmount
   }
+  if (input.conversionWindow) details.conversionWindow = input.conversionWindow
   if (input.regionIds?.length) details.regionIds = input.regionIds
   if (input.cityKeys?.length) details.cityKeys = input.cityKeys
   if (input.languages?.length) details.languages = input.languages
@@ -1292,6 +1311,7 @@ export class CampaignPublishingService {
       campaignLifetimeCap: input.campaignLifetimeCap ?? null,
       bidStrategy: input.bidStrategy ?? null,
       bidAmount: input.bidAmount ?? null,
+      conversionWindow: input.conversionWindow ?? null,
       regionIds: input.regionIds ?? null,
       cityKeys: input.cityKeys ?? null,
       languages: input.languages ?? null,

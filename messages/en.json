@@ -8202,7 +8202,7 @@
         },
         "googleNote": "Google search ads are shown by what people search for, not by age or gender. Choosing the country is enough.",
         "snapchatAgeNote": "Snapchat targets a youngest age up to 45 and an oldest age up to 49 only; above that it knows only \"and older\". So on Snapchat your ad will be published for these ages: {ages}.",
-        "goal": "What do you want more of?",
+        "goal": "Performance goal (conversion event)",
         "goalHint": "Snapchat shows the ad to people likely to do this. We picked the best fit for your objective; you can change it.",
         "budgetKinds": {
           "daily": "Daily budget",
@@ -8429,7 +8429,12 @@
         "PIXEL_SIGNUP": "Sign-ups (pixel)",
         "PIXEL_ADD_TO_CART": "Adds to cart (pixel)",
         "PIXEL_PURCHASE": "Purchases (pixel)",
-        "APP_INSTALLS": "App installs"
+        "APP_INSTALLS": "App installs",
+        "VIDEO_VIEWS_15_SEC": "15-second video views",
+        "LANDING_PAGE_VIEW": "Landing page views",
+        "APP_PURCHASE": "In-app purchases",
+        "APP_SIGNUP": "In-app sign-ups",
+        "APP_ADD_TO_CART": "In-app add to cart"
       },
       "advanced": {
         "title": "Advanced options (optional)",
@@ -8527,6 +8532,19 @@
         "iconUpload": "Upload the icon",
         "iconChange": "Change the icon",
         "adNote": "The ad opens “{name}” in the store directly, so it needs no link."
+      },
+      "optimization": {
+        "title": "Optimization and bid",
+        "hint": "The same choices as Snapchat: what the campaign optimizes for, how long a result counts, and how it bids.",
+        "window": "Optimization window",
+        "windowHint": "How many days after a tap or a view a result still counts for the ad.",
+        "windowFixed": "Snapchat uses only this window with this goal.",
+        "windows": {
+          "SWIPE_28DAY_VIEW_1DAY": "28-day click and 1-day view",
+          "SWIPE_7DAY": "7-day click and no view"
+        },
+        "targetCost": "Target cost per result",
+        "fixedAfter": "The performance goal and optimization window can't change once the ad group is made on Snapchat; the bid can be changed here."
       }
     },
     "metrics": {

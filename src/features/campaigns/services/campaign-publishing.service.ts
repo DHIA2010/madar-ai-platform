@@ -110,25 +110,54 @@ export type SnapchatGoal =
   | "SWIPES"
   | "APP_INSTALLS"
   | "VIDEO_VIEWS"
+  | "VIDEO_VIEWS_15_SEC"
+  | "LANDING_PAGE_VIEW"
   | "PIXEL_PAGE_VIEW"
   | "PIXEL_SIGNUP"
   | "PIXEL_ADD_TO_CART"
   | "PIXEL_PURCHASE"
+  | "APP_PURCHASE"
+  | "APP_SIGNUP"
+  | "APP_ADD_TO_CART"
 export const SNAPCHAT_GOALS: Record<PublishObjective, SnapchatGoal[]> = {
-  awareness: ["IMPRESSIONS", "VIDEO_VIEWS", "SWIPES"],
-  traffic: ["SWIPES", "PIXEL_PAGE_VIEW"],
-  leads: ["PIXEL_SIGNUP", "SWIPES"],
-  sales: ["PIXEL_PURCHASE", "PIXEL_ADD_TO_CART", "PIXEL_PAGE_VIEW"],
-  app: ["APP_INSTALLS", "SWIPES"],
+  awareness: ["IMPRESSIONS", "VIDEO_VIEWS", "VIDEO_VIEWS_15_SEC", "SWIPES"],
+  traffic: ["SWIPES", "LANDING_PAGE_VIEW", "PIXEL_PAGE_VIEW"],
+  leads: ["PIXEL_SIGNUP", "LANDING_PAGE_VIEW", "PIXEL_PAGE_VIEW", "SWIPES"],
+  sales: [
+    "PIXEL_PURCHASE",
+    "PIXEL_SIGNUP",
+    "PIXEL_ADD_TO_CART",
+    "PIXEL_PAGE_VIEW",
+    "LANDING_PAGE_VIEW",
+  ],
+  app: ["APP_INSTALLS", "APP_PURCHASE", "APP_SIGNUP", "APP_ADD_TO_CART", "SWIPES"],
 }
-export type SnapchatBidStrategy = "auto" | "target_cost" | "max_bid"
-// Snapchat takes a target cost only for these goals.
-export const SNAPCHAT_TARGET_COST_GOALS: SnapchatGoal[] = [
-  "SWIPES",
+// Over how long a result counts towards the delivery (Snapchat's "optimization window"); only
+// these goals can take the 7-day one. (The same lists the server holds.)
+export type SnapchatConversionWindow = "SWIPE_28DAY_VIEW_1DAY" | "SWIPE_7DAY"
+export const SNAPCHAT_WINDOWS: SnapchatConversionWindow[] = ["SWIPE_28DAY_VIEW_1DAY", "SWIPE_7DAY"]
+export const SNAPCHAT_WINDOW_GOALS: SnapchatGoal[] = [
   "PIXEL_PAGE_VIEW",
   "PIXEL_SIGNUP",
   "PIXEL_ADD_TO_CART",
   "PIXEL_PURCHASE",
+  "APP_INSTALLS",
+  "APP_PURCHASE",
+]
+export type SnapchatBidStrategy = "auto" | "target_cost" | "max_bid"
+// Snapchat takes a target cost only for these goals.
+export const SNAPCHAT_TARGET_COST_GOALS: SnapchatGoal[] = [
+  "SWIPES",
+  "VIDEO_VIEWS_15_SEC",
+  "LANDING_PAGE_VIEW",
+  "PIXEL_PAGE_VIEW",
+  "PIXEL_SIGNUP",
+  "PIXEL_ADD_TO_CART",
+  "PIXEL_PURCHASE",
+  "APP_INSTALLS",
+  "APP_PURCHASE",
+  "APP_SIGNUP",
+  "APP_ADD_TO_CART",
 ]
 export const SNAPCHAT_MIN_SPEND_CAP = 20
 export type PublishGender = "all" | "male" | "female"
@@ -273,6 +302,7 @@ export type PublishCampaignInput =
       callToAction: AnyCallToAction
       // Snapchat only: what the ad set is delivered for, the campaign's spend caps and the bid.
       goal?: SnapchatGoal | null
+      conversionWindow?: SnapchatConversionWindow | null
       campaignDailyCap?: number | null
       campaignLifetimeCap?: number | null
       bidStrategy?: SnapchatBidStrategy | null

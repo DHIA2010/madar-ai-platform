@@ -637,13 +637,19 @@ export const publishCampaignSchema = z.discriminatedUnion("platform", [
         "IMPRESSIONS",
         "SWIPES",
         "VIDEO_VIEWS",
+        "VIDEO_VIEWS_15_SEC",
+        "LANDING_PAGE_VIEW",
         "PIXEL_PAGE_VIEW",
         "PIXEL_SIGNUP",
         "PIXEL_ADD_TO_CART",
         "PIXEL_PURCHASE",
         "APP_INSTALLS",
+        "APP_PURCHASE",
+        "APP_SIGNUP",
+        "APP_ADD_TO_CART",
       ])
       .nullish(),
+    conversionWindow: z.enum(["SWIPE_28DAY_VIEW_1DAY", "SWIPE_7DAY"]).nullish(),
     campaignDailyCap: z.number().positive().max(1_000_000).nullish(),
     campaignLifetimeCap: z.number().positive().max(100_000_000).nullish(),
     bidStrategy: z.enum(["auto", "target_cost", "max_bid"]).nullish(),
@@ -771,6 +777,9 @@ const campaignControlChanges = {
   deviceSystem: snapchatDeviceSystem,
   deviceConnection: snapchatDeviceConnection,
   lifetimeBudget: z.number().positive().max(10000000).nullish(),
+  // An ad group's bid: how Snapchat bids, and the target cost or ceiling for the two that take one.
+  bidStrategy: z.enum(["auto", "target_cost", "max_bid"]).nullish(),
+  bidAmount: z.number().positive().max(100_000).nullish(),
 }
 export const campaignControlSettingsSchema = z.object(campaignControlTarget)
 export const campaignControlEditSchema = z.object({

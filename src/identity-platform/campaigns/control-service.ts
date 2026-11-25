@@ -45,9 +45,14 @@ import {
   type SnapchatRegion,
 } from "./publishing/snapchat-geo"
 import {
+  readSnapchatBidStrategy,
+  SNAPCHAT_BID_STRATEGY,
+  SNAPCHAT_TARGET_COST_GOALS,
   SnapchatPublishError,
+  type SnapchatBidStrategy,
   type SnapchatCallToAction,
   type SnapchatEntityLevel,
+  type SnapchatGoal,
 } from "./publishing/snapchat-publisher"
 
 // Switching a campaign, an ad group or an ad on or off -- or deleting it -- from the campaigns
@@ -170,6 +175,11 @@ export interface ControlSettings {
   deviceConnection: SnapchatDeviceConnection | null
   // An ad group's budget for its whole run, when it has that instead of a daily budget.
   lifetimeBudget: number | null
+  // An ad group's bid (how Snapchat bids, and its target cost or ceiling) and the window results
+  // count in (Snapchat ad groups only; the goal and window are fixed once it is made).
+  bidStrategy: SnapchatBidStrategy | null
+  bidAmount: number | null
+  conversionWindow: string | null
   minAge: number | null
   maxAge: number | null
   gender: "all" | "male" | "female" | null
@@ -204,6 +214,9 @@ export interface EditInput {
   // The budget for the whole run, for an ad group that has one (the kind of budget cannot be
   // switched after the ad group is made).
   lifetimeBudget?: number | null
+  // An ad group's bid; the amount is the target cost or the ceiling (not used with "auto").
+  bidStrategy?: SnapchatBidStrategy | null
+  bidAmount?: number | null
 }
 
 // A copy: its own name, and whatever of the original's settings the copy should have differently.
@@ -1215,6 +1228,7 @@ export class CampaignControlService {
         }
         if (level === "adGroup") {
           snapchatBudget(next, input)
+          snapchatBid(next, input)
           next.targeting = snapchatAudience(next.targeting, input)
         }
         return next
@@ -1342,6 +1356,7 @@ export class CampaignControlService {
           change: (copy) => {
             const next: Record<string, unknown> = { ...copy, name }
             snapchatBudget(next, input)
+            snapchatBid(next, input)
             next.targeting = snapchatAudience(next.targeting, input)
             return next
           },
@@ -1390,6 +1405,9 @@ const EMPTY: SettingsBody = {
   deviceSystem: null,
   deviceConnection: null,
   lifetimeBudget: null,
+  bidStrategy: null,
+  bidAmount: null,
+  conversionWindow: null,
   minAge: null,
   maxAge: null,
   gender: null,
@@ -1435,6 +1453,9 @@ function snapchatSettings(level: ControlLevel, entity: Raw, creative: Raw | null
     goal: text(entity.optimization_goal),
     dailyBudget: amount(entity.daily_budget_micro, 1_000_000),
     lifetimeBudget: level === "adGroup" ? amount(entity.lifetime_budget_micro, 1_000_000) : null,
+    bidStrategy: level === "adGroup" ? snapchatBidStrategyOf(entity) : null,
+    bidAmount: level === "adGroup" ? amount(entity.bid_micro, 1_000_000) : null,
+    conversionWindow: level === "adGroup" ? text(entity.conversion_window) : null,
     deviceSystem: level === "adGroup" ? devices.system : null,
     deviceConnection: level === "adGroup" ? devices.connection : null,
     startAt: instant(entity.start_time),
@@ -1653,6 +1674,44 @@ function snapchatBudget(
   if (input.lifetimeBudget != null) {
     next.lifetime_budget_micro = Math.round(input.lifetimeBudget * 1_000_000)
   }
+}
+
+// How an ad group bids: its bid_strategy, else what Snapchat's older auto_bid and target_bid say.
+function snapchatBidStrategyOf(entity: Raw): SnapchatBidStrategy {
+  const named = readSnapchatBidStrategy(entity.bid_strategy)
+  if (named) return named
+  if (entity.auto_bid === false) return entity.target_bid === true ? "target_cost" : "max_bid"
+  return "auto"
+}
+
+// An ad group's bid as asked for: auto, or a target cost or ceiling with its amount. A target cost
+// only for the goals Snapchat takes one with. Snapchat retired auto_bid and target_bid and wants
+// them left off an update.
+function snapchatBid(
+  next: Record<string, unknown>,
+  input: Pick<EditInput, "bidStrategy" | "bidAmount">
+) {
+  if (input.bidStrategy == null && input.bidAmount == null) return
+  const strategy =
+    input.bidStrategy ?? readSnapchatBidStrategy(next.bid_strategy) ?? ("auto" as const)
+  const unsuitable = (problem: string, message: string) =>
+    new IdentityError("PUBLISH_SETTINGS_NOT_SUITABLE", 422, "validation", message, { problem })
+  delete next.auto_bid
+  delete next.target_bid
+  next.bid_strategy = SNAPCHAT_BID_STRATEGY[strategy]
+  if (strategy === "auto") {
+    delete next.bid_micro
+    return
+  }
+  const amount = input.bidAmount ?? (Number(next.bid_micro) > 0 ? Number(next.bid_micro) / 1e6 : 0)
+  if (!(amount > 0)) throw unsuitable("bid_amount", "This bid needs an amount.")
+  if (
+    strategy === "target_cost" &&
+    !SNAPCHAT_TARGET_COST_GOALS.has(String(next.optimization_goal) as SnapchatGoal)
+  ) {
+    throw unsuitable("target_cost_goal", "Snapchat takes no target cost for this ad group's goal.")
+  }
+  next.bid_micro = Math.round(amount * 1_000_000)
 }
 
 // The audience's places: the ad group's own country, narrowed to the regions or the cities asked

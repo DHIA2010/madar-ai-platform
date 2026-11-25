@@ -25,7 +25,12 @@ import {
   type CampaignPerformanceRow,
   campaignPerformanceService,
 } from "../services/campaign-performance.service"
-import { CALLS_TO_ACTION } from "../services/campaign-publishing.service"
+import {
+  CALLS_TO_ACTION,
+  SNAPCHAT_TARGET_COST_GOALS,
+  type SnapchatBidStrategy,
+  type SnapchatGoal,
+} from "../services/campaign-publishing.service"
 import {
   CampaignAudiencePicker,
   CampaignDevicePicker,
@@ -92,6 +97,8 @@ interface Draft {
   deviceSystem: DeviceSystem
   deviceConnection: DeviceConnection
   lifetimeBudget: string
+  bidStrategy: SnapchatBidStrategy
+  bidAmount: string
 }
 
 function draftOf(settings: CampaignControlSettings, name: string): Draft {
@@ -113,6 +120,8 @@ function draftOf(settings: CampaignControlSettings, name: string): Draft {
     deviceSystem: settings.deviceSystem ?? "all",
     deviceConnection: settings.deviceConnection ?? "all",
     lifetimeBudget: settings.lifetimeBudget ? String(settings.lifetimeBudget) : "",
+    bidStrategy: settings.bidStrategy ?? "auto",
+    bidAmount: settings.bidAmount ? String(settings.bidAmount) : "",
   }
 }
 
@@ -151,6 +160,14 @@ function changesOf(
     if (draft.deviceSystem !== start.deviceSystem) changes.deviceSystem = draft.deviceSystem
     if (draft.deviceConnection !== start.deviceConnection) {
       changes.deviceConnection = draft.deviceConnection
+    }
+    // The bid is sent whole when either part changed.
+    if (
+      settings.bidStrategy &&
+      (draft.bidStrategy !== start.bidStrategy || draft.bidAmount !== start.bidAmount)
+    ) {
+      changes.bidStrategy = draft.bidStrategy
+      if (draft.bidStrategy !== "auto") changes.bidAmount = Number(draft.bidAmount)
     }
   }
   if (level === "ad") {
@@ -321,6 +338,21 @@ function SettingsBody({
       [t("fields.objective"), worded("objectives", settings.objective)],
       [t("fields.goal"), worded("goals", settings.goal)],
       [
+        p("optimization.window"),
+        settings.conversionWindow &&
+        p.has(`optimization.windows.${settings.conversionWindow}` as "optimization.window")
+          ? p(`optimization.windows.${settings.conversionWindow}` as "optimization.window")
+          : null,
+      ],
+      [
+        p("advanced.bidStrategy"),
+        settings.bidStrategy
+          ? settings.bidStrategy === "auto" || !settings.bidAmount
+            ? p(`advanced.bidStrategies.${settings.bidStrategy}`)
+            : `${p(`advanced.bidStrategies.${settings.bidStrategy}`)} · ${settings.bidAmount} ${currencyLabel}`
+          : null,
+      ],
+      [
         t("fields.dailyBudget"),
         settings.dailyBudget ? `${settings.dailyBudget} ${currencyLabel}` : null,
       ],
@@ -460,6 +492,15 @@ function SettingsBody({
         return t("problems.budget", { minimum: MIN_DAILY_BUDGET, currency: currencyLabel })
       }
       const from = Number(draft.minAge)
+      if (settings.bidStrategy && draft.bidStrategy !== "auto") {
+        if (!(Number(draft.bidAmount) > 0)) return p("errors.bidAmount")
+        if (
+          draft.bidStrategy === "target_cost" &&
+          !SNAPCHAT_TARGET_COST_GOALS.includes(settings.goal as SnapchatGoal)
+        ) {
+          return p("errors.targetCostGoal")
+        }
+      }
       const to = draft.maxAge ? Number(draft.maxAge) : null
       if (!(from >= MIN_AGE && from <= MIN_AGE_TOP)) {
         return t("problems.minAge", { from: MIN_AGE, to: MIN_AGE_TOP })
@@ -647,6 +688,56 @@ function SettingsBody({
               setDraft((current) => (current ? { ...current, ...devices } : current))
             }
           />
+          {settings.bidStrategy ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={LABEL}>{p("advanced.bidStrategy")}</label>
+                <AppSelect
+                  value={draft.bidStrategy}
+                  onValueChange={(value) => set("bidStrategy", value as SnapchatBidStrategy)}
+                  dir={dir}
+                >
+                  <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
+                    <AppSelectValue />
+                  </AppSelectTrigger>
+                  <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
+                    {(["auto", "target_cost", "max_bid"] as const).map((value) => (
+                      <AppSelectItem
+                        key={value}
+                        value={value}
+                        className={CAMPAIGN_SELECT_ITEM_CLASSNAME}
+                      >
+                        {p(`advanced.bidStrategies.${value}`)}
+                      </AppSelectItem>
+                    ))}
+                  </AppSelectContent>
+                </AppSelect>
+                <p className={HINT}>{p(`advanced.bidStrategyHints.${draft.bidStrategy}`)}</p>
+              </div>
+              {draft.bidStrategy === "auto" ? null : (
+                <div>
+                  <label className={LABEL}>
+                    {draft.bidStrategy === "target_cost"
+                      ? p("optimization.targetCost", { goal: worded("goals", settings.goal) ?? "" })
+                      : p("advanced.bidAmount")}
+                  </label>
+                  <div className="relative">
+                    <AppInput
+                      className={cn(FIELD, "pe-16")}
+                      type="number"
+                      inputMode="decimal"
+                      value={draft.bidAmount}
+                      onChange={(event) => set("bidAmount", event.target.value)}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] font-bold text-[#6b7b96]">
+                      {currencyLabel}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <p className={cn(HINT, "sm:col-span-2")}>{p("optimization.fixedAfter")}</p>
+            </div>
+          ) : null}
         </>
       ) : null}
 

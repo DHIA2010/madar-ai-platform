@@ -46,30 +46,74 @@ export type SnapchatGoal =
   | "SWIPES"
   | "APP_INSTALLS"
   | "VIDEO_VIEWS"
+  | "VIDEO_VIEWS_15_SEC"
+  | "LANDING_PAGE_VIEW"
   | "PIXEL_PAGE_VIEW"
   | "PIXEL_SIGNUP"
   | "PIXEL_ADD_TO_CART"
   | "PIXEL_PURCHASE"
+  | "APP_PURCHASE"
+  | "APP_SIGNUP"
+  | "APP_ADD_TO_CART"
 export const SNAPCHAT_GOALS: Record<SnapchatObjective, readonly SnapchatGoal[]> = {
-  awareness: ["IMPRESSIONS", "VIDEO_VIEWS", "SWIPES"],
-  traffic: ["SWIPES", "PIXEL_PAGE_VIEW"],
-  leads: ["PIXEL_SIGNUP", "SWIPES"],
-  sales: ["PIXEL_PURCHASE", "PIXEL_ADD_TO_CART", "PIXEL_PAGE_VIEW"],
-  // Installs are counted by Snapchat only when the app reports them to it (the Snap app id or a
-  // measurement partner, set up outside Madar); taps on the ad need nothing.
-  app: ["APP_INSTALLS", "SWIPES"],
+  awareness: ["IMPRESSIONS", "VIDEO_VIEWS", "VIDEO_VIEWS_15_SEC", "SWIPES"],
+  traffic: ["SWIPES", "LANDING_PAGE_VIEW", "PIXEL_PAGE_VIEW"],
+  leads: ["PIXEL_SIGNUP", "LANDING_PAGE_VIEW", "PIXEL_PAGE_VIEW", "SWIPES"],
+  sales: [
+    "PIXEL_PURCHASE",
+    "PIXEL_SIGNUP",
+    "PIXEL_ADD_TO_CART",
+    "PIXEL_PAGE_VIEW",
+    "LANDING_PAGE_VIEW",
+  ],
+  // Installs and in-app events are counted by Snapchat only when the app reports them to it (the
+  // Snap app id or a measurement partner, set up outside Madar); taps on the ad need nothing.
+  app: ["APP_INSTALLS", "APP_PURCHASE", "APP_SIGNUP", "APP_ADD_TO_CART", "SWIPES"],
 }
+
+// Over how long after seeing or tapping the ad a result counts towards the delivery (Snapchat's
+// "optimization window"): 28 days after a tap or 1 after a view (Snapchat's default), or 7 days
+// after a tap and none after a view. Only these goals can take the 7-day one.
+export type SnapchatConversionWindow = "SWIPE_28DAY_VIEW_1DAY" | "SWIPE_7DAY"
+export const SNAPCHAT_DEFAULT_WINDOW: SnapchatConversionWindow = "SWIPE_28DAY_VIEW_1DAY"
+export const SNAPCHAT_WINDOW_GOALS: ReadonlySet<SnapchatGoal> = new Set([
+  "PIXEL_PAGE_VIEW",
+  "PIXEL_SIGNUP",
+  "PIXEL_ADD_TO_CART",
+  "PIXEL_PURCHASE",
+  "APP_INSTALLS",
+  "APP_PURCHASE",
+])
 
 // How Snapchat bids for the ad set: on its own, around a cost per result to aim for, or never
 // above a ceiling. Snapchat only takes a target cost for some goals.
 export type SnapchatBidStrategy = "auto" | "target_cost" | "max_bid"
 export const SNAPCHAT_TARGET_COST_GOALS: ReadonlySet<SnapchatGoal> = new Set([
   "SWIPES",
+  "VIDEO_VIEWS_15_SEC",
+  "LANDING_PAGE_VIEW",
   "PIXEL_PAGE_VIEW",
   "PIXEL_SIGNUP",
   "PIXEL_ADD_TO_CART",
   "PIXEL_PURCHASE",
+  "APP_INSTALLS",
+  "APP_PURCHASE",
+  "APP_SIGNUP",
+  "APP_ADD_TO_CART",
 ])
+
+// Snapchat's own name for a bid strategy, and back.
+export const SNAPCHAT_BID_STRATEGY: Record<SnapchatBidStrategy, string> = {
+  auto: "AUTO_BID",
+  target_cost: "TARGET_COST",
+  max_bid: "LOWEST_COST_WITH_MAX_BID",
+}
+export function readSnapchatBidStrategy(value: unknown): SnapchatBidStrategy | null {
+  const found = Object.entries(SNAPCHAT_BID_STRATEGY).find(
+    ([, name]) => name === String(value ?? "").toUpperCase()
+  )
+  return found ? (found[0] as SnapchatBidStrategy) : null
+}
 // Snapchat's floor for a campaign's daily or lifetime spend cap, in the account's currency.
 export const SNAPCHAT_MIN_SPEND_CAP = 20
 
@@ -160,6 +204,7 @@ export interface SnapchatPublishInput {
   bidStrategy?: SnapchatBidStrategy | null
   // The cost per result to aim for, or the ceiling, in the account's currency.
   bidAmount?: number | null
+  conversionWindow?: SnapchatConversionWindow | null
 }
 
 // One ad group of a campaign: its own budget and its own audience. The country, the dates, the
@@ -537,19 +582,22 @@ export class SnapchatCampaignPublisher {
     // before anything is created.
     const profileId = await this.publicProfileId(token, account)
     const goal = input.goal ?? SNAPCHAT_GOALS[input.objective][0]
-    const pixelId = goal.startsWith("PIXEL_") ? await this.pixelId(token, account) : null
+    // Pixel goals need the account's Snap Pixel; a landing page view uses it when there is one.
+    const pixelId = goal.startsWith("PIXEL_")
+      ? await this.pixelId(token, account)
+      : goal === "LANDING_PAGE_VIEW"
+        ? await this.pixelId(token, account).catch(() => null)
+        : null
+    const conversionWindow = SNAPCHAT_WINDOW_GOALS.has(goal)
+      ? (input.conversionWindow ?? SNAPCHAT_DEFAULT_WINDOW)
+      : null
     const micro = (amount: number) => Math.round(amount * 1_000_000)
     const bidStrategy = input.bidStrategy ?? "auto"
+    // bid_strategy alone (Snapchat retired auto_bid and target_bid).
     const bidding: Json =
       bidStrategy === "auto" || !input.bidAmount
-        ? { auto_bid: true, bid_strategy: "AUTO_BID" }
-        : {
-            auto_bid: false,
-            target_bid: bidStrategy === "target_cost",
-            bid_strategy:
-              bidStrategy === "target_cost" ? "TARGET_COST" : "LOWEST_COST_WITH_MAX_BID",
-            bid_micro: micro(input.bidAmount),
-          }
+        ? { bid_strategy: SNAPCHAT_BID_STRATEGY.auto }
+        : { bid_strategy: SNAPCHAT_BID_STRATEGY[bidStrategy], bid_micro: micro(input.bidAmount) }
 
     const app = input.objective === "app" ? (input.app ?? null) : null
     if (input.objective === "app" && !(app?.iosAppId || app?.androidPackage)) {
@@ -663,9 +711,8 @@ export class SnapchatCampaignPublisher {
                 start_time: input.startAt,
                 ...(input.endAt ? { end_time: input.endAt } : {}),
                 optimization_goal: goal,
-                ...(pixelId
-                  ? { pixel_id: pixelId, conversion_window: "SWIPE_28DAY_VIEW_1DAY" }
-                  : {}),
+                ...(pixelId ? { pixel_id: pixelId } : {}),
+                ...(conversionWindow ? { conversion_window: conversionWindow } : {}),
               },
             ],
           }),
