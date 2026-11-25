@@ -31,6 +31,7 @@ import {
   Plus,
   Printer,
   RotateCcw,
+  ArrowLeftRight,
   Search,
   Send,
   Trash2,
@@ -452,6 +453,16 @@ export default function InvoicesPage() {
             <Link href={ROUTES.invoicesReturns}>
               <RotateCcw className="size-4" />
               {t("page.returnedInvoicesLink")}
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 gap-2 rounded-[10px] border-[#e8edf3] px-4 text-[13px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
+          >
+            <Link href={ROUTES.invoicesExchanges}>
+              <ArrowLeftRight className="size-4" />
+              {locale === "ar" ? "الاستبدالات" : "Exchanges"}
             </Link>
           </Button>
           <Button

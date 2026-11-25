@@ -116,6 +116,8 @@ export interface Invoice {
   // not the cashier who rang it up.
   salesPersonUserId: string | null
   salesPersonName: string | null
+  // Set when this invoice is the new side of a cashier exchange.
+  exchangeId?: string | null
   // ZATCA Phase 2 (Integration Phase) -- set only once the organization has an onboarded
   // production device (Settings -> الفوترة الإلكترونية); every sale before that stays
   // zatcaSigned: false and shows only the Phase 1 QR above. A signed sale is reported to ZATCA
@@ -196,6 +198,10 @@ export interface InvoiceReturn {
   // way a sale's own payments[] can.
   payments: InvoicePayment[]
   notes: string | null
+  // Why it came back (size, color, defect, other), when given.
+  reason?: ReturnReason | null
+  // Set when this credit note is the returned side of a cashier exchange.
+  exchangeId?: string | null
   createdAt: string
   items: InvoiceReturnItem[]
   qrCode: string | null
@@ -211,9 +217,13 @@ export interface InvoiceReturn {
   zatcaLastErrorAr: string | null
 }
 
+export type ReturnReason = "size" | "color" | "defect" | "other"
+
 export interface CreateInvoiceReturnItemInput {
   invoiceItemId: string
   quantity: number
+  // false: it came back damaged and is not put back into stock.
+  restock?: boolean
 }
 
 export interface CreateInvoiceReturnPaymentInput {
@@ -229,6 +239,63 @@ export interface CreateInvoiceReturnInput {
   // method code, same rule a sale's own payments already follow.
   payments: CreateInvoiceReturnPaymentInput[]
   notes: string | null
+  reason?: ReturnReason | null
+}
+
+// A cashier exchange (استبدال): a credit note for what came back and a new invoice for what went
+// out, paid by the returned items' credit so only the difference moved.
+export type ExchangeSettlement = "even" | "collected" | "refunded" | "balance"
+
+export interface ExchangeLine {
+  productId: string | null
+  productName: string
+  quantity: number
+  amount: number
+  restocked?: boolean
+}
+
+export interface Exchange {
+  id: string
+  workspaceId: string
+  originalInvoiceId: string
+  originalInvoiceNumber: string
+  returnId: string
+  returnNumber: string
+  newInvoiceId: string
+  newInvoiceNumber: string
+  returnedAmount: number
+  newAmount: number
+  // New minus returned: above 0 the customer paid it, below 0 the customer got it back.
+  differenceAmount: number
+  settlement: ExchangeSettlement
+  refundPaymentMethodCode: string | null
+  reason: ReturnReason
+  notes: string | null
+  cashierUserId: string | null
+  cashierName: string | null
+  createdAt: string
+  returnedItems: ExchangeLine[]
+  newItems: ExchangeLine[]
+}
+
+export interface CreateExchangeInput {
+  returnItems: CreateInvoiceReturnItemInput[]
+  reason: ReturnReason
+  notes: string | null
+  items: CreateInvoiceItemInput[]
+  discountAmount: number
+  salesPersonUserId?: string | null
+  // What the customer pays when the new items cost more.
+  payments: Array<{ paymentMethodCode: string; amount: number }>
+  // When the new items cost less.
+  refund: { paymentMethodCode: string } | { toCustomerBalance: true } | null
+  idempotencyKey: string
+}
+
+export interface ExchangeResult {
+  exchange: Exchange
+  invoice: Invoice
+  creditNote: InvoiceReturn
 }
 
 export interface InvoiceReturnListFilter {
@@ -334,6 +401,20 @@ export const posInvoicesService = {
       [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "returns"].join(PATH_SEPARATOR),
       input
     )
+  },
+
+  async createExchange(invoiceId: string, input: CreateExchangeInput): Promise<ExchangeResult> {
+    return client.post<CreateExchangeInput, ExchangeResult>(
+      [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "exchanges"].join(PATH_SEPARATOR),
+      input
+    )
+  },
+
+  async listExchanges(filter: InvoiceReturnListFilter = {}): Promise<Exchange[]> {
+    const response = await client.get<{ items: Exchange[] }>(
+      [INVOICES_ENDPOINT, "exchanges"].join(PATH_SEPARATOR) + buildReturnsQuery(filter)
+    )
+    return response.items
   },
 
   async listReturns(filter: InvoiceReturnListFilter = {}): Promise<InvoiceReturn[]> {

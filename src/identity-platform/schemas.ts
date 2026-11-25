@@ -1446,6 +1446,8 @@ export const invoiceStatusSchema = z.object({
 export const createInvoiceReturnItemSchema = z.object({
   invoiceItemId: z.string().uuid(),
   quantity: z.number().positive(),
+  // false: it came back damaged and is not put back into stock.
+  restock: z.boolean().optional(),
 })
 
 // Unlike a sale's own payment lines, amount is optional here -- a single-method refund (the
@@ -1465,6 +1467,31 @@ export const createInvoiceReturnSchema = z.object({
   // PosInvoicesService.createReturn()).
   payments: z.array(createInvoiceReturnPaymentSchema).min(1),
   notes: z.string().max(500).nullable().optional().default(null),
+  // Why it came back: size, color, defect or other.
+  reason: z.enum(["size", "color", "defect", "other"]).nullable().optional(),
+})
+
+// A cashier exchange (PosInvoicesService.createExchange): lines of the original sale coming back,
+// the new items going out, and how the difference is settled.
+export const createInvoiceExchangeSchema = z.object({
+  returnItems: z.array(createInvoiceReturnItemSchema).min(1),
+  reason: z.enum(["size", "color", "defect", "other"]),
+  notes: z.string().max(500).nullable().optional().default(null),
+  items: z.array(createInvoiceItemSchema).min(1),
+  discountAmount: z.number().min(0).default(0),
+  salesPersonUserId: z.string().uuid().nullable().optional().default(null),
+  // What the customer pays when the new items cost more (one line is taken as the whole rest).
+  payments: z.array(createInvoicePaymentSchema).default([]),
+  // When the new items cost less.
+  refund: z
+    .union([
+      z.object({ paymentMethodCode: z.string().min(1).max(60) }),
+      z.object({ toCustomerBalance: z.literal(true) }),
+    ])
+    .nullable()
+    .optional()
+    .default(null),
+  idempotencyKey: z.string().uuid().nullable().optional().default(null),
 })
 
 export const paymentMethodUpdateSchema = z.object({

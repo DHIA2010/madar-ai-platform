@@ -414,18 +414,21 @@ describe("point-of-sale cashier shifts", () => {
 
     const detail = await getShiftDetail(token, shiftId)
     expect(detail.status).toBe(200)
+    // The returned sale still happened: its 46 came into the drawer and its refund went back out,
+    // counted once each (it used to be dropped from the sales and still subtracted as a return,
+    // which took it off the drawer twice).
     expect(detail.body).toMatchObject({
-      totalSales: 345, // 115 + 230, the returned invoice excluded
-      invoiceCount: 3, // includes the returned one -- it is still a real invoice that happened
+      totalSales: 391, // 115 + 230 + 46
+      invoiceCount: 3,
       cashSummary: {
         openingCashAmount: 100,
-        cashSales: 115,
+        cashSales: 161,
         otherSales: 230,
         cashReturns: 46,
         withdrawals: 25,
         deposits: 10,
-        // 100 + 115 - 46 - 25 + 10
-        expectedCashAmount: 154,
+        // 100 + 161 - 46 - 25 + 10
+        expectedCashAmount: 200,
       },
     })
 
@@ -433,7 +436,7 @@ describe("point-of-sale cashier shifts", () => {
     expect(breakdown).toHaveLength(2)
     const cashEntry = breakdown.find((entry) => entry.code === "cash")
     const madaEntry = breakdown.find((entry) => entry.code === "mada")
-    expect(cashEntry).toMatchObject({ amount: 115 })
+    expect(cashEntry).toMatchObject({ amount: 161 })
     expect(madaEntry).toMatchObject({ amount: 230 })
 
     // Activity: opening float, both cash movements, and every real invoice (sale or return),
@@ -445,14 +448,14 @@ describe("point-of-sale cashier shifts", () => {
       "return",
       "sale",
       "sale",
+      "sale",
       "open",
     ])
 
     const returnEntry = activity.find((entry) => entry.type === "return")
-    expect(returnEntry).toMatchObject({
-      amount: 46,
-      reference: String(toReturn.body.invoiceNumber),
-    })
+    // The return is listed by its own credit note number.
+    expect(returnEntry).toMatchObject({ amount: 46 })
+    expect(String(returnEntry?.reference)).toMatch(/^RTN-\d{6}$/)
   })
 
   it("refuses an unauthenticated read", async () => {

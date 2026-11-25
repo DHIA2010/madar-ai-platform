@@ -20,6 +20,7 @@ import { createPortal } from "react-dom"
 import QRCode from "qrcode"
 import { useLocale, useTranslations } from "next-intl"
 import {
+  ArrowLeftRight,
   BadgePercent,
   Banknote,
   Calendar,
@@ -125,7 +126,12 @@ import { PosServiceWorkerRegistration } from "@/features/pos/offline/PosServiceW
 
 import { CreditNoteReceipt } from "./CreditNoteReceipt"
 import { ThermalInvoiceReceipt } from "./ThermalInvoiceReceipt"
-import { ReturnDialog, useInvoiceReturn } from "@/app/(layout-pages)/invoices/invoice-return-dialog"
+import {
+  type ExchangeDraft,
+  ReturnDialog,
+  useInvoiceReturn,
+} from "@/app/(layout-pages)/invoices/invoice-return-dialog"
+import { ExchangeSettleDialog, type ExchangeSettlement } from "./ExchangeSettleDialog"
 import {
   toWhatsAppNumber,
   WhatsAppSendDialog,
@@ -2360,15 +2366,28 @@ export default function CashierPage() {
   useEffect(() => {
     if (!isReturnDialogOpen) return
     setLoadingReturnCandidates(true)
+    // A sale returned in part can still be returned or exchanged for what is left.
     void posInvoicesService
-      .list({ status: "completed", search: returnSearch.trim() || undefined })
-      .then(setReturnCandidates)
+      .list({ search: returnSearch.trim() || undefined })
+      .then((invoices) =>
+        setReturnCandidates(
+          invoices.filter(
+            (invoice) => invoice.status === "completed" || invoice.status === "partially_returned"
+          )
+        )
+      )
       .catch(() => setReturnCandidates([]))
       .finally(() => setLoadingReturnCandidates(false))
   }, [isReturnDialogOpen, returnSearch])
 
   const invoiceReturn = useInvoiceReturn({
     paymentMethods: returnPaymentMethods,
+    // "استبدال": the chosen lines become an exchange credit on the cart; the cashier adds the new
+    // items and completes it from the cart.
+    onExchange: (draft) => {
+      setExchangeDraft(draft)
+      window.setTimeout(() => searchInputRef.current?.focus(), 0)
+    },
     onReturned: async (created) => {
       loadTodaySummary()
       const qrDataUrl = created.qrCode
@@ -2389,6 +2408,144 @@ export default function CashierPage() {
   const startReturn = (invoice: Invoice) => {
     setIsReturnDialogOpen(false)
     window.setTimeout(() => invoiceReturn.open(invoice), 0)
+  }
+
+  // --- Exchange (استبدال) --------------------------------------------------------------------
+  // The lines coming back sit on the cart as a credit; the new items are added as in any sale,
+  // and "إتمام الاستبدال" saves the credit note and the new invoice together, settling only the
+  // difference (PosInvoicesService.createExchange).
+  const [exchangeDraft, setExchangeDraft] = useState<ExchangeDraft | null>(null)
+  const [isExchangeSettleOpen, setIsExchangeSettleOpen] = useState(false)
+  const [exchanging, setExchanging] = useState(false)
+  // The credit note and new invoice just made -- printed together, then cleared.
+  const [exchangePrint, setExchangePrint] = useState<{
+    creditNote: InvoiceReturn
+    creditQr: string | null
+    invoice: Invoice
+    invoiceQr: string | null
+  } | null>(null)
+
+  // The branch's enabled methods, loaded when the exchange's last step opens (checkout loads its
+  // own list only when it opens).
+  const [exchangePaymentMethods, setExchangePaymentMethods] = useState<
+    Array<{ code: string; name: string; kind: PaymentKind }>
+  >([])
+  useEffect(() => {
+    if (!isExchangeSettleOpen) return
+    void posPaymentMethodsService
+      .list()
+      .then((methods) =>
+        setExchangePaymentMethods(
+          methods
+            .filter((method) => method.enabled)
+            .map((method) => ({ code: method.code, name: method.name, kind: method.kind }))
+        )
+      )
+      .catch(() => setExchangePaymentMethods([]))
+  }, [isExchangeSettleOpen])
+
+  const exchangeDifference = exchangeDraft
+    ? Math.round((total - exchangeDraft.credit) * 100) / 100
+    : 0
+
+  const cancelExchange = () => {
+    setExchangeDraft(null)
+    setIsExchangeSettleOpen(false)
+  }
+
+  const performExchange = async (settlement: ExchangeSettlement) => {
+    if (!exchangeDraft) return
+    if (!isOnline) {
+      toast.error(
+        locale === "ar"
+          ? "الاستبدال يحتاج اتصالًا بالإنترنت."
+          : "An exchange needs an internet connection."
+      )
+      return
+    }
+    setExchanging(true)
+    try {
+      const result = await posInvoicesService.createExchange(exchangeDraft.invoice.id, {
+        returnItems: exchangeDraft.returnItems.map(({ invoiceItemId, quantity, restock }) => ({
+          invoiceItemId,
+          quantity,
+          restock,
+        })),
+        reason: exchangeDraft.reason,
+        notes: exchangeDraft.notes,
+        items: cart.map((line) => {
+          const promotion = linePromotion(line)
+          return {
+            productId: line.productId,
+            variantId: line.variantId,
+            productName: line.productName,
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            discountAmount: resolveLineDiscount(line),
+            promotionId: promotion?.promotion.id ?? null,
+            promotionDiscountAmount: promotion?.netDiscount ?? 0,
+          }
+        }),
+        discountAmount: manualDiscount,
+        salesPersonUserId: salesPerson?.userId ?? null,
+        payments: settlement.payments,
+        refund: settlement.refund,
+        idempotencyKey: crypto.randomUUID(),
+      })
+      toast.success(
+        locale === "ar"
+          ? `تم الاستبدال: إشعار دائن ${result.creditNote.returnNumber} وفاتورة ${result.invoice.invoiceNumber}`
+          : `Exchanged: credit note ${result.creditNote.returnNumber}, invoice ${result.invoice.invoiceNumber}`
+      )
+      const cashInvolved = [...settlement.payments.map((p) => p.paymentMethodCode)].some(
+        (code) => exchangePaymentMethods.find((method) => method.code === code)?.kind === "cash"
+      )
+      if (posSettings.autoOpenCashDrawer && cashInvolved) void openCashDrawerIfPaired()
+      setIsExchangeSettleOpen(false)
+      setExchangeDraft(null)
+      clearCart()
+      setSalesPerson(null)
+      setDiscountValue("")
+      setDiscountType("percent")
+      setDiscountIncludesTax(true)
+      loadTodaySummary()
+      const [creditQr, invoiceQr] = await Promise.all([
+        result.creditNote.qrCode
+          ? QRCode.toDataURL(result.creditNote.qrCode, { margin: 0, width: 180 }).catch(() => null)
+          : Promise.resolve(null),
+        result.invoice.qrCode
+          ? QRCode.toDataURL(result.invoice.qrCode, { margin: 0, width: 180 }).catch(() => null)
+          : Promise.resolve(null),
+      ])
+      setExchangePrint({
+        creditNote: result.creditNote,
+        creditQr,
+        invoice: result.invoice,
+        invoiceQr,
+      })
+      window.setTimeout(() => {
+        printThermalReceipt("zatca-print-invoice")
+        setExchangePrint(null)
+        searchInputRef.current?.focus()
+      }, 200)
+    } catch (error) {
+      const code = error instanceof AppError ? error.code : undefined
+      toast.error(
+        code === "POS_EXCHANGE_OTHER_BRANCH"
+          ? locale === "ar"
+            ? "الاستبدال يتم في نفس الفرع الذي بيعت فيه الفاتورة."
+            : "Exchanges are made in the branch of the original sale."
+          : code === "POS_INVOICE_RETURN_QUANTITY_EXCEEDS_REMAINING"
+            ? locale === "ar"
+              ? "الكمية أكبر من المتبقي في الفاتورة."
+              : "More than what is left on the invoice."
+            : locale === "ar"
+              ? "تعذر إتمام الاستبدال. لم يُحفظ شيء."
+              : "Couldn't complete the exchange. Nothing was saved."
+      )
+    } finally {
+      setExchanging(false)
+    }
   }
 
   // --- Held orders -----------------------------------------------------------------------------
@@ -3098,6 +3255,39 @@ export default function CashierPage() {
             ) : null}
           </div>
 
+          {exchangeDraft ? (
+            <div className="shrink-0 rounded-[12px] border border-[#c7d7fe] bg-[#eef4ff] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-[#1d4fd8]">
+                    <ArrowLeftRight className="size-3.5" />
+                    {locale === "ar"
+                      ? `استبدال من الفاتورة ${exchangeDraft.invoice.invoiceNumber}`
+                      : `Exchange from invoice ${exchangeDraft.invoice.invoiceNumber}`}
+                  </p>
+                  <p className="mt-1 text-[11.5px] leading-5 text-[#334e88]">
+                    {locale === "ar" ? "يرجع: " : "Back: "}
+                    {exchangeDraft.returnItems
+                      .map((item) => `${item.productName} ×${item.quantity}`)
+                      .join("، ")}
+                  </p>
+                  <p className="mt-0.5 text-[11.5px] text-[#334e88]">
+                    {locale === "ar"
+                      ? "أضف المنتج الجديد في السلة، ثم اضغط «إتمام الاستبدال»."
+                      : "Add the new items, then press “Complete exchange”."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={cancelExchange}
+                  className="shrink-0 rounded-full px-2 py-1 text-[11px] font-bold text-[#dc2626] hover:bg-white"
+                >
+                  {locale === "ar" ? "إلغاء" : "Cancel"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {customerName ? (
             <div className="shrink-0">
               <Label className={cn("mb-1.5 block text-[11px] font-semibold", HEADING)}>
@@ -3298,16 +3488,56 @@ export default function CashierPage() {
               <span className={HEADING}>{t("cart.totalDue")}</span>
               <span className="text-[#2563eb]">{formatAmount(total, locale)}</span>
             </div>
+            {exchangeDraft ? (
+              <>
+                <div className="flex items-center justify-between text-[#1d4fd8]">
+                  <span className="font-semibold">
+                    {locale === "ar" ? "رصيد الاستبدال" : "Exchange credit"}
+                  </span>
+                  <span>− {formatAmount(exchangeDraft.credit, locale)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-[#eef2f8] pt-1.5 text-[15px] font-extrabold">
+                  <span className={HEADING}>
+                    {exchangeDifference > 0.004
+                      ? locale === "ar"
+                        ? "المطلوب من العميل"
+                        : "Customer pays"
+                      : exchangeDifference < -0.004
+                        ? locale === "ar"
+                          ? "للعميل"
+                          : "Back to the customer"
+                        : locale === "ar"
+                          ? "لا يوجد فرق"
+                          : "No difference"}
+                  </span>
+                  <span
+                    className={exchangeDifference < -0.004 ? "text-[#16a34a]" : "text-[#2563eb]"}
+                  >
+                    {formatAmount(Math.abs(exchangeDifference), locale)}
+                  </span>
+                </div>
+              </>
+            ) : null}
           </div>
 
           {myOpenShift ? (
             <Button
               disabled={cart.length === 0}
               className="h-12 shrink-0 gap-2 rounded-[12px] bg-[#2563eb] text-[13.5px] font-bold text-white hover:bg-[#1d4ed8] disabled:opacity-50"
-              onClick={() => setIsCheckoutOpen(true)}
+              onClick={() =>
+                exchangeDraft ? setIsExchangeSettleOpen(true) : setIsCheckoutOpen(true)
+              }
             >
-              <Wallet className="size-4" />
-              {t("cart.proceedToPayment")}
+              {exchangeDraft ? (
+                <ArrowLeftRight className="size-4" />
+              ) : (
+                <Wallet className="size-4" />
+              )}
+              {exchangeDraft
+                ? locale === "ar"
+                  ? "إتمام الاستبدال"
+                  : "Complete exchange"
+                : t("cart.proceedToPayment")}
             </Button>
           ) : (
             <div className="flex shrink-0 flex-col gap-2">
@@ -4573,6 +4803,18 @@ export default function CashierPage() {
       </Dialog>
 
       <ReturnDialog {...invoiceReturn.dialogProps} />
+      <ExchangeSettleDialog
+        key={isExchangeSettleOpen ? "open" : "closed"}
+        open={isExchangeSettleOpen && exchangeDraft !== null}
+        invoiceNumber={exchangeDraft?.invoice.invoiceNumber ?? ""}
+        credit={exchangeDraft?.credit ?? 0}
+        newTotal={total}
+        hasCustomer={Boolean(exchangeDraft?.invoice.customerId)}
+        methods={exchangePaymentMethods}
+        busy={exchanging}
+        onConfirm={(settlement) => void performExchange(settlement)}
+        onClose={() => setIsExchangeSettleOpen(false)}
+      />
 
       {/* Salesperson -- who this sale is credited to */}
       <Dialog open={isSalesPersonDialogOpen} onOpenChange={setIsSalesPersonDialogOpen}>
@@ -4826,11 +5068,35 @@ export default function CashierPage() {
         />
       ) : null}
 
-      {(lastReturn || successInvoice) &&
+      {(lastReturn || successInvoice || exchangePrint) &&
         typeof document !== "undefined" &&
         createPortal(
           <div id="zatca-print-invoice" className="hidden print:block">
-            {lastReturn ? (
+            {exchangePrint ? (
+              // An exchange prints both documents on one roll: the credit note for what came
+              // back, then the new invoice.
+              <>
+                <CreditNoteReceipt
+                  creditNote={exchangePrint.creditNote}
+                  qrDataUrl={exchangePrint.creditQr}
+                  sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+                  paymentMethodNames={paymentMethodNameByCode}
+                />
+                <div className="my-3 border-t border-dashed border-black" />
+                <ThermalInvoiceReceipt
+                  invoice={exchangePrint.invoice}
+                  paymentMethodNames={paymentMethodNameByCode}
+                  qrDataUrl={exchangePrint.invoiceQr}
+                  sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+                  receiptTitleLines={
+                    posSettings.showReceiptTitle ? posSettings.receiptTitleLines : null
+                  }
+                  receiptDescriptionLines={
+                    posSettings.showReceiptTitle ? posSettings.receiptDescriptionLines : null
+                  }
+                />
+              </>
+            ) : lastReturn ? (
               <CreditNoteReceipt
                 creditNote={lastReturn}
                 qrDataUrl={lastReturnQrDataUrl}

@@ -37,6 +37,8 @@ interface PgPoolLike extends PgExecutor {
 
 export class PostgresDatabase {
   private readonly transactionStorage = new AsyncLocalStorage<PgClient>()
+  // Work waiting for the current outermost transaction to commit (see afterCommit).
+  private readonly afterCommitStorage = new AsyncLocalStorage<Array<() => unknown>>()
 
   constructor(private readonly pool: PgPoolLike) {}
 
@@ -73,19 +75,47 @@ export class PostgresDatabase {
     }
   }
 
+  // A transaction started inside another one joins it: the work commits or rolls back with the
+  // outer one (two documents saved as one, e.g. a cashier exchange's credit note and invoice).
   async withTransaction<T>(work: () => Promise<T>) {
+    if (this.transactionStorage.getStore()) return work()
     const client = await this.pool.connect()
+    const pending: Array<() => unknown> = []
+    let result: T
     try {
       await client.query("BEGIN")
-      const result = await this.transactionStorage.run(client, work)
+      result = await this.transactionStorage.run(client, () =>
+        this.afterCommitStorage.run(pending, work)
+      )
       await client.query("COMMIT")
-      return result
     } catch (error) {
       await client.query("ROLLBACK")
       throw error
     } finally {
       client.release()
     }
+    for (const task of pending) {
+      try {
+        await task()
+      } catch (error) {
+        console.error("postgres.after_commit_failed", {
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    return result
+  }
+
+  // Runs work that must only happen once the data is saved for good (reporting to ZATCA, an
+  // audit entry, pushing stock to a store): straight away outside a transaction, else once the
+  // outermost transaction commits -- and never if it rolls back.
+  async afterCommit(task: () => unknown): Promise<void> {
+    const pending = this.transactionStorage.getStore() ? this.afterCommitStorage.getStore() : null
+    if (pending) {
+      pending.push(task)
+      return
+    }
+    await task()
   }
 
   async healthCheck() {

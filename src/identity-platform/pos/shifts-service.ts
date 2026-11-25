@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { PosInvoicesService } from "./invoices-service"
-import type { PaymentKind, PosPaymentMethodsService } from "./payment-methods-service"
+import {
+  exchangeMethods,
+  type PaymentKind,
+  type PosPaymentMethodsService,
+} from "./payment-methods-service"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -316,7 +320,7 @@ export class PosShiftsService {
   async getDetail(organizationId: string, id: string): Promise<ShiftDetailView> {
     const shift = await this.getById(organizationId, id)
 
-    const [invoices, methods, movements] = await Promise.all([
+    const [invoices, branchMethods, movements, refunds] = await Promise.all([
       this.invoicesService.list(organizationId, {
         workspaceId: shift.workspaceId,
         status: null,
@@ -327,10 +331,30 @@ export class PosShiftsService {
       }),
       this.paymentMethodsService.list(organizationId, shift.workspaceId),
       this.listCashMovements(organizationId, id),
+      // The credit notes this cashier issued during the shift, with how each was refunded --
+      // a return of an earlier sale, a partial one, or the returned side of an exchange.
+      this.database.query<{
+        id: string
+        return_number: string
+        total_amount: string | number
+        created_at: Date | string
+        payment_method_code: string | null
+        amount: string | number | null
+      }>(
+        `SELECT r.id, r.return_number, r.total_amount, r.created_at, p.payment_method_code, p.amount
+           FROM pos_invoice_returns r
+           LEFT JOIN pos_invoice_return_payments p ON p.return_id = r.id
+          WHERE r.organization_id = $1 AND r.workspace_id = $2 AND r.created_by = $3
+            AND r.created_at >= $4 AND ($5::timestamptz IS NULL OR r.created_at <= $5)`,
+        [organizationId, shift.workspaceId, shift.cashierUserId, shift.openedAt, shift.closedAt]
+      ),
     ])
+    const methods = [...branchMethods, ...exchangeMethods()]
 
     const mine = invoices.filter((invoice) => invoice.cashierUserId === shift.cashierUserId)
-    const completed = mine.filter((invoice) => invoice.status === "completed")
+    // Every sale that happened counts, even one returned later: its refund is counted on its own,
+    // from the credit note, so a sale returned in the same shift nets to nothing in the drawer.
+    const completed = mine.filter((invoice) => invoice.status !== "cancelled")
     const totalSales = completed.reduce((total, invoice) => total + invoice.totalAmount, 0)
 
     const methodByCode = new Map(methods.map((method) => [method.code, method]))
@@ -370,16 +394,14 @@ export class PosShiftsService {
       0
     )
     const otherSales = totalSales - cashSales
-    const cashReturns = mine
-      .filter((invoice) => invoice.status === "returned")
-      .reduce(
-        (total, invoice) =>
-          total +
-          invoice.payments
-            .filter((payment) => cashCodes.has(payment.paymentMethodCode))
-            .reduce((sum, payment) => sum + payment.amount, 0),
-        0
-      )
+    // Cash actually handed back: the cash lines of the shift's credit notes (an exchange's
+    // credit never moves cash).
+    const cashReturns =
+      Math.round(
+        refunds.rows
+          .filter((row) => row.payment_method_code && cashCodes.has(row.payment_method_code))
+          .reduce((total, row) => total + Number(row.amount ?? 0), 0) * 100
+      ) / 100
     const withdrawals = movements
       .filter((movement) => movement.type === "withdrawal")
       .reduce((total, movement) => total + movement.amount, 0)
@@ -387,7 +409,7 @@ export class PosShiftsService {
       .filter((movement) => movement.type === "deposit")
       .reduce((total, movement) => total + movement.amount, 0)
 
-    const returned = mine.filter((invoice) => invoice.status === "returned")
+    const returned = [...new Map(refunds.rows.map((row) => [row.id, row])).values()]
 
     const activity: ShiftActivityEntry[] = [
       {
@@ -411,12 +433,12 @@ export class PosShiftsService {
         occurredAt: invoice.createdAt,
         reference: invoice.invoiceNumber,
       })),
-      ...returned.map((invoice) => ({
+      ...returned.map((row) => ({
         type: "return" as const,
-        amount: invoice.totalAmount,
+        amount: Number(row.total_amount),
         note: null,
-        occurredAt: invoice.createdAt,
-        reference: invoice.invoiceNumber,
+        occurredAt: new Date(row.created_at).toISOString(),
+        reference: row.return_number,
       })),
       ...(shift.closedAt
         ? [

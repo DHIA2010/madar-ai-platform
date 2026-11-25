@@ -133,6 +133,36 @@ export const PAYMENT_METHOD_CATALOG: PaymentMethodCatalogEntry[] = [
   },
 ]
 
+// Two internal methods only an exchange uses, never offered at the till or in settings:
+// - the exchange credit: the returned items' value, refunding the credit note and paying the new
+//   invoice at once, so no money moves for it;
+// - the customer balance credit: what is left over when the new items cost less, kept on the
+//   customer's account ("prepaid", the same balance a wallet spends).
+export const EXCHANGE_CREDIT_CODE = "exchange_credit"
+export const EXCHANGE_BALANCE_CODE = "exchange_balance"
+export const EXCHANGE_METHOD_NAMES: Record<string, string> = {
+  [EXCHANGE_CREDIT_CODE]: "رصيد استبدال",
+  [EXCHANGE_BALANCE_CODE]: "رصيد العميل (استبدال)",
+}
+
+export function exchangeMethods(): PaymentMethodView[] {
+  const make = (code: string, kind: PaymentKind, position: number): PaymentMethodView => ({
+    id: null,
+    code,
+    name: EXCHANGE_METHOD_NAMES[code],
+    subtitle: "",
+    kind,
+    enabled: true,
+    feePercent: 0,
+    isCustom: false,
+    configured: true,
+    position,
+    merchantId: null,
+    apiKey: null,
+  })
+  return [make(EXCHANGE_CREDIT_CODE, "wallet", 900), make(EXCHANGE_BALANCE_CODE, "prepaid", 901)]
+}
+
 export interface PaymentMethodView {
   id: string | null
   code: string

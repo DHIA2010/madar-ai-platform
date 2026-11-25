@@ -104,9 +104,14 @@ export default function ReturnedInvoicesPage() {
       })
   }, [])
   const paymentMethodName = useMemo(() => {
-    const map = new Map(paymentMethods.map((method) => [method.code, method.name]))
+    const map = new Map<string, string>([
+      ...paymentMethods.map((method) => [method.code, method.name] as const),
+      // An exchange's internal methods.
+      ["exchange_credit", locale === "ar" ? "رصيد استبدال" : "Exchange credit"],
+      ["exchange_balance", locale === "ar" ? "رصيد العميل" : "Customer balance"],
+    ])
     return (code: string) => map.get(code) ?? code
-  }, [paymentMethods])
+  }, [paymentMethods, locale])
   // A split refund shows every real method it actually used ("نقدي، شبكة"), not the backend's own
   // internal "split" sentinel code -- same reasoning as InvoicesPage.tsx's own paymentMethodLabel.
   function refundPaymentLabel(item: InvoiceReturn): string {
@@ -273,6 +278,11 @@ export default function ReturnedInvoicesPage() {
                     >
                       <td className={cn("px-3 py-3.5 text-right text-[12.5px] font-bold", HEADING)}>
                         {item.returnNumber}
+                        {item.exchangeId ? (
+                          <span className="ms-1.5 rounded-full bg-[#eef4ff] px-2 py-0.5 text-[10.5px] font-bold text-[#1d4fd8]">
+                            {locale === "ar" ? "استبدال" : "Exchange"}
+                          </span>
+                        ) : null}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                         {item.invoiceNumber}

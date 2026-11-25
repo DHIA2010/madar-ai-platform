@@ -17,7 +17,12 @@ import type { TaxRatesService } from "../tax/tax-rates-service"
 import type { ZatcaDevicesService } from "../zatca/zatca-devices-service"
 import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "./pos-settings-service"
 import type { ZatcaUblAddress } from "../zatca/zatca-ubl-invoice"
-import type { PosPaymentMethodsService } from "./payment-methods-service"
+import {
+  EXCHANGE_BALANCE_CODE,
+  EXCHANGE_CREDIT_CODE,
+  exchangeMethods,
+  type PosPaymentMethodsService,
+} from "./payment-methods-service"
 import { parseNoteLines, type NoteLine } from "./saved-notes-service"
 import { generateZatcaQrCode } from "./zatca-qr-code"
 import type { PosZatcaReporting } from "./zatca-reporting"
@@ -176,6 +181,34 @@ const INVOICE_ERRORS = {
       "validation",
       "The salesperson must be an active member of this branch."
     ),
+  exchangeOtherBranch: () =>
+    new IdentityError(
+      "POS_EXCHANGE_OTHER_BRANCH",
+      400,
+      "business",
+      "An exchange is made in the branch the original sale was made in."
+    ),
+  exchangeRequiresNewItems: () =>
+    new IdentityError(
+      "POS_EXCHANGE_REQUIRES_NEW_ITEMS",
+      400,
+      "validation",
+      "An exchange needs at least one new item; with none it is a return."
+    ),
+  exchangeRefundRequired: () =>
+    new IdentityError(
+      "POS_EXCHANGE_REFUND_REQUIRED",
+      400,
+      "validation",
+      "The new items cost less: choose how the rest goes back to the customer."
+    ),
+  exchangeBalanceRequiresCustomer: () =>
+    new IdentityError(
+      "POS_EXCHANGE_BALANCE_REQUIRES_CUSTOMER",
+      400,
+      "business",
+      "Only a sale made to a known customer can keep the rest on the customer's balance."
+    ),
   returnRequiresItems: () =>
     new IdentityError(
       "POS_INVOICE_RETURN_REQUIRES_ITEMS",
@@ -183,6 +216,83 @@ const INVOICE_ERRORS = {
       "validation",
       "A return must include at least one item."
     ),
+}
+
+// Why items came back, for returns and exchanges.
+export const RETURN_REASONS = ["size", "color", "defect", "other"] as const
+export type ReturnReason = (typeof RETURN_REASONS)[number]
+// The reason as written on the credit note sent to ZATCA.
+const RETURN_REASON_NOTE: Record<ReturnReason, string> = {
+  size: "استبدال/إرجاع - المقاس",
+  color: "استبدال/إرجاع - اللون",
+  defect: "استبدال/إرجاع - عيب في المنتج",
+  other: "استبدال/إرجاع",
+}
+
+// ---- Cashier exchange (استبدال) ----
+
+export type ExchangeSettlement = "even" | "collected" | "refunded" | "balance"
+
+export interface CreateExchangeInput {
+  organizationId: string
+  // The original sale the items come back from.
+  invoiceId: string
+  // The branch the cashier is in -- an exchange is made in the branch of the original sale.
+  workspaceId: string | null
+  cashierUserId: string | null
+  // What comes back, from the original invoice's lines; restock false for a damaged item.
+  returnItems: Array<{ invoiceItemId: string; quantity: number; restock?: boolean }>
+  reason: ReturnReason
+  notes: string | null
+  // What goes out, priced like any sale.
+  items: InvoiceItemInput[]
+  discountAmount: number
+  salesPersonUserId?: string | null
+  // Settle what the customer still owes when the new items cost more.
+  payments: InvoicePaymentInput[]
+  // When the new items cost less: refund the rest by a payment method, or keep it on the
+  // customer's balance.
+  refund: { paymentMethodCode: string } | { toCustomerBalance: true } | null
+  idempotencyKey: string | null
+}
+
+export interface ExchangeLineView {
+  productId: string | null
+  productName: string
+  quantity: number
+  amount: number
+  // Returned lines only: false when it came back damaged and was kept out of stock.
+  restocked?: boolean
+}
+
+export interface ExchangeView {
+  id: string
+  workspaceId: string
+  originalInvoiceId: string
+  originalInvoiceNumber: string
+  returnId: string
+  returnNumber: string
+  newInvoiceId: string
+  newInvoiceNumber: string
+  returnedAmount: number
+  newAmount: number
+  // New minus returned: above 0 the customer paid it, below 0 the customer got it back.
+  differenceAmount: number
+  settlement: ExchangeSettlement
+  refundPaymentMethodCode: string | null
+  reason: ReturnReason
+  notes: string | null
+  cashierUserId: string | null
+  cashierName: string | null
+  createdAt: string
+  returnedItems: ExchangeLineView[]
+  newItems: ExchangeLineView[]
+}
+
+export interface ExchangeResult {
+  exchange: ExchangeView
+  invoice: InvoiceView
+  creditNote: InvoiceReturnView
 }
 
 export type InvoiceStatus = "completed" | "cancelled" | "returned" | "partially_returned"
@@ -276,6 +386,8 @@ export interface InvoiceView {
   // migration 111 and PosInvoicesService.create()'s own order-number counter. Snapshotted once at
   // sale time, null on every invoice created before this feature existed or with it turned off.
   orderNumber: number | null
+  // Set when this invoice is the new side of a cashier exchange (paid partly by exchange credit).
+  exchangeId: string | null
   status: InvoiceStatus
   customerName: string | null
   customerPhone: string | null
@@ -382,6 +494,10 @@ export interface InvoiceReturnView {
   refundPaymentMethodCode: string | null
   payments: InvoiceReturnPaymentView[]
   notes: string | null
+  // Why it came back (size, color, defect, other), when given.
+  reason: string | null
+  // Set when this credit note is the returned side of a cashier exchange.
+  exchangeId: string | null
   createdAt: string
   items: InvoiceReturnItemView[]
   qrCode: string | null
@@ -509,6 +625,7 @@ function mapInvoice(
     invoiceNumber: row.invoice_number,
     orderNumber:
       row.order_number === null || row.order_number === undefined ? null : Number(row.order_number),
+    exchangeId: row.exchange_id ? String(row.exchange_id) : null,
     status: row.status as InvoiceStatus,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
@@ -624,6 +741,8 @@ function mapReturn(
     refundPaymentMethodCode: row.refund_payment_method_code,
     payments,
     notes: row.notes,
+    reason: typeof row.reason === "string" ? row.reason : null,
+    exchangeId: row.exchange_id ? String(row.exchange_id) : null,
     createdAt: toIso(row.created_at),
     items,
     qrCode: row.qr_code,
@@ -643,7 +762,8 @@ const INVOICE_SELECT = `
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
          total_amount, notes, notes_lines, created_at, qr_code, seller_name, seller_vat_number,
          seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at,
-         zatca_last_error, zatca_last_error_ar, sales_person_user_id, sales_person_name
+         zatca_last_error, zatca_last_error_ar, sales_person_user_id, sales_person_name,
+         exchange_id
     FROM pos_invoices
 `
 
@@ -981,7 +1101,12 @@ export class PosInvoicesService {
     }
   }
 
-  private async createSale(input: CreateInvoiceInput): Promise<InvoiceView> {
+  // exchange: this sale is the new invoice of a cashier exchange (createExchange), paid first by
+  // the returned items' credit; input.payments then only settle what is left.
+  private async createSale(
+    input: CreateInvoiceInput,
+    exchange?: { credit: number }
+  ): Promise<InvoiceView> {
     // The salesperson, when picked: checked against the branch's active members, and their name
     // kept on the invoice as it is now.
     let salesPerson: { id: string; name: string } | null = null
@@ -994,7 +1119,7 @@ export class PosInvoicesService {
     }
 
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
-    if (input.payments.length === 0) throw INVOICE_ERRORS.invalidPaymentMethod()
+    if (input.payments.length === 0 && !exchange) throw INVOICE_ERRORS.invalidPaymentMethod()
 
     // Each promotion a line names must be this organization's; its name is kept on the line as it
     // is now. Not checked against the subscription or schedule -- a sale rung up offline under a
@@ -1026,7 +1151,10 @@ export class PosInvoicesService {
     // Every payment line can only name a method this branch has actually turned on -- the same
     // list the payment picker itself is built from, so a request can never name a method the UI
     // would never have offered.
-    const methods = await this.paymentMethodsService.list(input.organizationId, input.workspaceId)
+    const methods = [
+      ...(await this.paymentMethodsService.list(input.organizationId, input.workspaceId)),
+      ...(exchange ? exchangeMethods() : []),
+    ]
     const methodByCode = new Map(methods.map((candidate) => [candidate.code, candidate]))
     for (const payment of input.payments) {
       const method = methodByCode.get(payment.paymentMethodCode)
@@ -1201,7 +1329,22 @@ export class PosInvoicesService {
     // The payment lines have to fully settle the invoice -- not more, not less. A tiny epsilon
     // absorbs float/decimal rounding noise across several lines, the same tolerance the frontend
     // checkout uses to decide when "المبلغ المتبقي" reads as zero.
-    const paidAmount = Math.round(input.payments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100
+    // An exchange's new invoice is paid first by the returned items' credit (up to its total);
+    // the payments sent settle only the rest -- a single one is taken as exactly that rest.
+    let payments = input.payments
+    if (exchange) {
+      const credit = Math.round(Math.min(exchange.credit, totalAmount) * 100) / 100
+      const rest = Math.round((totalAmount - credit) * 100) / 100
+      const others =
+        rest <= 0
+          ? []
+          : input.payments.length === 1
+            ? [{ paymentMethodCode: input.payments[0].paymentMethodCode, amount: rest }]
+            : input.payments
+      if (rest > 0 && others.length === 0) throw INVOICE_ERRORS.paymentAmountMismatch()
+      payments = [{ paymentMethodCode: EXCHANGE_CREDIT_CODE, amount: credit }, ...others]
+    }
+    const paidAmount = Math.round(payments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100
     if (Math.abs(paidAmount - totalAmount) > 0.01) throw INVOICE_ERRORS.paymentAmountMismatch()
 
     // A "credit" line defers that amount to the customer's real account instead of collecting it
@@ -1209,7 +1352,7 @@ export class PosInvoicesService {
     // attributed to a real, existing customer record.
     const sumByKind = (kind: string) =>
       Math.round(
-        input.payments
+        payments
           .filter((payment) => methodByCode.get(payment.paymentMethodCode)?.kind === kind)
           .reduce((sum, payment) => sum + payment.amount, 0) * 100
       ) / 100
@@ -1242,7 +1385,7 @@ export class PosInvoicesService {
 
     const id = randomUUID()
     const paymentMethodCode =
-      input.payments.length === 1 ? input.payments[0].paymentMethodCode : SPLIT_PAYMENT_CODE
+      payments.length === 1 ? payments[0].paymentMethodCode : SPLIT_PAYMENT_CODE
 
     const issuedAt = new Date()
 
@@ -1481,7 +1624,7 @@ export class PosInvoicesService {
           )
         }
 
-        for (const payment of input.payments) {
+        for (const payment of payments) {
           await this.database.query(
             `INSERT INTO pos_invoice_payments (id, invoice_id, payment_method_code, amount)
            VALUES ($1, $2, $3, $4)`,
@@ -1553,70 +1696,74 @@ export class PosInvoicesService {
     const created = await this.findById(input.organizationId, id)
     if (!created) throw INVOICE_ERRORS.notFound()
 
-    // The sale is already fully committed at this point -- a failure writing its audit trail
-    // entry must never be reported back as a failed sale (the cashier would retry a charge that
-    // already went through). Best-effort only; swallow and move on.
-    await writeAuditLog(this.database, {
-      action: "pos_invoice.created",
-      actorUserId: input.cashierUserId,
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      entityType: "pos_invoice",
-      entityId: id,
-      metadata: { invoiceNumber, totalAmount, status: "completed" },
-    }).catch(() => {})
+    // After the save is final: straight away for a plain sale, after the whole exchange for an
+    // exchange's new invoice (so nothing is reported for a sale that is then rolled back).
+    await this.database.afterCommit(async () => {
+      // The sale is already fully committed at this point -- a failure writing its audit trail
+      // entry must never be reported back as a failed sale (the cashier would retry a charge that
+      // already went through). Best-effort only; swallow and move on.
+      await writeAuditLog(this.database, {
+        action: "pos_invoice.created",
+        actorUserId: input.cashierUserId,
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        entityType: "pos_invoice",
+        entityId: id,
+        metadata: { invoiceNumber, totalAmount, status: "completed" },
+      }).catch(() => {})
 
-    // Reported to ZATCA in the background -- the sale is already complete either way.
-    if (created.zatcaSigned) this.zatcaReporting?.reportInBackground("invoice", id)
+      // Reported to ZATCA in the background -- the sale is already complete either way.
+      if (created.zatcaSigned) this.zatcaReporting?.reportInBackground("invoice", id)
 
-    // Not awaited: the sale is saved, and the cashier shouldn't wait on Salla or Zid answering
-    // (a slow store used to leave the checkout spinning after the sale had already gone through).
-    // A push that fails is logged; the next sale or stock change of the product pushes again.
-    //
-    // Deliberately after the transaction commits, not alongside applyStockConsumption inside it
-    // above -- this reads each linked product's/variant's now-committed absolute stock figure, so
-    // it must run once that write is visible, and it must never be able to roll back a completed
-    // sale.
-    if (this.sallaStockPushService) {
-      void this.sallaStockPushService
-        .pushStockForLines(
-          input.organizationId,
-          input.workspaceId,
-          input.items.map((item) => ({
-            productId: item.productId,
-            variantId: item.variantId ?? null,
-          })),
-          -1
-        )
-        .catch(logStockPushFailure("salla"))
-    }
-    if (this.zidStockPushService) {
-      void this.zidStockPushService
-        .pushStockForLines(
-          input.organizationId,
-          input.workspaceId,
-          input.items.map((item) => ({
-            productId: item.productId,
-            variantId: item.variantId ?? null,
-          })),
-          -1
-        )
-        .catch(logStockPushFailure("zid"))
-    }
+      // Not awaited: the sale is saved, and the cashier shouldn't wait on Salla or Zid answering
+      // (a slow store used to leave the checkout spinning after the sale had already gone through).
+      // A push that fails is logged; the next sale or stock change of the product pushes again.
+      //
+      // Deliberately after the transaction commits, not alongside applyStockConsumption inside it
+      // above -- this reads each linked product's/variant's now-committed absolute stock figure, so
+      // it must run once that write is visible, and it must never be able to roll back a completed
+      // sale.
+      if (this.sallaStockPushService) {
+        void this.sallaStockPushService
+          .pushStockForLines(
+            input.organizationId,
+            input.workspaceId,
+            input.items.map((item) => ({
+              productId: item.productId,
+              variantId: item.variantId ?? null,
+            })),
+            -1
+          )
+          .catch(logStockPushFailure("salla"))
+      }
+      if (this.zidStockPushService) {
+        void this.zidStockPushService
+          .pushStockForLines(
+            input.organizationId,
+            input.workspaceId,
+            input.items.map((item) => ({
+              productId: item.productId,
+              variantId: item.variantId ?? null,
+            })),
+            -1
+          )
+          .catch(logStockPushFailure("zid"))
+      }
 
-    // A booking's own invoice does not earn here: the booking already earned for that visit.
-    if (this.loyalty && created.customerId && !input.idempotencyKey?.startsWith("booking:")) {
-      void this.loyalty
-        .earn(input.organizationId, {
-          customerId: created.customerId,
-          amount: created.totalAmount,
-          source: "pos",
-          ref: created.id,
-        })
-        .catch((error: unknown) =>
-          console.error("pos.loyalty_earn_failed", { invoiceId: created.id, error })
-        )
-    }
+      // A booking's own invoice does not earn here: the booking already earned for that visit.
+      if (this.loyalty && created.customerId && !input.idempotencyKey?.startsWith("booking:")) {
+        void this.loyalty
+          .earn(input.organizationId, {
+            customerId: created.customerId,
+            amount: created.totalAmount,
+            source: "pos",
+            ref: created.id,
+          })
+          .catch((error: unknown) =>
+            console.error("pos.loyalty_earn_failed", { invoiceId: created.id, error })
+          )
+      }
+    })
 
     return created
   }
@@ -1683,63 +1830,12 @@ export class PosInvoicesService {
     return this.zatcaReporting.reportNow("return", organizationId, returnId)
   }
 
-  // A real, itemized return event -- an إشعار دائن (credit note) with its own sequential number,
-  // its own totals, and a real line per returned item/quantity, distinct from (and referencing)
-  // the original invoice. Supports a PARTIAL return: input.items only needs to name the lines and
-  // quantities actually being returned THIS time, not the whole invoice, and can be called again
-  // later for whatever is still left on the same invoice (pos_invoice_items.returned_quantity is
-  // cumulative across every past call). A return that happens to cover everything still
-  // outstanding on every line is simply the full-invoice case of the same mechanism -- there is
-  // no separate "return everything" code path anymore.
-  // No workspaceId parameter -- a return always belongs to whichever branch the ORIGINAL invoice
-  // was rung up on (invoiceRow.workspace_id, below), not whatever branch the actor happens to be
-  // viewing right now.
-  async createReturn(
-    organizationId: string,
+  // The lines of a return and its totals, at the price actually paid for each unit (after line,
+  // promotion and order discounts) -- shared by a return and an exchange's preview of it.
+  private async allocateReturn(
     invoiceId: string,
-    input: {
-      items: Array<{ invoiceItemId: string; quantity: number }>
-      // amount is only required once there's more than one line -- a single-method refund always
-      // refunds the return's own computed total (see resolvedPayments below).
-      payments: Array<{ paymentMethodCode: string; amount?: number }>
-      notes: string | null
-    },
-    actorUserId: string | null
-  ): Promise<InvoiceReturnView> {
-    if (!UUID_PATTERN.test(invoiceId)) throw INVOICE_ERRORS.notFound()
-
-    const invoiceResult = await this.database.query<{
-      status: string
-      customer_id: string | null
-      workspace_id: string
-      invoice_number: string
-    }>(
-      `SELECT status, customer_id, workspace_id, invoice_number FROM pos_invoices
-        WHERE organization_id = $1 AND id = $2`,
-      [organizationId, invoiceId]
-    )
-    const invoiceRow = invoiceResult.rows[0]
-    if (!invoiceRow) throw INVOICE_ERRORS.notFound()
-    // A cancelled or already fully-returned invoice has nothing left to return; a
-    // "partially_returned" one can absolutely be returned against again (that is the entire point
-    // of tracking returned_quantity per line rather than one whole-invoice flag).
-    if (invoiceRow.status !== "completed" && invoiceRow.status !== "partially_returned") {
-      throw INVOICE_ERRORS.invoiceNotReturnable()
-    }
-
-    // Same rule create() already enforces for a sale's own payments -- a refund can only be
-    // attributed to a method this branch has actually turned on. The refund can be split across
-    // more than one (see migration 077_pos_invoice_return_payments.sql), so every line is checked.
-    const paymentMethods = await this.paymentMethodsService.list(
-      organizationId,
-      invoiceRow.workspace_id
-    )
-    const methodByCode = new Map(paymentMethods.map((method) => [method.code, method]))
-    for (const payment of input.payments) {
-      const method = methodByCode.get(payment.paymentMethodCode)
-      if (!method || !method.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
-    }
-
+    items: Array<{ invoiceItemId: string; quantity: number; restock?: boolean }>
+  ) {
     const itemsResult = await this.database.query<{
       id: string
       product_id: string | null
@@ -1770,12 +1866,13 @@ export class PosInvoicesService {
       productName: string
       unitPrice: number
       quantity: number
+      restock: boolean
       netAmount: number
       taxAmount: number
       taxRatePercent: number
     }> = []
 
-    for (const requested of input.items) {
+    for (const requested of items) {
       const line = itemById.get(requested.invoiceItemId)
       if (!line) throw INVOICE_ERRORS.returnItemNotFound()
 
@@ -1810,6 +1907,7 @@ export class PosInvoicesService {
         productName: line.product_name,
         unitPrice: Number(line.unit_price),
         quantity: requested.quantity,
+        restock: requested.restock !== false,
         netAmount: lineNet,
         taxAmount: lineTax,
         taxRatePercent: perUnitNet > 0 ? Math.round((perUnitTax / perUnitNet) * 100) : 0,
@@ -1821,6 +1919,73 @@ export class PosInvoicesService {
     discountAmount = Math.round(discountAmount * 100) / 100
     taxAmount = Math.round(taxAmount * 100) / 100
     const totalAmount = Math.round((subtotalAmount - discountAmount + taxAmount) * 100) / 100
+    return { returnLines, subtotalAmount, discountAmount, taxAmount, totalAmount }
+  }
+
+  // A real, itemized return event -- an إشعار دائن (credit note) with its own sequential number,
+  // its own totals, and a real line per returned item/quantity, distinct from (and referencing)
+  // the original invoice. Supports a PARTIAL return: input.items only needs to name the lines and
+  // quantities actually being returned THIS time, not the whole invoice, and can be called again
+  // later for whatever is still left on the same invoice (pos_invoice_items.returned_quantity is
+  // cumulative across every past call). A return that happens to cover everything still
+  // outstanding on every line is simply the full-invoice case of the same mechanism -- there is
+  // no separate "return everything" code path anymore.
+  // No workspaceId parameter -- a return always belongs to whichever branch the ORIGINAL invoice
+  // was rung up on (invoiceRow.workspace_id, below), not whatever branch the actor happens to be
+  // viewing right now.
+  async createReturn(
+    organizationId: string,
+    invoiceId: string,
+    input: {
+      // restock false: the item came back damaged and is not put back into stock.
+      items: Array<{ invoiceItemId: string; quantity: number; restock?: boolean }>
+      // amount is only required once there's more than one line -- a single-method refund always
+      // refunds the return's own computed total (see resolvedPayments below).
+      payments: Array<{ paymentMethodCode: string; amount?: number }>
+      notes: string | null
+      // Why it came back: size, color, defect or other.
+      reason?: ReturnReason | null
+    },
+    actorUserId: string | null,
+    // Part of a cashier exchange (createExchange): its internal payment methods are allowed.
+    options: { exchange?: boolean } = {}
+  ): Promise<InvoiceReturnView> {
+    if (!UUID_PATTERN.test(invoiceId)) throw INVOICE_ERRORS.notFound()
+
+    const invoiceResult = await this.database.query<{
+      status: string
+      customer_id: string | null
+      workspace_id: string
+      invoice_number: string
+    }>(
+      `SELECT status, customer_id, workspace_id, invoice_number FROM pos_invoices
+        WHERE organization_id = $1 AND id = $2`,
+      [organizationId, invoiceId]
+    )
+    const invoiceRow = invoiceResult.rows[0]
+    if (!invoiceRow) throw INVOICE_ERRORS.notFound()
+    // A cancelled or already fully-returned invoice has nothing left to return; a
+    // "partially_returned" one can absolutely be returned against again (that is the entire point
+    // of tracking returned_quantity per line rather than one whole-invoice flag).
+    if (invoiceRow.status !== "completed" && invoiceRow.status !== "partially_returned") {
+      throw INVOICE_ERRORS.invoiceNotReturnable()
+    }
+
+    // Same rule create() already enforces for a sale's own payments -- a refund can only be
+    // attributed to a method this branch has actually turned on. The refund can be split across
+    // more than one (see migration 077_pos_invoice_return_payments.sql), so every line is checked.
+    const paymentMethods = [
+      ...(await this.paymentMethodsService.list(organizationId, invoiceRow.workspace_id)),
+      ...(options.exchange ? exchangeMethods() : []),
+    ]
+    const methodByCode = new Map(paymentMethods.map((method) => [method.code, method]))
+    for (const payment of input.payments) {
+      const method = methodByCode.get(payment.paymentMethodCode)
+      if (!method || !method.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
+    }
+
+    const { returnLines, subtotalAmount, discountAmount, taxAmount, totalAmount } =
+      await this.allocateReturn(invoiceId, input.items)
 
     // A single-method refund always refunds the whole return -- the caller doesn't have to
     // already know totalAmount (it's only computable after prorating every returned line above)
@@ -1868,11 +2033,13 @@ export class PosInvoicesService {
     // them, not just the bundle itself (which never carried its own stock to begin with).
     const stockRestoration = await this.computeStockConsumption(
       organizationId,
-      returnLines.map((line) => ({
-        productId: line.productId,
-        variantId: line.variantId,
-        quantity: line.quantity,
-      }))
+      returnLines
+        .filter((line) => line.restock)
+        .map((line) => ({
+          productId: line.productId,
+          variantId: line.variantId,
+          quantity: line.quantity,
+        }))
     )
 
     const returnId = randomUUID()
@@ -1948,7 +2115,10 @@ export class PosInvoicesService {
           adjustment: {
             type: "credit",
             originalInvoiceNumber: invoiceRow.invoice_number,
-            reason: input.notes?.trim() || "Goods returned",
+            reason:
+              input.notes?.trim() ||
+              (input.reason ? RETURN_REASON_NOTE[input.reason] : null) ||
+              (options.exchange ? "استبدال" : "Goods returned"),
           },
           advanceChain: true,
         })
@@ -1970,9 +2140,9 @@ export class PosInvoicesService {
             discount_amount, tax_amount, total_amount, refund_payment_method_code, notes,
             created_by, created_at, qr_code, seller_name, seller_vat_number, seller_address,
             zatca_device_id, icv, previous_invoice_hash, invoice_hash, cryptographic_stamp,
-            zatca_signed_xml, zatca_uuid)
+            zatca_signed_xml, zatca_uuid, reason)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                 $18, $19, $20, $21, $22, $23, $24)`,
+                 $18, $19, $20, $21, $22, $23, $24, $25)`,
         [
           returnId,
           organizationId,
@@ -2000,6 +2170,7 @@ export class PosInvoicesService {
           zatca?.cryptographicStamp ?? null,
           zatca?.signedXml ?? null,
           zatca?.uuid ?? null,
+          input.reason ?? null,
         ]
       )
       returnSigned = zatca !== null
@@ -2016,8 +2187,8 @@ export class PosInvoicesService {
         await this.database.query(
           `INSERT INTO pos_invoice_return_items
              (id, return_id, invoice_item_id, product_id, variant_id, product_name, unit_price,
-              quantity, net_amount, tax_amount)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              quantity, net_amount, tax_amount, restocked)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             randomUUID(),
             returnId,
@@ -2029,6 +2200,7 @@ export class PosInvoicesService {
             line.quantity,
             line.netAmount,
             line.taxAmount,
+            line.restock,
           ]
         )
         // Guarded: the quantity left was checked above, before this transaction, so a second
@@ -2101,61 +2273,320 @@ export class PosInvoicesService {
     const created = await this.findReturnById(organizationId, returnId)
     if (!created) throw INVOICE_ERRORS.notFound()
 
-    await writeAuditLog(this.database, {
-      action: "pos_invoice.returned",
-      actorUserId,
-      organizationId,
-      workspaceId: invoiceRow.workspace_id,
-      entityType: "pos_invoice_return",
-      entityId: returnId,
-      metadata: { invoiceId, returnNumber, totalAmount },
-    }).catch(() => {})
+    await this.database.afterCommit(async () => {
+      await writeAuditLog(this.database, {
+        action: "pos_invoice.returned",
+        actorUserId,
+        organizationId,
+        workspaceId: invoiceRow.workspace_id,
+        entityType: "pos_invoice_return",
+        entityId: returnId,
+        metadata: { invoiceId, returnNumber, totalAmount },
+      }).catch(() => {})
 
-    if (returnSigned) this.zatcaReporting?.reportInBackground("return", returnId)
+      if (returnSigned) this.zatcaReporting?.reportInBackground("return", returnId)
 
-    // Symmetric with create()'s own push, after this transaction's own commit for the same reason
-    // -- reads the now-restocked, committed stock figure.
-    if (this.sallaStockPushService) {
-      void this.sallaStockPushService
-        .pushStockForLines(
-          organizationId,
-          invoiceRow.workspace_id,
-          returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
-          1
-        )
-        .catch(logStockPushFailure("salla"))
-    }
-    if (this.zidStockPushService) {
-      void this.zidStockPushService
-        .pushStockForLines(
-          organizationId,
-          invoiceRow.workspace_id,
-          returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
-          1
-        )
-        .catch(logStockPushFailure("zid"))
-    }
+      // Symmetric with create()'s own push, after this transaction's own commit for the same reason
+      // -- reads the now-restocked, committed stock figure.
+      if (this.sallaStockPushService) {
+        void this.sallaStockPushService
+          .pushStockForLines(
+            organizationId,
+            invoiceRow.workspace_id,
+            returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
+            1
+          )
+          .catch(logStockPushFailure("salla"))
+      }
+      if (this.zidStockPushService) {
+        void this.zidStockPushService
+          .pushStockForLines(
+            organizationId,
+            invoiceRow.workspace_id,
+            returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
+            1
+          )
+          .catch(logStockPushFailure("zid"))
+      }
 
-    if (this.loyalty) {
-      const loyalty = this.loyalty
-      // Points go back in the share of the sale that was returned.
-      void this.database
-        .query<{ total_amount: string | number }>(
-          `SELECT total_amount FROM pos_invoices WHERE organization_id = $1 AND id = $2`,
-          [organizationId, invoiceId]
-        )
-        .then((sale) => {
-          const sold = Number(sale.rows[0]?.total_amount ?? 0)
-          return loyalty.unearn(organizationId, {
-            source: "pos",
-            ref: invoiceId,
-            fraction: sold > 0 ? created.totalAmount / sold : 1,
+      if (this.loyalty) {
+        const loyalty = this.loyalty
+        // Points go back in the share of the sale that was returned.
+        void this.database
+          .query<{ total_amount: string | number }>(
+            `SELECT total_amount FROM pos_invoices WHERE organization_id = $1 AND id = $2`,
+            [organizationId, invoiceId]
+          )
+          .then((sale) => {
+            const sold = Number(sale.rows[0]?.total_amount ?? 0)
+            return loyalty.unearn(organizationId, {
+              source: "pos",
+              ref: invoiceId,
+              fraction: sold > 0 ? created.totalAmount / sold : 1,
+            })
           })
-        })
-        .catch((error: unknown) => console.error("pos.loyalty_unearn_failed", { invoiceId, error }))
-    }
+          .catch((error: unknown) =>
+            console.error("pos.loyalty_unearn_failed", { invoiceId, error })
+          )
+      }
+    })
 
     return created
+  }
+
+  // A cashier exchange: the chosen lines of a sale come back (a credit note, linked to it) and
+  // new items go out (a new invoice), saved together or not at all. The returned items' value is
+  // an internal "exchange credit" that refunds the credit note and pays the new invoice, so only
+  // the difference changes hands: the customer pays it, or gets it back by a payment method or
+  // on their balance. Both documents are signed and reported to ZATCA like any sale or return.
+  async createExchange(input: CreateExchangeInput): Promise<ExchangeResult> {
+    const { organizationId } = input
+    if (input.idempotencyKey) {
+      const existing = await this.database.query<{ id: string }>(
+        `SELECT id FROM pos_exchanges WHERE organization_id = $1 AND idempotency_key = $2`,
+        [organizationId, input.idempotencyKey]
+      )
+      if (existing.rows[0]) return this.exchangeResult(organizationId, existing.rows[0].id)
+    }
+    if (input.items.length === 0) throw INVOICE_ERRORS.exchangeRequiresNewItems()
+
+    const original = await this.database.query<{
+      id: string
+      status: string
+      workspace_id: string
+      customer_id: string | null
+      customer_name: string | null
+      customer_phone: string | null
+    }>(
+      `SELECT id, status, workspace_id, customer_id, customer_name, customer_phone
+         FROM pos_invoices WHERE organization_id = $1 AND id = $2`,
+      [organizationId, UUID_PATTERN.test(input.invoiceId) ? input.invoiceId : randomUUID()]
+    )
+    const sale = original.rows[0]
+    if (!sale) throw INVOICE_ERRORS.notFound()
+    if (sale.status !== "completed" && sale.status !== "partially_returned") {
+      throw INVOICE_ERRORS.invoiceNotReturnable()
+    }
+    if (input.workspaceId && input.workspaceId !== sale.workspace_id) {
+      throw INVOICE_ERRORS.exchangeOtherBranch()
+    }
+    if (input.refund && "toCustomerBalance" in input.refund && !sale.customer_id) {
+      throw INVOICE_ERRORS.exchangeBalanceRequiresCustomer()
+    }
+
+    const returned = await this.allocateReturn(sale.id, input.returnItems)
+    const exchangeId = randomUUID()
+
+    const { invoice, creditNote } = await this.database.withTransaction(async () => {
+      const invoice = await this.createSale(
+        {
+          organizationId,
+          workspaceId: sale.workspace_id,
+          cashierUserId: input.cashierUserId,
+          customerName: sale.customer_name,
+          customerPhone: sale.customer_phone,
+          customerId: sale.customer_id,
+          salesPersonUserId: input.salesPersonUserId ?? null,
+          payments: input.payments,
+          discountAmount: input.discountAmount,
+          notes: input.notes,
+          notesLines: null,
+          items: input.items,
+          idempotencyKey: null,
+        },
+        { credit: returned.totalAmount }
+      )
+      const creditUsed =
+        invoice.payments.find((payment) => payment.paymentMethodCode === EXCHANGE_CREDIT_CODE)
+          ?.amount ?? 0
+      const rest = Math.round((returned.totalAmount - creditUsed) * 100) / 100
+
+      let refundCode: string | null = null
+      if (rest > 0) {
+        if (!input.refund) throw INVOICE_ERRORS.exchangeRefundRequired()
+        refundCode =
+          "toCustomerBalance" in input.refund
+            ? EXCHANGE_BALANCE_CODE
+            : input.refund.paymentMethodCode
+      }
+      const creditNote = await this.createReturn(
+        organizationId,
+        sale.id,
+        {
+          items: input.returnItems,
+          payments: [
+            { paymentMethodCode: EXCHANGE_CREDIT_CODE, amount: creditUsed },
+            ...(refundCode ? [{ paymentMethodCode: refundCode, amount: rest }] : []),
+          ],
+          notes: input.notes,
+          reason: input.reason,
+        },
+        input.cashierUserId,
+        { exchange: true }
+      )
+
+      const difference = Math.round((invoice.totalAmount - creditNote.totalAmount) * 100) / 100
+      const settlement: ExchangeSettlement =
+        Math.abs(difference) < 0.005
+          ? "even"
+          : difference > 0
+            ? "collected"
+            : refundCode === EXCHANGE_BALANCE_CODE
+              ? "balance"
+              : "refunded"
+      await this.database.query(
+        `INSERT INTO pos_exchanges
+             (id, organization_id, workspace_id, original_invoice_id, return_id, new_invoice_id,
+              returned_amount, new_amount, difference_amount, settlement,
+              refund_payment_method_code, reason, notes, idempotency_key, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+        [
+          exchangeId,
+          organizationId,
+          sale.workspace_id,
+          sale.id,
+          creditNote.id,
+          invoice.id,
+          creditNote.totalAmount,
+          invoice.totalAmount,
+          difference,
+          settlement,
+          settlement === "refunded" ? refundCode : null,
+          input.reason,
+          input.notes,
+          input.idempotencyKey,
+          input.cashierUserId,
+        ]
+      )
+      await this.database.query(`UPDATE pos_invoices SET exchange_id = $2 WHERE id = $1`, [
+        invoice.id,
+        exchangeId,
+      ])
+      await this.database.query(`UPDATE pos_invoice_returns SET exchange_id = $2 WHERE id = $1`, [
+        creditNote.id,
+        exchangeId,
+      ])
+      return { invoice, creditNote }
+    })
+    await this.database.afterCommit(() =>
+      writeAuditLog(this.database, {
+        action: "pos_invoice.exchanged",
+        actorUserId: input.cashierUserId,
+        organizationId,
+        workspaceId: sale.workspace_id,
+        entityType: "pos_exchange",
+        entityId: exchangeId,
+        metadata: { invoiceId: invoice.id, returnId: creditNote.id },
+      }).catch(() => {})
+    )
+    return this.exchangeResult(organizationId, exchangeId)
+  }
+
+  private async exchangeResult(
+    organizationId: string,
+    exchangeId: string
+  ): Promise<ExchangeResult> {
+    const [exchange] = await this.listExchanges(organizationId, { exchangeId })
+    if (!exchange) throw INVOICE_ERRORS.notFound()
+    const invoice = await this.findById(organizationId, exchange.newInvoiceId)
+    const creditNote = await this.findReturnById(organizationId, exchange.returnId)
+    if (!invoice || !creditNote) throw INVOICE_ERRORS.notFound()
+    return { exchange, invoice, creditNote }
+  }
+
+  // Exchanges, newest first, with what came back and what went out -- what the exchanges page
+  // and its insights read.
+  async listExchanges(
+    organizationId: string,
+    filter: {
+      workspaceId?: string | null
+      from?: string | null
+      to?: string | null
+      exchangeId?: string
+    }
+  ): Promise<ExchangeView[]> {
+    const conditions = ["e.organization_id = $1"]
+    const params: unknown[] = [organizationId]
+    const add = (sql: string, value: unknown) => {
+      params.push(value)
+      conditions.push(sql.replace("?", `$${params.length}`))
+    }
+    if (filter.exchangeId) add("e.id = ?", filter.exchangeId)
+    if (filter.workspaceId) add("e.workspace_id = ?", filter.workspaceId)
+    if (filter.from) add("e.created_at >= ?", filter.from)
+    if (filter.to) add("e.created_at <= ?", filter.to)
+    const rows = await this.database.query<Record<string, unknown>>(
+      `SELECT e.*, o.invoice_number AS original_number, n.invoice_number AS new_number,
+              r.return_number, u.full_name AS cashier_name
+         FROM pos_exchanges e
+         JOIN pos_invoices o ON o.id = e.original_invoice_id
+         JOIN pos_invoices n ON n.id = e.new_invoice_id
+         JOIN pos_invoice_returns r ON r.id = e.return_id
+         LEFT JOIN users u ON u.id = e.created_by
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY e.created_at DESC
+        LIMIT 2000`,
+      params
+    )
+    if (rows.rows.length === 0) return []
+
+    const returnIds = rows.rows.map((row) => String(row.return_id))
+    const invoiceIds = rows.rows.map((row) => String(row.new_invoice_id))
+    const list = (ids: string[]) => ids.map((_, index) => `$${index + 1}`).join(", ")
+    const [returnedLines, newLines] = await Promise.all([
+      this.database.query<Record<string, unknown>>(
+        `SELECT return_id, product_id, product_name, quantity, net_amount, tax_amount, restocked
+           FROM pos_invoice_return_items WHERE return_id IN (${list(returnIds)})`,
+        returnIds
+      ),
+      this.database.query<Record<string, unknown>>(
+        `SELECT invoice_id, product_id, product_name, quantity, net_amount, tax_amount
+           FROM pos_invoice_items WHERE invoice_id IN (${list(invoiceIds)})`,
+        invoiceIds
+      ),
+    ])
+    const group = (lines: Record<string, unknown>[], key: string, returned: boolean) => {
+      const byKey = new Map<string, ExchangeLineView[]>()
+      for (const line of lines) {
+        const id = String(line[key])
+        const entry: ExchangeLineView = {
+          productId: line.product_id ? String(line.product_id) : null,
+          productName: String(line.product_name),
+          quantity: Number(line.quantity),
+          amount: Math.round((Number(line.net_amount) + Number(line.tax_amount)) * 100) / 100,
+          ...(returned ? { restocked: line.restocked !== false } : {}),
+        }
+        byKey.set(id, [...(byKey.get(id) ?? []), entry])
+      }
+      return byKey
+    }
+    const returnedBy = group(returnedLines.rows, "return_id", true)
+    const newBy = group(newLines.rows, "invoice_id", false)
+
+    return rows.rows.map((row) => ({
+      id: String(row.id),
+      workspaceId: String(row.workspace_id),
+      originalInvoiceId: String(row.original_invoice_id),
+      originalInvoiceNumber: String(row.original_number),
+      returnId: String(row.return_id),
+      returnNumber: String(row.return_number),
+      newInvoiceId: String(row.new_invoice_id),
+      newInvoiceNumber: String(row.new_number),
+      returnedAmount: Number(row.returned_amount),
+      newAmount: Number(row.new_amount),
+      differenceAmount: Number(row.difference_amount),
+      settlement: String(row.settlement) as ExchangeSettlement,
+      refundPaymentMethodCode: row.refund_payment_method_code
+        ? String(row.refund_payment_method_code)
+        : null,
+      reason: String(row.reason) as ReturnReason,
+      notes: row.notes ? String(row.notes) : null,
+      cashierUserId: row.created_by ? String(row.created_by) : null,
+      cashierName: row.cashier_name ? String(row.cashier_name) : null,
+      createdAt: toIso(row.created_at as string),
+      returnedItems: returnedBy.get(String(row.return_id)) ?? [],
+      newItems: newBy.get(String(row.new_invoice_id)) ?? [],
+    }))
   }
 
   async listReturns(
@@ -2181,7 +2612,8 @@ export class PosInvoicesService {
     const result = await this.database.query<InvoiceReturnRow & { invoice_number: string }>(
       `SELECT r.id, r.organization_id, r.workspace_id, r.invoice_id, r.return_number,
               r.subtotal_amount, r.discount_amount, r.tax_amount, r.total_amount,
-              r.refund_payment_method_code, r.notes, r.created_at, r.qr_code, r.seller_name,
+              r.refund_payment_method_code, r.notes, r.reason, r.exchange_id, r.created_at,
+              r.qr_code, r.seller_name,
               r.seller_vat_number, r.seller_address, i.invoice_number,
               (r.zatca_signed_xml IS NOT NULL) AS zatca_signed, r.zatca_status,
               r.zatca_reported_at, r.zatca_last_error, r.zatca_last_error_ar
@@ -2239,7 +2671,8 @@ export class PosInvoicesService {
     const result = await this.database.query<InvoiceReturnRow & { invoice_number: string }>(
       `SELECT r.id, r.organization_id, r.workspace_id, r.invoice_id, r.return_number,
               r.subtotal_amount, r.discount_amount, r.tax_amount, r.total_amount,
-              r.refund_payment_method_code, r.notes, r.created_at, r.qr_code, r.seller_name,
+              r.refund_payment_method_code, r.notes, r.reason, r.exchange_id, r.created_at,
+              r.qr_code, r.seller_name,
               r.seller_vat_number, r.seller_address, i.invoice_number,
               (r.zatca_signed_xml IS NOT NULL) AS zatca_signed, r.zatca_status,
               r.zatca_reported_at, r.zatca_last_error, r.zatca_last_error_ar

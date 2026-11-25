@@ -26,8 +26,6 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { Locale } from "@/i18n/locales"
 import { posShiftsService, type Shift } from "@/features/pos/services/pos-shifts.service"
-import { posInvoicesService } from "@/features/pos/services/pos-invoices.service"
-import { posPaymentMethodsService } from "@/features/pos/services/pos-payment-methods.service"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -98,44 +96,18 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
     }
     let cancelled = false
     setLoadingCloseSummary(true)
-    void Promise.all([
-      posInvoicesService.list({ workspaceId: shift.workspaceId, from: shift.openedAt }),
-      posPaymentMethodsService.list(),
-      posShiftsService.listCashMovements(shift.id),
-    ])
-      .then(([invoices, methods, movements]) => {
+    // The same figures the shift's own page shows, worked out on the server from the real sales
+    // and the credit notes' refunds (a returned or exchanged sale is counted correctly there).
+    void posShiftsService
+      .getDetail(shift.id)
+      .then((detail) => {
         if (cancelled) return
-        const cashCodes = new Set(
-          methods.filter((method) => method.kind === "cash").map((method) => method.code)
-        )
-        const mine = invoices.filter((invoice) => invoice.cashierUserId === shift.cashierUserId)
-        const sum = (list: typeof mine) =>
-          list.reduce((total, invoice) => total + invoice.totalAmount, 0)
-
         setCloseSummary({
-          cashSales: sum(
-            mine.filter(
-              (invoice) =>
-                invoice.status === "completed" && cashCodes.has(invoice.paymentMethodCode)
-            )
-          ),
-          otherSales: sum(
-            mine.filter(
-              (invoice) =>
-                invoice.status === "completed" && !cashCodes.has(invoice.paymentMethodCode)
-            )
-          ),
-          cashReturns: sum(
-            mine.filter(
-              (invoice) => invoice.status === "returned" && cashCodes.has(invoice.paymentMethodCode)
-            )
-          ),
-          withdrawals: movements
-            .filter((movement) => movement.type === "withdrawal")
-            .reduce((total, movement) => total + movement.amount, 0),
-          deposits: movements
-            .filter((movement) => movement.type === "deposit")
-            .reduce((total, movement) => total + movement.amount, 0),
+          cashSales: detail.cashSummary.cashSales,
+          otherSales: detail.cashSummary.otherSales,
+          cashReturns: detail.cashSummary.cashReturns,
+          withdrawals: detail.cashSummary.withdrawals,
+          deposits: detail.cashSummary.deposits,
         })
       })
       .catch(() => {

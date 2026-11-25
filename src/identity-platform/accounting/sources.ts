@@ -1,6 +1,6 @@
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { toDateString } from "../invoicing/shared"
-import { PAYMENT_METHOD_CATALOG } from "../pos/payment-methods-service"
+import { exchangeMethods, PAYMENT_METHOD_CATALOG } from "../pos/payment-methods-service"
 import {
   type DraftEntry,
   type PaymentKind,
@@ -79,9 +79,13 @@ function groupBy<T extends Row>(rows: T[], key: string): Map<string, T[]> {
   return groups
 }
 
-const CATALOG_KIND = new Map(
-  PAYMENT_METHOD_CATALOG.map((entry) => [entry.code, entry.kind as PaymentKind])
-)
+const CATALOG_KIND = new Map<string, PaymentKind>([
+  ...PAYMENT_METHOD_CATALOG.map((entry) => [entry.code, entry.kind as PaymentKind] as const),
+  // An exchange's credit refunds the credit note and pays the new invoice by the same amount, so
+  // its two sides cancel out on the clearing account; a leftover kept for the customer is store
+  // credit, the same as a wallet.
+  ...exchangeMethods().map((method) => [method.code, method.kind as PaymentKind] as const),
+])
 
 // A purchase, expense or voucher records how it was paid as a plain word.
 function simpleMethod(value: unknown): SimpleMethod {

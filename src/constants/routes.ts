@@ -38,6 +38,7 @@ export const ROUTES = {
   shiftsDetails: (shiftId: string) => `/shifts/${shiftId}`,
   invoices: "/invoices",
   invoicesReturns: "/invoices/returns",
+  invoicesExchanges: "/invoices/exchanges",
   quotations: "/quotations",
   quotationsNew: "/quotations/new",
   quotationDetails: (quotationId: string) => `/quotations/${quotationId}`,

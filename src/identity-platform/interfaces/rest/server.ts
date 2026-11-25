@@ -278,6 +278,7 @@ import {
   createSavedNoteSchema,
   updateSavedNoteSchema,
   invoiceStatusSchema,
+  createInvoiceExchangeSchema,
   createInvoiceReturnSchema,
   createZatcaDeviceSchema,
   submitZatcaComplianceOtpSchema,
@@ -6104,6 +6105,40 @@ export function createIdentityApiServer(
         })
       }
 
+      // Cashier exchanges: the list behind the exchanges page (before the :id routes, like
+      // "returns" above), and making one from a sale.
+      if (method === "GET" && url.pathname === "/v1/pos/invoices/exchanges") {
+        if (!posInvoicesService) {
+          return send(503, { code: "POS_INVOICES_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+        return send(200, {
+          items: await posInvoicesService.listExchanges(actor.organizationId, {
+            workspaceId: url.searchParams.get("workspaceId"),
+            from: url.searchParams.get("from"),
+            to: url.searchParams.get("to"),
+          }),
+        })
+      }
+      const invoiceExchangeMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/exchanges$/)
+      if (invoiceExchangeMatch && method === "POST") {
+        if (!posInvoicesService) {
+          return send(503, { code: "POS_INVOICES_UNAVAILABLE", message: "Unavailable." })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        const payload = createInvoiceExchangeSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await posInvoicesService.createExchange({
+            organizationId: actor.organizationId,
+            invoiceId: invoiceExchangeMatch[1],
+            workspaceId: actor.workspaceId ?? null,
+            cashierUserId: actor.userId,
+            ...payload,
+          })
+        )
+      }
+
       const invoiceReturnsMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/returns$/)
       if (invoiceReturnsMatch && method === "POST") {
         if (!posInvoicesService) {
@@ -6124,6 +6159,7 @@ export function createIdentityApiServer(
               items: payload.items,
               payments: payload.payments,
               notes: payload.notes,
+              reason: payload.reason ?? null,
             },
             actor.userId
           )

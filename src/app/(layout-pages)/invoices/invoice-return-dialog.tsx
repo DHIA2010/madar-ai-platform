@@ -15,6 +15,7 @@ import {
   type Invoice,
   type InvoiceReturn,
   posInvoicesService,
+  type ReturnReason,
 } from "@/features/pos/services/pos-invoices.service"
 
 import { Button } from "@/components/ui/button"
@@ -43,15 +44,43 @@ function formatAmount(value: number, locale: Locale): string {
 
 type ReturnPaymentMethod = { code: string; name: string; enabled?: boolean }
 
+export type ReturnMode = "refund" | "exchange"
+
+export const RETURN_REASON_LABEL: Record<ReturnReason, { ar: string; en: string }> = {
+  size: { ar: "المقاس", en: "Size" },
+  color: { ar: "اللون", en: "Color" },
+  defect: { ar: "عيب في المنتج", en: "Defect" },
+  other: { ar: "سبب آخر", en: "Other" },
+}
+
+// What the cashier carries into the cart for an exchange: the lines coming back and their value.
+export interface ExchangeDraft {
+  invoice: Invoice
+  returnItems: Array<{
+    invoiceItemId: string
+    quantity: number
+    restock: boolean
+    productName: string
+  }>
+  reason: ReturnReason
+  notes: string | null
+  // The returned lines' value at the price paid -- what the new items are paid with first.
+  credit: number
+}
+
 // The return's state and submit: open(invoice) starts one (every line at its full remaining
 // quantity, refunded through the sale's own method -- so a full return is "open and submit"), and
 // onReturned gets the created credit note to refresh and print.
 export function useInvoiceReturn({
   paymentMethods,
   onReturned,
+  onExchange,
 }: {
   paymentMethods: ReturnPaymentMethod[]
   onReturned: (created: InvoiceReturn) => void | Promise<void>
+  // Given only where an exchange can be made (the cashier): "استبدال" then hands the chosen
+  // lines to the cart instead of refunding them.
+  onExchange?: (draft: ExchangeDraft) => void
 }) {
   const t = useTranslations("invoices")
   const locale = useLocale() as Locale
@@ -65,6 +94,10 @@ export function useInvoiceReturn({
   // One entry per method the refund goes back through -- a refund can be split, like a sale.
   const [paymentAmounts, setPaymentAmounts] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [mode, setMode] = useState<ReturnMode>("refund")
+  const [reason, setReason] = useState<ReturnReason | null>(null)
+  // Lines marked as damaged: they come back but not into stock.
+  const [damaged, setDamaged] = useState<Record<string, boolean>>({})
 
   // A live estimate from the same per-unit rate createReturn() prorates from; the backend
   // re-derives the real figure.
@@ -86,8 +119,11 @@ export function useInvoiceReturn({
     [paymentAmounts]
   )
 
-  function open(invoice: Invoice) {
+  function open(invoice: Invoice, startMode: ReturnMode = "refund") {
     setTarget(invoice)
+    setMode(onExchange ? startMode : "refund")
+    setReason(null)
+    setDamaged({})
     const fullQuantities = Object.fromEntries(
       invoice.items
         .filter((item) => item.quantity - item.returnedQuantity > 0)
@@ -114,10 +150,27 @@ export function useInvoiceReturn({
       .map((item) => ({
         invoiceItemId: item.id,
         quantity: Math.trunc(Number(quantities[item.id]) || 0),
+        restock: !damaged[item.id],
+        productName: item.productName,
       }))
       .filter((entry) => entry.quantity > 0)
     if (items.length === 0) {
       toast.error(t("returnDialog.toasts.selectQuantity"))
+      return
+    }
+    if (mode === "exchange" && onExchange) {
+      if (!reason) {
+        toast.error(locale === "ar" ? "اختر سبب الاستبدال." : "Choose the reason for the exchange.")
+        return
+      }
+      onExchange({
+        invoice: target,
+        returnItems: items,
+        reason,
+        notes: notes.trim() || null,
+        credit: previewTotal,
+      })
+      setTarget(null)
       return
     }
     if (paymentEntries.length === 0) {
@@ -136,7 +189,12 @@ export function useInvoiceReturn({
     setSubmitting(true)
     try {
       const created = await posInvoicesService.createReturn(target.id, {
-        items,
+        items: items.map(({ invoiceItemId, quantity, restock }) => ({
+          invoiceItemId,
+          quantity,
+          restock,
+        })),
+        reason,
         payments: paymentEntries.map((entry) => ({
           paymentMethodCode: entry.code,
           amount: entry.amount,
@@ -168,6 +226,13 @@ export function useInvoiceReturn({
       submitting,
       onSubmit: () => void submit(),
       onClose: () => setTarget(null),
+      allowExchange: Boolean(onExchange),
+      mode,
+      onModeChange: setMode,
+      reason,
+      onReasonChange: setReason,
+      damaged,
+      onDamagedChange: setDamaged,
     },
   }
 }
@@ -245,6 +310,13 @@ export function ReturnDialog({
   submitting,
   onSubmit,
   onClose,
+  allowExchange = false,
+  mode = "refund",
+  onModeChange,
+  reason = null,
+  onReasonChange,
+  damaged = {},
+  onDamagedChange,
 }: {
   invoice: Invoice | null
   quantities: Record<string, string>
@@ -258,10 +330,19 @@ export function ReturnDialog({
   submitting: boolean
   onSubmit: () => void
   onClose: () => void
+  allowExchange?: boolean
+  mode?: ReturnMode
+  onModeChange?: (mode: ReturnMode) => void
+  reason?: ReturnReason | null
+  onReasonChange?: (reason: ReturnReason | null) => void
+  damaged?: Record<string, boolean>
+  onDamagedChange?: (next: Record<string, boolean>) => void
 }) {
   const t = useTranslations("invoices")
   const tCommon = useTranslations("common")
   const locale = useLocale() as Locale
+  const ar = locale === "ar"
+  const exchanging = allowExchange && mode === "exchange"
   const returnableItems = (invoice?.items ?? []).filter(
     (item) => item.quantity - item.returnedQuantity > 0
   )
@@ -276,7 +357,7 @@ export function ReturnDialog({
       >
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-            {t("returnDialog.title")}
+            {exchanging ? (ar ? "استبدال منتج" : "Exchange items") : t("returnDialog.title")}
           </DialogTitle>
           <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
             {invoice ? t("returnDialog.description", { number: invoice.invoiceNumber }) : ""}
@@ -289,6 +370,36 @@ export function ReturnDialog({
           </p>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pe-1">
+            {allowExchange ? (
+              <div className="grid grid-cols-2 gap-2 rounded-[12px] bg-[#f4f7fc] p-1">
+                {(["refund", "exchange"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => onModeChange?.(option)}
+                    className={cn(
+                      "rounded-[10px] px-3 py-2.5 text-[13px] font-bold transition-colors",
+                      mode === option ? "bg-white text-[#0d1b3e] shadow-sm" : "text-[#5b6b85]"
+                    )}
+                  >
+                    {option === "refund"
+                      ? ar
+                        ? "استرداد المبلغ"
+                        : "Refund"
+                      : ar
+                        ? "استبدال بمنتج آخر"
+                        : "Exchange for another item"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {exchanging ? (
+              <p className="rounded-[10px] bg-[#eef4ff] px-3 py-2 text-[12px] leading-6 text-[#1d4fd8]">
+                {ar
+                  ? "اختر ما سيرجع، ثم أضف المنتج الجديد في السلة. يُحسب الفرق تلقائيًا."
+                  : "Choose what comes back, then add the new items to the cart. The difference is worked out for you."}
+              </p>
+            ) : null}
             {returnableItems.map((item) => {
               const remaining = item.quantity - item.returnedQuantity
               return (
@@ -303,6 +414,19 @@ export function ReturnDialog({
                     <p className="text-[11px] text-[#e0484d]">
                       {t("returnDialog.remainingLabel", { remaining, quantity: item.quantity })}
                     </p>
+                    {onDamagedChange ? (
+                      <label className="mt-1 flex w-fit cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5b6b85]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(damaged[item.id])}
+                          onChange={(event) =>
+                            onDamagedChange({ ...damaged, [item.id]: event.target.checked })
+                          }
+                          className="size-3.5 accent-[#e0484d]"
+                        />
+                        {ar ? "تالف (لا يرجع للمخزون)" : "Damaged (not back to stock)"}
+                      </label>
+                    ) : null}
                   </div>
                   <Input
                     type="number"
@@ -320,16 +444,42 @@ export function ReturnDialog({
               )
             })}
 
+            {onReasonChange ? (
+              <div>
+                <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                  {exchanging ? (ar ? "سبب الاستبدال" : "Reason") : ar ? "سبب الإرجاع" : "Reason"}
+                  {exchanging ? <span className="text-[#e0484d]"> *</span> : null}
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(RETURN_REASON_LABEL) as ReturnReason[]).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => onReasonChange(reason === key ? null : key)}
+                      className={cn(
+                        "rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-colors",
+                        reason === key
+                          ? "border-black bg-black text-white"
+                          : "border-[#e5e9f0] bg-white text-[#0d1b3e]"
+                      )}
+                    >
+                      {RETURN_REASON_LABEL[key][ar ? "ar" : "en"]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5">
               <span className={cn("text-[13px] font-extrabold", HEADING)}>
-                {t("returnDialog.total")}
+                {exchanging ? (ar ? "رصيد الاستبدال" : "Exchange credit") : t("returnDialog.total")}
               </span>
               <span className={cn("text-[14px] font-extrabold", HEADING)}>
                 {formatAmount(previewTotal, locale)}
               </span>
             </div>
 
-            <div>
+            <div className={exchanging ? "hidden" : undefined}>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
                 {t("returnDialog.refundMethodLabel")} <span className="text-[#e0484d]">*</span>
               </Label>
@@ -373,7 +523,13 @@ export function ReturnDialog({
               disabled={submitting}
               onClick={onSubmit}
             >
-              {submitting ? t("returnDialog.submitting") : t("returnDialog.submit")}
+              {submitting
+                ? t("returnDialog.submitting")
+                : exchanging
+                  ? ar
+                    ? "التالي: اختر المنتج الجديد"
+                    : "Next: choose the new items"
+                  : t("returnDialog.submit")}
             </Button>
           ) : null}
           <Button
