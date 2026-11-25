@@ -94,7 +94,7 @@ const HEADLINES: Record<string, string> = {
   restaurant: "كاشير للمطاعم والكافيهات",
   booking: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
   "whatsapp-invoices": "أرسل فواتير عملائك عبر واتساب",
-  campaigns: "أدر حملاتك الإعلانية كلها من مدار",
+  campaigns: "أدر حملاتك الإعلانية كلها في مدار واحد",
 }
 
 // A topic about another app than the cashier also carries its own line and points beneath the
