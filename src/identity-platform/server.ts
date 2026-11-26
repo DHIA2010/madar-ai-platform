@@ -11,6 +11,7 @@ import { runBillingMaintenance } from "./subscriptions/maintenance"
 import { registeredAdsReportService } from "./whatsapp/ads-report"
 import { registeredBookingMessenger } from "./booking/automation"
 import { registeredLoyaltyCampaigns } from "./loyalty/campaigns"
+import { registeredWhatsAppCampaigns } from "./whatsapp/campaigns"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
@@ -166,6 +167,22 @@ if (loyaltyCampaigns && loyaltyCampaignMinutes > 0) {
       .catch((error: unknown) => console.error("loyalty.campaign_pass_failed", error))
   setTimeout(runLoyaltyCampaigns, 170_000).unref()
   setInterval(runLoyaltyCampaigns, loyaltyCampaignMinutes * 60_000).unref()
+}
+
+// WhatsApp marketing campaigns: due ones start, and sending ones go out in batches, every minute.
+// Safe from several tasks at once -- each message is claimed before it is sent.
+const whatsAppCampaignMinutes = Number(process.env.WHATSAPP_CAMPAIGN_INTERVAL_MINUTES ?? "1")
+const whatsAppCampaigns = registeredWhatsAppCampaigns()
+if (whatsAppCampaigns && whatsAppCampaignMinutes > 0) {
+  const runWhatsAppCampaigns = () =>
+    whatsAppCampaigns
+      .runDue()
+      .then((result) => {
+        if (result.sent + result.failed > 0) console.log("whatsapp.campaign_pass", result)
+      })
+      .catch((error: unknown) => console.error("whatsapp.campaign_pass_failed", error))
+  setTimeout(runWhatsAppCampaigns, 120_000).unref()
+  setInterval(runWhatsAppCampaigns, whatsAppCampaignMinutes * 60_000).unref()
 }
 
 const adsReports = registeredAdsReportService()

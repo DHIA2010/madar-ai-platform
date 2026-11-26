@@ -415,6 +415,11 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <CircleUserRound className="text-pink-500" />,
       permission: "customers:view",
       applications: ["ecommerce", "pos", "invoicing"],
+      items: [
+        { title: t("customersList"), url: ROUTES.customers, icon: <List /> },
+        // Offers to customers on WhatsApp, from the business's own connected number.
+        { title: t("whatsappCampaigns"), url: ROUTES.whatsappCampaigns, icon: <Megaphone /> },
+      ],
     },
     {
       title: t("reports"),

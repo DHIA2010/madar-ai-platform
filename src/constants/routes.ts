@@ -111,6 +111,7 @@ export const ROUTES = {
   accountingBalances: "/accounting/balances",
   accountingSettings: "/accounting/settings",
   customers: "/customers",
+  whatsappCampaigns: "/customers/campaigns",
   suppliers: "/suppliers",
   suppliersVouchers: "/suppliers/vouchers",
   purchases: "/purchases",

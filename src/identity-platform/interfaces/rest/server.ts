@@ -43,6 +43,7 @@ import { handleBookingRoute, handlePublicBookingRoute } from "./booking-routes"
 import { handleLoyaltyRoute, handlePublicLoyaltyRoute } from "./loyalty-routes"
 import { handleHomeTargetRoute } from "./home-target-routes"
 import { handleLaundryRoute } from "./laundry-routes"
+import { handleWhatsAppCampaignRoute } from "./whatsapp-campaign-routes"
 import { handlePluginRoute } from "./plugin-routes"
 import { PluginsService } from "../../plugins/service"
 import { LaundryService } from "../../laundry/service"
@@ -170,6 +171,7 @@ import { invoiceIdFromLinkToken, invoiceWhatsAppLink } from "../../whatsapp/invo
 import { registerDailyReportService, WhatsAppDailyReportService } from "../../whatsapp/daily-report"
 import { registerAdsReportService, WhatsAppAdsReportService } from "../../whatsapp/ads-report"
 import { WhatsAppMerchantConnectionService } from "../../whatsapp/merchant-connection"
+import { registerWhatsAppCampaigns, WhatsAppCampaignsService } from "../../whatsapp/campaigns"
 import { AddonsService } from "../../subscriptions/addons"
 import { PackageEntitlementsService } from "../../subscriptions/entitlements"
 import { BranchAllowanceService } from "../../subscriptions/branches"
@@ -1176,6 +1178,12 @@ export function createIdentityApiServer(
           whatsAppPlatformService
         )
       : null
+  // Marketing campaigns to a business's own customers, from its own connected number.
+  const whatsAppCampaigns =
+    container.infrastructure.database && whatsAppMerchantConnections
+      ? new WhatsAppCampaignsService(container.infrastructure.database, whatsAppMerchantConnections)
+      : null
+  registerWhatsAppCampaigns(whatsAppCampaigns)
   const whatsAppInvoiceSender =
     container.infrastructure.database &&
     whatsAppPlatformService &&
@@ -2382,7 +2390,25 @@ export function createIdentityApiServer(
         }
         // A team number writing to Madar's number opens its 24 hours of direct lead alerts.
         await whatsAppLeadAlerts?.recordReplies(payload)
+        // Campaign messages' statuses, customers' replies and opt-outs.
+        await whatsAppCampaigns
+          ?.handleWebhook(payload)
+          .catch((error: unknown) => console.error("whatsapp.campaign_webhook_failed", error))
         return send(200, { ok: true })
+      }
+
+      // Public: a campaign message's button -- counted, then on to the business's own link.
+      const whatsAppCampaignLinkMatch = url.pathname.match(/^\/v1\/public\/w\/([A-Za-z0-9]{6,16})$/)
+      if (whatsAppCampaignLinkMatch && method === "GET") {
+        const target = whatsAppCampaigns
+          ? await whatsAppCampaigns.click(whatsAppCampaignLinkMatch[1])
+          : null
+        response.writeHead(target ? 302 : 404, {
+          location: target ?? "https://www.madar.my",
+          "cache-control": "no-store",
+        })
+        response.end()
+        return
       }
 
       // Public: madar.my's "talk to sales" form.
@@ -3372,6 +3398,29 @@ export function createIdentityApiServer(
           url,
           actor,
           service: pluginsService,
+          send,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
+
+      // WhatsApp campaigns (whatsapp/campaigns.ts): offers, groups of customers, sending, results.
+      if (
+        await handleWhatsAppCampaignRoute({
+          method,
+          url,
+          actor,
+          service: whatsAppCampaigns,
+          uploadImage: container.infrastructure.objectStorage
+            ? (organizationId, body, contentType) =>
+                // Beside the product pictures: a folder the live storage already accepts.
+                container.infrastructure.objectStorage!.uploadPublicObject({
+                  key: `products/${organizationId}/offer-${randomUUID()}.${contentType === "image/png" ? "png" : "jpg"}`,
+                  body,
+                  contentType,
+                })
+            : null,
           send,
           readJsonBody: () => readJsonBody(request),
         })

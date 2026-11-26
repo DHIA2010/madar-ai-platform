@@ -57,7 +57,11 @@ export interface TemplateMessage {
   templateName: string
   language: string
   document?: { mediaId: string; filename: string }
+  // A picture header, by its public link (a marketing offer's image).
+  imageLink?: string
   bodyParameters: string[]
+  // A URL button whose link ends in a value of its own (a campaign's tracked link).
+  urlButton?: { index: number; suffix: string }
   // A sign-in code template: the code goes in the body and again in its "copy code" button.
   codeButton?: string
 }
@@ -80,10 +84,24 @@ export async function sendTemplateMessage(
       ],
     })
   }
+  if (message.imageLink) {
+    components.push({
+      type: "header",
+      parameters: [{ type: "image", image: { link: message.imageLink } }],
+    })
+  }
   if (message.bodyParameters.length > 0) {
     components.push({
       type: "body",
       parameters: message.bodyParameters.map((text) => ({ type: "text", text })),
+    })
+  }
+  if (message.urlButton) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: String(message.urlButton.index),
+      parameters: [{ type: "text", text: message.urlButton.suffix }],
     })
   }
   if (message.codeButton) {
@@ -205,7 +223,7 @@ export async function getTemplateStatus(
 
 // A sample file for a template's document header must be uploaded first, through Meta's
 // Resumable Upload API (on the app), which returns the handle the template references.
-async function uploadTemplateSample(
+export async function uploadTemplateSample(
   auth: GraphAuth,
   appId: string,
   file: { bytes: Buffer; mimeType: string; filename: string }
