@@ -187,3 +187,19 @@ export function getPhoneNumber(phoneNumberId: string, auth: GraphAuth) {
     fields: "display_phone_number,verified_name,quality_rating,name_status,messaging_limit_tier",
   })
 }
+
+// Coexistence (a number also in use in the WhatsApp Business app): asks Meta to send the app's
+// contacts ("smb_app_state_sync") or its last 180 days of chats ("history") to the webhook. Each
+// can run once, within 24 hours of the connection.
+export function syncBusinessAppData(
+  phoneNumberId: string,
+  syncType: "smb_app_state_sync" | "history",
+  auth: GraphAuth
+) {
+  return graphRequest<{ messaging_product?: string; request_id?: string }>(
+    "POST",
+    `/${encodeURIComponent(phoneNumberId)}/smb_app_data`,
+    auth,
+    { messaging_product: "whatsapp", sync_type: syncType }
+  )
+}

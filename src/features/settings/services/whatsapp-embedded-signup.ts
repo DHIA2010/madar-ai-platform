@@ -48,7 +48,15 @@ function loadSdk(appId: string, version: string): Promise<FacebookSdk> {
 }
 
 export type EmbeddedSignupResult =
-  | { kind: "finished"; code: string; wabaId: string; phoneNumberId: string }
+  // coexistence: the merchant connected the number they use in the WhatsApp Business app (it keeps
+  // working there); Meta may not say which number, in which case the server looks it up.
+  | {
+      kind: "finished"
+      code: string
+      wabaId: string
+      phoneNumberId: string | null
+      coexistence: boolean
+    }
   // The merchant closed Meta's window; `step` is where they stopped, when Meta says.
   | { kind: "cancelled"; step: string | null }
   | { kind: "error"; message: string | null }
@@ -70,7 +78,7 @@ export async function runEmbeddedSignup(config: {
 
   return new Promise<EmbeddedSignupResult>((resolve) => {
     let code: string | null = null
-    let picked: { wabaId: string; phoneNumberId: string } | null = null
+    let picked: { wabaId: string; phoneNumberId: string | null; coexistence: boolean } | null = null
     let settled = false
     const settle = (result: EmbeddedSignupResult) => {
       if (settled) return
@@ -95,7 +103,14 @@ export async function runEmbeddedSignup(config: {
         const wabaId = data.data?.waba_id
         const phoneNumberId = data.data?.phone_number_id
         if (wabaId && phoneNumberId) {
-          picked = { wabaId, phoneNumberId }
+          picked = { wabaId, phoneNumberId, coexistence: false }
+          finishIfReady()
+        }
+      } else if (data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING") {
+        // The number from the merchant's WhatsApp Business app (coexistence).
+        const wabaId = data.data?.waba_id
+        if (wabaId) {
+          picked = { wabaId, phoneNumberId: data.data?.phone_number_id ?? null, coexistence: true }
           finishIfReady()
         }
       } else if (data.event === "CANCEL") {
@@ -125,7 +140,13 @@ export async function runEmbeddedSignup(config: {
         config_id: config.configId,
         response_type: "code",
         override_default_response_type: true,
-        extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+        // Offers connecting the number already in the WhatsApp Business app (coexistence), beside
+        // a new number.
+        extras: {
+          setup: {},
+          featureType: "whatsapp_business_app_onboarding",
+          sessionInfoVersion: "3",
+        },
       }
     )
   })

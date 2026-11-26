@@ -5419,8 +5419,8 @@
             "body": "You'll log in with it in Meta's window. Ideally an admin of your business on Meta — you can also create the business during the steps."
           },
           {
-            "title": "A mobile number for the store",
-            "body": "It receives an SMS or call with the verification code. It must not be registered in the WhatsApp or WhatsApp Business app right now — delete that account first, or use a new number."
+            "title": "Your store's number",
+            "body": "Your current number in the WhatsApp Business app: connect it by scanning a QR code from the app, and it keeps working on your phone as it is. Or a new number not on WhatsApp, which gets a code by text or call."
           },
           {
             "title": "A display name",
@@ -5435,15 +5435,15 @@
         "stepsTitle": "What happens in Meta's window",
         "steps": [
           "Log in with Facebook",
-          "Choose your business or create one",
-          "Choose a WhatsApp Business account or create one",
-          "Enter the store's number and display name",
-          "Enter the verification code sent to the number",
+          "Choose: connect your current WhatsApp Business app, or a new number",
+          "WhatsApp Business app: scan the QR code from the app on your phone (Settings → Linked devices)",
+          "New number: enter it and the code you receive",
           "Approve Madar's permissions — done"
         ],
         "afterTitle": "After connecting",
         "after": [
           "Madar sends invoices automatically from your number when you sell",
+          "If you connected the WhatsApp Business app: it keeps working on your phone, and messages Madar sends show there too",
           "The invoice template is sent to your account for Meta's approval (usually minutes)",
           "You can go back to WhatsApp Web or disconnect the number any time"
         ],
@@ -5471,7 +5471,8 @@
         "manage": "Manage the number in WhatsApp Manager",
         "disconnect": "Disconnect number",
         "disconnectConfirm": "Madar will go back to WhatsApp Web. Your number stays in your Meta account and can be connected again. Continue?",
-        "previous": "Your number {number} was connected before. Connect it again with the button below."
+        "previous": "Your number {number} was connected before. Connect it again with the button below.",
+        "coexistence": "Also works in the WhatsApp Business app on your phone"
       },
       "toasts": {
         "modeWeb": "Madar will send through WhatsApp Web.",

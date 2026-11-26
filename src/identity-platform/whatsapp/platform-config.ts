@@ -483,7 +483,42 @@ export class WhatsAppPlatformService {
   async recordWebhookEvent(payload: unknown): Promise<void> {
     await this.database.query(
       "INSERT INTO whatsapp_webhook_events (id, payload) VALUES ($1, $2::jsonb)",
-      [randomUUID(), JSON.stringify(payload)]
+      [randomUUID(), JSON.stringify(withoutPrivateChats(payload))]
     )
+  }
+}
+
+// What a coexistence number's own app sends Meta's webhook -- its chat history, its contacts and
+// copies of the messages typed in the app -- is the merchant's private conversations. Madar does
+// not use them, so only a note of the event is kept, never the chats or contacts themselves.
+const PRIVATE_FIELDS = new Set(["history", "smb_app_state_sync", "smb_message_echoes"])
+
+export function withoutPrivateChats(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload
+  const body = payload as {
+    entry?: Array<{ changes?: Array<{ field?: string; value?: unknown }> }>
+  }
+  if (!Array.isArray(body.entry)) return payload
+  return {
+    ...body,
+    entry: body.entry.map((entry) => ({
+      ...entry,
+      changes: (entry.changes ?? []).map((change) => {
+        if (!change.field || !PRIVATE_FIELDS.has(change.field)) return change
+        const value = (change.value ?? {}) as Record<string, unknown>
+        return {
+          field: change.field,
+          value: {
+            metadata: value.metadata ?? null,
+            // How much came, without what it said.
+            items: ["history", "state_sync", "message_echoes"].reduce(
+              (count, key) =>
+                count + (Array.isArray(value[key]) ? (value[key] as unknown[]).length : 0),
+              0
+            ),
+          },
+        }
+      }),
+    })),
   }
 }

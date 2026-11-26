@@ -1927,10 +1927,15 @@ export const whatsAppEmbeddedSignupSchema = z.object({
     .string()
     .trim()
     .regex(/^\d{5,30}$/),
+  // Meta can leave it out for a number connected from the WhatsApp Business app (coexistence).
   phoneNumberId: z
     .string()
     .trim()
-    .regex(/^\d{5,30}$/),
+    .regex(/^\d{5,30}$/)
+    .nullable()
+    .optional(),
+  // The number stays in use in the WhatsApp Business app on the merchant's phone.
+  coexistence: z.boolean().optional().default(false),
 })
 
 // The daily store report on WhatsApp -- see whatsapp/daily-report.ts.

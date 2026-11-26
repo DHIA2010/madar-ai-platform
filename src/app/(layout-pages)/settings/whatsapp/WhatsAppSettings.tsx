@@ -522,6 +522,9 @@ function ConnectedPanel({
             {connection.verifiedName ? (
               <p className={cn("text-[13px] font-semibold", MUTED)}>{connection.verifiedName}</p>
             ) : null}
+            {connection.coexistence ? (
+              <p className="mt-1 text-[11.5px] font-semibold text-[#16a34a]">{t("coexistence")}</p>
+            ) : null}
             {since ? (
               <p className="mt-1 text-[11.5px] text-[#98A2B3]">{t("since", { date: since })}</p>
             ) : null}

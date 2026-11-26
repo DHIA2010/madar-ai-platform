@@ -13,7 +13,7 @@ import type { PosInvoicesService } from "../pos/invoices-service"
 import type { PosPaymentMethodsService } from "../pos/payment-methods-service"
 import { WhatsAppInvoiceSender } from "../whatsapp/invoice-sender"
 import { WhatsAppMerchantConnectionService } from "../whatsapp/merchant-connection"
-import { WhatsAppPlatformService } from "../whatsapp/platform-config"
+import { WhatsAppPlatformService, withoutPrivateChats } from "../whatsapp/platform-config"
 import { WhatsAppTemplatesService } from "../whatsapp/templates"
 
 const organizationId = "20000000-0000-0000-0000-000000000001"
@@ -52,6 +52,12 @@ function stubMeta(options: { registerFails?: boolean } = {}) {
         : json({ success: true })
     }
     if (url.pathname.endsWith("/subscribed_apps")) return json({ success: true })
+    if (url.pathname.endsWith("/smb_app_data")) {
+      return json({ messaging_product: "whatsapp", request_id: "req-1" })
+    }
+    if (url.pathname.endsWith("/7700/phone_numbers")) {
+      return json({ data: [{ id: "8800", display_phone_number: "+966 50 111 2222" }] })
+    }
     if (url.pathname.endsWith("/8800") && method === "GET") {
       return json({
         id: "8800",
@@ -166,6 +172,58 @@ describe("WhatsAppMerchantConnectionService", () => {
     )
     expect(stored.rows[0].business_token_encrypted).toMatch(/^v1:/)
     expect(stored.rows[0].business_token_encrypted).not.toContain("EAAB-merchant-token")
+  })
+
+  it("connects a number from the WhatsApp Business app without registering it again", async () => {
+    await platform.update({ embeddedSignupConfigId: "cfg-42" }, userId)
+    const calls = stubMeta()
+
+    // Meta's coexistence finish can leave the number out: the account's number is used.
+    const view = await connections.completeEmbeddedSignup({
+      organizationId,
+      actorUserId: userId,
+      code: "signup-code",
+      wabaId: "7700",
+      phoneNumberId: null,
+      coexistence: true,
+    })
+
+    expect(view.connection).toMatchObject({
+      status: "connected",
+      phoneNumberId: "8800",
+      coexistence: true,
+      lastError: null,
+    })
+    // Already registered by the app: never registered again.
+    expect(calls.some((call) => call.path.endsWith("/register"))).toBe(false)
+    // Contacts and history are asked for at once (Meta allows 24 hours, once each).
+    expect(calls.filter((call) => call.path === "/v26.0/8800/smb_app_data")).toHaveLength(2)
+  })
+
+  it("keeps a coexistence number's chats and contacts out of the event log", () => {
+    const event = {
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "7700",
+          changes: [
+            {
+              field: "history",
+              value: {
+                metadata: { phone_number_id: "8800" },
+                history: [{ threads: [{ id: "966500000000", messages: [{ text: "private" }] }] }],
+              },
+            },
+            { field: "messages", value: { statuses: [{ id: "wamid.1", status: "read" }] } },
+          ],
+        },
+      ],
+    }
+    const kept = JSON.stringify(withoutPrivateChats(event))
+    expect(kept).not.toContain("private")
+    expect(kept).toContain('"items":1')
+    // Ordinary events are kept as they came.
+    expect(kept).toContain("wamid.1")
   })
 
   it("keeps the connection when a later step fails, noting what's left to fix", async () => {

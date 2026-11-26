@@ -21,6 +21,8 @@ export interface WhatsAppConnection {
   qualityRating: string | null
   lastError: string | null
   connectedAt: string | null
+  // The number also stays in use in the WhatsApp Business app on the merchant's phone.
+  coexistence?: boolean
 }
 
 export interface WhatsAppConnectionOverview {
@@ -47,7 +49,8 @@ export const whatsAppConnectionService = {
   async completeSignup(input: {
     code: string
     wabaId: string
-    phoneNumberId: string
+    phoneNumberId: string | null
+    coexistence: boolean
   }): Promise<WhatsAppConnectionOverview> {
     return client.post<typeof input, WhatsAppConnectionOverview>(
       [ENDPOINT, "embedded-signup"].join(PATH_SEPARATOR),

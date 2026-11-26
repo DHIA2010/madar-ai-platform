@@ -6,7 +6,9 @@ import {
   exchangeSignupCode,
   getPhoneNumber,
   type GraphAuth,
+  listPhoneNumbers,
   registerPhoneNumber,
+  syncBusinessAppData,
   subscribeWabaToApp,
   WhatsAppApiError,
 } from "./cloud-api"
@@ -40,6 +42,8 @@ export interface WhatsAppConnectionView {
     qualityRating: string | null
     lastError: string | null
     connectedAt: string | null
+    // The number also stays in use in the WhatsApp Business app on the merchant's phone.
+    coexistence: boolean
   } | null
   // Whether Meta's signup can be opened yet, and with what (both public values) -- null until
   // Madar's Meta app is set up for it (Madar Admin -> settings -> WhatsApp).
@@ -91,7 +95,7 @@ export class WhatsAppMerchantConnectionService {
   private async row(organizationId: string): Promise<ConnectionRow | null> {
     const result = await this.database.query<ConnectionRow>(
       `SELECT send_mode, status, waba_id, phone_number_id, display_phone_number, verified_name,
-              quality_rating, business_token_encrypted, last_error, connected_at
+              quality_rating, business_token_encrypted, last_error, connected_at, coexistence
          FROM whatsapp_merchant_connections WHERE organization_id = $1`,
       [organizationId]
     )
@@ -116,6 +120,7 @@ export class WhatsAppMerchantConnectionService {
               qualityRating: row.quality_rating,
               lastError: row.last_error,
               connectedAt: toIso(row.connected_at),
+              coexistence: row.coexistence === true,
             }
           : null,
       embeddedSignup,
@@ -149,7 +154,11 @@ export class WhatsAppMerchantConnectionService {
     actorUserId: string
     code: string
     wabaId: string
-    phoneNumberId: string
+    // Meta may leave it out for a number connected from the WhatsApp Business app: then it is
+    // the account's number.
+    phoneNumberId?: string | null
+    // Coexistence: the number stays in use in the WhatsApp Business app on the merchant's phone.
+    coexistence?: boolean
   }): Promise<WhatsAppConnectionView> {
     if (!(await this.platform.embeddedSignup())) throw ERRORS.signupUnavailable()
     const app = await this.platform.appCredentials()
@@ -178,14 +187,36 @@ export class WhatsAppMerchantConnectionService {
       problems.push(`webhook: ${errorText(error)}`)
     }
 
-    const pin = String(randomInt(0, 1_000_000)).padStart(6, "0")
-    try {
-      await registerPhoneNumber(input.phoneNumberId, pin, auth)
-    } catch (error) {
-      problems.push(`number registration: ${errorText(error)}`)
+    const coexistence = input.coexistence === true
+    let phoneNumberId = input.phoneNumberId ?? null
+    if (!phoneNumberId) {
+      const numbers = await listPhoneNumbers(input.wabaId, auth).catch(() => null)
+      phoneNumberId = numbers?.data?.[0]?.id ?? null
+      if (!phoneNumberId) throw ERRORS.rejected("Meta didn't say which number was connected.")
     }
 
-    const number = await getPhoneNumber(input.phoneNumberId, auth).catch(() => null)
+    const pin = String(randomInt(0, 1_000_000)).padStart(6, "0")
+    if (coexistence) {
+      // Already registered by the WhatsApp Business app -- registering again would break it. Meta
+      // asks for the app's contacts and chats to be synced within 24 hours of the connection.
+      for (const syncType of ["smb_app_state_sync", "history"] as const) {
+        try {
+          await syncBusinessAppData(phoneNumberId, syncType, auth)
+        } catch (error) {
+          problems.push(
+            `${syncType === "history" ? "history" : "contacts"} sync: ${errorText(error)}`
+          )
+        }
+      }
+    } else {
+      try {
+        await registerPhoneNumber(phoneNumberId, pin, auth)
+      } catch (error) {
+        problems.push(`number registration: ${errorText(error)}`)
+      }
+    }
+
+    const number = await getPhoneNumber(phoneNumberId, auth).catch(() => null)
 
     try {
       await submitTemplate(auth, {
@@ -205,17 +236,17 @@ export class WhatsAppMerchantConnectionService {
       `INSERT INTO whatsapp_merchant_connections (
          organization_id, send_mode, status, waba_id, phone_number_id, display_phone_number,
          verified_name, quality_rating, business_token_encrypted, registration_pin_encrypted,
-         last_error, connected_at, connected_by, updated_at)
-       VALUES ($1, 'business', 'connected', $2, $3, $4, $5, $6, $7, $8, $9, now(), $10, now())
+         last_error, connected_at, connected_by, updated_at, coexistence)
+       VALUES ($1, 'business', 'connected', $2, $3, $4, $5, $6, $7, $8, $9, now(), $10, now(), $11)
        ON CONFLICT (organization_id) DO UPDATE SET
          send_mode = 'business', status = 'connected', waba_id = $2, phone_number_id = $3,
          display_phone_number = $4, verified_name = $5, quality_rating = $6,
          business_token_encrypted = $7, registration_pin_encrypted = $8, last_error = $9,
-         connected_at = now(), connected_by = $10, updated_at = now()`,
+         connected_at = now(), connected_by = $10, updated_at = now(), coexistence = $11`,
       [
         input.organizationId,
         input.wabaId,
-        input.phoneNumberId,
+        phoneNumberId,
         number?.display_phone_number ?? null,
         number?.verified_name ?? null,
         number?.quality_rating ?? null,
@@ -223,11 +254,13 @@ export class WhatsAppMerchantConnectionService {
         encryptSecret(pin),
         problems.length > 0 ? problems.join(" · ") : null,
         input.actorUserId,
+        coexistence,
       ]
     )
     console.log("whatsapp.merchant_connected", {
       organizationId: input.organizationId,
       wabaId: input.wabaId,
+      coexistence,
       problems: problems.length,
     })
     return this.get(input.organizationId)
