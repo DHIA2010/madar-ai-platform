@@ -1088,9 +1088,10 @@ export class LaundryService {
     }
     await this.db.query(
       `UPDATE laundry_orders SET status = $3, updated_at = now(),
-              ready_at = CASE WHEN $3 = 'ready' THEN COALESCE(ready_at, now()) ELSE NULL END
+              ready_at = CASE WHEN $4 THEN COALESCE(ready_at, now()) ELSE NULL END
         WHERE organization_id = $1 AND id = $2`,
-      [organizationId, id, status]
+      // A separate flag: Postgres refuses one parameter used as both varchar and text.
+      [organizationId, id, status, status === "ready"]
     )
     await this.event(id, "status", { from: row.status, to: status }, actorUserId)
     const order = await this.getOrder(organizationId, id)
