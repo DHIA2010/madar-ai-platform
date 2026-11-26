@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 
+import { type OfferInput, PlatformOffersService } from "../pricing/offers"
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { ERRORS } from "../application/errors/IdentityError"
 import { writeAuditLog } from "../infrastructure/postgres/audit-log-writer"
@@ -1120,6 +1121,35 @@ export class PlatformAdminService {
 
   // A platform-level change (pricing, settings) -- not tied to any one customer.
   // Paid add-ons (subscriptions/addons.ts): their prices, and giving or ending one for a customer.
+  // ---- Offers (العروض) ----
+
+  private offers() {
+    return new PlatformOffersService(this.db, this.pricing)
+  }
+
+  async listOffers(actor: AuthenticatedActor) {
+    requirePlatformAdmin(actor)
+    return this.offers().list({ availableOnly: false })
+  }
+
+  async saveOffer(actor: AuthenticatedActor, id: string | null, input: OfferInput) {
+    requirePlatformAdmin(actor)
+    const saved = await this.offers().save(id, input)
+    await this.auditPlatform(
+      actor,
+      id ? "platform_admin.offer_updated" : "platform_admin.offer_created",
+      saved.id,
+      { ...input }
+    )
+    return saved
+  }
+
+  async deleteOffer(actor: AuthenticatedActor, id: string) {
+    requirePlatformAdmin(actor)
+    await this.offers().remove(id)
+    await this.auditPlatform(actor, "platform_admin.offer_deleted", id, {})
+  }
+
   async listAddons(actor: AuthenticatedActor) {
     requirePlatformAdmin(actor)
     return new AddonsService(this.db).prices()

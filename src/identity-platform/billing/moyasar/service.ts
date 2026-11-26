@@ -7,6 +7,7 @@ import { writeAuditLog } from "../../infrastructure/postgres/audit-log-writer"
 import { crmPaymentReceived } from "../../crm/service"
 import { notify } from "../../notifications/service"
 import type { CouponService } from "../../coupons/service"
+import type { PlatformOffersService } from "../../pricing/offers"
 import type { PricingService } from "../../pricing/service"
 import { extraBranchPrice } from "../../pricing/service"
 import { activationSettingsPatch } from "../../subscriptions/activation"
@@ -39,7 +40,9 @@ export class MoyasarBillingService {
     private readonly db: PostgresDatabase,
     private readonly repository: MoyasarBillingRepository,
     private readonly pricing: PricingService,
-    private readonly coupons: CouponService
+    private readonly coupons: CouponService,
+    // Offers (pricing/offers.ts); absent = offers can't be bought.
+    private readonly offers: PlatformOffersService | null = null
   ) {}
 
   // Credentials are resolved lazily per call rather than once at server startup -- createServer's
@@ -150,6 +153,89 @@ export class MoyasarBillingService {
       amount: payment.amount,
       currency: payment.currency,
       publishableKey: credentials.publishableKey,
+    }
+  }
+
+  // One of Madar Admin's offers: its package for its years at the offer's one price (yearly, no
+  // coupon, no extra branches); its included apps and add-ons are switched on once it's paid.
+  async createOfferCheckout(
+    actor: AuthenticatedActor,
+    input: { offerId: string }
+  ): Promise<CreateCheckoutIntentResult> {
+    if (!this.offers) throw ERRORS.serviceUnavailable("Offers are unavailable.")
+    const offer = await this.offers.purchasable(input.offerId)
+    const pkg = await this.pricing.getPackage(offer.package.id)
+    const credentials = await this.requireCredentials()
+    const payment = await this.repository.createCheckout({
+      organizationId: actor.organizationId,
+      requestedByUserId: actor.userId,
+      application: offer.application,
+      planTier: pkg.legacyPlanTier === "enterprise" ? null : pkg.legacyPlanTier,
+      packageId: pkg.id,
+      billingInterval: "yearly",
+      offerYears: offer.years,
+      offerId: offer.id,
+      coupon: null,
+      amount: offer.priceHalalas,
+      currency: MOYASAR_CURRENCY,
+    })
+    return {
+      checkoutId: payment.id,
+      amount: payment.amount,
+      currency: payment.currency,
+      publishableKey: credentials.publishableKey,
+    }
+  }
+
+  // The apps and add-ons an offer includes, switched on for the offer's years (each after any
+  // period of it already running). They are kept at their normal yearly price, which is what
+  // continuing them would cost.
+  private async applyOfferExtras(payment: MoyasarPaymentRecord) {
+    if (!payment.offerId || !this.offers) return
+    const offer = await this.offers.get(payment.offerId).catch(() => null)
+    if (!offer) return
+    const years = payment.offerYears ?? offer.years
+    const subscriptions = new PostgresOrganizationSubscriptionRepository(this.db)
+    const catalog = await this.pricing.getCatalog({ includeInactive: false })
+    for (const application of offer.bonusApplications) {
+      const organization = await this.db.query<{ settings: Record<string, unknown> | null }>(
+        "SELECT settings FROM organizations WHERE id = $1",
+        [payment.organizationId]
+      )
+      const trialEndsAt = trialEndFromSettings(organization.rows[0]?.settings, application)
+      await this.repository.applySettingsPatch(
+        payment.organizationId,
+        activationSettingsPatch(application, null)
+      )
+      const pkg = [...(catalog.find((entry) => entry.application === application)?.packages ?? [])]
+        .filter((entry) => entry.yearlyPriceHalalas !== null)
+        .sort((a, b) => (a.yearlyPriceHalalas ?? 0) - (b.yearlyPriceHalalas ?? 0))[0]
+      await subscriptions.save(
+        activatePaid(
+          await subscriptions.findByOrganizationAndApplication(payment.organizationId, application),
+          {
+            id: randomUUID(),
+            organizationId: payment.organizationId,
+            application,
+            planTier: null,
+            package: pkg ? { id: pkg.id, name: pkg.name } : null,
+            interval: "yearly",
+            periods: years,
+            priceHalalas: pkg?.yearlyPriceHalalas ?? null,
+            extraBranches: 0,
+            trialEndsAt,
+            source: "payment",
+            now: new Date().toISOString(),
+          }
+        )
+      )
+    }
+    const addons = new AddonsService(this.db)
+    for (const code of offer.bonusAddons) {
+      if (!(ADDON_CODES as readonly string[]).includes(code)) continue
+      for (let year = 0; year < years; year += 1) {
+        await addons.extend(payment.organizationId, code as AddonCode, "yearly", "payment")
+      }
     }
   }
 
@@ -355,6 +441,8 @@ export class MoyasarBillingService {
           )
         )
 
+        await this.applyOfferExtras(payment)
+
         if (payment.couponId) {
           await this.coupons.redeem({
             couponId: payment.couponId,
@@ -377,6 +465,7 @@ export class MoyasarBillingService {
             packageId: payment.packageId,
             interval: payment.billingInterval,
             offerYears: payment.offerYears,
+            offerId: payment.offerId,
             couponId: payment.couponId,
             moyasarPaymentId: moyasarPayment.id,
           },

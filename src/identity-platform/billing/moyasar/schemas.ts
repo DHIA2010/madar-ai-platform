@@ -32,3 +32,6 @@ export const couponQuoteSchema = z.object({
   interval: z.enum(["monthly", "yearly"]),
   extraBranches: z.number().int().min(0).max(500).default(0),
 })
+
+// Buying one of Madar Admin's offers (pricing/offers.ts) -- everything is priced from the offer.
+export const createOfferCheckoutSchema = z.object({ offerId: z.string().uuid() })

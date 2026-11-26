@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
-import { Crown, LayoutGrid, PlayCircle, Puzzle, Search, Sparkles } from "lucide-react"
+import { BadgePercent, Crown, LayoutGrid, PlayCircle, Puzzle, Search, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -14,11 +14,13 @@ import { useWorkspace } from "@/features/workspace"
 
 import { useApplicationsCatalog, useSubscriptionPeriods } from "../hooks"
 import { getActiveApplications } from "../services/applications-catalog.service"
+import { type MarketplaceOffer, offersService } from "../services/offers.service"
 import type { ApplicationDefinition } from "../types"
 import { ActivationRequestDialog, type ActivationRequestTarget } from "./activation-request-dialog"
 import { ApplicationCard } from "./application-card"
 import { ApplicationCategoryTabs } from "./application-category-tabs"
 import { MadarCompleteCard } from "./madar-complete-card"
+import { OffersSection } from "./offers-section"
 import { periodFor } from "./subscription-remaining"
 
 import { cairo } from "@/components/design/fonts"
@@ -28,16 +30,26 @@ export function ApplicationsMarketplace() {
   const t = useTranslations("applications")
   const locale = useLocale()
   const ar = locale === "ar"
-  // Two sections on one page: the apps (first), and the sector plugins that complete the cashier.
-  // Kept in the address (?section=plugins) so a link can open the plugins directly.
+  // Sections on one page: the apps (first), the sector plugins that complete the cashier, and
+  // Madar Admin's offers while any is on sale. Kept in the address (?section=plugins|offers) so a
+  // link can open one directly.
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
-  const section = params.get("section") === "plugins" ? "plugins" : "apps"
+  const requested = params.get("section")
+  const section: "apps" | "plugins" | "offers" =
+    requested === "plugins" || requested === "offers" ? requested : "apps"
   const { currentOrganization } = useWorkspace()
   const hasPos = getActiveApplications(currentOrganization?.settings).includes("pos")
-  const showSection = (next: "apps" | "plugins") =>
-    router.replace(next === "plugins" ? `${pathname}?section=plugins` : pathname, { scroll: false })
+  const showSection = (next: "apps" | "plugins" | "offers") =>
+    router.replace(next === "apps" ? pathname : `${pathname}?section=${next}`, { scroll: false })
+  const [offers, setOffers] = useState<MarketplaceOffer[] | null>(null)
+  useEffect(() => {
+    offersService
+      .list()
+      .then(setOffers)
+      .catch(() => setOffers([]))
+  }, [])
   const {
     searchQuery,
     setSearchQuery,
@@ -113,13 +125,16 @@ export function ApplicationsMarketplace() {
         </div>
       </div>
 
-      {/* Section: apps or plugins */}
+      {/* Section: apps, plugins or offers */}
       <div className="mb-3.5 flex shrink-0">
         <div className="inline-flex rounded-[12px] border border-[#e1e7f0] bg-white p-1">
           {(
             [
               ["apps", ar ? "التطبيقات" : "Apps", LayoutGrid],
               ["plugins", ar ? "الإضافات" : "Plugins", Puzzle],
+              ...(offers && offers.length > 0
+                ? ([["offers", ar ? "العروض" : "Offers", BadgePercent]] as const)
+                : []),
             ] as const
           ).map(([key, label, Icon]) => (
             <button
@@ -133,12 +148,21 @@ export function ApplicationsMarketplace() {
             >
               <Icon className="size-4" />
               {label}
+              {key === "offers" && section !== "offers" ? (
+                <span className="flex size-5 items-center justify-center rounded-full bg-[#ef4444] text-[10.5px] text-white">
+                  {offers?.length}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
       </div>
 
-      {section === "plugins" ? (
+      {section === "offers" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+          <OffersSection offers={offers ?? []} />
+        </div>
+      ) : section === "plugins" ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <PluginsPage embedded hasPos={hasPos} />
         </div>

@@ -32,6 +32,9 @@ const CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "checkout"].join(Stri
 const ADDON_CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "addon-checkout"].join(
   String.fromCharCode(47)
 )
+const OFFER_CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "offer-checkout"].join(
+  String.fromCharCode(47)
+)
 const BRANCH_CHECKOUT_ENDPOINT = ["", "v1", "billing", "moyasar", "branches", "checkout"].join(
   String.fromCharCode(47)
 )
@@ -49,6 +52,11 @@ export const moyasarBillingService = {
         ADDON_CHECKOUT_ENDPOINT,
         { addonCode: input.addon, interval: input.interval }
       )
+    }
+    if (input.bundleOffer) {
+      return client.post<{ offerId: string }, MoyasarCheckoutIntent>(OFFER_CHECKOUT_ENDPOINT, {
+        offerId: input.bundleOffer,
+      })
     }
     if (input.addBranches) {
       return client.post<{ count: number }, MoyasarCheckoutIntent>(BRANCH_CHECKOUT_ENDPOINT, {

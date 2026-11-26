@@ -21,6 +21,7 @@ import {
 import { type BranchAllowance, branchAllowanceService } from "../services"
 import type { MoyasarPurchase } from "../types"
 import { MoyasarAddonCheckout } from "./moyasar-addon-checkout"
+import { MoyasarOfferCheckout } from "./moyasar-offer-checkout"
 import { MoyasarPaymentPanel } from "./moyasar-payment-panel"
 
 import type { BillingInterval, PurchasableApplication } from "@/application/contracts"
@@ -102,6 +103,9 @@ export function MoyasarCheckoutPage() {
         initialInterval={interval === "yearly" ? "yearly" : "monthly"}
       />
     )
+  }
+  if (searchParams.get("purpose") === "offer") {
+    return <MoyasarOfferCheckout offerId={searchParams.get("offerId") ?? ""} />
   }
   return <PackageCheckoutPage />
 }

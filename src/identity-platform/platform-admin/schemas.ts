@@ -1,6 +1,7 @@
 import { z } from "zod"
 
-import { PURCHASABLE_APPLICATIONS } from "../subscriptions/types"
+import { ADDON_CODES } from "../subscriptions/addons"
+import { PURCHASABLE_APPLICATIONS, SUBSCRIPTION_APPLICATIONS } from "../subscriptions/types"
 import { MAX_LEAD_ALERT_PHONES } from "../whatsapp/platform-config"
 import { PLATFORM_ROLES } from "./staff-roles"
 import { UTILIZATION_SORTS } from "./utilization"
@@ -49,6 +50,24 @@ export const addonPriceSchema = z.object({
   monthlyPriceHalalas: z.number().int().min(0).max(100_000_000),
   yearlyPriceHalalas: z.number().int().min(0).max(100_000_000),
   isActive: z.boolean(),
+})
+
+// An offer (pricing/offers.ts), edited in Madar Admin.
+export const offerInputSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  subtitle: z.string().trim().max(200).nullable(),
+  application: z.enum(PURCHASABLE_APPLICATIONS),
+  packageId: z.string().uuid().nullable(),
+  priceHalalas: z.number().int().min(100).max(100_000_000),
+  years: z.number().int().min(1).max(5),
+  bonusApplications: z.array(z.enum(SUBSCRIPTION_APPLICATIONS)).max(20),
+  bonusAddons: z.array(z.enum(ADDON_CODES)).max(10),
+  features: z.array(z.string().trim().max(80)).max(20),
+  isActive: z.boolean(),
+  endsOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable(),
 })
 
 // Giving an organization a period of an add-on without payment.

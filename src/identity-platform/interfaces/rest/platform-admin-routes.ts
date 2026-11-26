@@ -10,6 +10,7 @@ import {
   grantSubscriptionSchema,
   setExtraBranchesSchema,
   addonPriceSchema,
+  offerInputSchema,
   grantAddonSchema,
   packageInputSchema,
   paymentListQuerySchema,
@@ -251,6 +252,27 @@ export async function handlePlatformAdminRoute(input: {
   }
   if (method === "GET" && path === "/pricing/addons") {
     return send(200, await service.listAddons(actor))
+  }
+  // Offers (العروض): switched on and off, edited, added and removed here.
+  if (path === "/pricing/offers") {
+    if (method === "GET") return send(200, { items: await service.listOffers(actor) })
+    if (method === "POST") {
+      return send(
+        201,
+        await service.saveOffer(actor, null, offerInputSchema.parse(await readJsonBody()))
+      )
+    }
+  }
+  const offerMatch = path.match(/^\/pricing\/offers\/([0-9a-f-]{36})$/)
+  if (offerMatch && method === "PUT") {
+    return send(
+      200,
+      await service.saveOffer(actor, offerMatch[1], offerInputSchema.parse(await readJsonBody()))
+    )
+  }
+  if (offerMatch && method === "DELETE") {
+    await service.deleteOffer(actor, offerMatch[1])
+    return send(200, { ok: true })
   }
   const addonPriceMatch = path.match(/^\/pricing\/addons\/([^/]+)$/)
   if (method === "PATCH" && addonPriceMatch) {

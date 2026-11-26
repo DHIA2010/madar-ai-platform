@@ -24,6 +24,9 @@ export interface MoyasarPaymentRecord {
   extraBranches: number
   // The years paid for when the package's multi-year offer was bought (null = one period).
   offerYears: number | null
+  // The offer (pricing/offers.ts) this payment bought, whose included apps and add-ons are
+  // switched on with it (null for an ordinary purchase).
+  offerId: string | null
   // The coupon used, and the price before it (null when no coupon was used).
   couponId: string | null
   originalAmount: number | null

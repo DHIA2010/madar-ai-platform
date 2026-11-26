@@ -41,4 +41,6 @@ export interface MoyasarPurchase {
   addBranches?: number
   // Set instead of buying a package: a period of this paid add-on, priced server-side.
   addon?: string
+  // Set instead of buying a package: one of Madar Admin's offers (العروض), priced server-side.
+  bundleOffer?: string
 }

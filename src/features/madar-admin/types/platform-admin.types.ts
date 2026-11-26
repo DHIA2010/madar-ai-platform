@@ -599,3 +599,27 @@ export interface AdminCustomerUtilization {
   subscriptions: AdminSubscriptionView[]
   daily: AdminUtilizationDailyPoint[]
 }
+
+// An offer (العروض): several years of a package for one price, with other apps and add-ons
+// included free for the same years -- switched on and off in Madar Admin.
+export interface AdminOfferInput {
+  title: string
+  subtitle: string | null
+  application: PurchasableApplication
+  packageId: string | null
+  priceHalalas: number
+  years: number
+  bonusApplications: PurchasableApplication[]
+  bonusAddons: string[]
+  features: string[]
+  isActive: boolean
+  endsOn: string | null
+}
+
+export interface AdminOffer extends AdminOfferInput {
+  id: string
+  sortOrder: number
+  package: { id: string; name: string; yearlyPriceHalalas: number | null } | null
+  regularHalalas: number
+  available: boolean
+}

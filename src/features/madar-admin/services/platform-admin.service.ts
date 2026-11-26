@@ -10,6 +10,8 @@ import type {
   AdminCustomerUtilization,
   AdminFeatureFlag,
   AdminIntegrations,
+  AdminOffer,
+  AdminOfferInput,
   AdminOverview,
   AdminPackage,
   AdminPage,
@@ -193,6 +195,22 @@ export const platformAdminService = {
 
   reorderPackages(application: PurchasableApplication, packageIds: string[]): Promise<unknown> {
     return client.put(`${ENDPOINT}/pricing/${application}/order`, { packageIds })
+  },
+
+  listOffers(): Promise<AdminOffer[]> {
+    return client
+      .get<{ items: AdminOffer[] }>(`${ENDPOINT}/pricing/offers`)
+      .then((response) => response.items)
+  },
+
+  saveOffer(id: string | null, input: AdminOfferInput): Promise<AdminOffer> {
+    return id
+      ? client.put(`${ENDPOINT}/pricing/offers/${encodeURIComponent(id)}`, input)
+      : client.post(`${ENDPOINT}/pricing/offers`, input)
+  },
+
+  deleteOffer(id: string): Promise<{ ok: boolean }> {
+    return client.delete(`${ENDPOINT}/pricing/offers/${encodeURIComponent(id)}`)
   },
 
   listAddons(): Promise<AdminAddonPrice[]> {

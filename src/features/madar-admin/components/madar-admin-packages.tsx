@@ -18,6 +18,7 @@ import type {
   PricingMode,
 } from "../types/platform-admin.types"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
+import { MadarAdminOffers } from "./madar-admin-offers"
 import { PackageEditorDialog } from "./package-editor-dialog"
 
 import type { PurchasableApplication } from "@/application/contracts"
@@ -490,6 +491,7 @@ export function MadarAdminPackages() {
         </div>
       )}
 
+      <MadarAdminOffers />
       <AddonPricing />
       <TrialAndRenewalSettings />
 

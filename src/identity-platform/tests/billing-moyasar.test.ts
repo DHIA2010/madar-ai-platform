@@ -13,6 +13,7 @@ import { MoyasarBillingRepository } from "../billing/moyasar/repository"
 import { MoyasarBillingService } from "../billing/moyasar/service"
 import type { MoyasarWebhookPayload } from "../billing/moyasar/types"
 import { CouponService } from "../coupons/service"
+import { PlatformOffersService } from "../pricing/offers"
 import { PricingService } from "../pricing/service"
 import { AddonsService } from "../subscriptions/addons"
 import type { PurchasableApplication } from "../subscriptions/types"
@@ -456,6 +457,100 @@ describe("a package's multi-year offer", () => {
     await expect(buy({})).rejects.toMatchObject({ code: "PACKAGE_NOT_PURCHASABLE" })
     const ordinary = await buy({ offer: false })
     expect(ordinary.amount).toBe(pkg.yearlyPriceHalalas)
+  })
+})
+
+describe("Madar Admin's offers (العروض)", () => {
+  function withOffers() {
+    const offers = new PlatformOffersService(database, pricing)
+    return {
+      offers,
+      billing: new MoyasarBillingService(
+        database,
+        new MoyasarBillingRepository(database),
+        pricing,
+        new CouponService(database),
+        offers
+      ),
+    }
+  }
+  const daysLeft = (end: string) => (new Date(end).getTime() - Date.now()) / 86_400_000
+
+  it("sells Blue Friday: two years of the dearest cashier package with Accounting, Promotions and the daily report", async () => {
+    const { offers, billing } = withOffers()
+    const [offer] = await offers.list({ availableOnly: true })
+    const catalog = await pricing.getCatalog({ includeInactive: false })
+    const dearest = [...catalog.find((entry) => entry.application === "pos")!.packages].sort(
+      (a, b) => (b.yearlyPriceHalalas ?? 0) - (a.yearlyPriceHalalas ?? 0)
+    )[0]
+    expect(offer).toMatchObject({
+      title: "عرض الجمعة الزرقاء",
+      priceHalalas: 169900,
+      years: 2,
+      bonusApplications: ["accounting", "promotions"],
+      bonusAddons: ["whatsapp_daily_report"],
+      package: { id: dearest.id },
+      available: true,
+    })
+    expect(offer.regularHalalas).toBeGreaterThan(offer.priceHalalas)
+
+    const intent = await billing.createOfferCheckout(actor(), { offerId: offer.id })
+    expect(intent.amount).toBe(169900)
+    await billing.handleWebhookEvent({
+      id: "evt_blue",
+      type: "payment_paid",
+      secret_token: "whsec_fixture",
+      data: {
+        id: "pay_blue",
+        status: "paid",
+        amount: intent.amount,
+        currency: intent.currency,
+        metadata: { checkout_id: intent.checkoutId },
+      },
+    })
+
+    const subscriptions = await database.query<{
+      application: string
+      status: string
+      package_id: string | null
+      current_period_end: string
+      price_halalas: number | null
+    }>(
+      "select application, status, package_id, current_period_end, price_halalas from organization_subscriptions where organization_id = $1",
+      [ORG_A]
+    )
+    const byApp = new Map(subscriptions.rows.map((row) => [row.application, row]))
+    for (const application of ["pos", "accounting", "promotions"]) {
+      const row = byApp.get(application)!
+      expect(row.status).toBe("active")
+      expect(daysLeft(row.current_period_end)).toBeGreaterThan(725)
+      expect(daysLeft(row.current_period_end)).toBeLessThan(735)
+    }
+    // The cashier renews at its normal yearly price after the two years.
+    expect(byApp.get("pos")!.package_id).toBe(dearest.id)
+    expect(Number(byApp.get("pos")!.price_halalas)).toBe(dearest.yearlyPriceHalalas)
+    const settings = await getOrgSettings(ORG_A)
+    expect(settings).toMatchObject({
+      posEnabled: true,
+      accountingEnabled: true,
+      promotionsEnabled: true,
+    })
+    const addon = await new AddonsService(database).active(ORG_A, "whatsapp_daily_report")
+    expect(daysLeft(addon!.currentPeriodEnd)).toBeGreaterThan(725)
+  })
+
+  it("can't be bought once Madar Admin switches it off or its last day has passed", async () => {
+    const { offers, billing } = withOffers()
+    const [offer] = await offers.list({ availableOnly: false })
+    await offers.save(offer.id, { ...offer, isActive: false })
+    expect(await offers.list({ availableOnly: true })).toHaveLength(0)
+    await expect(billing.createOfferCheckout(actor(), { offerId: offer.id })).rejects.toMatchObject(
+      { code: "OFFER_NOT_AVAILABLE" }
+    )
+    await offers.save(offer.id, { ...offer, isActive: true, endsOn: "2020-01-01" })
+    await expect(billing.createOfferCheckout(actor(), { offerId: offer.id })).rejects.toMatchObject(
+      { code: "OFFER_NOT_AVAILABLE" }
+    )
   })
 })
 

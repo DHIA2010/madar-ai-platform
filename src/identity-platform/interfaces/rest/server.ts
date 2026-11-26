@@ -23,6 +23,7 @@ import { requirePlatformPermission } from "../../platform-admin/guard"
 import { PlatformGovernanceService } from "../../platform-admin/governance-service"
 import { PlatformOperationsService } from "../../platform-admin/operations-service"
 import { PlatformAdminService } from "../../platform-admin/service"
+import { PlatformOffersService } from "../../pricing/offers"
 import { activeOffer, PricingService } from "../../pricing/service"
 import { CouponService } from "../../coupons/service"
 import { ReceiptService } from "../../billing/receipts"
@@ -184,6 +185,7 @@ import {
   couponQuoteSchema,
   createBranchCheckoutSchema,
   createAddonCheckoutSchema,
+  createOfferCheckoutSchema,
   createCheckoutIntentSchema,
 } from "../../billing/moyasar/schemas"
 import type { MoyasarWebhookPayload } from "../../billing/moyasar/types"
@@ -840,13 +842,19 @@ export function createIdentityApiServer(
     container.infrastructure.database && pricingService
       ? new BranchAllowanceService(container.infrastructure.database, pricingService)
       : null
+  // Offers (العروض): limited-time deals Madar Admin switches on and off (pricing/offers.ts).
+  const platformOffers =
+    container.infrastructure.database && pricingService
+      ? new PlatformOffersService(container.infrastructure.database, pricingService)
+      : null
   const moyasarBillingService =
     container.infrastructure.database && pricingService && couponService
       ? new MoyasarBillingService(
           container.infrastructure.database,
           new MoyasarBillingRepository(container.infrastructure.database),
           pricingService,
-          couponService
+          couponService,
+          platformOffers
         )
       : null
   const platformAdminService =
@@ -3553,6 +3561,12 @@ export function createIdentityApiServer(
         )
       }
 
+      // The offers on the apps page right now (switched on, not over, their package on sale).
+      if (method === "GET" && url.pathname === "/v1/offers") {
+        if (!platformOffers) return send(200, { items: [] })
+        return send(200, { items: await platformOffers.list({ availableOnly: true }) })
+      }
+
       // Lets the checkout page show a coupon's effect before paying. The same check runs again
       // when the checkout itself is created, so this is only ever a preview.
       if (method === "POST" && url.pathname === "/v1/billing/coupons/quote") {
@@ -5383,6 +5397,26 @@ export function createIdentityApiServer(
           await moyasarBillingService.createCheckoutIntent(
             actor,
             createCheckoutIntentSchema.parse(await readJsonBody(request))
+          )
+        )
+      }
+
+      // One of Madar Admin's offers (pricing/offers.ts), priced from the offer.
+      if (url.pathname === "/v1/billing/moyasar/offer-checkout" && method === "POST") {
+        if (!moyasarBillingService) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          201,
+          await moyasarBillingService.createOfferCheckout(
+            actor,
+            createOfferCheckoutSchema.parse(await readJsonBody(request))
           )
         )
       }

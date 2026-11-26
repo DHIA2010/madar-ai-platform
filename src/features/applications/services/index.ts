@@ -1,4 +1,5 @@
 export * from "./applications-catalog.service"
 export * from "./entitlements.service"
+export * from "./offers.service"
 export * from "./plan-tiers"
 export * from "./pricing.service"
