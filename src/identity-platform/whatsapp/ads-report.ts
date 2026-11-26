@@ -142,6 +142,26 @@ export function findingNote(finding: CheckupFinding): string {
       return `إعلان ${ad} صرف ${money(number("spend"), finding.currency)} بلا نتيجة`
     case "low_ctr":
       return `إعلان ${ad} نقراته أقل من بقية الإعلانات`
+    case "edit_in_learning":
+      return `${ad} عُدّل وهو في مرحلة التعلّم، اتركه ٧ أيام`
+    case "too_many_edits":
+      return `${ad} عُدّل ${amount(number("edits"))} مرات خلال أسبوع`
+    case "big_budget_jump":
+      return `ميزانية ${ad} تغيّرت ${amount(Math.abs(number("percent")))}% دفعة واحدة`
+    case "bid_churn":
+      return `المزايدة في ${ad} تغيّرت ${amount(number("edits"))} مرات خلال ٣ أيام`
+    case "on_off_flapping":
+      return `${ad} أُوقف وشُغّل ${amount(number("switches"))} مرات خلال أسبوع`
+    case "ad_wait":
+      return `إعلان ${ad} جديد، انتظر قبل الحكم عليه`
+    case "ad_promising":
+      return `إعلان ${ad} بداية واعدة، اتركه يعمل`
+    case "ad_winning":
+      return `إعلان ${ad} نتائجه أرخص من بقية الإعلانات`
+    case "ad_tired":
+      return `إعلان ${ad} بدأ يتعب، جهّز إعلاناً جديداً`
+    case "ad_costly":
+      return `إعلان ${ad} نتائجه أغلى بكثير من بقية الإعلانات`
   }
 }
 

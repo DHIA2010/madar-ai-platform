@@ -50,6 +50,10 @@ const checkup = (
     range: { startDate: "2026-11-01", endDate: "2026-11-23", days: 23 },
   })
 
+// The warnings only (high / medium) -- stage notes such as "promising" are not warnings.
+const warnings = (result: ReturnType<typeof checkup>) =>
+  result.findings.filter((finding) => finding.severity === "high" || finding.severity === "medium")
+
 const ad = (id: string, values: Partial<CampaignPerformanceRow>) =>
   row({ id, name: id, level: "ad", parentId: "set", ...values })
 
@@ -75,7 +79,7 @@ describe("campaign check-up: only what is running gets a finding", () => {
     const result = checkup([row({ id: "c", name: "Leads", ...totals })], {
       c: [ad("hog", { ...hog, status: "PAUSED" }), ad("good", good)],
     })
-    expect(result.findings).toEqual([])
+    expect(warnings(result)).toEqual([])
     expect(result.ads.find((entry) => entry.name === "good")?.running).toBe(true)
   })
 
@@ -92,7 +96,7 @@ describe("campaign check-up: only what is running gets a finding", () => {
     const result = checkup([row({ id: "c", name: "Leads", ...totals })], {
       c: [ad("hog", hog), ad("good", good)],
     })
-    expect(result.findings).toEqual([
+    expect(warnings(result)).toEqual([
       expect.objectContaining({
         kind: "budget_hog",
         adName: "hog",

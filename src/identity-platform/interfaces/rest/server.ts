@@ -207,7 +207,9 @@ import {
   type CampaignPerformancePlatform,
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
-import { CampaignCheckupService } from "../../campaigns/checkup"
+import { AdChangeTracker, registerAdChangeTracker } from "../../campaigns/ad-changes"
+import { AdHistory } from "../../campaigns/ad-history"
+import { CampaignCheckupService, registerCheckupSources } from "../../campaigns/checkup"
 import {
   GoogleCampaignControl,
   MetaCampaignControl,
@@ -1419,8 +1421,18 @@ export function createIdentityApiServer(
   const campaignsPerformanceAggregationService = container.infrastructure.database
     ? new CampaignsPerformanceAggregationService(container.infrastructure.database)
     : null
+  // Madar's own log of what was changed in campaigns and ad sets, and the day-by-day numbers:
+  // the check-up reads both (ad stages, change notes), the backend's timer fills the log.
+  const checkupSources = container.infrastructure.database
+    ? {
+        tracker: new AdChangeTracker(container.infrastructure.database),
+        history: new AdHistory(container.infrastructure.database),
+      }
+    : null
+  registerCheckupSources(checkupSources)
+  registerAdChangeTracker(checkupSources?.tracker ?? null)
   const campaignCheckupService = campaignsPerformanceAggregationService
-    ? new CampaignCheckupService(campaignsPerformanceAggregationService)
+    ? new CampaignCheckupService(campaignsPerformanceAggregationService, undefined, checkupSources)
     : null
   // The daily ads report on WhatsApp -- built here (it needs the check-up), and handed to the
   // backend's scheduled pass (server.ts).

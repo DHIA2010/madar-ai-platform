@@ -9,6 +9,7 @@ import { SalesInvoicesService } from "./invoicing/invoices-service"
 import { PosZatcaReporting } from "./pos/zatca-reporting"
 import { runBillingMaintenance } from "./subscriptions/maintenance"
 import { registeredAdsReportService } from "./whatsapp/ads-report"
+import { registeredAdChangeTracker } from "./campaigns/ad-changes"
 import { registeredBookingMessenger } from "./booking/automation"
 import { registeredLoyaltyCampaigns } from "./loyalty/campaigns"
 import { registeredWhatsAppCampaigns } from "./whatsapp/campaigns"
@@ -183,6 +184,23 @@ if (whatsAppCampaigns && whatsAppCampaignMinutes > 0) {
       .catch((error: unknown) => console.error("whatsapp.campaign_pass_failed", error))
   setTimeout(runWhatsAppCampaigns, 120_000).unref()
   setInterval(runWhatsAppCampaigns, whatsAppCampaignMinutes * 60_000).unref()
+}
+
+// Ad change log: every campaign and ad set the syncs saved is compared with the last pass, and
+// what changed is recorded for the campaign check-up. Safe from several tasks at once (a change
+// is written by the pass that moves the saved state on). AD_CHANGES_INTERVAL_MINUTES=0 turns it off.
+const adChangesMinutes = Number(process.env.AD_CHANGES_INTERVAL_MINUTES ?? "30")
+const adChanges = registeredAdChangeTracker()
+if (adChanges && adChangesMinutes > 0) {
+  const runAdChanges = () =>
+    adChanges
+      .capture()
+      .then((result) => {
+        if (result.changes > 0) console.log("campaigns.ad_changes_pass", result)
+      })
+      .catch((error: unknown) => console.error("campaigns.ad_changes_pass_failed", error))
+  setTimeout(runAdChanges, 180_000).unref()
+  setInterval(runAdChanges, adChangesMinutes * 60_000).unref()
 }
 
 const adsReports = registeredAdsReportService()

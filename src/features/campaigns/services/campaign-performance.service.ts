@@ -163,10 +163,77 @@ export type CampaignCheckupFindingKind =
   | "budget_reached"
   | "budget_unspent"
   | "not_delivering"
+  | "edit_in_learning"
+  | "too_many_edits"
+  | "big_budget_jump"
+  | "bid_churn"
+  | "on_off_flapping"
+  | "ad_wait"
+  | "ad_promising"
+  | "ad_winning"
+  | "ad_tired"
+  | "ad_costly"
+
+// high / medium: act on it. info: worth knowing (be patient). good: going well.
+export type CampaignCheckupSeverity = "high" | "medium" | "info" | "good"
+
+export type CampaignCheckupAdStage =
+  | "too_early"
+  | "promising"
+  | "winning"
+  | "steady"
+  | "tired"
+  | "not_working"
+
+export interface CampaignCheckupAverages {
+  ctr: number | null
+  cpc: number | null
+  cpm: number | null
+  cpa: number | null
+  cvr: number | null
+}
+
+export interface CampaignCheckupEffectWindow {
+  days: number
+  spend: number
+  impressions: number
+  clicks: number
+  conversions: number
+  ctr: number | null
+  cpa: number | null
+}
+
+export type CampaignCheckupChangeField =
+  | "status"
+  | "dailyBudget"
+  | "lifetimeBudget"
+  | "bid"
+  | "bidStrategy"
+  | "optimization"
+  | "targeting"
+
+export interface CampaignCheckupChange {
+  id: string
+  rowId: string
+  platform: CampaignPerformancePlatform
+  campaignId: string
+  campaignName: string
+  currency: string | null
+  level: "campaign" | "adset"
+  name: string
+  field: CampaignCheckupChangeField
+  oldValue: string | null
+  newValue: string | null
+  changePercent: number | null
+  duringLearning: boolean | null
+  learningSource: "platform" | "estimate" | null
+  changedAt: string
+  effect: { before: CampaignCheckupEffectWindow; after: CampaignCheckupEffectWindow } | null
+}
 
 export interface CampaignCheckupFinding {
   kind: CampaignCheckupFindingKind
-  severity: "high" | "medium"
+  severity: CampaignCheckupSeverity
   platform: CampaignPerformancePlatform
   campaignId: string
   campaignName: string
@@ -209,6 +276,22 @@ export interface CampaignCheckupAd {
   pageViews: number | null
   conversions: number
   cpa: number
+  cpc: number | null
+  cpm: number | null
+  cvr: number | null
+  stage: CampaignCheckupAdStage | null
+  diagnosis: "page" | "creative" | null
+  ageDays: number | null
+  spendToJudge: number | null
+  daysToJudge: number | null
+  campaignAverage: CampaignCheckupAverages | null
+  accountAverage: CampaignCheckupAverages | null
+  trend: {
+    earlyCtr: number
+    recentCtr: number
+    earlyCpa: number | null
+    recentCpa: number | null
+  } | null
 }
 
 export interface CampaignCheckup {
@@ -225,6 +308,8 @@ export interface CampaignCheckup {
   campaigns: CampaignCheckupCampaign[]
   findings: CampaignCheckupFinding[]
   ads: CampaignCheckupAd[]
+  // Older servers send no change list.
+  changes?: CampaignCheckupChange[]
 }
 
 // Mirrors identity-platform/campaigns/journey-service.ts's CampaignJourneyRow -- ad-spend KPIs

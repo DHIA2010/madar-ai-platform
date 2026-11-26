@@ -7775,7 +7775,9 @@
       "noFindings": "Nothing needs your attention in this period.",
       "severity": {
         "high": "Important",
-        "medium": "Keep an eye"
+        "medium": "Keep an eye",
+        "info": "Good to know",
+        "good": "Good"
       },
       "askAssistant": "Ask the assistant",
       "askPrompt": "In the campaign \"{campaign}\": {finding} What do you advise me to do, step by step?",
@@ -7820,6 +7822,65 @@
           "title": "A campaign that is on but not running",
           "body": "Its state now: {status}.",
           "advice": "Open it in the ad platform to see why."
+        },
+        "edit_in_learning": {
+          "title": "Edited during the learning phase",
+          "body_platform": "{entity} was changed ({fields}) while the platform says it was still learning. Each big change restarts learning and wastes part of the budget.",
+          "body_estimate": "{entity} was changed ({fields}) while it was most likely still learning (new, or changed within the last 7 days). Each big change restarts learning.",
+          "advice": "Leave it untouched for 7 days, or until it leaves learning."
+        },
+        "too_many_edits": {
+          "title": "Too many changes",
+          "body": "{entity} was changed {edits} times within 7 days. Each change wipes part of what the platform has learned.",
+          "advice": "Change one thing at a time and wait 3–4 days before the next change."
+        },
+        "big_budget_jump": {
+          "title": "Big budget jump",
+          "body": "{entity}'s budget went from {oldValue} to {newValue} ({percent}%) in one go.",
+          "advice": "Move budgets by 20% at most, once every 3–4 days."
+        },
+        "bid_churn": {
+          "title": "Bid changed too often",
+          "body": "The bid in {entity} was changed {edits} times within 3 days, before the platform could settle.",
+          "advice": "Give each bid at least 3 days before judging it."
+        },
+        "on_off_flapping": {
+          "title": "Switched on and off repeatedly",
+          "body": "{entity} was switched off and on {switches} times within 7 days, restarting delivery each time.",
+          "advice": "Leave it on, or stop it for good."
+        },
+        "ad_wait": {
+          "title": "New ad: wait before judging",
+          "body": "“{ad}” has spent {spend} so far.",
+          "needSpend": "It needs about {amount} more before it can be judged.",
+          "needDays": "And at least {days} more day(s).",
+          "needMore": "It needs more time and spend before it can be judged.",
+          "signalUp": "Early signal: its click rate {adCtr}% is above the other ads ({othersCtr}%).",
+          "signalDown": "Early signal: its click rate is {adCtr}% against {othersCtr}% for the other ads — not enough to judge yet.",
+          "advice": "Don't stop or edit it yet."
+        },
+        "ad_promising": {
+          "title": "Promising start",
+          "body_ctr": "“{ad}” is still new, but its click rate is {adCtr}% against {othersCtr}% for the other ads.",
+          "body_cpa": "“{ad}” is still new, but it brings a result for {adCpa} against {othersCpa}.",
+          "advice": "Leave it running and don't edit it."
+        },
+        "ad_winning": {
+          "title": "Winning ad",
+          "body": "“{ad}” brings a result for {adCpa} against {othersCpa} for the other ads ({conversions} results).",
+          "advice": "Keep it running, and try close variations of it."
+        },
+        "ad_tired": {
+          "title": "The ad is getting tired",
+          "body_ctr": "“{ad}”'s click rate fell from {earlyCtr}% to {recentCtr}% over the last 3 days.",
+          "body_cpa": "“{ad}”'s cost per result rose from {earlyCpa} to {recentCpa} over the last 3 days.",
+          "advice": "Prepare a new design or video before the cost climbs further."
+        },
+        "ad_costly": {
+          "title": "Ad with costly results",
+          "body": "“{ad}” brings a result for {adCpa} against {othersCpa} for the other ads.",
+          "body_none": "“{ad}” spent {spend} with no result, which is enough to judge it.",
+          "advice": "Pause it or replace the design."
         }
       },
       "adsTitle": "Ads",
@@ -7828,10 +7889,76 @@
         "share": "Share of spend",
         "pageViews": "Page visits",
         "results": "Results",
-        "costPerResult": "Cost per result"
+        "costPerResult": "Cost per result",
+        "stage": "Stage"
       },
       "noAds": "No active ads in this period.",
-      "adStopped": "Stopped"
+      "adStopped": "Stopped",
+      "findingsInfoTitle": "Good to know: be patient, and good news",
+      "entity": {
+        "adset": "Ad set “{name}”",
+        "campaign": "Campaign “{name}”"
+      },
+      "field": {
+        "status": "On/off",
+        "dailyBudget": "Daily budget",
+        "lifetimeBudget": "Total budget",
+        "bid": "Bid",
+        "bidStrategy": "Bid strategy",
+        "optimization": "Optimization goal",
+        "targeting": "Audience"
+      },
+      "diagnosis": {
+        "page": "People tap it as much as the others and then don't finish: the problem is most likely the page or the offer, not the ad.",
+        "creative": "People tap it far less than the others: the problem is most likely the design or the message."
+      },
+      "stage": {
+        "too_early": "Too early, wait",
+        "promising": "Promising",
+        "winning": "Winning",
+        "steady": "Steady",
+        "tired": "Tired",
+        "not_working": "Not working"
+      },
+      "stageLeft": "~{amount} to go",
+      "stageDaysLeft": "{days} day(s)",
+      "compare": {
+        "hint": "Tap any ad to compare it",
+        "metric": "Metric",
+        "this": "This ad",
+        "campaign": "Other ads in the campaign",
+        "account": "All ads in the account",
+        "ctr": "Click rate",
+        "cpc": "Cost per click",
+        "cpm": "Cost per 1,000 views",
+        "cpa": "Cost per result",
+        "cvr": "Conversion after click",
+        "age": "Ad age: {days} days",
+        "trend": "Click rate in its earlier days {earlyCtr}%, in the last 3 days {recentCtr}%."
+      },
+      "changesTitle": "Change history",
+      "changesSubtitle": "What changed in your campaigns and ad sets, and what it did to performance.",
+      "noChanges": "No changes recorded in this period. Recording starts from the day this feature was switched on.",
+      "changesNote": "Madar compares your campaign settings at every sync, so a change undone before the next sync is not shown here.",
+      "changeColumns": {
+        "when": "When",
+        "where": "Where",
+        "what": "Change",
+        "learning": "Learning phase",
+        "effect": "Before → after"
+      },
+      "change": {
+        "on": "Switched on",
+        "off": "Switched off",
+        "targeting": "Audience changed",
+        "inLearning": "During learning",
+        "inLearningEstimate": "Likely during learning",
+        "tooSoon": "Too soon to tell",
+        "noDaily": "—",
+        "cpa": "Cost per result {before} → {after}",
+        "ctr": "Click rate {before}% → {after}%",
+        "noResults": "no results"
+      }
     },
     "journeyScreen": {
       "title": "Spend & Sales Journey",

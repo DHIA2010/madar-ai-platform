@@ -87,6 +87,7 @@ function checkup(overrides: Partial<CheckupResult> = {}): CheckupResult {
     ],
     findings: [],
     ads: [],
+    changes: [],
     ...overrides,
   }
 }

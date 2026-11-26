@@ -104,6 +104,26 @@ const FINDING_MEANING: Record<CheckupFindingKind, string> = {
   budget_unspent: "A running campaign spent under half its daily budget yesterday.",
   not_delivering:
     "The campaign is switched on but not being shown (in review, rejected or limited).",
+  edit_in_learning:
+    "An ad set (values.level) was changed -- budget, bid, audience or goal (values.fields) -- while it was still in its learning phase, which restarts learning and wastes money. values.source: platform = the platform said it was learning, estimate = it was new or changed within the last 7 days. Advice: leave it untouched for 7 days or until it leaves learning.",
+  too_many_edits:
+    "The same campaign or ad set was changed values.edits times within 7 days. Every change resets what the platform has learned. Advice: change one thing at a time and wait 3-4 days between changes.",
+  big_budget_jump:
+    "A budget was changed by values.percent % in one go (values.oldValue -> values.newValue). Advice: move budgets by about 20% at most, once every 3-4 days.",
+  bid_churn:
+    "The bid was changed values.edits times within 3 days, before the platform could settle. Advice: give each bid at least 3 days.",
+  on_off_flapping:
+    "The campaign or ad set was switched off and on values.switches times within 7 days, which restarts delivery each time. Advice: leave it on, or stop it for good.",
+  ad_wait:
+    "A running ad is too new to judge: it has not yet spent twice what a result normally costs here (values.spendToJudge still to go) or has run under 3 days (values.daysToJudge to go). values.adCtr vs values.othersCtr is the early signal only. Advice: do not stop or edit it yet.",
+  ad_promising:
+    "A running ad is still early but already tapped more often (values.adCtr vs values.othersCtr) or bringing results cheaper than its neighbours. Advice: leave it running.",
+  ad_winning:
+    "A running ad's results cost clearly less than the campaign's other ads (values.adCpa vs values.othersCpa). Advice: keep it, and give it room (new variations of it).",
+  ad_tired:
+    "A running ad used to do better: its last 3 days are tapped less (values.recentCtr vs values.earlyCtr) or its results cost more (values.recentCpa vs values.earlyCpa). The creative is wearing out. Advice: prepare a new creative.",
+  ad_costly:
+    "A running ad spent enough to judge and its results cost far more than the campaign's other ads (values.adCpa vs values.othersCpa), or it brought none. values.diagnosis: page = tapped as much as the others but nobody finishes (fix the landing page or offer), creative = tapped far less. Advice: pause it or replace the creative.",
 }
 
 const MAX_ADS = 40
