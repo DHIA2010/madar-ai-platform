@@ -5474,7 +5474,21 @@
         "disconnect": "Disconnect number",
         "disconnectConfirm": "Madar will go back to WhatsApp Web. Your number stays in your Meta account and can be connected again. Continue?",
         "previous": "Your number {number} was connected before. Connect it again with the button below.",
-        "coexistence": "Also works in the WhatsApp Business app on your phone"
+        "coexistence": "Also works in the WhatsApp Business app on your phone",
+        "health": {
+          "untestedTitle": "Before sending works",
+          "untestedText": "Meta won't send any invoice or offer from your number until billing is set on your WhatsApp account:",
+          "stepCurrency": "Choose Saudi Arabia and the currency SAR.",
+          "stepCard": "Add a Visa or Mastercard and make it the default (mada cards may be refused).",
+          "stepTest": "Make a test invoice to your own mobile to check.",
+          "openBilling": "Open billing in Meta",
+          "billingTitle": "Meta refuses to send because of billing",
+          "billingText": "The last message from your number wasn't sent because billing on your WhatsApp account isn't complete. Set the currency and a default card:",
+          "failingTitle": "The last message from your number wasn't sent",
+          "failingText": "Meta's reason:",
+          "fix": "Fix it in Meta",
+          "clears": "This goes away on its own after the next message is sent."
+        }
       },
       "toasts": {
         "modeWeb": "Madar will send through WhatsApp Web.",

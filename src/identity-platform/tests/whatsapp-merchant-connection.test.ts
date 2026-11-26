@@ -4,6 +4,8 @@
 // WhatsApp Web by default, or its own business number connected through Meta's Embedded Signup --
 // the code exchange, webhook subscription, number registration and invoice template on the
 // merchant's own account (Meta stubbed), and invoices then going out from that number.
+import { randomUUID } from "node:crypto"
+
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -121,6 +123,38 @@ const signup = () =>
   })
 
 describe("WhatsAppMerchantConnectionService", () => {
+  it("tells whether messages actually go out from the number, and when Meta's billing blocks them", async () => {
+    await platform.update({ embeddedSignupConfigId: "cfg-42" }, userId)
+    stubMeta()
+    await signup()
+    const health = async () => (await connections.get(organizationId)).connection?.sending
+    expect(await health()).toMatchObject({ state: "untested", billing: false })
+
+    const record = async (status: string, error: string | null, kind = "pos_invoice") =>
+      database.query(
+        `insert into whatsapp_messages (id, organization_id, kind, to_phone, template_name, status, error)
+         values ($5, $1, $2, '966500000000', 'madar_pos_invoice', $3, $4)`,
+        [organizationId, kind, status, error, randomUUID()]
+      )
+    await record(
+      "failed",
+      "Message failed to send because no payment method is set up for your WhatsApp Business account. Visit https://business.facebook.com/billing_hub/accounts/details/?business_id=1&asset_id=7700&wizard_name=ADD_PM to resolve this issue."
+    )
+    expect(await health()).toMatchObject({
+      state: "failing",
+      billing: true,
+      fixUrl:
+        "https://business.facebook.com/billing_hub/accounts/details/?business_id=1&asset_id=7700&wizard_name=ADD_PM",
+    })
+    // Madar's own reports to the owner don't count; the next message that goes out clears it.
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    await record("delivered", null, "ads_report")
+    expect((await health())?.state).toBe("failing")
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    await record("sent", null)
+    expect(await health()).toMatchObject({ state: "ok", lastError: null })
+  })
+
   it("sends through WhatsApp Web until a business number is connected", async () => {
     const view = await connections.get(organizationId)
     expect(view).toEqual({ sendMode: "web", connection: null, embeddedSignup: null })

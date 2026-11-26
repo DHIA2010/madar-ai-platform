@@ -23,6 +23,14 @@ export interface WhatsAppConnection {
   connectedAt: string | null
   // The number also stays in use in the WhatsApp Business app on the merchant's phone.
   coexistence?: boolean
+  // How sending from the number is going (see the backend's merchant-connection.ts).
+  sending?: {
+    state: "untested" | "ok" | "failing"
+    lastError: string | null
+    lastErrorAt: string | null
+    billing: boolean
+    fixUrl: string | null
+  }
 }
 
 export interface WhatsAppConnectionOverview {

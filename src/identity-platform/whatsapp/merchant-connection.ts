@@ -44,11 +44,26 @@ export interface WhatsAppConnectionView {
     connectedAt: string | null
     // The number also stays in use in the WhatsApp Business app on the merchant's phone.
     coexistence: boolean
+    // How sending from the number is going, from the latest messages since it was connected.
+    sending: WhatsAppSendingHealth
   } | null
   // Whether Meta's signup can be opened yet, and with what (both public values) -- null until
   // Madar's Meta app is set up for it (Madar Admin -> settings -> WhatsApp).
   embeddedSignup: { appId: string; configId: string; apiVersion: string } | null
 }
+
+// untested: nothing sent from the number yet (Meta's billing -- currency and a default card -- must
+// be set first, or every message is refused). ok: the latest message went out. failing: the latest
+// was refused; billing tells whether it was Meta's billing, fixUrl where to put it right.
+export interface WhatsAppSendingHealth {
+  state: "untested" | "ok" | "failing"
+  lastError: string | null
+  lastErrorAt: string | null
+  billing: boolean
+  fixUrl: string | null
+}
+
+const BILLING_ERROR = /payment method|currency|billing|credit line|payment account|insufficient/i
 
 interface ConnectionRow {
   send_mode: WhatsAppSendMode
@@ -121,9 +136,68 @@ export class WhatsAppMerchantConnectionService {
               lastError: row.last_error,
               connectedAt: toIso(row.connected_at),
               coexistence: row.coexistence === true,
+              sending: await this.sendingHealth(organizationId, row),
             }
           : null,
       embeddedSignup,
+    }
+  }
+
+  // The latest message sent from the merchant's number since it was connected (invoices, booking
+  // and laundry messages, campaigns -- not Madar's own reports to the owner).
+  private async sendingHealth(
+    organizationId: string,
+    row: ConnectionRow
+  ): Promise<WhatsAppSendingHealth> {
+    const none: WhatsAppSendingHealth = {
+      state: "untested",
+      lastError: null,
+      lastErrorAt: null,
+      billing: false,
+      fixUrl: null,
+    }
+    if (row.status !== "connected" || !row.connected_at) return none
+    const since = toIso(row.connected_at)
+    const [messages, campaign] = await Promise.all([
+      this.database.query<{ status: string; error: string | null; at: Date | string }>(
+        `SELECT status, error, updated_at AS at FROM whatsapp_messages
+          WHERE organization_id = $1 AND created_at >= $2
+            AND kind NOT IN ('daily_report', 'ads_report')
+          ORDER BY created_at DESC LIMIT 1`,
+        [organizationId, since]
+      ),
+      this.database
+        .query<{ status: string; error: string | null; at: Date | string }>(
+          `SELECT status, error, claimed_at AS at FROM whatsapp_campaign_recipients
+            WHERE organization_id = $1 AND claimed_at >= $2
+              AND status IN ('sent', 'delivered', 'read', 'failed')
+            ORDER BY claimed_at DESC LIMIT 1`,
+          [organizationId, since]
+        )
+        .catch(() => ({
+          rows: [] as Array<{ status: string; error: string | null; at: Date | string }>,
+        })),
+    ])
+    const latest = [messages.rows[0], campaign.rows[0]]
+      .filter((entry): entry is { status: string; error: string | null; at: Date | string } =>
+        Boolean(entry)
+      )
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0]
+    if (!latest) return none
+    if (latest.status !== "failed") return { ...none, state: "ok" }
+    const error = latest.error ?? "Not sent."
+    const link = error.match(/https:\/\/business\.facebook\.com\/\S+/)?.[0]?.replace(/[.,)]+$/, "")
+    const billing = BILLING_ERROR.test(error)
+    return {
+      state: "failing",
+      lastError: error,
+      lastErrorAt: toIso(latest.at),
+      billing,
+      fixUrl:
+        link ??
+        (billing && row.waba_id
+          ? `https://business.facebook.com/billing_hub/accounts/details/?asset_id=${encodeURIComponent(row.waba_id)}&account_type=whatsapp-business-account`
+          : null),
     }
   }
 

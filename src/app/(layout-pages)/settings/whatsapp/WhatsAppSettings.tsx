@@ -537,6 +537,8 @@ function ConnectedPanel({
         </span>
       </div>
 
+      <SendingHealth connection={connection} />
+
       {connection.lastError ? (
         <div className="flex items-start gap-3 rounded-[14px] border border-[#f7d4a8] bg-[#fff8ef] p-4">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[#d97706]" />
@@ -608,5 +610,80 @@ function FacebookMark() {
     <svg viewBox="0 0 24 24" aria-hidden className="size-5 fill-current">
       <path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.41 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z" />
     </svg>
+  )
+}
+
+// Whether messages actually go out from the number. Meta refuses every message until the
+// business's WhatsApp account has a currency and a default card -- the step most people miss.
+function SendingHealth({
+  connection,
+}: {
+  connection: NonNullable<WhatsAppConnectionOverview["connection"]>
+}) {
+  const t = useTranslations("settings.whatsapp.connected.health")
+  const sending = connection.sending
+  if (!sending || sending.state === "ok") return null
+  const billingUrl =
+    sending.fixUrl ??
+    (connection.wabaId
+      ? `https://business.facebook.com/billing_hub/accounts/details/?asset_id=${encodeURIComponent(connection.wabaId)}&account_type=whatsapp-business-account`
+      : "https://business.facebook.com/billing_hub/accounts")
+  if (sending.state === "untested") {
+    return (
+      <div className="flex items-start gap-3 rounded-[14px] border border-[#cfe0ff] bg-[#f4f8ff] p-4">
+        <CreditCard className="mt-0.5 size-4 shrink-0 text-[#2563eb]" />
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[13px] font-bold text-[#1e3a8a]">{t("untestedTitle")}</p>
+          <p className="text-[12.5px] leading-5 text-[#344054]">{t("untestedText")}</p>
+          <ol className="list-decimal ps-5 text-[12.5px] leading-6 text-[#344054]">
+            <li>{t("stepCurrency")}</li>
+            <li>{t("stepCard")}</li>
+            <li>{t("stepTest")}</li>
+          </ol>
+          <a
+            href={billingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-bold text-[#2563eb] hover:underline"
+          >
+            <ExternalLink className="size-3.5" />
+            {t("openBilling")}
+          </a>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-start gap-3 rounded-[14px] border border-[#f7c9ca] bg-[#fef3f2] p-4">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[#d92d20]" />
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="text-[13px] font-bold text-[#b42318]">
+          {sending.billing ? t("billingTitle") : t("failingTitle")}
+        </p>
+        <p className="text-[12.5px] leading-5 text-[#344054]">
+          {sending.billing ? t("billingText") : t("failingText")}
+        </p>
+        {sending.lastError ? (
+          <p
+            dir="ltr"
+            className="break-words rounded-[10px] bg-white/70 px-3 py-2 text-start text-[12px] leading-5 text-[#7a271a]"
+          >
+            {sending.lastError}
+          </p>
+        ) : null}
+        {sending.fixUrl || sending.billing ? (
+          <a
+            href={sending.billing ? billingUrl : (sending.fixUrl ?? billingUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-bold text-[#2563eb] hover:underline"
+          >
+            <ExternalLink className="size-3.5" />
+            {t("fix")}
+          </a>
+        ) : null}
+        <p className="text-[11.5px] text-[#667085]">{t("clears")}</p>
+      </div>
+    </div>
   )
 }
