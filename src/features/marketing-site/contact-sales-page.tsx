@@ -90,7 +90,6 @@ const HEADLINES: Record<string, string> = {
   inventory: "مخزون دقيق في كل فرع",
   "daily-report": "تقرير مبيعاتك اليومي على واتساب",
   "offer-monthly": "كاشير سعودي ذكي بـ 149 ريال شهريًا",
-  "offer-yearly": "سنتان بـ 1,699 ريال فقط",
   restaurant: "كاشير للمطاعم والكافيهات",
   booking: "حجوزاتك مرتّبة بدون دفاتر ولا تعارض مواعيد",
   "whatsapp-invoices": "أرسل فواتير عملائك عبر واتساب",
