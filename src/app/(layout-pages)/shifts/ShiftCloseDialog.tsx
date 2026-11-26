@@ -60,6 +60,8 @@ interface CloseShiftSummary {
   cashReturns: number
   withdrawals: number
   deposits: number
+  customerReceipts: number
+  customerPayouts: number
 }
 
 export interface ShiftCloseDialogProps {
@@ -108,6 +110,8 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
           cashReturns: detail.cashSummary.cashReturns,
           withdrawals: detail.cashSummary.withdrawals,
           deposits: detail.cashSummary.deposits,
+          customerReceipts: detail.cashSummary.customerReceipts ?? 0,
+          customerPayouts: detail.cashSummary.customerPayouts ?? 0,
         })
       })
       .catch(() => {
@@ -118,6 +122,8 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
             cashReturns: 0,
             withdrawals: 0,
             deposits: 0,
+            customerReceipts: 0,
+            customerPayouts: 0,
           })
         }
       })
@@ -135,7 +141,9 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
         closeSummary.cashSales -
         closeSummary.cashReturns -
         closeSummary.withdrawals +
-        closeSummary.deposits
+        closeSummary.deposits +
+        closeSummary.customerReceipts -
+        closeSummary.customerPayouts
       : null
 
   // Typing appends to the string like a calculator; a denomination button adds that bill's value
@@ -269,6 +277,29 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
                   value={closeSummary?.deposits ?? 0}
                   locale={locale}
                 />
+                {closeSummary?.customerReceipts ? (
+                  <SummaryRow
+                    icon={ArrowDownToLine}
+                    iconClassName="text-[#16a34a]"
+                    label={
+                      locale === "ar"
+                        ? "مقبوضات العملاء (عربون، شحن رصيد)"
+                        : "Customer receipts (deposits, top-ups)"
+                    }
+                    value={closeSummary.customerReceipts}
+                    locale={locale}
+                  />
+                ) : null}
+                {closeSummary?.customerPayouts ? (
+                  <SummaryRow
+                    icon={ArrowUpFromLine}
+                    iconClassName="text-[#dc2626]"
+                    label={locale === "ar" ? "مدفوعات للعملاء" : "Paid out to customers"}
+                    value={closeSummary.customerPayouts}
+                    negative
+                    locale={locale}
+                  />
+                ) : null}
 
                 <div className="mt-1 flex items-center justify-between rounded-[12px] bg-[#eff6ff] px-3.5 py-3">
                   <span

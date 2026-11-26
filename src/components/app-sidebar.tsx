@@ -74,8 +74,13 @@ import {
   Wallet,
   Warehouse,
   Gift,
+  WashingMachine,
+  Shirt,
+  Repeat,
+  BarChart3,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
+import { usePlugins } from "@/features/plugins"
 
 // This is the sidebar component used in the app layout.
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
@@ -118,6 +123,8 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     ...getActiveApplications(currentOrganization?.settings),
     ...applicationsFromEntitlements(entitlements),
   ]
+  // The sector plugins switched on (they come with the cashier app).
+  const enabledPlugins = usePlugins(activeApplications.includes("pos"))
 
   const navMain = [
     {
@@ -339,6 +346,25 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
         { title: t("loyaltySettings"), url: ROUTES.loyaltySettings, icon: <Settings2 /> },
       ],
     },
+    // Laundry -- a sector plugin of the cashier: shown while the business has it switched on
+    // (الإضافات), enforced server-side on every /v1/laundry/ route.
+    {
+      title: t("laundry"),
+      url: ROUTES.laundry,
+      icon: <WashingMachine className="text-blue-600" />,
+      permission: "pos:view",
+      applications: ["pos"],
+      plugin: "laundry",
+      items: [
+        { title: t("laundryOrders"), url: ROUTES.laundry, icon: <LayoutDashboard /> },
+        { title: t("laundryNewOrder"), url: ROUTES.laundryNew, icon: <Shirt /> },
+        { title: t("laundryPrices"), url: ROUTES.laundryPrices, icon: <Tags /> },
+        { title: t("laundryPlans"), url: ROUTES.laundryPlans, icon: <Repeat /> },
+        { title: t("laundryDeliveries"), url: ROUTES.laundryDeliveries, icon: <Truck /> },
+        { title: t("laundryReports"), url: ROUTES.laundryReports, icon: <BarChart3 /> },
+        { title: t("laundrySettings"), url: ROUTES.laundrySettings, icon: <Settings2 /> },
+      ],
+    },
     {
       title: t("accounting"),
       url: ROUTES.accounting,
@@ -434,6 +460,12 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     },
   ]
     .filter((item) => !item.permission || can(item.permission))
+    .filter(
+      (item) =>
+        !("plugin" in item) ||
+        !item.plugin ||
+        (enabledPlugins ?? []).some((plugin) => plugin.id === item.plugin && plugin.enabled)
+    )
     .filter(
       (item) =>
         !item.applications ||

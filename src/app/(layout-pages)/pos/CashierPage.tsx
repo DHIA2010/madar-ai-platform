@@ -22,6 +22,7 @@ import { useLocale, useTranslations } from "next-intl"
 import {
   ArrowLeftRight,
   BadgePercent,
+  WashingMachine,
   Banknote,
   Calendar,
   Check,
@@ -132,6 +133,8 @@ import {
   useInvoiceReturn,
 } from "@/app/(layout-pages)/invoices/invoice-return-dialog"
 import { ExchangeSettleDialog, type ExchangeSettlement } from "./ExchangeSettleDialog"
+import { CashierLaundryDialog } from "@/features/laundry"
+import { usePluginEnabled } from "@/features/plugins"
 import {
   toWhatsAppNumber,
   WhatsAppSendDialog,
@@ -2410,6 +2413,30 @@ export default function CashierPage() {
     window.setTimeout(() => invoiceReturn.open(invoice), 0)
   }
 
+  // --- Laundry plugin -----------------------------------------------------------------------
+  // When the business has the Laundry plugin on, the cashier takes clothes in and hands orders
+  // over from here; whatever is paid goes through this shift, and the tax invoice prints like a
+  // sale.
+  const laundryOn = usePluginEnabled("laundry") === true
+  const [isLaundryOpen, setIsLaundryOpen] = useState(false)
+  const printLaundryInvoice = async (invoiceNumber: string) => {
+    loadTodaySummary()
+    try {
+      const [invoice] = (await posInvoicesService.list({ search: invoiceNumber })).filter(
+        (entry) => entry.invoiceNumber === invoiceNumber
+      )
+      if (!invoice) return
+      const qrDataUrl = invoice.qrCode
+        ? await QRCode.toDataURL(invoice.qrCode, { margin: 0, width: 180 }).catch(() => null)
+        : null
+      setSuccessQrDataUrl(qrDataUrl)
+      setSuccessInvoice(invoice)
+      printReceipt()
+    } catch {
+      // The order is handed over either way; the invoice can be printed from the invoices page.
+    }
+  }
+
   // --- Exchange (استبدال) --------------------------------------------------------------------
   // The lines coming back sit on the cart as a credit; the new items are added as in any sale,
   // and "إتمام الاستبدال" saves the credit note and the new invoice together, settling only the
@@ -3608,6 +3635,21 @@ export default function CashierPage() {
               </span>
             </button>
 
+            {laundryOn ? (
+              <button
+                type="button"
+                onClick={() => setIsLaundryOpen(true)}
+                className="flex flex-col items-center gap-1.5 rounded-[10px] p-1.5 hover:bg-[#f7faff]"
+              >
+                <span className="flex size-10 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb]">
+                  <WashingMachine className="size-[18px]" />
+                </span>
+                <span className={cn("text-[11px] font-semibold", MUTED)}>
+                  {locale === "ar" ? "المغسلة" : "Laundry"}
+                </span>
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => setIsReturnDialogOpen(true)}
@@ -4803,6 +4845,14 @@ export default function CashierPage() {
       </Dialog>
 
       <ReturnDialog {...invoiceReturn.dialogProps} />
+      {laundryOn ? (
+        <CashierLaundryDialog
+          open={isLaundryOpen}
+          onOpenChange={setIsLaundryOpen}
+          shiftOpen={Boolean(myOpenShift)}
+          onInvoiced={(invoiceNumber) => void printLaundryInvoice(invoiceNumber)}
+        />
+      ) : null}
       <ExchangeSettleDialog
         key={isExchangeSettleOpen ? "open" : "closed"}
         open={isExchangeSettleOpen && exchangeDraft !== null}
@@ -5122,7 +5172,7 @@ export default function CashierPage() {
         )}
       <style>{`
         @media print {
-          body > *:not(#zatca-print-invoice) { display: none !important; }
+          body > *:not(#zatca-print-invoice):not(#laundry-print) { display: none !important; }
           /* 72mm, not the full 80mm roll width: a real thermal printer's actual printable area is
              narrower than the paper itself, and real browser print/PDF pipelines were still
              clipping the right edge of every RTL row even at 76mm -- flex "justify-between" rows

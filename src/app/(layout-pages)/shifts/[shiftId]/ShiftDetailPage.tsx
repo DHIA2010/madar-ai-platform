@@ -413,6 +413,29 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
               value={cashSummary.deposits}
               locale={locale}
             />
+            {cashSummary.customerReceipts ? (
+              <CashRow
+                icon={FileText}
+                iconClassName="text-[#16a34a]"
+                label={
+                  locale === "ar"
+                    ? "مقبوضات العملاء (عربون، شحن رصيد)"
+                    : "Customer receipts (deposits, top-ups)"
+                }
+                value={cashSummary.customerReceipts}
+                locale={locale}
+              />
+            ) : null}
+            {cashSummary.customerPayouts ? (
+              <CashRow
+                icon={FileText}
+                iconClassName="text-[#dc2626]"
+                label={locale === "ar" ? "مدفوعات للعملاء" : "Paid out to customers"}
+                value={cashSummary.customerPayouts}
+                negative
+                locale={locale}
+              />
+            ) : null}
           </div>
 
           <div className="mt-4 flex items-center justify-between rounded-[12px] bg-[#eff6ff] px-3.5 py-3">

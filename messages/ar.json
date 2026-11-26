@@ -109,7 +109,16 @@
       "bookingResources": "الغرف والأجهزة",
       "bookingPlans": "الباقات",
       "bookingOffers": "الكوبونات والهدايا",
-      "bookingReviews": "التقييمات"
+      "bookingReviews": "التقييمات",
+      "laundry": "المغاسل",
+      "laundryOrders": "الطلبات",
+      "laundryNewOrder": "طلب جديد",
+      "laundryPrices": "قائمة الأسعار",
+      "laundryPlans": "الاشتراكات",
+      "laundryDeliveries": "التوصيل",
+      "laundryReports": "التقارير",
+      "laundrySettings": "الإعدادات",
+      "plugins": "الإضافات"
     }
   },
   "auth": {

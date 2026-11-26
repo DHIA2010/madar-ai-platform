@@ -286,6 +286,37 @@ export const GIFT_CARD_TEMPLATE: TemplateDefinition = {
   footer: "أُرسلت عبر مدار",
 }
 
+// The Laundry app: an order is ready to collect (laundry/messenger.ts).
+export const LAUNDRY_READY_TEMPLATE: TemplateDefinition = {
+  name: "madar_laundry_ready",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "مرحباً {{1}}،",
+    "طلبك رقم {{2}} لدى {{3}} جاهز للاستلام.",
+    "عدد القطع: {{4}}",
+    "المبلغ المتبقي: {{5}}",
+    "بانتظارك.",
+  ].join("\n"),
+  bodyExamples: ["نورة", "LND-000012", "مغسلة الريم", "6", "45.00 ر.س"],
+  footer: "أُرسلت عبر مدار",
+}
+
+// The Laundry app: an order ready for some days and not yet collected.
+export const LAUNDRY_REMINDER_TEMPLATE: TemplateDefinition = {
+  name: "madar_laundry_reminder",
+  language: "ar",
+  category: "UTILITY",
+  body: [
+    "مرحباً {{1}}،",
+    "نذكّرك بأن طلبك رقم {{2}} لدى {{3}} جاهز منذ {{4}} يوم وبانتظار استلامه.",
+    "المبلغ المتبقي: {{5}}",
+    "شكراً لك.",
+  ].join("\n"),
+  bodyExamples: ["نورة", "LND-000012", "مغسلة الريم", "5", "45.00 ر.س"],
+  footer: "أُرسلت عبر مدار",
+}
+
 export const MADAR_TEMPLATES: TemplateDefinition[] = [
   POS_INVOICE_TEMPLATE,
   DAILY_REPORT_TEMPLATE,
@@ -296,6 +327,8 @@ export const MADAR_TEMPLATES: TemplateDefinition[] = [
   BOOKING_REMINDER_TEMPLATE,
   LOGIN_CODE_TEMPLATE,
   GIFT_CARD_TEMPLATE,
+  LAUNDRY_READY_TEMPLATE,
+  LAUNDRY_REMINDER_TEMPLATE,
 ]
 
 // The sample document Meta reviews with a document-header template.

@@ -109,7 +109,16 @@
       "bookingResources": "Rooms & equipment",
       "bookingPlans": "Packages",
       "bookingOffers": "Coupons & gift cards",
-      "bookingReviews": "Reviews"
+      "bookingReviews": "Reviews",
+      "laundry": "Laundry",
+      "laundryOrders": "Orders",
+      "laundryNewOrder": "New order",
+      "laundryPrices": "Price list",
+      "laundryPlans": "Subscriptions",
+      "laundryDeliveries": "Delivery",
+      "laundryReports": "Reports",
+      "laundrySettings": "Settings",
+      "plugins": "Plugins"
     }
   },
   "auth": {

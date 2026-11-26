@@ -49,6 +49,10 @@ const RULES: AccessRule[] = [
   { prefix: "/v1/accounting/", applications: ["accounting"] },
   { prefix: "/v1/booking/", applications: ["booking"] },
   { prefix: "/v1/loyalty/", applications: ["loyalty"] },
+  // The sector plugins (laundry...) complete the cashier: they come with POS and are switched on
+  // or off by the business itself (plugins/service.ts).
+  { prefix: "/v1/laundry/", applications: ["pos"] },
+  { prefix: "/v1/plugins", applications: ["pos"] },
   { prefix: "/v1/inventory/", applications: ["pos", "ecommerce", "procurement"] },
   { prefix: "/v1/orders", applications: ["ecommerce"] },
   { prefix: "/v1/stores", applications: ["ecommerce"] },

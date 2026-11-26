@@ -42,6 +42,11 @@ import { handleAccountingRoute } from "./accounting-routes"
 import { handleBookingRoute, handlePublicBookingRoute } from "./booking-routes"
 import { handleLoyaltyRoute, handlePublicLoyaltyRoute } from "./loyalty-routes"
 import { handleHomeTargetRoute } from "./home-target-routes"
+import { handleLaundryRoute } from "./laundry-routes"
+import { handlePluginRoute } from "./plugin-routes"
+import { PluginsService } from "../../plugins/service"
+import { LaundryService } from "../../laundry/service"
+import { LaundryMessenger } from "../../laundry/messenger"
 import { HomeTargets } from "../../home-targets/service"
 import { handleInvoicingRoute, handlePublicInvoicingRoute } from "./invoicing-routes"
 import { AccountingService } from "../../accounting/service"
@@ -1829,6 +1834,39 @@ export function createIdentityApiServer(
     process.env.IDENTITY_PLATFORM_META_GRAPH_API_BASE_URL?.trim() ||
     "https://graph.facebook.com/v21.0"
 
+  // The sector plugins (plugins/): helpers that complete the cashier, switched on per business.
+  const pluginsService = container.infrastructure.database
+    ? new PluginsService(container.infrastructure.database)
+    : null
+
+  // The Laundry plugin (laundry/): orders, the price list, payments and invoices, subscriptions,
+  // delivery, and the "ready" WhatsApp message.
+  const laundryService =
+    container.infrastructure.database &&
+    posInvoicesService &&
+    nativeCustomersService &&
+    taxRatesService
+      ? new LaundryService(
+          container.infrastructure.database,
+          posInvoicesService,
+          nativeCustomersService,
+          taxRatesService
+        )
+      : null
+  if (
+    laundryService &&
+    container.infrastructure.database &&
+    whatsAppPlatformService &&
+    whatsAppTemplatesService
+  ) {
+    laundryService.messenger = new LaundryMessenger(
+      container.infrastructure.database,
+      whatsAppPlatformService,
+      whatsAppTemplatesService,
+      whatsAppMerchantConnections
+    )
+  }
+
   return createServer(async (request, response) => {
     const method = request.method ?? "GET"
     const url = new URL(request.url ?? "/", "http://localhost")
@@ -3321,6 +3359,59 @@ export function createIdentityApiServer(
           services: invoicingServices,
           send,
           sendRaw,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
+
+      // The sector plugins: the list and switching one on or off.
+      if (
+        await handlePluginRoute({
+          method,
+          url,
+          actor,
+          service: pluginsService,
+          send,
+          readJsonBody: () => readJsonBody(request),
+        })
+      ) {
+        return
+      }
+
+      // Laundry (laundry/): orders, prices, subscriptions, delivery and reports.
+      if (
+        await handleLaundryRoute({
+          method,
+          url,
+          actor,
+          service: laundryService,
+          isEnabled: (organizationId) =>
+            pluginsService
+              ? pluginsService.isEnabled(organizationId, "laundry")
+              : Promise.resolve(false),
+          listPaymentMethods: async (organizationId, workspaceId) =>
+            posPaymentMethodsService
+              ? (await posPaymentMethodsService.list(organizationId, workspaceId))
+                  .filter((entry) => entry.enabled && !["credit", "prepaid"].includes(entry.kind))
+                  .map((entry) => ({ code: entry.code, name: entry.name, kind: entry.kind }))
+              : [],
+          listStaff: (organizationId, workspaceId) =>
+            posInvoicesService
+              ? posInvoicesService.listSalesPeople(organizationId, workspaceId)
+              : Promise.resolve([]),
+          uploadImage: container.infrastructure.objectStorage
+            ? (organizationId, body, contentType) => {
+                const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1]
+                // Beside the product pictures: a folder the live storage already accepts.
+                return container.infrastructure.objectStorage!.uploadPublicObject({
+                  key: `products/${organizationId}/laundry-${randomUUID()}.${extension}`,
+                  body,
+                  contentType,
+                })
+              }
+            : null,
+          send,
           readJsonBody: () => readJsonBody(request),
         })
       ) {

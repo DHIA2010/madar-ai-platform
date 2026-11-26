@@ -92,6 +92,9 @@ export interface ShiftCashSummary {
   cashReturns: number
   withdrawals: number
   deposits: number
+  // Cash customers paid onto their account at the till, and cash paid out to them.
+  customerReceipts?: number
+  customerPayouts?: number
   expectedCashAmount: number
 }
 

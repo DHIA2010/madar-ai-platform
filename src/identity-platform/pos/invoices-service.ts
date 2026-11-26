@@ -1103,9 +1103,14 @@ export class PosInvoicesService {
 
   // exchange: this sale is the new invoice of a cashier exchange (createExchange), paid first by
   // the returned items' credit; input.payments then only settle what is left.
+  // app: an invoice another app issues (laundry): the payments sent are applied first and the
+  // rest of the total goes to restMethodCode, so the app's own rounding can never fail it;
+  // allowMethods may name catalogue methods the branch has not switched on (the customer wallet
+  // a deposit was paid into).
   private async createSale(
     input: CreateInvoiceInput,
-    exchange?: { credit: number }
+    exchange?: { credit: number },
+    app?: { restMethodCode: string | null; allowMethods?: string[] }
   ): Promise<InvoiceView> {
     // The salesperson, when picked: checked against the branch's active members, and their name
     // kept on the invoice as it is now.
@@ -1119,7 +1124,9 @@ export class PosInvoicesService {
     }
 
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
-    if (input.payments.length === 0 && !exchange) throw INVOICE_ERRORS.invalidPaymentMethod()
+    if (input.payments.length === 0 && !exchange && !app) {
+      throw INVOICE_ERRORS.invalidPaymentMethod()
+    }
 
     // Each promotion a line names must be this organization's; its name is kept on the line as it
     // is now. Not checked against the subscription or schedule -- a sale rung up offline under a
@@ -1152,7 +1159,10 @@ export class PosInvoicesService {
     // list the payment picker itself is built from, so a request can never name a method the UI
     // would never have offered.
     const methods = [
-      ...(await this.paymentMethodsService.list(input.organizationId, input.workspaceId)),
+      ...(await this.paymentMethodsService.list(input.organizationId, input.workspaceId)).map(
+        (method) =>
+          app?.allowMethods?.includes(method.code) ? { ...method, enabled: true } : method
+      ),
       ...(exchange ? exchangeMethods() : []),
     ]
     const methodByCode = new Map(methods.map((candidate) => [candidate.code, candidate]))
@@ -1343,6 +1353,24 @@ export class PosInvoicesService {
             : input.payments
       if (rest > 0 && others.length === 0) throw INVOICE_ERRORS.paymentAmountMismatch()
       payments = [{ paymentMethodCode: EXCHANGE_CREDIT_CODE, amount: credit }, ...others]
+    }
+    if (app) {
+      // Applied in order, each up to what is still owed; the rest to restMethodCode.
+      let left = totalAmount
+      const applied: InvoicePaymentInput[] = []
+      for (const payment of input.payments) {
+        const amount = Math.round(Math.min(payment.amount, left) * 100) / 100
+        if (amount <= 0) continue
+        applied.push({ paymentMethodCode: payment.paymentMethodCode, amount })
+        left = Math.round((left - amount) * 100) / 100
+      }
+      if (left > 0) {
+        if (!app.restMethodCode) throw INVOICE_ERRORS.paymentAmountMismatch()
+        const restMethod = methodByCode.get(app.restMethodCode)
+        if (!restMethod || !restMethod.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
+        applied.push({ paymentMethodCode: app.restMethodCode, amount: left })
+      }
+      payments = applied
     }
     const paidAmount = Math.round(payments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100
     if (Math.abs(paidAmount - totalAmount) > 0.01) throw INVOICE_ERRORS.paymentAmountMismatch()
@@ -2332,6 +2360,15 @@ export class PosInvoicesService {
     })
 
     return created
+  }
+
+  // An invoice issued by another app (laundry orders and plans): the payments sent are applied
+  // first and the rest goes to restMethodCode. See createSale's `app` option.
+  async createForApp(
+    input: CreateInvoiceInput,
+    settle: { restMethodCode: string | null; allowMethods?: string[] }
+  ): Promise<InvoiceView> {
+    return this.createSale(input, undefined, settle)
   }
 
   // A cashier exchange: the chosen lines of a sale come back (a credit note, linked to it) and

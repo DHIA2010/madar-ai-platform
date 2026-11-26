@@ -1,14 +1,19 @@
 "use client"
 
 import { useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
-import { Crown, PlayCircle, Search, Sparkles } from "lucide-react"
+import { Crown, LayoutGrid, PlayCircle, Puzzle, Search, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 import { AppInput } from "@/components/app"
 
+import { PluginsPage } from "@/features/plugins"
+import { useWorkspace } from "@/features/workspace"
+
 import { useApplicationsCatalog, useSubscriptionPeriods } from "../hooks"
+import { getActiveApplications } from "../services/applications-catalog.service"
 import type { ApplicationDefinition } from "../types"
 import { ActivationRequestDialog, type ActivationRequestTarget } from "./activation-request-dialog"
 import { ApplicationCard } from "./application-card"
@@ -22,6 +27,17 @@ import { type Locale, localeDirection } from "@/i18n/locales"
 export function ApplicationsMarketplace() {
   const t = useTranslations("applications")
   const locale = useLocale()
+  const ar = locale === "ar"
+  // Two sections on one page: the apps (first), and the sector plugins that complete the cashier.
+  // Kept in the address (?section=plugins) so a link can open the plugins directly.
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
+  const section = params.get("section") === "plugins" ? "plugins" : "apps"
+  const { currentOrganization } = useWorkspace()
+  const hasPos = getActiveApplications(currentOrganization?.settings).includes("pos")
+  const showSection = (next: "apps" | "plugins") =>
+    router.replace(next === "plugins" ? `${pathname}?section=plugins` : pathname, { scroll: false })
   const {
     searchQuery,
     setSearchQuery,
@@ -97,67 +113,100 @@ export function ApplicationsMarketplace() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="mb-3.5 shrink-0">
-        <AppInput
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder={t("searchPlaceholder")}
-          aria-label={t("searchAriaLabel")}
-          startIcon={<Search className="size-4 text-[#95a4bd]" />}
-          className="h-11 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738] placeholder:text-[#95a4bd]"
-        />
+      {/* Section: apps or plugins */}
+      <div className="mb-3.5 flex shrink-0">
+        <div className="inline-flex rounded-[12px] border border-[#e1e7f0] bg-white p-1">
+          {(
+            [
+              ["apps", ar ? "التطبيقات" : "Apps", LayoutGrid],
+              ["plugins", ar ? "الإضافات" : "Plugins", Puzzle],
+            ] as const
+          ).map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => showSection(key)}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-[9px] px-4 text-[13px] font-bold transition-colors",
+                section === key ? "bg-[#2563eb] text-white" : "text-[#4c5d79] hover:text-[#0b1738]"
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Category tabs */}
-      <div className="mb-3.5 shrink-0">
-        <ApplicationCategoryTabs
-          tabs={categoryTabs}
-          activeCategory={activeCategory}
-          onSelect={setActiveCategory}
-        />
-      </div>
+      {section === "plugins" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <PluginsPage embedded hasPos={hasPos} />
+        </div>
+      ) : (
+        <>
+          {/* Search */}
+          <div className="mb-3.5 shrink-0">
+            <AppInput
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("searchAriaLabel")}
+              startIcon={<Search className="size-4 text-[#95a4bd]" />}
+              className="h-11 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738] placeholder:text-[#95a4bd]"
+            />
+          </div>
 
-      {/* Application cards -- the only flexible child, so it's the only thing that ever
+          {/* Category tabs */}
+          <div className="mb-3.5 shrink-0">
+            <ApplicationCategoryTabs
+              tabs={categoryTabs}
+              activeCategory={activeCategory}
+              onSelect={setActiveCategory}
+            />
+          </div>
+
+          {/* Application cards -- the only flexible child, so it's the only thing that ever
           scrolls; header/search/tabs above and مدار الكامل below are shrink-0 and always
           fully visible. The panel border + visible (not hover-only) scrollbar make it read
           as a distinct scroll area instead of looking like clipped/broken content. */}
-      <div className="mb-3.5 min-h-0 flex-1 overflow-hidden rounded-[14px] border border-[#e1e7f0] bg-white/60">
-        <div
-          className={cn(
-            "h-full overflow-y-auto p-3.5",
-            "[&::-webkit-scrollbar]:w-1.5",
-            "[&::-webkit-scrollbar-track]:bg-transparent",
-            "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8e0ee]"
-          )}
-        >
-          {visibleApplications.length === 0 ? (
-            <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
-              {t("emptyState")}
+          <div className="mb-3.5 min-h-0 flex-1 overflow-hidden rounded-[14px] border border-[#e1e7f0] bg-white/60">
+            <div
+              className={cn(
+                "h-full overflow-y-auto p-3.5",
+                "[&::-webkit-scrollbar]:w-1.5",
+                "[&::-webkit-scrollbar-track]:bg-transparent",
+                "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8e0ee]"
+              )}
+            >
+              {visibleApplications.length === 0 ? (
+                <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
+                  {t("emptyState")}
+                </div>
+              ) : (
+                <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+                  {visibleApplications.map((application) => (
+                    <ApplicationCard
+                      key={application.id}
+                      application={application}
+                      activating={activatingId === application.id}
+                      onActivate={requestApplicationActivation}
+                      period={periodFor(application, periods)}
+                      now={loadedAt}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-              {visibleApplications.map((application) => (
-                <ApplicationCard
-                  key={application.id}
-                  application={application}
-                  activating={activatingId === application.id}
-                  onActivate={requestApplicationActivation}
-                  period={periodFor(application, periods)}
-                  now={loadedAt}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* مدار الكامل */}
-      {bundleVisible ? (
-        <div className="shrink-0">
-          <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
-        </div>
-      ) : null}
+          {/* مدار الكامل */}
+          {bundleVisible ? (
+            <div className="shrink-0">
+              <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
+            </div>
+          ) : null}
+        </>
+      )}
 
       <ActivationRequestDialog
         key={pendingRequest?.applicationId ?? "none"}

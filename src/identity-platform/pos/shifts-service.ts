@@ -102,6 +102,10 @@ export interface ShiftCashSummary {
   cashReturns: number
   withdrawals: number
   deposits: number
+  // Money customers paid onto their account at the till (a top-up, a laundry deposit, a receipt
+  // voucher) and money paid out to them (a payment voucher) -- in cash, so in the drawer.
+  customerReceipts: number
+  customerPayouts: number
   expectedCashAmount: number
 }
 
@@ -320,7 +324,7 @@ export class PosShiftsService {
   async getDetail(organizationId: string, id: string): Promise<ShiftDetailView> {
     const shift = await this.getById(organizationId, id)
 
-    const [invoices, branchMethods, movements, refunds] = await Promise.all([
+    const [invoices, branchMethods, movements, refunds, accountMoves] = await Promise.all([
       this.invoicesService.list(organizationId, {
         workspaceId: shift.workspaceId,
         status: null,
@@ -346,6 +350,18 @@ export class PosShiftsService {
            LEFT JOIN pos_invoice_return_payments p ON p.return_id = r.id
           WHERE r.organization_id = $1 AND r.workspace_id = $2 AND r.created_by = $3
             AND r.created_at >= $4 AND ($5::timestamptz IS NULL OR r.created_at <= $5)`,
+        [organizationId, shift.workspaceId, shift.cashierUserId, shift.openedAt, shift.closedAt]
+      ),
+      // What this cashier took onto or paid out of customers' accounts during the shift.
+      this.database.query<{
+        type: string
+        amount: string | number
+        payment_method_code: string | null
+      }>(
+        `SELECT type, amount, payment_method_code FROM customer_account_transactions
+          WHERE organization_id = $1 AND workspace_id = $2 AND created_by = $3
+            AND type IN ('receipt', 'payment')
+            AND created_at >= $4 AND ($5::timestamptz IS NULL OR created_at <= $5)`,
         [organizationId, shift.workspaceId, shift.cashierUserId, shift.openedAt, shift.closedAt]
       ),
     ])
@@ -402,6 +418,17 @@ export class PosShiftsService {
           .filter((row) => row.payment_method_code && cashCodes.has(row.payment_method_code))
           .reduce((total, row) => total + Number(row.amount ?? 0), 0) * 100
       ) / 100
+    const cashAccount = (type: string) =>
+      Math.round(
+        accountMoves.rows
+          .filter(
+            (row) =>
+              row.type === type && row.payment_method_code && cashCodes.has(row.payment_method_code)
+          )
+          .reduce((total, row) => total + Number(row.amount ?? 0), 0) * 100
+      ) / 100
+    const customerReceipts = cashAccount("receipt")
+    const customerPayouts = cashAccount("payment")
     const withdrawals = movements
       .filter((movement) => movement.type === "withdrawal")
       .reduce((total, movement) => total + movement.amount, 0)
@@ -465,8 +492,16 @@ export class PosShiftsService {
         cashReturns,
         withdrawals,
         deposits,
+        customerReceipts,
+        customerPayouts,
         expectedCashAmount:
-          shift.openingCashAmount + cashSales - cashReturns - withdrawals + deposits,
+          shift.openingCashAmount +
+          cashSales -
+          cashReturns -
+          withdrawals +
+          deposits +
+          customerReceipts -
+          customerPayouts,
       },
       activity,
     }
