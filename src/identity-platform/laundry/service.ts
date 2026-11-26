@@ -98,7 +98,37 @@ export interface CreateLaundryOrderInput {
     mode: "later" | "deposit" | "full"
     paymentMethodCode?: string | null
     amount?: number
+    // Paid in full with more than one method (the cashier's split payment), in place of
+    // paymentMethodCode.
+    payments?: LaundryPaymentSplit[]
   }
+}
+
+export interface LaundryPaymentSplit {
+  paymentMethodCode: string
+  amount: number
+}
+
+// What an order would cost before it is saved (the cashier's laundry cart): the customer found by
+// mobile, the pieces their subscription covers, the charges and the total.
+export interface LaundryQuoteInput {
+  customerId?: string | null
+  customerPhone?: string | null
+  lines: Array<{ itemId: string; serviceId: string; quantity: number }>
+  urgent: boolean
+  fulfilment: "pickup" | "delivery"
+  useSubscription: boolean
+}
+
+export interface LaundryQuote {
+  customer: { id: string; name: string; phone: string | null } | null
+  subscription: { planName: string; piecesLeft: number; endsAt: string } | null
+  pieces: number
+  covered: number
+  itemsTotal: number
+  urgentFee: number
+  deliveryFee: number
+  total: number
 }
 
 export interface LaundryOrderSummary {
@@ -486,19 +516,18 @@ export class LaundryService {
 
   // ---- Orders ----
 
-  async createOrder(
+  // Each line with its item, service and price from the list (refused when one has no price).
+  private async priceLines<T extends { itemId: string; serviceId: string; quantity: number }>(
     organizationId: string,
-    input: CreateLaundryOrderInput,
-    actorUserId: string | null
-  ): Promise<LaundryOrderDetail> {
-    if (input.lines.length === 0) {
+    lines: T[]
+  ) {
+    if (lines.length === 0) {
       throw refuse("LAUNDRY_ORDER_EMPTY", "Add at least one piece.", 400)
     }
-    const settings = await this.getSettings(organizationId)
     const catalog = await this.getCatalog(organizationId)
     const itemById = new Map(catalog.items.map((item) => [item.id, item]))
     const serviceById = new Map(catalog.services.map((service) => [service.id, service]))
-    const priced = input.lines.map((line, position) => {
+    return lines.map((line, position) => {
       const item = itemById.get(line.itemId)
       const service = serviceById.get(line.serviceId)
       const price = catalog.prices[`${line.itemId}:${line.serviceId}`]
@@ -510,6 +539,91 @@ export class LaundryService {
       }
       return { line, item, service, price, position }
     })
+  }
+
+  // The order's money: subscription pieces off first (line by line), then the urgent charge and
+  // delivery on what is left. The same sums for a quote and for the saved order.
+  private totals<L extends { line: { quantity: number }; price: number }>(
+    priced: L[],
+    piecesAvailable: number,
+    settings: LaundrySettings,
+    urgent: boolean,
+    fulfilment: "pickup" | "delivery"
+  ) {
+    let piecesLeft = piecesAvailable
+    const lines = priced.map((entry) => {
+      const covered = Math.min(piecesLeft, entry.line.quantity)
+      piecesLeft -= covered
+      return { ...entry, covered, lineTotal: money(entry.price * (entry.line.quantity - covered)) }
+    })
+    const covered = lines.reduce((sum, line) => sum + line.covered, 0)
+    const pieces = lines.reduce((sum, line) => sum + line.line.quantity, 0)
+    const itemsTotal = money(lines.reduce((sum, line) => sum + line.lineTotal, 0))
+    const urgentFee = urgent ? money((itemsTotal * settings.urgentSurchargePercent) / 100) : 0
+    const deliveryFee = fulfilment === "delivery" ? settings.deliveryFee : 0
+    const total = money(itemsTotal + urgentFee + deliveryFee)
+    return { lines, covered, pieces, itemsTotal, urgentFee, deliveryFee, total }
+  }
+
+  // The customer by id or by mobile, without making one (a quote saves nothing).
+  private async findCustomer(
+    organizationId: string,
+    input: { customerId?: string | null; customerPhone?: string | null }
+  ): Promise<{ id: string; name: string; phone: string | null } | null> {
+    if (input.customerId) {
+      const found = await this.customers.getById(organizationId, input.customerId)
+      return found ? { id: found.id, name: found.name, phone: found.phone ?? null } : null
+    }
+    const phone = input.customerPhone?.trim()
+    if (!phone || digits(phone).length < 9) return null
+    const rows = await this.db.query<Row>(
+      `SELECT id, name, phone FROM customers
+        WHERE organization_id = $1 AND deleted_at IS NULL AND phone IS NOT NULL`,
+      [organizationId]
+    )
+    const match = rows.rows.find((row) => digits(String(row.phone)) === digits(phone))
+    return match
+      ? { id: String(match.id), name: String(match.name), phone: String(match.phone) }
+      : null
+  }
+
+  async quote(organizationId: string, input: LaundryQuoteInput): Promise<LaundryQuote> {
+    const settings = await this.getSettings(organizationId)
+    const priced = await this.priceLines(organizationId, input.lines)
+    const customer = await this.findCustomer(organizationId, input)
+    const subscription =
+      input.useSubscription && customer
+        ? await this.activeSubscription(organizationId, customer.id)
+        : null
+    const piecesLeft = subscription
+      ? Number(subscription.pieces_total) - Number(subscription.pieces_used)
+      : 0
+    const sums = this.totals(priced, piecesLeft, settings, input.urgent, input.fulfilment)
+    return {
+      customer,
+      subscription: subscription
+        ? {
+            planName: String(subscription.plan_name),
+            piecesLeft,
+            endsAt: iso(subscription.ends_at) as string,
+          }
+        : null,
+      pieces: sums.pieces,
+      covered: sums.covered,
+      itemsTotal: sums.itemsTotal,
+      urgentFee: sums.urgentFee,
+      deliveryFee: sums.deliveryFee,
+      total: sums.total,
+    }
+  }
+
+  async createOrder(
+    organizationId: string,
+    input: CreateLaundryOrderInput,
+    actorUserId: string | null
+  ): Promise<LaundryOrderDetail> {
+    const settings = await this.getSettings(organizationId)
+    const priced = await this.priceLines(organizationId, input.lines)
     // A deposit lands on the customer's account, so it needs one (found or made by mobile).
     if (input.payment.mode === "deposit" && !input.customerPhone && !input.customerId) {
       throw refuse("LAUNDRY_CUSTOMER_REQUIRED", "A deposit needs the customer's mobile.", 400)
@@ -527,26 +641,16 @@ export class LaundryService {
         input.useSubscription && customer.id
           ? await this.activeSubscription(organizationId, customer.id)
           : null
-      let piecesLeft = subscription
+      const piecesLeft = subscription
         ? Number(subscription.pieces_total) - Number(subscription.pieces_used)
         : 0
-      const lines = priced.map((entry) => {
-        const covered = Math.min(piecesLeft, entry.line.quantity)
-        piecesLeft -= covered
-        return {
-          ...entry,
-          covered,
-          lineTotal: money(entry.price * (entry.line.quantity - covered)),
-        }
-      })
-      const covered = lines.reduce((sum, line) => sum + line.covered, 0)
-      const pieces = lines.reduce((sum, line) => sum + line.line.quantity, 0)
-      const itemsTotal = money(lines.reduce((sum, line) => sum + line.lineTotal, 0))
-      const urgentFee = input.urgent
-        ? money((itemsTotal * settings.urgentSurchargePercent) / 100)
-        : 0
-      const deliveryFee = input.fulfilment === "delivery" ? settings.deliveryFee : 0
-      const total = money(itemsTotal + urgentFee + deliveryFee)
+      const { lines, covered, pieces, itemsTotal, urgentFee, deliveryFee, total } = this.totals(
+        priced,
+        piecesLeft,
+        settings,
+        input.urgent,
+        input.fulfilment
+      )
 
       const counter = await this.db.query<{ next_number: number }>(
         `INSERT INTO laundry_order_counters (organization_id, next_number) VALUES ($1, 1)
@@ -628,7 +732,13 @@ export class LaundryService {
       // The money at drop-off.
       const payment = input.payment
       if (payment.mode === "full" && total > 0) {
-        await this.issueInvoice(organizationId, id, payment.paymentMethodCode ?? null, actorUserId)
+        await this.issueInvoice(
+          organizationId,
+          id,
+          payment.paymentMethodCode ?? null,
+          actorUserId,
+          payment.payments
+        )
       } else if (payment.mode === "deposit" && total > 0) {
         const amount = money(Math.min(payment.amount ?? 0, total))
         if (amount <= 0 || !payment.paymentMethodCode || !customer.id) {
@@ -659,13 +769,18 @@ export class LaundryService {
 
   // The order's tax invoice, once: its lines at their price before tax (when the list includes
   // tax), the urgent charge and delivery as lines of their own. A deposit on the customer's
-  // account pays first, the rest by the method given.
+  // account pays first, the rest by the method given -- or by the split the cashier entered, its
+  // last method taking whatever halala the tax rounding leaves.
   private async issueInvoice(
     organizationId: string,
     orderId: string,
-    paymentMethodCode: string | null,
-    actorUserId: string | null
+    methodCode: string | null,
+    actorUserId: string | null,
+    splits?: LaundryPaymentSplit[]
   ) {
+    const split = (splits ?? []).filter((entry) => entry.amount > 0)
+    const paymentMethodCode =
+      split.length > 0 ? split[split.length - 1].paymentMethodCode : methodCode
     const order = await this.orderRow(organizationId, orderId)
     if (order.invoice_id) return
     const total = money(order.total)
@@ -734,10 +849,15 @@ export class LaundryService {
         customerName: text(order.customer_name),
         customerPhone: text(order.customer_phone),
         customerId: text(order.customer_id),
-        payments:
-          deposit > 0 && order.customer_id
+        payments: [
+          ...(deposit > 0 && order.customer_id
             ? [{ paymentMethodCode: "customer_wallet", amount: deposit }]
-            : [],
+            : []),
+          ...split.slice(0, -1).map((entry) => ({
+            paymentMethodCode: entry.paymentMethodCode,
+            amount: money(entry.amount),
+          })),
+        ],
         discountAmount: 0,
         notes: `طلب مغسلة ${order.order_number}`,
         notesLines: null,
@@ -757,7 +877,7 @@ export class LaundryService {
       {
         invoiceNumber: invoice.invoiceNumber,
         total: invoice.totalAmount,
-        method: paymentMethodCode,
+        method: split.length > 1 ? "split" : paymentMethodCode,
       },
       actorUserId
     )
@@ -995,7 +1115,8 @@ export class LaundryService {
     organizationId: string,
     id: string,
     paymentMethodCode: string | null,
-    actorUserId: string | null
+    actorUserId: string | null,
+    splits?: LaundryPaymentSplit[]
   ): Promise<LaundryOrderDetail> {
     const row = await this.orderRow(organizationId, id)
     if (row.status === "delivered") return this.getOrder(organizationId, id)
@@ -1003,7 +1124,7 @@ export class LaundryService {
       throw refuse("LAUNDRY_ORDER_CLOSED", "This order was cancelled.")
     return this.db.withTransaction(async () => {
       if (!row.invoice_id && money(row.total) > 0) {
-        await this.issueInvoice(organizationId, id, paymentMethodCode, actorUserId)
+        await this.issueInvoice(organizationId, id, paymentMethodCode, actorUserId, splits)
       }
       await this.db.query(
         `UPDATE laundry_orders SET status = 'delivered', delivered_at = now(),

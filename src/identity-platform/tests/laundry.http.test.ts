@@ -326,6 +326,105 @@ describe("laundry", () => {
     expect(subscriptions[0].piecesLeft).toBe(30)
   })
 
+  it("prices the cashier's cart with the customer's plan before saving anything", async () => {
+    const { token } = await signIn("laundry-quote@example.com", "Laundry Quote")
+    const { thobe, washIron } = await priceList(token)
+    const plans = (
+      await call(token, "POST", "/v1/laundry/plans", {
+        name: "خمس قطع",
+        pieces: 5,
+        price: 40,
+        validDays: 30,
+      })
+    ).body.items
+    await call(token, "POST", "/v1/laundry/subscriptions", {
+      planId: plans[0].id,
+      customerName: "ريم",
+      customerPhone: "0551230009",
+      paymentMethodCode: "cash",
+    })
+    const quote = await call(token, "POST", "/v1/laundry/orders/quote", {
+      customerPhone: "+966 55 123 0009",
+      lines: [{ itemId: thobe.id, serviceId: washIron.id, quantity: 7 }],
+      urgent: true,
+    })
+    expect(quote.status).toBe(200)
+    // 5 of 7 on the plan; 2 x 10 = 20, plus 50% urgent = 30.
+    expect(quote.body).toMatchObject({
+      customer: { name: "ريم" },
+      subscription: { planName: "خمس قطع", piecesLeft: 5 },
+      pieces: 7,
+      covered: 5,
+      itemsTotal: 20,
+      urgentFee: 10,
+      total: 30,
+    })
+    // A mobile nobody has: priced as is, and no customer is made.
+    const fresh = await call(token, "POST", "/v1/laundry/orders/quote", {
+      customerPhone: "0559999999",
+      lines: [{ itemId: thobe.id, serviceId: washIron.id, quantity: 1 }],
+    })
+    expect(fresh.body).toMatchObject({ customer: null, subscription: null, total: 10 })
+    const customers = (await call(token, "GET", "/v1/customers")).body
+    const list: any[] = Array.isArray(customers) ? customers : (customers.items ?? [])
+    expect(list.map((entry) => entry.name)).toEqual(["ريم"])
+  })
+
+  it("takes a split payment at drop-off and at pickup, like the cashier's payment screen", async () => {
+    const { token } = await signIn("laundry-split@example.com", "Laundry Split")
+    const { thobe, blanket, washIron } = await priceList(token)
+    await call(token, "PATCH", "/v1/pos/payment-methods/mada", {
+      enabled: true,
+      feePercent: 0,
+      merchantId: null,
+      apiKey: null,
+    })
+    const paid = (
+      await call(token, "POST", "/v1/laundry/orders", {
+        customerName: "فهد",
+        lines: [{ itemId: blanket.id, serviceId: washIron.id, quantity: 2 }],
+        payment: {
+          mode: "full",
+          payments: [
+            { paymentMethodCode: "mada", amount: 30 },
+            { paymentMethodCode: "cash", amount: 20 },
+          ],
+        },
+      })
+    ).body
+    expect(paid).toMatchObject({ total: 50, paid: true })
+    const invoices = (await call(token, "GET", "/v1/pos/invoices")).body.items
+    const first = invoices.find((entry: any) => entry.invoiceNumber === paid.invoiceNumber)
+    expect(first.payments).toEqual([
+      expect.objectContaining({ paymentMethodCode: "mada", amount: 30 }),
+      expect.objectContaining({ paymentMethodCode: "cash", amount: 20 }),
+    ])
+
+    const later = (
+      await call(token, "POST", "/v1/laundry/orders", {
+        customerName: "فهد",
+        lines: [{ itemId: thobe.id, serviceId: washIron.id, quantity: 3 }],
+        payment: { mode: "later" },
+      })
+    ).body
+    const done = (
+      await call(token, "POST", `/v1/laundry/orders/${later.id}/collect`, {
+        payments: [
+          { paymentMethodCode: "cash", amount: 10 },
+          { paymentMethodCode: "mada", amount: 20 },
+        ],
+      })
+    ).body
+    expect(done).toMatchObject({ status: "delivered", paid: true })
+    const second = (await call(token, "GET", "/v1/pos/invoices")).body.items.find(
+      (entry: any) => entry.invoiceNumber === done.invoiceNumber
+    )
+    expect(second.payments).toEqual([
+      expect.objectContaining({ paymentMethodCode: "cash", amount: 10 }),
+      expect.objectContaining({ paymentMethodCode: "mada", amount: 20 }),
+    ])
+  })
+
   it("lists unclaimed orders and reports on the period", async () => {
     const { token } = await signIn("laundry-unclaimed@example.com", "Laundry Unclaimed")
     const { thobe, washIron } = await priceList(token)

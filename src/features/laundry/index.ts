@@ -1,5 +1,5 @@
 export { LaundryBoardPage } from "./components/board-page"
-export { CashierLaundryDialog } from "./components/cashier-laundry"
+export { CashierLaundryMode } from "./components/cashier-laundry"
 export { LaundryDeliveriesPage } from "./components/deliveries-page"
 export { LaundryNewOrderPage } from "./components/new-order-page"
 export { LaundryOrderPage } from "./components/order-page"

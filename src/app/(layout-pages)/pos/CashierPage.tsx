@@ -133,7 +133,8 @@ import {
   useInvoiceReturn,
 } from "@/app/(layout-pages)/invoices/invoice-return-dialog"
 import { ExchangeSettleDialog, type ExchangeSettlement } from "./ExchangeSettleDialog"
-import { CashierLaundryDialog } from "@/features/laundry"
+import { CashierLaundryMode } from "@/features/laundry"
+import { whatsAppConnectionService } from "@/features/settings/services/whatsapp-connection.service"
 import { usePluginEnabled } from "@/features/plugins"
 import {
   toWhatsAppNumber,
@@ -1532,6 +1533,56 @@ export default function CashierPage() {
     }, 150)
   }
 
+  // The store connected its own business number (Settings -> WhatsApp -> رقمك التجاري): every
+  // sale with a customer mobile is then sent from that number by Madar itself, as a PDF, in the
+  // background -- no WhatsApp window, whatever the print setting is.
+  const [businessWhatsApp, setBusinessWhatsApp] = useState(false)
+  useEffect(() => {
+    let active = true
+    whatsAppConnectionService
+      .get()
+      .then((overview) => {
+        if (active) {
+          setBusinessWhatsApp(
+            overview.sendMode === "business" && overview.connection?.status === "connected"
+          )
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+  const sendsFromBusinessNumber = (invoice: Invoice) =>
+    businessWhatsApp && !!invoice.customerPhone && !!toWhatsAppNumber(invoice.customerPhone)
+  const sendFromBusinessNumber = (invoice: Invoice) => {
+    if (!sendsFromBusinessNumber(invoice) || !invoice.customerPhone) return
+    const phone = invoice.customerPhone
+    posInvoicesService
+      .sendInvoiceWhatsApp(invoice.id, phone)
+      .then(() =>
+        toast.success(
+          locale === "ar"
+            ? `أُرسلت الفاتورة ${invoice.invoiceNumber} على واتساب إلى ${phone}`
+            : `Invoice ${invoice.invoiceNumber} sent on WhatsApp to ${phone}`
+        )
+      )
+      .catch((error: unknown) =>
+        toast.error(
+          locale === "ar"
+            ? `لم تُرسل الفاتورة ${invoice.invoiceNumber} على واتساب`
+            : `Invoice ${invoice.invoiceNumber} wasn't sent on WhatsApp`,
+          {
+            description: error instanceof AppError ? error.message : undefined,
+            action: {
+              label: locale === "ar" ? "إرسال يدوي" : "Send by hand",
+              onClick: () => setWhatsAppInvoice(invoice),
+            },
+          }
+        )
+      )
+  }
+
   // "WhatsApp only": straight to the customer's chat in the cashier's own WhatsApp, with the
   // invoice link ready to send. With no valid number on the sale -- or a browser that blocks the
   // new window -- the share dialog asks for it / offers the button instead.
@@ -2061,10 +2112,12 @@ export default function CashierPage() {
         // per sale ("both" -- never print and WhatsApp at once). A sale queued offline has no
         // link to share yet, so it's printed.
         const delivery = posSettings.receiptDelivery ?? "print"
+        const autoSent = !result.queued && sendsFromBusinessNumber(invoice)
+        if (autoSent) sendFromBusinessNumber(invoice)
         if (delivery === "whatsapp") {
-          deliverOnWhatsApp(invoice, result.queued)
+          if (!autoSent) deliverOnWhatsApp(invoice, result.queued)
           searchInputRef.current?.focus()
-        } else if (delivery === "both" && !result.queued) {
+        } else if (delivery === "both" && !result.queued && !autoSent) {
           setDeliveryChoiceInvoice(invoice)
         } else if (posSettings.autoPrintInvoice) {
           printReceipt()
@@ -2414,11 +2467,13 @@ export default function CashierPage() {
   }
 
   // --- Laundry plugin -----------------------------------------------------------------------
-  // When the business has the Laundry plugin on, the cashier takes clothes in and hands orders
-  // over from here; whatever is paid goes through this shift, and the tax invoice prints like a
-  // sale.
+  // When the business has the Laundry plugin on, the cashier switches to laundry mode (the top
+  // bar's المنتجات | المغسلة): pieces from the price list instead of products, a laundry cart, and
+  // orders handed over at the counter. Whatever is paid goes through this shift, and the tax
+  // invoice prints like a sale. Both modes stay mounted, so each keeps its own cart.
   const laundryOn = usePluginEnabled("laundry") === true
-  const [isLaundryOpen, setIsLaundryOpen] = useState(false)
+  const [laundryMode, setLaundryMode] = useState(false)
+  const inLaundry = laundryOn && laundryMode
   const printLaundryInvoice = async (invoiceNumber: string) => {
     loadTodaySummary()
     try {
@@ -2432,6 +2487,7 @@ export default function CashierPage() {
       setSuccessQrDataUrl(qrDataUrl)
       setSuccessInvoice(invoice)
       printReceipt()
+      sendFromBusinessNumber(invoice)
     } catch {
       // The order is handed over either way; the invoice can be printed from the invoices page.
     }
@@ -2827,6 +2883,31 @@ export default function CashierPage() {
         )}
 
         <div className="mr-auto flex items-center gap-2">
+          {laundryOn ? (
+            <div className="flex h-10 items-center rounded-[10px] border border-[#e8edf3] bg-[#f4f7fc] p-1">
+              {(
+                [
+                  [false, locale === "ar" ? "المنتجات" : "Products", LayoutGrid],
+                  [true, locale === "ar" ? "المغسلة" : "Laundry", WashingMachine],
+                ] as const
+              ).map(([value, label, Icon]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() => setLaundryMode(value)}
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-bold transition",
+                    laundryMode === value
+                      ? "bg-white text-[#2563eb] shadow-sm"
+                      : "text-[#5b6b85] hover:text-[#0b1738]"
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <button
             type="button"
             aria-label={t("topBar.fullscreenAriaLabel")}
@@ -2849,9 +2930,19 @@ export default function CashierPage() {
           height as this row -- itself pinned to lg:flex-1 min-h-0 within the fixed-height wrapper
           above -- so each column can scroll its own overflow independently instead of the page
           growing with however many products or cart lines there are. */}
+      {laundryOn ? (
+        <div className={cn("flex min-h-0 flex-col lg:flex-1", !inLaundry && "hidden")}>
+          <CashierLaundryMode
+            shiftOpen={Boolean(myOpenShift)}
+            onOpenShift={() => setIsOpenShiftDialogOpen(true)}
+            onInvoiced={(invoiceNumber) => void printLaundryInvoice(invoiceNumber)}
+          />
+        </div>
+      ) : null}
       <div
         className={cn(
           "grid min-h-0 gap-3 lg:flex-1",
+          inLaundry && "hidden",
           posSettings.showCategoryPanel
             ? "lg:grid-cols-[200px_minmax(0,1fr)_400px]"
             : "lg:grid-cols-[minmax(0,1fr)_400px]"
@@ -3634,21 +3725,6 @@ export default function CashierPage() {
                 {salesPerson ? salesPerson.name.split(" ")[0] : t("cart.salesPersonAction")}
               </span>
             </button>
-
-            {laundryOn ? (
-              <button
-                type="button"
-                onClick={() => setIsLaundryOpen(true)}
-                className="flex flex-col items-center gap-1.5 rounded-[10px] p-1.5 hover:bg-[#f7faff]"
-              >
-                <span className="flex size-10 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb]">
-                  <WashingMachine className="size-[18px]" />
-                </span>
-                <span className={cn("text-[11px] font-semibold", MUTED)}>
-                  {locale === "ar" ? "المغسلة" : "Laundry"}
-                </span>
-              </button>
-            ) : null}
 
             <button
               type="button"
@@ -4845,14 +4921,6 @@ export default function CashierPage() {
       </Dialog>
 
       <ReturnDialog {...invoiceReturn.dialogProps} />
-      {laundryOn ? (
-        <CashierLaundryDialog
-          open={isLaundryOpen}
-          onOpenChange={setIsLaundryOpen}
-          shiftOpen={Boolean(myOpenShift)}
-          onInvoiced={(invoiceNumber) => void printLaundryInvoice(invoiceNumber)}
-        />
-      ) : null}
       <ExchangeSettleDialog
         key={isExchangeSettleOpen ? "open" : "closed"}
         open={isExchangeSettleOpen && exchangeDraft !== null}

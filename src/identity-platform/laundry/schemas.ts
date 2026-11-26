@@ -3,6 +3,17 @@ import { z } from "zod"
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional()
 const instant = z.string().datetime({ offset: true }).nullable().optional()
 
+// Paid in full with more than one method (the cashier's split payment).
+const paymentSplits = z
+  .array(
+    z.object({
+      paymentMethodCode: z.string().min(1).max(60),
+      amount: z.number().min(0).max(1000000),
+    })
+  )
+  .max(10)
+  .optional()
+
 export const laundrySettingsSchema = z
   .object({
     pricesIncludeTax: z.boolean(),
@@ -68,7 +79,26 @@ export const laundryOrderSchema = z.object({
     mode: z.enum(["later", "deposit", "full"]),
     paymentMethodCode: z.string().min(1).max(60).nullable().optional(),
     amount: z.number().min(0).max(1000000).optional(),
+    payments: paymentSplits,
   }),
+})
+
+export const laundryQuoteSchema = z.object({
+  customerId: z.string().uuid().nullable().optional(),
+  customerPhone: optionalText(32),
+  lines: z
+    .array(
+      z.object({
+        itemId: z.string().uuid(),
+        serviceId: z.string().uuid(),
+        quantity: z.number().int().min(1).max(999),
+      })
+    )
+    .min(1)
+    .max(200),
+  urgent: z.boolean().default(false),
+  fulfilment: z.enum(["pickup", "delivery"]).default("pickup"),
+  useSubscription: z.boolean().default(true),
 })
 
 export const laundryStatusSchema = z.object({
@@ -77,6 +107,7 @@ export const laundryStatusSchema = z.object({
 
 export const laundryCollectSchema = z.object({
   paymentMethodCode: z.string().min(1).max(60).nullable().optional(),
+  payments: paymentSplits,
 })
 
 export const laundryOrderPatchSchema = z.object({

@@ -95,7 +95,33 @@ export interface CreateLaundryOrderInput {
     mode: "later" | "deposit" | "full"
     paymentMethodCode?: string | null
     amount?: number
+    payments?: LaundryPaymentSplit[]
   }
+}
+
+export interface LaundryPaymentSplit {
+  paymentMethodCode: string
+  amount: number
+}
+
+export interface LaundryQuoteInput {
+  customerId?: string | null
+  customerPhone?: string | null
+  lines: Array<{ itemId: string; serviceId: string; quantity: number }>
+  urgent: boolean
+  fulfilment: "pickup" | "delivery"
+  useSubscription: boolean
+}
+
+export interface LaundryQuote {
+  customer: { id: string; name: string; phone: string | null } | null
+  subscription: { planName: string; piecesLeft: number; endsAt: string } | null
+  pieces: number
+  covered: number
+  itemsTotal: number
+  urgentFee: number
+  deliveryFee: number
+  total: number
 }
 
 export interface LaundryPlan {
@@ -218,10 +244,13 @@ export const laundryService = {
     client.post<CreateLaundryOrderInput, LaundryOrder>(path("orders"), input),
   setStatus: (id: string, status: "received" | "processing" | "ready") =>
     client.post<{ status: string }, LaundryOrder>(path("orders", id, "status"), { status }),
-  collect: (id: string, paymentMethodCode: string | null) =>
-    client.post<{ paymentMethodCode: string | null }, LaundryOrder>(path("orders", id, "collect"), {
-      paymentMethodCode,
-    }),
+  collect: (id: string, paymentMethodCode: string | null, payments?: LaundryPaymentSplit[]) =>
+    client.post<
+      { paymentMethodCode: string | null; payments?: LaundryPaymentSplit[] },
+      LaundryOrder
+    >(path("orders", id, "collect"), { paymentMethodCode, payments }),
+  quote: (input: LaundryQuoteInput) =>
+    client.post<LaundryQuoteInput, LaundryQuote>(path("orders", "quote"), input),
   cancel: (id: string) =>
     client.post<undefined, LaundryOrder>(path("orders", id, "cancel"), undefined),
   updateOrder: (id: string, patch: Record<string, unknown>) =>

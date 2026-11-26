@@ -9,6 +9,7 @@ import {
   laundryPhotoSchema,
   laundryPlanSchema,
   laundryPricesSchema,
+  laundryQuoteSchema,
   laundryServiceSchema,
   laundrySettingsSchema,
   laundryStatusSchema,
@@ -174,6 +175,12 @@ export async function handleLaundryRoute(input: {
     }
   }
 
+  // What the cashier's laundry cart would cost (the customer's subscription included).
+  if (path === "/orders/quote" && method === "POST") {
+    requireView()
+    return send(200, await service.quote(org, laundryQuoteSchema.parse(await body())))
+  }
+
   const orderMatch = path.match(/^\/orders\/([0-9a-f-]{36})(\/.*)?$/)
   if (orderMatch) {
     const id = orderMatch[1]
@@ -196,8 +203,8 @@ export async function handleLaundryRoute(input: {
     }
     if (rest === "/collect" && method === "POST") {
       requireManage()
-      const { paymentMethodCode } = laundryCollectSchema.parse(await body())
-      return send(200, await service.collect(org, id, paymentMethodCode ?? null, who))
+      const { paymentMethodCode, payments } = laundryCollectSchema.parse(await body())
+      return send(200, await service.collect(org, id, paymentMethodCode ?? null, who, payments))
     }
     if (rest === "/cancel" && method === "POST") {
       requireManage()
