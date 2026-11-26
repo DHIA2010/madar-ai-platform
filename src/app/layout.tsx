@@ -24,23 +24,23 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://madar.my"),
 
   title: {
-    default: "MADAR | AI-Powered Marketing Intelligence for E-commerce",
+    default: "MADAR | Madar1",
     template: "%s | MADAR",
   },
 
   description:
-    "MADAR helps e-commerce businesses connect marketing data, analyze advertising performance, monitor key KPIs, and turn data into actionable insights.",
+    "Madar1 brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
 
   keywords: [
-    "Marketing Intelligence Platform",
-    "E-commerce Marketing Analytics",
+    "Madar1",
+    "Point of Sale",
+    "ZATCA E-invoicing",
+    "Bookings",
+    "E-commerce Analytics",
     "Advertising Performance Analytics",
-    "Campaign Analytics",
-    "Cross-Channel Reporting",
-    "Marketing KPIs",
-    "Business Intelligence",
-    "SaaS Platform",
-    "Marketing Operations",
+    "Inventory Management",
+    "Accounting",
+    "Business Management Platform",
   ],
 
   authors: [
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   ],
 
   creator: "MADAR",
-  publisher: "MADAR",
+  publisher: "Madar Business Solutions",
 
   robots: {
     index: true,
@@ -63,24 +63,24 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://madar.my/",
     siteName: "MADAR",
-    title: "MADAR | AI-Powered Marketing Intelligence for E-commerce",
+    title: "MADAR | Madar1",
     description:
-      "MADAR helps e-commerce businesses connect marketing data, analyze advertising performance, monitor key KPIs, and turn data into actionable insights.",
+      "Madar1 brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
     images: [
       {
         url: "/images/madar-logo.png",
         width: 778,
         height: 325,
-        alt: "MADAR - AI-Powered Marketing Intelligence for E-commerce",
+        alt: "MADAR | Madar1",
       },
     ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "MADAR | AI-Powered Marketing Intelligence for E-commerce",
+    title: "MADAR | Madar1",
     description:
-      "MADAR helps e-commerce businesses connect marketing data, analyze advertising performance, monitor key KPIs, and turn data into actionable insights.",
+      "Madar1 brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
     images: ["/images/madar-logo.png"],
     creator: "@MADAR",
   },

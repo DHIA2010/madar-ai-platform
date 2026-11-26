@@ -97,7 +97,7 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-14 border-t border-slate-200 pt-8 text-center text-sm text-slate-500">
-          <p>© {CURRENT_YEAR} مدار. جميع الحقوق محفوظة.</p>
+          <p>© {CURRENT_YEAR} مدار للحلول التجارية. جميع الحقوق محفوظة.</p>
         </div>
       </div>
     </footer>

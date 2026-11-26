@@ -58,7 +58,7 @@ function renderLayout(input: {
             </tr>
             <tr>
               <td style="padding:20px 32px;background:#fafafa;border-top:1px solid #eee;">
-                <span style="font-size:12px;color:#9ca3af;">MADAR &mdash; AI Marketing Intelligence</span>
+                <span style="font-size:12px;color:#9ca3af;">Madar1 &mdash; Madar Business Solutions</span>
               </td>
             </tr>
           </table>
