@@ -1,6 +1,10 @@
 import type { Metadata } from "next"
 
+import { loadBlogPosts } from "@/features/marketing-site/blog/blog-data"
 import { BlogIndexPage } from "@/features/marketing-site/blog/blog-index-page"
+
+// Articles published from Madar Admin show up within a few minutes.
+export const revalidate = 300
 
 export const metadata: Metadata = {
   title: { absolute: "مدونة مدار | نصائح في البيع والتسويق والمخزون" },
@@ -9,6 +13,6 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://madar.my/blog" },
 }
 
-export default function Page() {
-  return <BlogIndexPage />
+export default async function Page() {
+  return <BlogIndexPage allPosts={await loadBlogPosts()} />
 }

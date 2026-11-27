@@ -6,7 +6,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { CATEGORY_ICON } from "./blog-cover"
 import { BlogHero, BlogShell, PostCard } from "./blog-shared"
-import { BLOG_CATEGORIES, postsInCategory } from "./posts"
+import { BLOG_CATEGORIES, type BlogPost, postsInCategory } from "./posts"
 
 // How many posts each section shows on the blog home; the rest are on the category page.
 const PER_SECTION = 3
@@ -19,7 +19,7 @@ function articleCount(count: number) {
   return `${count} مقالًا`
 }
 
-export function BlogIndexPage() {
+export function BlogIndexPage({ allPosts }: { allPosts: BlogPost[] }) {
   return (
     <BlogShell>
       <BlogHero
@@ -31,7 +31,7 @@ export function BlogIndexPage() {
 
       <div className="mx-auto w-full max-w-7xl space-y-20 px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         {BLOG_CATEGORIES.map((category) => {
-          const posts = postsInCategory(category.slug)
+          const posts = postsInCategory(allPosts, category.slug)
           if (posts.length === 0) return null
           const Icon = CATEGORY_ICON[category.slug]
           return (
@@ -68,8 +68,8 @@ export function BlogIndexPage() {
                   posts.length >= PER_SECTION && "lg:grid-cols-3"
                 )}
               >
-                {posts.slice(0, PER_SECTION).map((post) => (
-                  <PostCard key={post.slug} post={post} />
+                {posts.slice(0, PER_SECTION).map((post, index) => (
+                  <PostCard key={post.slug} post={post} variant={index} />
                 ))}
               </div>
             </section>

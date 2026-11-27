@@ -15,6 +15,7 @@ import { registeredLoyaltyCampaigns } from "./loyalty/campaigns"
 import { registeredWhatsAppCampaigns } from "./whatsapp/campaigns"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
+import { registeredBlogAgent } from "./blog/agent"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
 
 function loadRuntimeEnvironment() {
@@ -201,6 +202,21 @@ if (adChanges && adChangesMinutes > 0) {
       .catch((error: unknown) => console.error("campaigns.ad_changes_pass_failed", error))
   setTimeout(runAdChanges, 180_000).unref()
   setInterval(runAdChanges, adChangesMinutes * 60_000).unref()
+}
+
+// The blog agent looks every hour; it writes the week's drafts once, on Sunday morning (Riyadh).
+const blogAgentMinutes = Number(process.env.BLOG_AGENT_INTERVAL_MINUTES ?? "60")
+const blogAgent = registeredBlogAgent()
+if (blogAgent && blogAgentMinutes > 0) {
+  const runBlogAgent = () =>
+    blogAgent
+      .tick()
+      .then((written) => {
+        if (written > 0) console.log("blog_agent.week_written", { written })
+      })
+      .catch((error: unknown) => console.error("blog_agent.tick_failed", error))
+  setTimeout(runBlogAgent, 240_000).unref()
+  setInterval(runBlogAgent, blogAgentMinutes * 60_000).unref()
 }
 
 const adsReports = registeredAdsReportService()

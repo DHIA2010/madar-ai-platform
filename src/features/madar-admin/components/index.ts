@@ -1,3 +1,4 @@
+export * from "./madar-admin-blog"
 export * from "./madar-admin-coupons"
 export * from "./madar-admin-crm-activations"
 export * from "./madar-admin-crm-dashboard"

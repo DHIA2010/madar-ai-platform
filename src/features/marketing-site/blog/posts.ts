@@ -1,5 +1,6 @@
 // Madar's blog on madar.my. Each article is plain structured content, rendered by
-// blog-post-page.tsx -- add a post by adding an entry here.
+// blog-post-page.tsx. The first articles live here; newer ones are written in Madar Admin (by the
+// blog agent) and come from the API -- blog-data.ts puts the two together.
 
 export type BlogBlock =
   | { type: "p"; text: string }
@@ -9,7 +10,19 @@ export type BlogBlock =
   | { type: "callout"; tone: "tip" | "note"; title: string; text: string }
   | { type: "formula"; label: string; formula: string; example: string }
 
-export type BlogCategory = "campaigns" | "invoicing" | "ecommerce" | "inventory"
+export type BlogCategory = "campaigns" | "invoicing" | "ecommerce" | "inventory" | "pos" | "booking"
+
+// Which Madar app an article's sign-up buttons point to.
+export type BlogCtaApp =
+  | "pos"
+  | "ecommerce"
+  | "campaigns"
+  | "invoicing"
+  | "inventory"
+  | "booking"
+  | "loyalty"
+  | "accounting"
+  | "complete"
 
 export interface BlogCategoryInfo {
   slug: BlogCategory
@@ -39,6 +52,16 @@ export const BLOG_CATEGORIES: BlogCategoryInfo[] = [
     label: "المخزون والفروع",
     description: "الجرد والتحويل بين الفروع وضبط المخزون بدون فوضى.",
   },
+  {
+    slug: "pos",
+    label: "الكاشير والمبيعات",
+    description: "اختيار الكاشير، وتسريع البيع، وضبط الورديات والمرتجعات في محلك.",
+  },
+  {
+    slug: "booking",
+    label: "الحجوزات والعملاء",
+    description: "المواعيد والحجوزات وبرامج الولاء للصالونات والعيادات ومراكز الخدمات.",
+  },
 ]
 
 export const BLOG_CATEGORY_LABEL: Record<BlogCategory, string> = Object.fromEntries(
@@ -53,8 +76,16 @@ export interface BlogPost {
   // ISO date (yyyy-mm-dd).
   publishedAt: string
   body: BlogBlock[]
+  // Newer articles (from Madar Admin) also carry these.
+  faq?: Array<{ question: string; answer: string }>
+  seoTitle?: string | null
+  seoDescription?: string | null
+  keywords?: string[]
+  ctaApp?: BlogCtaApp | null
 }
 
+// The articles written in the code. The backend keeps a copy of their titles
+// (identity-platform/blog/static-posts.ts) so the blog agent doesn't repeat them.
 export const BLOG_POSTS: BlogPost[] = [
   {
     slug: "know-which-ad-really-sells",
@@ -532,8 +563,8 @@ export const BLOG_POSTS: BlogPost[] = [
   },
 ]
 
-export function findBlogPost(slug: string) {
-  return BLOG_POSTS.find((post) => post.slug === slug) ?? null
+export function findBlogPost(posts: BlogPost[], slug: string) {
+  return posts.find((post) => post.slug === slug) ?? null
 }
 
 export function findBlogCategory(slug: string) {
@@ -541,15 +572,18 @@ export function findBlogCategory(slug: string) {
 }
 
 // Which of the three cover variants a post uses: neighbours in a section always differ.
-export function coverVariant(post: BlogPost) {
-  return postsInCategory(post.category).findIndex((other) => other.slug === post.slug) % 3
+export function coverVariant(posts: BlogPost[], post: BlogPost) {
+  return Math.max(
+    0,
+    postsInCategory(posts, post.category).findIndex((other) => other.slug === post.slug) % 3
+  )
 }
 
 // A category's posts, newest first.
-export function postsInCategory(category: BlogCategory) {
-  return BLOG_POSTS.filter((post) => post.category === category).sort((left, right) =>
-    right.publishedAt.localeCompare(left.publishedAt)
-  )
+export function postsInCategory(posts: BlogPost[], category: BlogCategory) {
+  return posts
+    .filter((post) => post.category === category)
+    .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
 }
 
 // "قراءة في دقيقتين" -- in proper Arabic for each count.

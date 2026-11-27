@@ -227,6 +227,44 @@ export class WhatsAppLeadAlertsService {
     }
   }
 
+  // A plain note to the team (e.g. "this week's blog drafts are ready"). Only numbers inside
+  // Meta's 24-hour window can get free text; the rest are skipped rather than sent a lead
+  // template that would say the wrong thing. Never throws.
+  async notifyTeamText(text: string): Promise<{ sent: number; skipped: number }> {
+    const result = { sent: 0, skipped: 0 }
+    try {
+      const phones = await this.platform.leadAlertPhones()
+      if (phones.length === 0) return result
+      const context = await this.platform.sendingContext()
+      const open = await this.openWindows(new Date())
+      for (const phone of phones) {
+        if (!open.has(phone)) {
+          result.skipped += 1
+          continue
+        }
+        let waMessageId: string | null = null
+        let error: string | null = null
+        try {
+          waMessageId = await sendDirectMessage(context.auth, context.phoneNumberId, {
+            to: phone,
+            body: text,
+            button: RECEIVED_BUTTON,
+          })
+          result.sent += 1
+        } catch (caught) {
+          error = caught instanceof Error ? caught.message : String(caught)
+          result.skipped += 1
+        }
+        await this.record("lead_alert", phone, "team_note", waMessageId, error)
+      }
+    } catch (error) {
+      console.error("whatsapp.team_note_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+    return result
+  }
+
   // Madar Admin's "send a test alert": both alerts with sample values, errors surfaced.
   async sendTest(): Promise<LeadAlertSendResult> {
     const phones = await this.platform.leadAlertPhones()

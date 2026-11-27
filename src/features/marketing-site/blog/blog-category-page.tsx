@@ -1,11 +1,17 @@
 import { cn } from "@/lib/utils"
 
 import { BlogHero, BlogShell, PostCard } from "./blog-shared"
-import { type BlogCategoryInfo, postsInCategory } from "./posts"
+import { type BlogCategoryInfo, type BlogPost, postsInCategory } from "./posts"
 
 // Every article in one section of the blog.
-export function BlogCategoryPage({ category }: { category: BlogCategoryInfo }) {
-  const posts = postsInCategory(category.slug)
+export function BlogCategoryPage({
+  category,
+  allPosts,
+}: {
+  category: BlogCategoryInfo
+  allPosts: BlogPost[]
+}) {
+  const posts = postsInCategory(allPosts, category.slug)
   return (
     <BlogShell>
       <BlogHero
@@ -21,8 +27,8 @@ export function BlogCategoryPage({ category }: { category: BlogCategoryInfo }) {
           </p>
         ) : (
           <div className={cn("grid gap-8 md:grid-cols-2", posts.length >= 3 && "lg:grid-cols-3")}>
-            {posts.map((post) => (
-              <PostCard key={post.slug} post={post} />
+            {posts.map((post, index) => (
+              <PostCard key={post.slug} post={post} variant={index} />
             ))}
           </div>
         )}

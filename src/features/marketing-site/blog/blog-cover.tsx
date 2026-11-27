@@ -1,4 +1,4 @@
-import { Boxes, Megaphone, ReceiptText, Store } from "lucide-react"
+import { Boxes, CalendarCheck, Megaphone, ReceiptText, ScanBarcode, Store } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -9,6 +9,8 @@ export const CATEGORY_ICON = {
   invoicing: ReceiptText,
   ecommerce: Store,
   inventory: Boxes,
+  pos: ScanBarcode,
+  booking: CalendarCheck,
 } as const
 
 const COVERS: Record<
@@ -34,6 +36,16 @@ const COVERS: Record<
     icon: Boxes,
     gradient: "from-[#ea580c] via-[#db2777] to-[#0b1738]",
     chips: ["-2", "+1", "TRF", "0", "TRF-0012", "+5"],
+  },
+  pos: {
+    icon: ScanBarcode,
+    gradient: "from-[#16a34a] via-[#0d9488] to-[#0b1738]",
+    chips: ["QR", "+48", "SAR", "mada", "x3", "POS"],
+  },
+  booking: {
+    icon: CalendarCheck,
+    gradient: "from-[#c026d3] via-[#7c3aed] to-[#0b1738]",
+    chips: ["10:30", "+12", "VIP", "4.9", "SMS", "★"],
   },
 }
 

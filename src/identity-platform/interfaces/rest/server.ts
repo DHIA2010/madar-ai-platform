@@ -208,6 +208,9 @@ import {
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
 import { AdChangeTracker, registerAdChangeTracker } from "../../campaigns/ad-changes"
+import { BlogAgent, ClaudeBlogWriter, formatPrices, registerBlogAgent } from "../../blog/agent"
+import { BlogService } from "../../blog/service"
+import { handleAdminBlogRoute, handlePublicBlogRoute } from "./blog-routes"
 import { AdHistory } from "../../campaigns/ad-history"
 import { CampaignCheckupService, registerCheckupSources } from "../../campaigns/checkup"
 import {
@@ -1431,6 +1434,29 @@ export function createIdentityApiServer(
     : null
   registerCheckupSources(checkupSources)
   registerAdChangeTracker(checkupSources?.tracker ?? null)
+  // Madar's blog, and the agent that writes its weekly drafts (needs the AI key).
+  const blogService = container.infrastructure.database
+    ? new BlogService(container.infrastructure.database)
+    : null
+  const blogAgent =
+    blogService && container.config.anthropicApiKey && container.infrastructure.database
+      ? new BlogAgent(
+          container.infrastructure.database,
+          blogService,
+          new ClaudeBlogWriter(
+            container.config.anthropicApiKey,
+            process.env.BLOG_AGENT_MODEL ?? container.config.invoiceReaderModel
+          ),
+          async () =>
+            pricingService
+              ? formatPrices(await pricingService.getCatalog({ includeInactive: false }))
+              : formatPrices([]),
+          async (text) => {
+            await whatsAppLeadAlerts?.notifyTeamText(text)
+          }
+        )
+      : null
+  registerBlogAgent(blogAgent)
   const campaignCheckupService = campaignsPerformanceAggregationService
     ? new CampaignCheckupService(campaignsPerformanceAggregationService, undefined, checkupSources)
     : null
@@ -2665,6 +2691,29 @@ export function createIdentityApiServer(
         if (handled) return
       }
 
+      // Public: Madar's blog articles and what readers do on them.
+      if (url.pathname.startsWith("/v1/public/blog/")) {
+        const handled = await handlePublicBlogRoute({
+          method,
+          pathname: url.pathname,
+          blog: blogService,
+          readJsonBody: () => readJsonBody(request),
+          send: (status, body) => {
+            send(status, body)
+            return true
+          },
+          limit: async (bucket, max, windowMs) => {
+            const decision = await container.infrastructure.rateLimiter?.check(
+              `${bucket}:${context.ipAddress}`,
+              max,
+              windowMs
+            )
+            return !decision || decision.allowed
+          },
+        })
+        if (handled) return
+      }
+
       // Public: the link inside a WhatsApp message sent from the CRM -- its card and its taps.
       if (url.pathname.startsWith("/v1/public/outreach/")) {
         const handled = await handlePublicOutreachRoute({
@@ -3345,6 +3394,20 @@ export function createIdentityApiServer(
         token,
         typeof requestedWorkspace === "string" ? requestedWorkspace : null
       )
+
+      const handledByBlog = await handleAdminBlogRoute({
+        method,
+        url,
+        actor,
+        blog: blogService,
+        agent: blogAgent,
+        readJsonBody: () => readJsonBody(request),
+        send: (status, body) => {
+          send(status, body)
+          return true
+        },
+      })
+      if (handledByBlog) return
 
       const handledByPlatformAdmin = await handlePlatformAdminRoute({
         method,

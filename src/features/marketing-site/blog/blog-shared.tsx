@@ -12,7 +12,6 @@ import {
   BLOG_CATEGORY_LABEL,
   type BlogCategory,
   type BlogPost,
-  coverVariant,
   formatBlogDate,
   readingLabel,
 } from "./posts"
@@ -42,9 +41,12 @@ export function PostMeta({ post }: { post: BlogPost }) {
 
 export function PostCard({
   post,
+  variant = 0,
   showCategory = false,
 }: {
   post: BlogPost
+  // Varies the cover between neighbours (see coverVariant).
+  variant?: number
   showCategory?: boolean
 }) {
   return (
@@ -52,7 +54,7 @@ export function PostCard({
       href={ROUTES.blogPost(post.slug)}
       className="group flex flex-col overflow-hidden rounded-[28px] border border-slate-200/80 bg-white transition-all hover:-translate-y-1 hover:shadow-[0_24px_60px_-28px_rgba(11,23,56,0.35)]"
     >
-      <BlogCover category={post.category} variant={coverVariant(post)} className="aspect-[2/1]" />
+      <BlogCover category={post.category} variant={variant % 3} className="aspect-[2/1]" />
       <div className="flex flex-1 flex-col gap-3.5 p-7">
         {showCategory ? (
           <span className="w-fit rounded-full bg-[#eef4ff] px-3 py-1 text-[12.5px] font-extrabold text-[#2878ff]">

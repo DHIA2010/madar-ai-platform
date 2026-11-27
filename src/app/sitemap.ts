@@ -1,9 +1,14 @@
 import type { MetadataRoute } from "next"
 
-import { BLOG_CATEGORIES, BLOG_POSTS } from "@/features/marketing-site/blog/posts"
+import { loadBlogPosts } from "@/features/marketing-site/blog/blog-data"
+import { BLOG_CATEGORIES } from "@/features/marketing-site/blog/posts"
 
-export default function sitemap(): MetadataRoute.Sitemap {
+// Refreshed every few minutes, so a newly published article is listed for Google right away.
+export const revalidate = 300
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date()
+  const posts = await loadBlogPosts()
 
   return [
     {
@@ -24,7 +29,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
-    ...BLOG_POSTS.map((post) => ({
+    ...posts.map((post) => ({
       url: `https://madar.my/blog/${post.slug}`,
       lastModified: new Date(post.publishedAt),
       changeFrequency: "monthly" as const,
