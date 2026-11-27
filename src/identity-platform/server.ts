@@ -16,6 +16,8 @@ import { registeredWhatsAppCampaigns } from "./whatsapp/campaigns"
 import { registeredDailyReportService } from "./whatsapp/daily-report"
 import { registeredLeadAlertsService } from "./whatsapp/lead-alerts"
 import { registeredBlogAgent } from "./blog/agent"
+import { registeredInstagramAgent } from "./instagram/agent"
+import { registeredInstagramPublisher } from "./instagram/publisher"
 import { ZatcaDevicesService } from "./zatca/zatca-devices-service"
 
 function loadRuntimeEnvironment() {
@@ -217,6 +219,34 @@ if (blogAgent && blogAgentMinutes > 0) {
       .catch((error: unknown) => console.error("blog_agent.tick_failed", error))
   setTimeout(runBlogAgent, 240_000).unref()
   setInterval(runBlogAgent, blogAgentMinutes * 60_000).unref()
+}
+
+// Instagram: approved posts go out within a few minutes of their time; the agent writes the
+// week's drafts on Sunday morning (Riyadh), like the blog.
+const instagramPublishMinutes = Number(process.env.INSTAGRAM_PUBLISH_INTERVAL_MINUTES ?? "5")
+const instagramPublisher = registeredInstagramPublisher()
+if (instagramPublisher && instagramPublishMinutes > 0) {
+  const runInstagramPublisher = () =>
+    instagramPublisher
+      .tick()
+      .then((published) => {
+        if (published > 0) console.log("instagram.published", { published })
+      })
+      .catch((error: unknown) => console.error("instagram.publish_failed", error))
+  setTimeout(runInstagramPublisher, 120_000).unref()
+  setInterval(runInstagramPublisher, instagramPublishMinutes * 60_000).unref()
+}
+const instagramAgent = registeredInstagramAgent()
+if (instagramAgent && blogAgentMinutes > 0) {
+  const runInstagramAgent = () =>
+    instagramAgent
+      .tick()
+      .then((written) => {
+        if (written > 0) console.log("instagram_agent.week_written", { written })
+      })
+      .catch((error: unknown) => console.error("instagram_agent.tick_failed", error))
+  setTimeout(runInstagramAgent, 300_000).unref()
+  setInterval(runInstagramAgent, blogAgentMinutes * 60_000).unref()
 }
 
 const adsReports = registeredAdsReportService()

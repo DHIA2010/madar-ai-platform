@@ -211,6 +211,20 @@ import { AdChangeTracker, registerAdChangeTracker } from "../../campaigns/ad-cha
 import { BlogAgent, ClaudeBlogWriter, formatPrices, registerBlogAgent } from "../../blog/agent"
 import { BlogService } from "../../blog/service"
 import { handleAdminBlogRoute, handlePublicBlogRoute } from "./blog-routes"
+import {
+  ClaudeInstagramWriter,
+  InstagramAgent,
+  registerInstagramAgent,
+} from "../../instagram/agent"
+import { InstagramGraph } from "../../instagram/graph"
+import {
+  INSTAGRAM_STATE_PREFIX,
+  InstagramConnector,
+  InstagramPublisher,
+  registerInstagramPublisher,
+} from "../../instagram/publisher"
+import { InstagramService } from "../../instagram/service"
+import { handleAdminInstagramRoute } from "./instagram-routes"
 import { AdHistory } from "../../campaigns/ad-history"
 import { CampaignCheckupService, registerCheckupSources } from "../../campaigns/checkup"
 import {
@@ -1457,6 +1471,52 @@ export function createIdentityApiServer(
         )
       : null
   registerBlogAgent(blogAgent)
+  // Madar's own Instagram: the connected account, publishing and the weekly agent.
+  const instagramService = container.infrastructure.database
+    ? new InstagramService(container.infrastructure.database)
+    : null
+  const instagramGraph = new InstagramGraph()
+  const instagramMetaApp = container.infrastructure.database
+    ? new MetaOAuthService(new MetaOAuthRepository(container.infrastructure.database))
+    : null
+  const instagramConnector =
+    instagramService && instagramMetaApp
+      ? new InstagramConnector(instagramService, instagramGraph, () =>
+          instagramMetaApp.ownAppAccess()
+        )
+      : null
+  const instagramPublisher =
+    instagramService && instagramMetaApp
+      ? new InstagramPublisher(
+          instagramService,
+          instagramGraph,
+          async () => (await instagramMetaApp.ownAppAccess()).open,
+          async (text) => {
+            await whatsAppLeadAlerts?.notifyTeamText(text)
+          }
+        )
+      : null
+  registerInstagramPublisher(instagramPublisher)
+  const instagramAgent =
+    instagramService && container.config.anthropicApiKey && container.infrastructure.database
+      ? new InstagramAgent(
+          container.infrastructure.database,
+          instagramService,
+          blogService,
+          new ClaudeInstagramWriter(
+            container.config.anthropicApiKey,
+            process.env.INSTAGRAM_AGENT_MODEL ?? container.config.invoiceReaderModel
+          ),
+          async () =>
+            pricingService
+              ? formatPrices(await pricingService.getCatalog({ includeInactive: false }))
+              : formatPrices([]),
+          async (text) => {
+            await whatsAppLeadAlerts?.notifyTeamText(text)
+          }
+        )
+      : null
+  registerInstagramAgent(instagramAgent)
   const campaignCheckupService = campaignsPerformanceAggregationService
     ? new CampaignCheckupService(campaignsPerformanceAggregationService, undefined, checkupSources)
     : null
@@ -2074,6 +2134,29 @@ export function createIdentityApiServer(
       const providerOauthCallbackMatch = url.pathname.match(
         /^\/v1\/integrations\/([^/]+)\/oauth\/callback$/
       )
+      // Madar Admin connecting Madar's own Instagram reuses the Meta app's return address; its
+      // state says so (instagram/publisher.ts).
+      if (
+        method === "GET" &&
+        providerOauthCallbackMatch?.[1] === "meta-ads" &&
+        (url.searchParams.get("state") ?? "").startsWith(INSTAGRAM_STATE_PREFIX)
+      ) {
+        const outcome = instagramConnector
+          ? await instagramConnector
+              .complete(url.searchParams.get("code"), url.searchParams.get("state") ?? "")
+              .catch(() => "failed")
+          : "unavailable"
+        const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://app.madar.my").replace(
+          /\/$/,
+          ""
+        )
+        response.writeHead(302, {
+          location: `${appUrl}/madar-admin/instagram?connect=${encodeURIComponent(outcome)}`,
+        })
+        response.end()
+        return
+      }
+
       if (method === "GET" && providerOauthCallbackMatch) {
         const provider = container.infrastructure.integrations?.find(providerOauthCallbackMatch[1])
         if (!provider || !provider.oauthCallback) {
@@ -3408,6 +3491,31 @@ export function createIdentityApiServer(
         },
       })
       if (handledByBlog) return
+
+      const handledByInstagram = await handleAdminInstagramRoute({
+        method,
+        url,
+        actor,
+        service: instagramService,
+        connector: instagramConnector,
+        publisher: instagramPublisher,
+        agent: instagramAgent,
+        // Beside the campaign creatives, a folder the live storage already accepts.
+        uploadImage: container.infrastructure.objectStorage
+          ? (body, key) =>
+              container.infrastructure.objectStorage!.uploadPublicObject({
+                key: `campaign-creatives/instagram/${key}`,
+                body,
+                contentType: "image/jpeg",
+              })
+          : null,
+        readJsonBody: () => readJsonBody(request),
+        send: (status, body) => {
+          send(status, body)
+          return true
+        },
+      })
+      if (handledByInstagram) return
 
       const handledByPlatformAdmin = await handlePlatformAdminRoute({
         method,

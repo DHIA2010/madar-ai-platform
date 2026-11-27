@@ -4,6 +4,7 @@ import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
+  Instagram,
   Newspaper,
   Activity,
   BarChart3,
@@ -203,6 +204,12 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       title: "المدونة",
       url: ROUTES.madarAdminBlog,
       icon: <Newspaper />,
+      permission: "crm:manage",
+    },
+    {
+      title: "إنستقرام",
+      url: ROUTES.madarAdminInstagram,
+      icon: <Instagram />,
       permission: "crm:manage",
     },
   ])
