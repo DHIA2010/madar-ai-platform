@@ -217,8 +217,8 @@ import {
   registerInstagramAgent,
 } from "../../instagram/agent"
 import { InstagramGraph } from "../../instagram/graph"
+import { whatsAppMetaApp } from "../../instagram/meta-app"
 import {
-  INSTAGRAM_STATE_PREFIX,
   InstagramConnector,
   InstagramPublisher,
   registerInstagramPublisher,
@@ -1476,21 +1476,20 @@ export function createIdentityApiServer(
     ? new InstagramService(container.infrastructure.database)
     : null
   const instagramGraph = new InstagramGraph()
-  const instagramMetaApp = container.infrastructure.database
-    ? new MetaOAuthService(new MetaOAuthRepository(container.infrastructure.database))
+  // Connected with Madar's own Meta app (the WhatsApp one); see instagram/meta-app.ts.
+  const instagramMetaApp = whatsAppPlatformService
+    ? () => whatsAppMetaApp(whatsAppPlatformService)
     : null
   const instagramConnector =
     instagramService && instagramMetaApp
-      ? new InstagramConnector(instagramService, instagramGraph, () =>
-          instagramMetaApp.ownAppAccess()
-        )
+      ? new InstagramConnector(instagramService, instagramGraph, instagramMetaApp)
       : null
   const instagramPublisher =
     instagramService && instagramMetaApp
       ? new InstagramPublisher(
           instagramService,
           instagramGraph,
-          async () => (await instagramMetaApp.ownAppAccess()).open,
+          async () => (await instagramMetaApp()).open,
           async (text) => {
             await whatsAppLeadAlerts?.notifyTeamText(text)
           }
@@ -2131,16 +2130,8 @@ export function createIdentityApiServer(
         return
       }
 
-      const providerOauthCallbackMatch = url.pathname.match(
-        /^\/v1\/integrations\/([^/]+)\/oauth\/callback$/
-      )
-      // Madar Admin connecting Madar's own Instagram reuses the Meta app's return address; its
-      // state says so (instagram/publisher.ts).
-      if (
-        method === "GET" &&
-        providerOauthCallbackMatch?.[1] === "meta-ads" &&
-        (url.searchParams.get("state") ?? "").startsWith(INSTAGRAM_STATE_PREFIX)
-      ) {
+      // Back from Meta's sign-in when Madar Admin connects Madar's own Instagram.
+      if (method === "GET" && url.pathname === "/v1/public/instagram/oauth/callback") {
         const outcome = instagramConnector
           ? await instagramConnector
               .complete(url.searchParams.get("code"), url.searchParams.get("state") ?? "")
@@ -2157,6 +2148,9 @@ export function createIdentityApiServer(
         return
       }
 
+      const providerOauthCallbackMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/oauth\/callback$/
+      )
       if (method === "GET" && providerOauthCallbackMatch) {
         const provider = container.infrastructure.integrations?.find(providerOauthCallbackMatch[1])
         if (!provider || !provider.oauthCallback) {

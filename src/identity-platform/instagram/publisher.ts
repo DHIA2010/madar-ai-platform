@@ -15,8 +15,7 @@ export const INSTAGRAM_SCOPES = [
   "business_management",
 ]
 
-// The sign-in reuses the Meta app's existing return address; a state starting with this tells
-// that callback the person is connecting Madar's Instagram, not an ad account.
+// Marks the sign-ins Madar Admin starts for Madar's Instagram.
 export const INSTAGRAM_STATE_PREFIX = "ig."
 
 export interface MetaAppAccess {

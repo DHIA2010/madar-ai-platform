@@ -385,28 +385,6 @@ export class MetaOAuthService {
     return resolved
   }
 
-  // For Madar's own Instagram connection (instagram/service.ts): the same Meta app, its sign-in
-  // address and token sealing, without touching the ad-account connections above.
-  async ownAppAccess() {
-    const config = await this.loadResolvedConfig()
-    return {
-      clientId: config.clientId,
-      redirectUri: config.redirectUri,
-      authorizationUrl: config.authorizationUrl,
-      graphApiBaseUrl: config.graphApiBaseUrl,
-      exchangeCode: async (code: string) => {
-        const short = await exchangeAuthorizationCode({ code, config })
-        const long = await exchangeForLongLivedToken({
-          shortLivedToken: short.access_token,
-          config,
-        })
-        return long.access_token
-      },
-      seal: (plainText: string) => encryptSecret(plainText, config.tokenEncryptionKey),
-      open: (sealed: string) => decryptSecret(sealed, config.tokenEncryptionKey),
-    }
-  }
-
   async startAuthorization(
     actor: AuthenticatedActor,
     input: MetaOAuthStartInput = {}
