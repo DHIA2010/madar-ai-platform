@@ -21,6 +21,7 @@ import {
   MapPinned,
   ReceiptText,
   UserCheck,
+  SearchCheck,
   Settings2,
   ShieldCheck,
   ShoppingBag,
@@ -210,6 +211,12 @@ export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebar
       title: "إنستقرام",
       url: ROUTES.madarAdminInstagram,
       icon: <Instagram />,
+      permission: "crm:manage",
+    },
+    {
+      title: "السيو",
+      url: ROUTES.madarAdminSeo,
+      icon: <SearchCheck />,
       permission: "crm:manage",
     },
   ])

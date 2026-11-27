@@ -191,6 +191,7 @@ export const ROUTES = {
   madarAdminCrm: "/madar-admin/crm",
   madarAdminBlog: "/madar-admin/blog",
   madarAdminInstagram: "/madar-admin/instagram",
+  madarAdminSeo: "/madar-admin/seo",
   madarAdminCrmLead: (leadId: string) => `/madar-admin/crm/lead?id=${leadId}`,
   madarAdminCrmTasks: "/madar-admin/crm/tasks",
   madarAdminCrmOutreach: "/madar-admin/crm/outreach",

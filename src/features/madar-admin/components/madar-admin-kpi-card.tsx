@@ -24,6 +24,8 @@ export interface MadarAdminKpi {
   deltaPct: number | null
   icon: LucideIcon
   tone: MadarAdminKpiTone
+  // What the change is measured against; the month before unless the page says otherwise.
+  comparedTo?: string
 }
 
 export function MadarAdminKpiCard({ kpi }: { kpi: MadarAdminKpi }) {
@@ -59,7 +61,7 @@ export function MadarAdminKpiCard({ kpi }: { kpi: MadarAdminKpi }) {
             <TrendIcon className="size-3.5" />
             {kpi.deltaPct !== null ? `${kpi.deltaPct > 0 ? "+" : ""}${kpi.deltaPct}%` : ""}
           </span>
-          <span className="text-muted-foreground">مقارنة بالشهر الماضي</span>
+          <span className="text-muted-foreground">{kpi.comparedTo ?? "مقارنة بالشهر الماضي"}</span>
         </div>
       ) : null}
     </AppCard>

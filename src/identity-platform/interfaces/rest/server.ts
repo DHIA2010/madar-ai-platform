@@ -156,7 +156,12 @@ import { AwsSecretsWhatsAppCredentialsSource } from "../../whatsapp/credentials"
 import { applyWhatsAppStatuses, WhatsAppInvoiceSender } from "../../whatsapp/invoice-sender"
 import { WhatsAppTemplatesService } from "../../whatsapp/templates"
 import { registerLeadAlertsService, WhatsAppLeadAlertsService } from "../../whatsapp/lead-alerts"
-import { verifyWhatsAppSignature, WhatsAppPlatformService } from "../../whatsapp/platform-config"
+import {
+  decryptSecret,
+  encryptSecret,
+  verifyWhatsAppSignature,
+  WhatsAppPlatformService,
+} from "../../whatsapp/platform-config"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
@@ -225,6 +230,9 @@ import {
 } from "../../instagram/publisher"
 import { InstagramService } from "../../instagram/service"
 import { handleAdminInstagramRoute } from "./instagram-routes"
+import { SearchConsoleClient } from "../../seo/search-console"
+import { SeoService } from "../../seo/service"
+import { handleAdminSeoRoute } from "./seo-routes"
 import { AdHistory } from "../../campaigns/ad-history"
 import { CampaignCheckupService, registerCheckupSources } from "../../campaigns/checkup"
 import {
@@ -1516,6 +1524,15 @@ export function createIdentityApiServer(
         )
       : null
   registerInstagramAgent(instagramAgent)
+  // Madar's own Google search numbers (Search Console, read with a service account).
+  const seoService = container.infrastructure.database
+    ? new SeoService(
+        container.infrastructure.database,
+        (key) => new SearchConsoleClient(key),
+        encryptSecret,
+        decryptSecret
+      )
+    : null
   const campaignCheckupService = campaignsPerformanceAggregationService
     ? new CampaignCheckupService(campaignsPerformanceAggregationService, undefined, checkupSources)
     : null
@@ -3510,6 +3527,19 @@ export function createIdentityApiServer(
         },
       })
       if (handledByInstagram) return
+
+      const handledBySeo = await handleAdminSeoRoute({
+        method,
+        url,
+        actor,
+        service: seoService,
+        readJsonBody: () => readJsonBody(request),
+        send: (status, body) => {
+          send(status, body)
+          return true
+        },
+      })
+      if (handledBySeo) return
 
       const handledByPlatformAdmin = await handlePlatformAdminRoute({
         method,
