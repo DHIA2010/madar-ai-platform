@@ -1,6 +1,6 @@
 # MADAR
 
-Madar1 (by Madar Business Solutions) is a Next.js 16 application: one Arabic-first system for
+Madar One (by Madar Business Solutions) is a Next.js 16 application: one Arabic-first system for
 cashier, bookings, online stores, ad campaigns, inventory, accounting and reports.
 
 This repository is deployment-ready from an engineering perspective and includes:

@@ -2,7 +2,7 @@
 
 ## What MADAR Is
 
-Madar1 (by Madar Business Solutions) is an all-in-one business platform: cashier, bookings, online stores, ad campaigns, inventory, accounting and reports in one workspace. The current codebase provides the frontend foundation for this platform: dashboards, data views, forms, operational screens, and a reusable UI framework.
+Madar One (by Madar Business Solutions) is an all-in-one business platform: cashier, bookings, online stores, ad campaigns, inventory, accounting and reports in one workspace. The current codebase provides the frontend foundation for this platform: dashboards, data views, forms, operational screens, and a reusable UI framework.
 
 ## Problem It Solves
 

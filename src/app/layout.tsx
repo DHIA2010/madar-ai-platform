@@ -24,15 +24,15 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://madar.my"),
 
   title: {
-    default: "MADAR | Madar1",
+    default: "MADAR | Madar One",
     template: "%s | MADAR",
   },
 
   description:
-    "Madar1 brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
+    "Madar One brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
 
   keywords: [
-    "Madar1",
+    "Madar One",
     "Point of Sale",
     "ZATCA E-invoicing",
     "Bookings",
@@ -63,24 +63,24 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://madar.my/",
     siteName: "MADAR",
-    title: "MADAR | Madar1",
+    title: "MADAR | Madar One",
     description:
-      "Madar1 brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
+      "Madar One brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
     images: [
       {
         url: "/images/madar-logo.png",
         width: 778,
         height: 325,
-        alt: "MADAR | Madar1",
+        alt: "MADAR | Madar One",
       },
     ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "MADAR | Madar1",
+    title: "MADAR | Madar One",
     description:
-      "Madar1 brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
+      "Madar One brings your cashier, bookings, online stores, ad campaigns, inventory, accounting and reports into one Arabic-first system.",
     images: ["/images/madar-logo.png"],
     creator: "@MADAR",
   },
