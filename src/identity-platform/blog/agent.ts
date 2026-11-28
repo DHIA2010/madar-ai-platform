@@ -24,7 +24,9 @@ import { WHATS_NEW, type WhatsNewEntry } from "./whats-new"
 //
 // Its goal is organic leads: it leans towards topics Saudi business owners search for, writes
 // for Google (title, description, headings, FAQ), points every article at the right Madar app,
-// and looks at which earlier articles brought sign-ups.
+// and looks at which earlier articles brought sign-ups. With Search Console connected it aims at
+// ranking first: each week it targets followed searches Madar isn't top-3 for, and searches
+// where Madar already shows up in positions 4-20.
 
 export interface BlogTopic {
   kind: BlogPostKind
@@ -47,16 +49,30 @@ export interface WrittenArticle {
   faq: Array<{ question: string; answer: string }>
 }
 
+// Where madar.my stands in Google (Search Console, Saudi Arabia, last 28 days).
+export interface BlogSearchSignals {
+  averagePosition: number
+  // The searches Madar Admin follows; position null = Madar doesn't show up for it yet.
+  followed: Array<{ keyword: string; position: number | null; impressions: number }>
+  // Searches where Madar already shows up but isn't in the top 3 -- the closest wins.
+  opportunities: Array<{ keyword: string; position: number; impressions: number; clicks: number }>
+  // The site's pages Google shows most, with their position.
+  pages: Array<{ path: string; position: number; impressions: number }>
+}
+
 export interface BlogPlanInput {
   count: number
   today: string
   existing: Array<{ title: string; category: string }>
   whatsNew: WhatsNewEntry[]
   topPerformers: Array<{ title: string; views: number; leads: number; signups: number }>
+  search: BlogSearchSignals | null
 }
 
 export interface BlogWriteInput {
   topic: BlogTopic
+  // Madar's current Google position for the topic's search, when it shows up at all.
+  currentPosition: number | null
   today: string
   prices: string
   features: WhatsNewEntry[]
@@ -86,7 +102,9 @@ export class BlogAgent {
     private readonly prices: () => Promise<BlogPrices>,
     private readonly notify: (text: string) => Promise<void>,
     private readonly now: () => Date = () => new Date(),
-    private readonly adminUrl = "https://app.madar.my/madar-admin/blog"
+    private readonly adminUrl = "https://app.madar.my/madar-admin/blog",
+    // Search Console numbers, so the week's topics aim at ranking first (null without them).
+    private readonly search: () => Promise<BlogSearchSignals | null> = async () => null
   ) {}
 
   // Called every hour (server.ts). Writes once per week: on Sunday from 8:00 Riyadh, the first
@@ -232,9 +250,16 @@ export class BlogAgent {
       ...STATIC_BLOG_POSTS.map((post) => ({ title: post.title, category: post.category })),
       ...live.map((post) => ({ title: post.title, category: post.category })),
     ]
+    const search = await this.search().catch(() => null)
     const topics = (
-      await this.writer.plan({ count, today, existing, whatsNew, topPerformers })
+      await this.writer.plan({ count, today, existing, whatsNew, topPerformers, search })
     ).slice(0, count)
+    const positionOf = (keyword: string) => {
+      const wanted = keyword.trim().toLowerCase()
+      const followed = search?.followed.find((entry) => entry.keyword === wanted)
+      if (followed) return followed.position
+      return search?.opportunities.find((entry) => entry.keyword === wanted)?.position ?? null
+    }
 
     const prices = await this.prices()
     const titles: string[] = []
@@ -242,6 +267,7 @@ export class BlogAgent {
       const features = WHATS_NEW.filter((entry) => topic.featureKeys.includes(entry.key))
       const article = await this.writer.write({
         topic,
+        currentPosition: positionOf(topic.targetKeyword),
         today,
         prices: prices.text,
         features,
@@ -375,6 +401,19 @@ export function normalizeBlocks(raw: RawBlock[]): BlogBlock[] {
 const CATEGORY_HELP = `الأقسام (category): campaigns = الحملات الإعلانية، invoicing = الفوترة والضريبة، ecommerce = التجارة الإلكترونية، inventory = المخزون والفروع، pos = الكاشير والمبيعات، booking = الحجوزات والعملاء.
 التطبيق الذي توجّه له أزرار المقال (ctaApp): pos, ecommerce, campaigns, invoicing, inventory, booking, loyalty, accounting, complete (مدار الكامل).`
 
+// Madar's Google numbers as the planner reads them.
+export function searchSection(search: BlogSearchSignals | null): string {
+  if (!search) return "أرقام جوجل (Search Console): غير متوفرة بعد."
+  const position = (value: number | null) => (value ? `المركز ${value.toFixed(1)}` : "لا يظهر بعد")
+  return `أرقام جوجل في السعودية آخر 28 يوماً (Search Console) — متوسط ترتيب مدار ${search.averagePosition ? search.averagePosition.toFixed(1) : "—"}:
+العبارات المتابَعة (الهدف: المركز 1 لكل منها):
+${search.followed.length ? search.followed.map((entry) => `- ${entry.keyword}: ${position(entry.position)}، ${entry.impressions} ظهور`).join("\n") : "- لا توجد عبارات متابَعة بعد"}
+فرص قريبة (يظهر فيها مدار لكن ليس ضمن أول 3):
+${search.opportunities.length ? search.opportunities.map((entry) => `- ${entry.keyword}: ${position(entry.position)}، ${entry.impressions} ظهور، ${entry.clicks} نقرة`).join("\n") : "- لا شيء بعد"}
+أكثر صفحات الموقع ظهوراً:
+${search.pages.length ? search.pages.map((entry) => `- ${entry.path}: ${position(entry.position)}، ${entry.impressions} ظهور`).join("\n") : "- لا شيء بعد"}`
+}
+
 export class ClaudeBlogWriter implements BlogWriter {
   private readonly client: Anthropic
 
@@ -389,7 +428,7 @@ export class ClaudeBlogWriter implements BlogWriter {
     const prompt = `${MADAR_PRODUCT_BRIEF}
 
 ---
-أنت مسؤول مدونة مدار (madar.my/blog). هدفك الأول: عملاء محتملون من بحث جوجل (تسجيل في التجربة المجانية أو طلب تواصل)، وليس الزيارات فقط.
+أنت مسؤول مدونة مدار (madar.my/blog). هدفك: أن يكون مدار **الأول في بحث جوجل** في السعودية لعبارات البحث التي تهم أصحاب المنشآت، لأن الترتيب الأول يجلب عملاء محتملين (تسجيل في التجربة المجانية أو طلب تواصل)، وليس الزيارات فقط.
 اليوم ${input.today}. خطّط ${input.count} مقالات لهذا الأسبوع.
 
 القواعد:
@@ -398,6 +437,13 @@ export class ClaudeBlogWriter implements BlogWriter {
 - targetKeyword: عبارة البحث الرئيسية بالعربي كما يكتبها الناس.
 - لا تكرر موضوعاً موجوداً (القائمة أدناه)، ونوّع الأقسام خلال الأسبوع.
 - استفد من المقالات الأعلى نتائج: اكتب في مواضيع قريبة منها إن كانت تجلب تسجيلات.
+
+خطة الوصول للمركز الأول (من أرقام جوجل أدناه):
+- مقال واحد على الأقل هذا الأسبوع يستهدف إحدى «العبارات المتابَعة» التي ليس مدار فيها ضمن أول 3 (ابدأ بالأهم تجارياً: كاشير، محاسبة، فاتورة إلكترونية، مخزون، حجوزات). اجعل targetKeyword هي العبارة نفسها حرفياً.
+- مقال على الأقل يستهدف «فرصة قريبة»: عبارة يظهر فيها مدار في المراكز 4–20 ولها ظهور؛ مقال قوي ومركّز عليها يرفعها للأعلى.
+- إن كان لدينا مقال يستهدف العبارة نفسها، فاكتب مقالاً داعماً بزاوية مختلفة (سؤال فرعي يبحث عنه الناس حولها) بدل التكرار، ليقوّي الموضوع كله في جوجل.
+- عبارة بحث واحدة رئيسية لكل مقال، ولا تستهدف عبارتين متطابقتين في الأسبوع نفسه.
+- إذا لم تتوفر أرقام جوجل بعد، فاختر عبارات البحث التجارية الأساسية لتطبيقات مدار.
 ${CATEGORY_HELP}
 
 المقالات الموجودة:
@@ -407,7 +453,9 @@ ${input.existing.map((post) => `- [${post.category}] ${post.title}`).join("\n")}
 ${input.whatsNew.length ? input.whatsNew.map((entry) => `- ${entry.key} (${entry.date}، ${entry.app}): ${entry.title} — ${entry.summary}`).join("\n") : "- لا شيء"}
 
 المقالات الأعلى نتائج آخر 30 يوماً:
-${input.topPerformers.length ? input.topPerformers.map((entry) => `- ${entry.title}: ${entry.views} مشاهدة، ${entry.leads} طلب تواصل، ${entry.signups} تسجيل`).join("\n") : "- لا توجد بيانات بعد"}`
+${input.topPerformers.length ? input.topPerformers.map((entry) => `- ${entry.title}: ${entry.views} مشاهدة، ${entry.leads} طلب تواصل، ${entry.signups} تسجيل`).join("\n") : "- لا توجد بيانات بعد"}
+
+${searchSection(input.search)}`
 
     const response = await this.client.beta.messages.parse({
       model: this.model,
@@ -435,7 +483,7 @@ ${input.topPerformers.length ? input.topPerformers.map((entry) => `- ${entry.tit
 اكتب مقالاً لمدونة مدار.
 - النوع: ${topic.kind === "news" ? "خبر عن ميزة جديدة (جديد في مدار)" : "دليل عملي يجيب عن سؤال يبحث عنه الناس"}
 - العنوان المقترح: ${topic.title}
-- عبارة البحث الرئيسية: ${topic.targetKeyword}
+- عبارة البحث الرئيسية: ${topic.targetKeyword} — الهدف أن يتصدر هذا المقال نتائج جوجل لها (${input.currentPosition ? `مدار الآن في المركز ${input.currentPosition.toFixed(1)}` : "مدار لا يظهر لها بعد"}).
 - الزاوية: ${topic.angle}
 - التطبيق الذي يقود له المقال: ${topic.ctaApp}
 اليوم ${input.today}.
@@ -453,6 +501,7 @@ ${input.prices}
 - excerpt: جملتان تشرحان ما سيستفيده القارئ.
 - keywords: 4 إلى 8 عبارات بحث قريبة.
 - body: ابدأ بفقرة تدخل في المشكلة مباشرة، ثم 4 إلى 6 عناوين h2 واضحة (بعضها أسئلة كما يبحث الناس)، مع قوائم ونصيحة callout واحدة على الأقل. استخدم formula فقط لمعادلة حسابية حقيقية. اذكر كيف يحل مدار المشكلة بشكل طبيعي في قسم واحد قرب النهاية دون مبالغة.
+- ليتصدر المقال: ضع عبارة البحث في أول العنوان، وفي الجملة الأولى من المقال، وفي عنوان h2 واحد على الأقل، وفي سؤال من الأسئلة الشائعة. أجب عن سؤال الباحث مباشرة في أول فقرة، ثم غطِّ الموضوع أعمق وأشمل من أي صفحة منافسة (خطوات، أمثلة سعودية، أرقام صحيحة، أخطاء شائعة)، دون حشو أو تكرار للعبارة.
 - لا تضع روابط ولا أزرار في النص؛ الصفحة تضيف أزرار التسجيل تلقائياً.
 - faq: 3 إلى 5 أسئلة يبحث عنها الناس مع إجابات قصيرة (جملتان أو ثلاث).
 - كل حقل في الكتل موجود دائماً: اترك غير المستخدم فارغاً ("" أو [])، وtone = "tip" إذا لم تكن الكتلة callout.

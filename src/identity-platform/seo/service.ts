@@ -342,4 +342,45 @@ export class SeoService {
     if (this.cache.size > 100) this.cache.delete(this.cache.keys().next().value as string)
     return report
   }
+
+  // What the blog agent plans with: Saudi Arabia, the last 28 days. Null when not connected.
+  async searchSignals(): Promise<{
+    averagePosition: number
+    followed: Array<{ keyword: string; position: number | null; impressions: number }>
+    opportunities: Array<{ keyword: string; position: number; impressions: number; clicks: number }>
+    pages: Array<{ path: string; position: number; impressions: number }>
+  } | null> {
+    const report = await this.report({ country: "sau" })
+    if (!report) return null
+    const path = (url: string) => {
+      try {
+        return decodeURIComponent(new URL(url).pathname)
+      } catch {
+        return url
+      }
+    }
+    return {
+      averagePosition: report.totals.position,
+      followed: report.tracked.map((entry) => ({
+        keyword: entry.keyword,
+        position: entry.current?.position ?? null,
+        impressions: entry.current?.impressions ?? 0,
+      })),
+      opportunities: report.queries
+        .filter((row) => row.position > 3 && row.position <= 30)
+        .sort((a, b) => b.impressions - a.impressions)
+        .slice(0, 15)
+        .map((row) => ({
+          keyword: row.key,
+          position: row.position,
+          impressions: row.impressions,
+          clicks: row.clicks,
+        })),
+      pages: report.pages.slice(0, 10).map((row) => ({
+        path: path(row.key),
+        position: row.position,
+        impressions: row.impressions,
+      })),
+    }
+  }
 }

@@ -1457,6 +1457,15 @@ export function createIdentityApiServer(
   registerCheckupSources(checkupSources)
   registerAdChangeTracker(checkupSources?.tracker ?? null)
   // Madar's blog, and the agent that writes its weekly drafts (needs the AI key).
+  // Madar's own Google search numbers (Search Console, read with a service account).
+  const seoService = container.infrastructure.database
+    ? new SeoService(
+        container.infrastructure.database,
+        (key) => new SearchConsoleClient(key),
+        encryptSecret,
+        decryptSecret
+      )
+    : null
   const blogService = container.infrastructure.database
     ? new BlogService(container.infrastructure.database)
     : null
@@ -1475,7 +1484,10 @@ export function createIdentityApiServer(
               : formatPrices([]),
           async (text) => {
             await whatsAppLeadAlerts?.notifyTeamText(text)
-          }
+          },
+          undefined,
+          undefined,
+          async () => (seoService ? seoService.searchSignals() : null)
         )
       : null
   registerBlogAgent(blogAgent)
@@ -1524,15 +1536,6 @@ export function createIdentityApiServer(
         )
       : null
   registerInstagramAgent(instagramAgent)
-  // Madar's own Google search numbers (Search Console, read with a service account).
-  const seoService = container.infrastructure.database
-    ? new SeoService(
-        container.infrastructure.database,
-        (key) => new SearchConsoleClient(key),
-        encryptSecret,
-        decryptSecret
-      )
-    : null
   const campaignCheckupService = campaignsPerformanceAggregationService
     ? new CampaignCheckupService(campaignsPerformanceAggregationService, undefined, checkupSources)
     : null

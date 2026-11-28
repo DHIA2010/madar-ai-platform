@@ -10,6 +10,7 @@ import {
   type BlogWriter,
   formatPrices,
   normalizeBlocks,
+  searchSection,
 } from "../blog/agent"
 import { blocksToText, contentWarnings, slugify, textToBlocks } from "../blog/content"
 import { nextPublishSlots, riyadhWeekStart } from "../blog/schedule"
@@ -119,6 +120,39 @@ describe("blog agent and schedule", () => {
 
     // Nothing is public before approval.
     expect(await blog.listPublished()).toEqual([])
+  })
+
+  it("plans with Madar's Google positions so articles aim at ranking first", async () => {
+    const search = {
+      averagePosition: 26.3,
+      followed: [
+        { keyword: "topic 2", position: 14.2, impressions: 40 },
+        { keyword: "برنامج محاسبة", position: null, impressions: 0 },
+      ],
+      opportunities: [{ keyword: "نظام نقاط بيع", position: 8.4, impressions: 120, clicks: 3 }],
+      pages: [{ path: "/", position: 5.1, impressions: 300 }],
+    }
+    const ranked = new BlogAgent(
+      database,
+      blog,
+      writer,
+      async () => ({ text: "", values: [] }),
+      async () => undefined,
+      () => clock,
+      undefined,
+      async () => search
+    )
+    await ranked.runNow(2)
+    expect(writer.plans[0].search).toEqual(search)
+    // The writer is told where Madar stands for the article's search today.
+    expect(writer.writes.map((input) => input.currentPosition)).toEqual([null, 14.2])
+    const text = searchSection(search)
+    expect(text).toContain("برنامج محاسبة: لا يظهر بعد")
+    expect(text).toContain("نظام نقاط بيع: المركز 8.4")
+    // Without Search Console the agent still plans.
+    expect(searchSection(null)).toContain("غير متوفرة")
+    await agent.runNow(1)
+    expect(writer.plans[1].search).toBeNull()
   })
 
   it("doesn't write on other days, before 8:00, or when switched off", async () => {
