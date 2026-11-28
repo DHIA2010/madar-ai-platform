@@ -1,7 +1,7 @@
 import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 
-export const MARKETING_SITE_URL = "https://madar.my"
+export const MARKETING_SITE_URL = "https://www.madar.my"
 export const MADAR_APP_URL = "https://app.madar.my"
 export const MADAR_CONTACT_EMAIL = "support@madar.my"
 // Madar's support WhatsApp number, in the form wa.me links take (country code, no + or zeros).

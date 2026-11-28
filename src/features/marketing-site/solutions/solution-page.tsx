@@ -83,7 +83,7 @@ function Visual({ page }: { page: SolutionPage }) {
 }
 
 function structuredData(page: SolutionPage) {
-  const url = `${MARKETING_SITE_URL}${ROUTES.solution(page.slug)}`
+  const url = `${MARKETING_SITE_URL}${ROUTES.solution(page.slug)}/`
   return [
     {
       "@context": "https://schema.org",
@@ -118,7 +118,7 @@ function structuredData(page: SolutionPage) {
           "@type": "ListItem",
           position: 2,
           name: "الحلول",
-          item: `${MARKETING_SITE_URL}${ROUTES.solutions}`,
+          item: `${MARKETING_SITE_URL}${ROUTES.solutions}/`,
         },
         { "@type": "ListItem", position: 3, name: page.keyword, item: url },
       ],

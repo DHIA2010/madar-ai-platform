@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: "Terms of Service",
   description:
     "MADAR Terms of Service for the marketing intelligence platform and its integrations.",
-  alternates: { canonical: "https://madar.my/terms/en" },
+  alternates: { canonical: "https://www.madar.my/terms/en/" },
 }
 
 const EFFECTIVE_DATE = "July 10, 2026"

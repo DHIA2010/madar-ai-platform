@@ -9,8 +9,8 @@ export const metadata: Metadata = {
   title: { absolute: "سياسة الخصوصية | مدار" },
   description: "سياسة الخصوصية لمنصة مدار لمستخدمي المنصة والتكاملات الإعلانية المرتبطة بها.",
   alternates: {
-    canonical: "https://madar.my/privacy",
-    languages: { ar: "https://madar.my/privacy", en: "https://madar.my/privacy/en" },
+    canonical: "https://www.madar.my/privacy/",
+    languages: { ar: "https://www.madar.my/privacy", en: "https://www.madar.my/privacy/en" },
   },
 }
 

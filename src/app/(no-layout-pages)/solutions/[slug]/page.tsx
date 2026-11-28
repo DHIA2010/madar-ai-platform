@@ -25,7 +25,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const page = findSolutionPage((await params).slug)
   if (!page) return {}
-  const url = `${MARKETING_SITE_URL}${ROUTES.solution(page.slug)}`
+  const url = `${MARKETING_SITE_URL}${ROUTES.solution(page.slug)}/`
   return {
     title: { absolute: page.seoTitle },
     description: page.seoDescription,

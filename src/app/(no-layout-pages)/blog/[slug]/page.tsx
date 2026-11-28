@@ -21,7 +21,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const post = findBlogPost(await loadBlogPosts(), (await params).slug)
   if (!post) return {}
-  const url = `https://madar.my/blog/${post.slug}`
+  const url = `https://www.madar.my/blog/${post.slug}/`
   const title = post.seoTitle || post.title
   const description = post.seoDescription || post.excerpt
   return {

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: { absolute: "مدونة مدار | نصائح في البيع والتسويق والمخزون" },
   description:
     "مقالات عملية للتاجر السعودي في الكاشير والفوترة الإلكترونية والتسويق والإعلانات وإدارة المخزون.",
-  alternates: { canonical: "https://madar.my/blog" },
+  alternates: { canonical: "https://www.madar.my/blog/" },
 }
 
 export default async function Page() {

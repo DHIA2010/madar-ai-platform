@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: { absolute: "حلول مدار: كاشير وفواتير ومحاسبة ومخزون وحجوزات | مدار" },
   description:
     "حلول مدار للمنشآت في السعودية: برنامج كاشير، فاتورة إلكترونية، برنامج محاسبة، مخزون، حجوزات، ولاء، ربط سلة وزد، وتحليل الحملات الإعلانية في نظام واحد.",
-  alternates: { canonical: `${MARKETING_SITE_URL}${ROUTES.solutions}` },
+  alternates: { canonical: `${MARKETING_SITE_URL}${ROUTES.solutions}/` },
 }
 
 export default function Page() {

@@ -24,7 +24,7 @@ export async function generateMetadata({
   return {
     title: { absolute: `${category.label} | مدونة مدار` },
     description: category.description,
-    alternates: { canonical: `https://madar.my/blog/category/${category.slug}` },
+    alternates: { canonical: `https://www.madar.my/blog/category/${category.slug}/` },
   }
 }
 

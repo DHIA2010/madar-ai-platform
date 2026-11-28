@@ -7,76 +7,80 @@ import { SOLUTION_PAGES } from "@/features/marketing-site/solutions/solution-pag
 // Refreshed every few minutes, so a newly published article is listed for Google right away.
 export const revalidate = 300
 
+// The site serves every page with a trailing slash; list the final addresses (no redirects).
+const withSlash = (url: string) => (url.endsWith("/") ? url : `${url}/`)
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date()
   const posts = await loadBlogPosts()
 
-  return [
+  const entries: MetadataRoute.Sitemap = [
     {
-      url: "https://madar.my/",
+      url: "https://www.madar.my/",
       lastModified,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: "https://madar.my/solutions",
+      url: "https://www.madar.my/solutions",
       lastModified,
       changeFrequency: "monthly",
       priority: 0.8,
     },
     ...SOLUTION_PAGES.map((page) => ({
-      url: `https://madar.my/solutions/${page.slug}`,
+      url: `https://www.madar.my/solutions/${page.slug}`,
       lastModified,
       changeFrequency: "monthly" as const,
       priority: 0.9,
     })),
     {
-      url: "https://madar.my/blog",
+      url: "https://www.madar.my/blog",
       lastModified,
       changeFrequency: "weekly",
       priority: 0.7,
     },
     ...BLOG_CATEGORIES.map((category) => ({
-      url: `https://madar.my/blog/category/${category.slug}`,
+      url: `https://www.madar.my/blog/category/${category.slug}`,
       lastModified,
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
     ...posts.map((post) => ({
-      url: `https://madar.my/blog/${post.slug}`,
+      url: `https://www.madar.my/blog/${post.slug}`,
       lastModified: new Date(post.publishedAt),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
     {
-      url: "https://madar.my/contact-sales",
+      url: "https://www.madar.my/contact-sales",
       lastModified,
       changeFrequency: "yearly",
       priority: 0.5,
     },
     {
-      url: "https://madar.my/privacy",
+      url: "https://www.madar.my/privacy",
       lastModified,
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
-      url: "https://madar.my/terms",
+      url: "https://www.madar.my/terms",
       lastModified,
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
-      url: "https://madar.my/privacy/en",
+      url: "https://www.madar.my/privacy/en",
       lastModified,
       changeFrequency: "yearly",
       priority: 0.2,
     },
     {
-      url: "https://madar.my/terms/en",
+      url: "https://www.madar.my/terms/en",
       lastModified,
       changeFrequency: "yearly",
       priority: 0.2,
     },
   ]
+  return entries.map((entry) => ({ ...entry, url: withSlash(entry.url) }))
 }

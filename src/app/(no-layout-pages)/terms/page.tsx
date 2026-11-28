@@ -9,8 +9,8 @@ export const metadata: Metadata = {
   title: { absolute: "شروط الاستخدام | مدار" },
   description: "شروط استخدام منصة مدار لتحليلات التسويق وتكاملاتها.",
   alternates: {
-    canonical: "https://madar.my/terms",
-    languages: { ar: "https://madar.my/terms", en: "https://madar.my/terms/en" },
+    canonical: "https://www.madar.my/terms/",
+    languages: { ar: "https://www.madar.my/terms", en: "https://www.madar.my/terms/en" },
   },
 }
 

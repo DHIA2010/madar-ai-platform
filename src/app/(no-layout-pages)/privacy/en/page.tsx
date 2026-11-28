@@ -7,7 +7,7 @@ import { MADAR_CONTACT_EMAIL } from "@/features/marketing-site/marketing-constan
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "MADAR Privacy Policy for platform users and connected advertising integrations.",
-  alternates: { canonical: "https://madar.my/privacy/en" },
+  alternates: { canonical: "https://www.madar.my/privacy/en/" },
 }
 
 const EFFECTIVE_DATE = "November 18, 2026"

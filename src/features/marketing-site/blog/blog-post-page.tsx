@@ -126,7 +126,7 @@ function middleHeadingIndex(body: BlogBlock[]) {
 
 // What Google reads about the article: an Article, and its FAQ when it has one.
 function structuredData(post: BlogPost) {
-  const url = `https://madar.my/blog/${post.slug}`
+  const url = `https://www.madar.my/blog/${post.slug}/`
   const article = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -137,13 +137,13 @@ function structuredData(post: BlogPost) {
     inLanguage: "ar",
     mainEntityOfPage: url,
     url,
-    image: "https://madar.my/images/madar-logo.png",
+    image: "https://www.madar.my/images/madar-logo.png",
     keywords: post.keywords?.join("، ") || undefined,
-    author: { "@type": "Organization", name: "فريق مدار", url: "https://madar.my" },
+    author: { "@type": "Organization", name: "فريق مدار", url: "https://www.madar.my" },
     publisher: {
       "@type": "Organization",
       name: "مدار للحلول التجارية",
-      logo: { "@type": "ImageObject", url: "https://madar.my/images/madar-logo.png" },
+      logo: { "@type": "ImageObject", url: "https://www.madar.my/images/madar-logo.png" },
     },
   }
   const faq = post.faq?.length

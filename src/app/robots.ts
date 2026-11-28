@@ -22,6 +22,6 @@ export default function robots(): MetadataRoute.Robots {
         "/workspace",
       ],
     },
-    sitemap: "https://madar.my/sitemap.xml",
+    sitemap: "https://www.madar.my/sitemap.xml",
   }
 }

@@ -23,10 +23,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { absolute: title },
     description,
-    alternates: { canonical: "https://madar.my/" },
+    alternates: { canonical: "https://www.madar.my/" },
     openGraph: {
       type: "website",
-      url: "https://madar.my/",
+      url: "https://www.madar.my/",
       siteName: "مدار",
       locale: "ar_SA",
       title,

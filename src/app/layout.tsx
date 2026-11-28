@@ -21,7 +21,7 @@ import { GoogleTagManagerNoScript, GoogleTagManagerScript } from "@/components/g
 
 /* SEO Metadata */
 export const metadata: Metadata = {
-  metadataBase: new URL("https://madar.my"),
+  metadataBase: new URL("https://www.madar.my"),
 
   title: {
     default: "MADAR | Madar One",
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   authors: [
     {
       name: "MADAR",
-      url: "https://madar.my/",
+      url: "https://www.madar.my/",
     },
   ],
 
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://madar.my/",
+    url: "https://www.madar.my/",
     siteName: "MADAR",
     title: "MADAR | Madar One",
     description:
