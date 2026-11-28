@@ -6166,8 +6166,42 @@
           "children": {
             "main": "Cashier",
             "invoices": "Invoices",
-            "shifts": "Shifts"
+            "shifts": "Shifts",
+            "laundry": "Laundry",
+            "promotions": "Promotions",
+            "devices": "Device settings",
+            "cashier": "Cashier settings",
+            "payments": "Payment methods",
+            "zatca": "E-invoicing (ZATCA)"
           }
+        },
+        "invoicing": {
+          "label": "Invoicing & quotes",
+          "pages": ["Quotations", "Sales invoices (B2B)"]
+        },
+        "booking": {
+          "label": "Bookings",
+          "pages": ["Bookings", "Booking page & services"]
+        },
+        "loyalty": {
+          "label": "Loyalty",
+          "pages": ["Loyalty program", "Loyalty cards & notifications"]
+        },
+        "accounting": {
+          "label": "Accounting",
+          "pages": ["Journal entries & financial statements"]
+        },
+        "suppliers": {
+          "label": "Suppliers",
+          "pages": ["Suppliers & vouchers"]
+        },
+        "purchases": {
+          "label": "Purchases",
+          "pages": ["Purchase orders & returns"]
+        },
+        "expenses": {
+          "label": "Expenses",
+          "pages": ["Expenses & categories"]
         },
         "customers": {
           "label": "Customers",
@@ -6218,10 +6252,6 @@
           "pages": ["General settings"],
           "children": {
             "general": "General settings",
-            "devices": "Device settings",
-            "cashier": "Cashier settings",
-            "payments": "Payment methods",
-            "zatca": "E-invoicing (ZATCA)",
             "workspace": "Workspace management",
             "tax": "Taxes"
           }

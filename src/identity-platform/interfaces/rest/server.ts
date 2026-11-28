@@ -3839,6 +3839,21 @@ export function createIdentityApiServer(
       // frontend opens the App Store install URL in a new tab -- see
       // SallaOAuthService.createConnectIntent's own comment for why this exists at all (Salla's
       // install URL has no query-param passthrough to correlate any other way).
+      // Connecting, pausing, resuming, retrying, scheduling or removing an integration changes the
+      // workspace's connections: it needs a connections permission beyond view.
+      if (
+        url.pathname.startsWith("/v1/integrations/") &&
+        method !== "GET" &&
+        ![
+          "connections:create",
+          "connections:edit",
+          "connections:delete",
+          "connections:manage",
+        ].some((permission) => actor.modulePermissions.includes(permission))
+      ) {
+        throw ERRORS.forbidden()
+      }
+
       if (method === "POST" && url.pathname === "/v1/integrations/salla/connect-intents") {
         if (!sallaOAuthMarketplaceService) {
           return send(503, {
@@ -8102,6 +8117,31 @@ export function createIdentityApiServer(
       const NATIVE_CUSTOMER_ID_PATTERN =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+      // Customers are read by the Customers page and also by the apps that pick a customer
+      // (cashier, quotes/invoices, bookings, loyalty) -- any of those permissions may read; adding
+      // one is allowed from those same screens.
+      const holdsAny = (permissions: string[]) =>
+        permissions.some((permission) => actor.modulePermissions.includes(permission))
+      const CUSTOMER_READERS = [
+        "customers:view",
+        "pos:view",
+        "invoicing:view",
+        "booking:view",
+        "loyalty:view",
+        "orders:view",
+      ]
+      const CUSTOMER_CREATORS = [
+        "customers:create",
+        "pos:view",
+        "invoicing:manage",
+        "booking:manage",
+      ]
+      const isCustomersPath =
+        url.pathname === "/v1/customers" || url.pathname.startsWith("/v1/customers/")
+      if (isCustomersPath && method === "GET" && !holdsAny(CUSTOMER_READERS)) {
+        throw ERRORS.forbidden()
+      }
+
       if (url.pathname === "/v1/customers") {
         if (method === "GET") {
           if (!customersAggregationService) {
@@ -8127,6 +8167,7 @@ export function createIdentityApiServer(
         }
 
         if (method === "POST") {
+          if (!holdsAny(CUSTOMER_CREATORS)) throw ERRORS.forbidden()
           if (!nativeCustomersService) {
             return send(503, {
               code: "CUSTOMERS_UNAVAILABLE",
@@ -8164,6 +8205,7 @@ export function createIdentityApiServer(
       // outright); see NativeCustomersService.bulkImport for why the whole file never fails
       // over one bad row.
       if (method === "POST" && url.pathname === "/v1/customers/bulk-import") {
+        if (!actor.modulePermissions.includes("customers:import")) throw ERRORS.forbidden()
         if (!nativeCustomersService) {
           return send(503, {
             code: "CUSTOMERS_UNAVAILABLE",
@@ -8342,6 +8384,16 @@ export function createIdentityApiServer(
           }
         )
         return send(200, statement)
+      }
+
+      // Orders feed the Orders page and the dashboard/reports summaries.
+      const ORDER_READERS = ["orders:view", "dashboard:view", "reports:view"]
+      if (
+        (url.pathname === "/v1/orders" || url.pathname.startsWith("/v1/orders/")) &&
+        method === "GET" &&
+        !ORDER_READERS.some((permission) => actor.modulePermissions.includes(permission))
+      ) {
+        throw ERRORS.forbidden()
       }
 
       if (method === "GET" && url.pathname === "/v1/orders/by-store") {

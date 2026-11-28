@@ -32,6 +32,13 @@ export const IAM_PERMISSION_GROUPS: IamPermissionGroup[] = [
   },
   { module: "orders", label: "Orders", actions: ["view", "export", "manage"] },
   { module: "pos", label: "POS", actions: ["view", "manage"] },
+  { module: "invoicing", label: "Invoicing", actions: ["view", "manage"] },
+  { module: "booking", label: "Booking", actions: ["view", "manage"] },
+  { module: "loyalty", label: "Loyalty", actions: ["view", "manage"] },
+  { module: "accounting", label: "Accounting", actions: ["view", "manage"] },
+  { module: "suppliers", label: "Suppliers", actions: ["view", "manage"] },
+  { module: "purchases", label: "Purchases", actions: ["view", "manage"] },
+  { module: "expenses", label: "Expenses", actions: ["view", "manage"] },
   {
     module: "customers",
     label: "Customers",
