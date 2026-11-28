@@ -223,6 +223,8 @@ export const ROUTES = {
   blog: "/blog",
   blogPost: (slug: string) => `/blog/${slug}`,
   blogCategory: (category: string) => `/blog/category/${category}`,
+  solutions: "/solutions",
+  solution: (slug: string) => `/solutions/${slug}`,
   privacy: "/privacy",
   privacyEnglish: "/privacy/en",
   terms: "/terms",

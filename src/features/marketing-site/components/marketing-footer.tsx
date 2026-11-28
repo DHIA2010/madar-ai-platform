@@ -10,17 +10,9 @@ import {
   MADAR_REGISTER_URL,
   MARKETING_NAV_LINKS,
 } from "../marketing-constants"
+import { SOLUTION_PAGES } from "../solutions/solution-pages"
 
 const CURRENT_YEAR = new Date().getFullYear()
-
-const SOLUTIONS = [
-  "نقطة البيع",
-  "المتاجر الإلكترونية",
-  "الحملات الإعلانية",
-  "الموردون والمشتريات",
-  "المخزون والفروع",
-  "المساعد الذكي",
-]
 
 const LINK = "text-[15px] text-slate-600 transition-colors hover:text-[#0b1738]"
 
@@ -39,13 +31,18 @@ export function MarketingFooter() {
           <div>
             <h3 className="text-[15px] font-extrabold text-[#0b1738]">الحلول</h3>
             <ul className="mt-5 space-y-3">
-              {SOLUTIONS.map((solution) => (
-                <li key={solution}>
-                  <a href={ROUTES.marketing.product} className={LINK}>
-                    {solution}
-                  </a>
+              {SOLUTION_PAGES.map((page) => (
+                <li key={page.slug}>
+                  <Link href={ROUTES.solution(page.slug)} className={LINK}>
+                    {page.keyword}
+                  </Link>
                 </li>
               ))}
+              <li>
+                <Link href={ROUTES.solutions} className={LINK}>
+                  كل الحلول
+                </Link>
+              </li>
             </ul>
           </div>
 

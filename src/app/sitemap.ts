@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next"
 
 import { loadBlogPosts } from "@/features/marketing-site/blog/blog-data"
 import { BLOG_CATEGORIES } from "@/features/marketing-site/blog/posts"
+import { SOLUTION_PAGES } from "@/features/marketing-site/solutions/solution-pages"
 
 // Refreshed every few minutes, so a newly published article is listed for Google right away.
 export const revalidate = 300
@@ -17,6 +18,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 1,
     },
+    {
+      url: "https://madar.my/solutions",
+      lastModified,
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    ...SOLUTION_PAGES.map((page) => ({
+      url: `https://madar.my/solutions/${page.slug}`,
+      lastModified,
+      changeFrequency: "monthly" as const,
+      priority: 0.9,
+    })),
     {
       url: "https://madar.my/blog",
       lastModified,
