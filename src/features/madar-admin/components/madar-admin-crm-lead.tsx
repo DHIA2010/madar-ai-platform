@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   CircleDot,
   FileText,
+  FileUp,
   Mail,
   MessageCircle,
   NotebookPen,
@@ -56,6 +57,7 @@ import type {
 } from "../types"
 import { useCrmCustomFields } from "./crm-filters"
 import { LeadAttributionCard, LeadCustomFieldsCard, LeadInterestsCard } from "./crm-lead-extras"
+import { SendProfileDialog } from "./crm-send-profile-dialog"
 import {
   formatDateTime,
   formatSarAmount,
@@ -221,6 +223,7 @@ export function MadarAdminCrmLead() {
   const [editing, setEditing] = useState(false)
   const [losing, setLosing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [sendingProfile, setSendingProfile] = useState(false)
   const [documents, setDocuments] = useState<{ quotes: CrmQuote[]; invoices: CrmInvoice[] } | null>(
     null
   )
@@ -360,6 +363,14 @@ export function MadarAdminCrmLead() {
                 بريد
               </a>
             ) : null}
+            <AppButton
+              icon={<FileUp className="size-4" />}
+              variant="outline"
+              className="h-10 gap-2 rounded-[10px]"
+              onClick={() => setSendingProfile(true)}
+            >
+              إرسال الملف التعريفي
+            </AppButton>
             <AppButton
               icon={<Pencil className="size-4" />}
               variant="outline"
@@ -821,6 +832,13 @@ export function MadarAdminCrmLead() {
           toast.success("حُفظت التعديلات.")
         }}
       />
+      {sendingProfile ? (
+        <SendProfileDialog
+          detail={detail}
+          onClose={() => setSendingProfile(false)}
+          onLogged={setDetail}
+        />
+      ) : null}
       <LostReasonDialog
         open={losing}
         onClose={() => setLosing(false)}
