@@ -26,6 +26,10 @@ import {
 // stays varied, and writes around Saudi occasions (calendar + a weekly web search). Drafts only:
 // a person approves them in Madar Admin.
 
+// The style every post uses for now -- the cinematic scene photo with a headline (approved by the
+// owner on 2026-11-28). The other styles stay available for editing by hand in Madar Admin.
+export const APPROVED_TEMPLATE: InstagramTemplate = "j"
+
 export interface InstagramDraft {
   template: InstagramTemplate
   kind: InstagramPostRecord["kind"]
@@ -47,6 +51,8 @@ export interface InstagramWriteInput {
   topPosts: Array<{ topic: string; reach: number; likes: number }>
   // Styles of the latest posts, newest first, so the week doesn't repeat them.
   recentTemplates: InstagramTemplate[]
+  // Scene photos of the latest posts, newest first, so the photos don't repeat.
+  recentScenes: string[]
   // Saudi occasions in the coming weeks, as text for the prompt.
   occasions: string
 }
@@ -239,13 +245,19 @@ export class InstagramAgent {
               likes: post.insights?.likes ?? 0,
             })),
           recentTemplates: live.slice(0, 6).map((post) => post.template),
+          recentScenes: live
+            .map((post) => post.design.scene)
+            .filter((scene): scene is NonNullable<typeof scene> => Boolean(scene))
+            .slice(0, 8),
           occasions,
         })
       ).slice(0, count)
 
       const known = new Set(WHATS_NEW.map((entry) => entry.key))
       const titles: string[] = []
-      for (const draft of drafts) {
+      const usedScenes = new Set<string>()
+      for (const original of drafts) {
+        const draft = asApproved(original, usedScenes)
         const texts = [
           draft.design.titleTop,
           draft.design.titleBottom,
@@ -357,6 +369,33 @@ const postsSchema = z.object({
 
 type RawPost = z.infer<typeof postsSchema>["posts"][number]
 
+// Every post in the approved style: a scene photo (a different one per post this week) and a
+// headline with one line under it, taken from whatever the writer filled in.
+export function asApproved(draft: InstagramDraft, usedScenes: Set<string>): InstagramDraft {
+  const design = draft.design
+  let scene = design.scene && !usedScenes.has(design.scene) ? design.scene : undefined
+  scene ??= INSTAGRAM_SCENES.find((entry) => !usedScenes.has(entry)) ?? "shop-night"
+  usedScenes.add(scene)
+  if (draft.template === APPROVED_TEMPLATE && design.scene === scene) return draft
+  const sub =
+    design.sub ||
+    design.points?.[0] ||
+    design.steps?.map((step) => step.title).join("، ") ||
+    design.right?.join("، ") ||
+    ""
+  return {
+    ...draft,
+    template: APPROVED_TEMPLATE,
+    design: {
+      titleTop: design.titleTop,
+      titleBottom: design.titleBottom,
+      sub,
+      cta: design.cta,
+      scene,
+    },
+  }
+}
+
 const clean = (values: string[], max: number) =>
   values
     .map((value) => value.trim())
@@ -455,10 +494,10 @@ export class ClaudeInstagramWriter implements InstagramWriter {
 - i: جملة واحدة قوية على خلفية بألوان مدار: titleTop وtitleBottom سطرا الجملة + سطر توضيح (sub). لرسالة قصيرة واضحة.
 - j: صورة سينمائية حقيقية الشكل + عنوان كبير بسطرين + سطر (sub). اختر المشهد المناسب للموضوع (scene): shop-night صاحب محل عطور ليلاً، cafe-cashier كاشير مقهى مزدحم، phone-stock صاحب محل يتابع مخزونه بالجوال، salon استقبال صالون، laundry مغسلة ملابس، online-store صاحب متجر إلكتروني يجهز الطلبات، supermarket كاشير سوبرماركت، boutique محل عبايات وملابس، ads مدير تسويق أمام لوحة إعلانات، stocktake جرد بالباركود في المستودع، ramadan شارع محلات بزينة رمضان، payment دفع بالجوال عند الكاشير.
 
-التنويع (مهم):
-- لا تكرر التصميم نفسه في منشورين هذا الأسبوع.
-- تجنب التصاميم المستخدمة في آخر المنشورات (القائمة أدناه)، ونوّع بين التصاميم الفاتحة (c، e، f، h) والداكنة (b، d، g، i، j).
-- j مرة واحدة في الأسبوع على الأكثر، واختر مشهداً مختلفاً عن آخر مرة.
+التصميم المعتمد حالياً (مهم جداً): كل المنشورات بالتصميم j فقط (الصورة السينمائية مع العنوان).
+- اختر لكل منشور مشهداً (scene) مختلفاً يناسب موضوعه، ولا تكرر مشهداً في الأسبوع نفسه، وتجنب المشاهد المستخدمة مؤخراً (القائمة أدناه).
+- العنوان بسطرين قويين مختصرين (السطر الثاني بلون مدار)، وsub جملة واحدة واضحة تشرح الفائدة.
+- نوّع زوايا الكتابة بين المنشورات: سؤال يلفت الانتباه، مشكلة وحلها، رقم أو حقيقة صحيحة، نصيحة، أو مناسبة.
 
 حدود المساحة (مهمة جداً، النص الأطول لا يظهر):
 - titleTop وtitleBottom: كل سطر 18 حرفاً كحد أقصى (مثل «كل تجارتك» / «في مدار واحد»).
@@ -491,7 +530,7 @@ ${input.recentTopics.length ? input.recentTopics.map((topic) => `- ${topic}`).jo
 المنشورات الأعلى وصولاً:
 ${input.topPosts.length ? input.topPosts.map((post) => `- ${post.topic}: وصول ${post.reach}، إعجاب ${post.likes}`).join("\n") : "- لا توجد بيانات بعد"}
 
-التصاميم المستخدمة في آخر المنشورات (الأحدث أولاً): ${input.recentTemplates.length ? input.recentTemplates.join("، ") : "لا شيء"}
+المشاهد المستخدمة في آخر المنشورات (الأحدث أولاً): ${input.recentScenes.length ? input.recentScenes.join("، ") : "لا شيء"}
 
 المناسبات والمواسم:
 - إذا وقعت مناسبة في الأيام الثمانية القادمة، خصص لها منشوراً واحداً (تهنئة في يومها، أو فكرة تفيد صاحب المحل قبلها). المواسم الكبيرة (رمضان، العيدين، اليوم الوطني، يوم التأسيس، موسم التخفيضات) يُكتب عنها قبلها بأسبوع إلى أسبوعين بنصائح للتجهيز.

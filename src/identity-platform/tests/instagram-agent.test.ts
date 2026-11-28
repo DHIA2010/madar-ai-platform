@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest"
 
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
-import { designWarnings, InstagramAgent, type InstagramWriter, toDraft } from "../instagram/agent"
+import {
+  asApproved,
+  designWarnings,
+  InstagramAgent,
+  type InstagramWriter,
+  toDraft,
+} from "../instagram/agent"
 import {
   INSTAGRAM_STATE_PREFIX,
   InstagramConnector,
@@ -266,6 +272,32 @@ describe("instagram agent", () => {
     const last = writes.at(-1)
     expect(last.recentTemplates.length).toBeGreaterThan(0)
     expect(last.occasions).toContain("رمضان")
+  })
+
+  it("every new post comes out in the approved cinematic style, each with its own photo", async () => {
+    await agent().tick()
+    const posts = await service.list()
+    expect(posts.every((post) => post.template === "j")).toBe(true)
+    const scenes = posts.map((post) => post.design.scene)
+    expect(new Set(scenes).size).toBe(posts.length)
+    // A card post from the writer keeps its headline and gets a line under it.
+    const used = new Set<string>(["shop-night"])
+    const converted = asApproved(
+      {
+        template: "a",
+        kind: "tip",
+        topic: "t",
+        design: { titleTop: "كاشير", titleBottom: "سريع", points: ["فاتورة متوافقة"], cta: "ابدأ" },
+        caption: "c",
+        hashtags: [],
+        firstComment: "",
+        featureKeys: [],
+      },
+      used
+    )
+    expect(converted.template).toBe("j")
+    expect(converted.design).toMatchObject({ titleTop: "كاشير", sub: "فاتورة متوافقة" })
+    expect(converted.design.scene).not.toBe("shop-night")
   })
 
   it("fills the new styles with only their own fields", () => {
