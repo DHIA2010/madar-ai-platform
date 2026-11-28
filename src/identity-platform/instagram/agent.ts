@@ -12,6 +12,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { InstagramService } from "./service"
 import {
   INSTAGRAM_ICONS,
+  INSTAGRAM_SCENES,
   INSTAGRAM_SCREENS,
   INSTAGRAM_TEMPLATES,
   type InstagramDesign,
@@ -20,8 +21,10 @@ import {
 } from "./types"
 
 // The Instagram agent. Every Sunday (Riyadh) it writes the week's posts: each one a filled-in
-// square design (one of the three approved styles) plus a casual Saudi caption, hashtags and a
-// first-comment question. Drafts only: a person approves them in Madar Admin.
+// square design (one of the approved styles, all in Madar's navy/blue/teal identity) plus a
+// casual Saudi caption, hashtags and a first-comment question. It rotates the styles so the feed
+// stays varied, and writes around Saudi occasions (calendar + a weekly web search). Drafts only:
+// a person approves them in Madar Admin.
 
 export interface InstagramDraft {
   template: InstagramTemplate
@@ -42,6 +45,10 @@ export interface InstagramWriteInput {
   recentTopics: string[]
   blogTitles: string[]
   topPosts: Array<{ topic: string; reach: number; likes: number }>
+  // Styles of the latest posts, newest first, so the week doesn't repeat them.
+  recentTemplates: InstagramTemplate[]
+  // Saudi occasions in the coming weeks, as text for the prompt.
+  occasions: string
 }
 
 export interface InstagramWriter {
@@ -58,6 +65,13 @@ const LIMITS = {
   cardTitle: 14,
   cardText: 34,
   cta: 18,
+  kicker: 24,
+  number: 5,
+  option: 26,
+  side: 26,
+  stepTitle: 22,
+  stepText: 46,
+  line: 80,
 }
 
 // Too-long words get flagged rather than cut: the reviewer shortens them.
@@ -84,6 +98,29 @@ export function designWarnings(template: InstagramTemplate, design: InstagramDes
       check("نص البطاقة", card.text, LIMITS.cardText)
     }
   }
+  if (template === "d" || template === "e" || template === "g") {
+    check("السطر الصغير", design.kicker, LIMITS.kicker)
+  }
+  if (template === "d") {
+    check("الرقم", design.number, LIMITS.number)
+    for (const chip of design.chips ?? []) check("الملصق", chip, LIMITS.chip)
+  }
+  if (template === "e") {
+    for (const option of design.options ?? []) check("الخيار", option, LIMITS.option)
+  }
+  if (template === "f") {
+    for (const line of [...(design.wrong ?? []), ...(design.right ?? [])])
+      check("سطر المقارنة", line, LIMITS.side)
+  }
+  if (template === "g") {
+    for (const step of design.steps ?? []) {
+      check("عنوان النصيحة", step.title, LIMITS.stepTitle)
+      check("نص النصيحة", step.text, LIMITS.stepText)
+    }
+  }
+  if (template === "h" || template === "i" || template === "j") {
+    check("السطر تحت العنوان", design.sub, template === "h" ? LIMITS.sub : LIMITS.line)
+  }
   return warnings
 }
 
@@ -96,7 +133,9 @@ export class InstagramAgent {
     private readonly prices: () => Promise<BlogPrices>,
     private readonly notify: (text: string) => Promise<void>,
     private readonly now: () => Date = () => new Date(),
-    private readonly adminUrl = "https://app.madar.my/madar-admin/instagram"
+    private readonly adminUrl = "https://app.madar.my/madar-admin/instagram",
+    // Saudi occasions coming up, as prompt text (calendar + web search); "" without them.
+    private readonly occasions: (from: Date) => Promise<string> = async () => ""
   ) {}
 
   // Called every hour. Writes once per week, on Sunday from 9:00 Riyadh.
@@ -181,6 +220,7 @@ export class InstagramAgent {
         ? (await this.blog.listPublished()).slice(0, 12).map((post) => post.title)
         : []
       const prices = await this.prices()
+      const occasions = await this.occasions(now).catch(() => "")
       const drafts = (
         await this.writer.write({
           count,
@@ -198,6 +238,8 @@ export class InstagramAgent {
               reach: post.insights?.reach ?? 0,
               likes: post.insights?.likes ?? 0,
             })),
+          recentTemplates: live.slice(0, 6).map((post) => post.template),
+          occasions,
         })
       ).slice(0, count)
 
@@ -212,6 +254,11 @@ export class InstagramAgent {
           ...(draft.design.points ?? []),
           ...(draft.design.chips ?? []),
           ...(draft.design.cards ?? []).flatMap((card) => [card.title, card.text]),
+          draft.design.kicker ?? "",
+          ...(draft.design.options ?? []),
+          ...(draft.design.wrong ?? []),
+          ...(draft.design.right ?? []),
+          ...(draft.design.steps ?? []).flatMap((step) => [step.title, step.text]),
         ]
         const warnings = [
           ...designWarnings(draft.template, draft.design),
@@ -292,6 +339,13 @@ const postsSchema = z.object({
       cards: z.array(
         z.object({ icon: z.enum(INSTAGRAM_ICONS), title: z.string(), text: z.string() })
       ),
+      kicker: z.string(),
+      number: z.string(),
+      options: z.array(z.string()),
+      wrong: z.array(z.string()),
+      right: z.array(z.string()),
+      steps: z.array(z.object({ title: z.string(), text: z.string() })),
+      scene: z.enum(INSTAGRAM_SCENES),
       cta: z.string(),
       caption: z.string(),
       hashtags: z.array(z.string()),
@@ -302,6 +356,12 @@ const postsSchema = z.object({
 })
 
 type RawPost = z.infer<typeof postsSchema>["posts"][number]
+
+const clean = (values: string[], max: number) =>
+  values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, max)
 
 // The model's flat answer as a design: only the fields its template uses.
 export function toDraft(raw: RawPost): InstagramDraft {
@@ -323,11 +383,32 @@ export function toDraft(raw: RawPost): InstagramDraft {
       .filter(Boolean)
       .slice(0, 2)
     design.screen = raw.screen
-  } else {
+  } else if (raw.template === "c") {
     design.cards = raw.cards
       .filter((card) => card.title.trim())
       .slice(0, 4)
       .map((card) => ({ icon: card.icon, title: card.title.trim(), text: card.text.trim() }))
+  } else if (raw.template === "d") {
+    design.kicker = raw.kicker.trim()
+    design.number = raw.number.trim()
+    design.chips = clean(raw.chips, 4)
+  } else if (raw.template === "e") {
+    design.kicker = raw.kicker.trim()
+    design.options = clean(raw.options, 4)
+  } else if (raw.template === "f") {
+    design.wrong = clean(raw.wrong, 3)
+    design.right = clean(raw.right, 3)
+  } else if (raw.template === "g") {
+    design.kicker = raw.kicker.trim()
+    design.steps = raw.steps
+      .filter((step) => step.title.trim())
+      .slice(0, 3)
+      .map((step) => ({ title: step.title.trim(), text: step.text.trim() }))
+  } else if (raw.template === "j") {
+    design.sub = raw.sub.trim()
+    design.scene = raw.scene
+  } else {
+    design.sub = raw.sub.trim()
   }
   return {
     template: raw.template,
@@ -362,15 +443,28 @@ export class ClaudeInstagramWriter implements InstagramWriter {
 أنت مسؤول حساب مدار على إنستقرام. الجمهور: أصحاب المحلات والمطاعم والصالونات والمتاجر الإلكترونية في السعودية. الهدف: متابعون مهتمون وتسجيلات من رابط البايو.
 اليوم ${input.today}. اكتب ${input.count} منشورات لهذا الأسبوع، مختلفة عن بعضها في الموضوع والتصميم.
 
-لكل منشور صورة مربعة بأحد ثلاثة تصاميم معتمدة (template):
-- a: صورة شخص في محل + سطر بحث أعلى الصورة (search، مثل «برنامج كاشير») + عنوان بسطرين + 3 أو 4 نقاط بعلامة صح (points) + زر (cta). مناسب لميزة أو نوع نشاط.
-- b: شاشة التطبيق الحقيقية على لابتوب وجوال + عنوان بسطرين + سطر فرعي (sub) + ملصقان قصيران (chips) + اختيار الشاشة (screen: cashier = شاشة الكاشير، products = المنتجات، close = إغلاق الوردية) + زر. مناسب لإظهار المنتج.
-- c: أربع بطاقات (cards) لكل بطاقة أيقونة (icon من: pos كاشير، store متجر، ads إعلانات، booking حجوزات، inventory مخزون، invoice فاتورة، loyalty ولاء، accounting محاسبة، whatsapp واتساب، report تقارير، ai ذكاء اصطناعي) وعنوان قصير ونص قصير + عنوان بسطرين + زر. مناسب لنصائح أو مقارنة.
+لكل منشور صورة مربعة بأحد هذه التصاميم المعتمدة (template). كلها بهوية مدار نفسها (كحلي وأزرق وفيروزي)، والاختلاف في الشكل فقط:
+- a: صورة شخص في محل + سطر بحث (search، مثل «برنامج كاشير») + عنوان بسطرين + 3-4 نقاط (points) + زر (cta). استخدمه نادراً (مرة كل أسبوعين على الأكثر) لأن الصورة نفسها تتكرر.
+- b: شاشة التطبيق الحقيقية على لابتوب وجوال + عنوان + سطر فرعي (sub) + ملصقان (chips) + الشاشة (screen: cashier الكاشير، products المنتجات، close إغلاق الوردية). لإظهار المنتج.
+- c: أربع بطاقات (cards) بأيقونة (icon من: pos، store، ads، booking، inventory، invoice، loyalty، accounting، whatsapp، report، ai) وعنوان ونص قصيرين + عنوان. لعرض عدة مزايا.
+- d: رقم كبير (number، مثل «4» أو «24/7») + سطر صغير فوقه (kicker) + عنوان بسطرين يشرح الرقم + حتى 4 ملصقات (chips). لحقيقة صحيحة قوية فقط (لا تخترع أرقاماً أو إحصاءات).
+- e: «سؤال اليوم»: kicker («سؤال اليوم») + السؤال في سطرين (titleTop/titleBottom) + 4 خيارات قصيرة (options). للتفاعل والتعليقات.
+- f: مقارنة «الطريقة القديمة» و«مع مدار»: titleTop = الموضوع (مثل «الجرد في محلك»)، titleBottom فارغ، و3 أسطر قصيرة لكل جهة (wrong للقديم، right لمدار). لإظهار الفرق.
+- g: نصائح مرقمة: kicker («نصيحة الأسبوع») + عنوان بسطرين + 3 نصائح (steps: عنوان قصير ونص سطر). لمحتوى يحفظه الناس.
+- h: جوال كبير فيه التقرير اليومي الحقيقي على واتساب + عنوان بسطرين + سطر (sub). للتقرير اليومي والأرقام اليومية.
+- i: جملة واحدة قوية على خلفية بألوان مدار: titleTop وtitleBottom سطرا الجملة + سطر توضيح (sub). لرسالة قصيرة واضحة.
+- j: صورة سينمائية حقيقية الشكل + عنوان كبير بسطرين + سطر (sub). اختر المشهد المناسب للموضوع (scene): shop-night صاحب محل عطور ليلاً، cafe-cashier كاشير مقهى مزدحم، phone-stock صاحب محل يتابع مخزونه بالجوال، salon استقبال صالون، laundry مغسلة ملابس، online-store صاحب متجر إلكتروني يجهز الطلبات، supermarket كاشير سوبرماركت، boutique محل عبايات وملابس، ads مدير تسويق أمام لوحة إعلانات، stocktake جرد بالباركود في المستودع، ramadan شارع محلات بزينة رمضان، payment دفع بالجوال عند الكاشير.
+
+التنويع (مهم):
+- لا تكرر التصميم نفسه في منشورين هذا الأسبوع.
+- تجنب التصاميم المستخدمة في آخر المنشورات (القائمة أدناه)، ونوّع بين التصاميم الفاتحة (c، e، f، h) والداكنة (b، d، g، i، j).
+- j مرة واحدة في الأسبوع على الأكثر، واختر مشهداً مختلفاً عن آخر مرة.
 
 حدود المساحة (مهمة جداً، النص الأطول لا يظهر):
 - titleTop وtitleBottom: كل سطر 18 حرفاً كحد أقصى (مثل «كل تجارتك» / «في مدار واحد»).
-- search حتى 26 حرفاً، sub حتى 60، كل نقطة حتى 40، كل ملصق حتى 30، عنوان البطاقة حتى 14 ونصها حتى 34، الزر حتى 18.
-- املأ كل الحقول دائماً؛ غير المستخدم في التصميم المختار اتركه "" أو []، وscreen = "cashier" إن لم يكن b، وcards فارغة إن لم يكن c.
+- search حتى 26 حرفاً، sub حتى 60 (و80 في i وj)، كل نقطة حتى 40، كل ملصق حتى 30، عنوان البطاقة حتى 14 ونصها حتى 34، الزر حتى 18.
+- kicker حتى 24، number حتى 5، كل خيار حتى 26، كل سطر مقارنة حتى 26، عنوان النصيحة حتى 22 ونصها حتى 46.
+- املأ كل الحقول دائماً؛ غير المستخدم في التصميم المختار اتركه "" أو []، وscreen = "cashier" وscene = "shop-night" إن لم يُستخدما.
 
 الكابشن (caption):
 - لهجة سعودية خفيفة وودية (مثل: «وش رايك»، «الحين»، «جاب لك»)، يبدأ بجملة تشد الانتباه في أول سطر.
@@ -395,7 +489,15 @@ ${input.blogTitles.length ? input.blogTitles.map((title) => `- ${title}`).join("
 ${input.recentTopics.length ? input.recentTopics.map((topic) => `- ${topic}`).join("\n") : "- لا شيء"}
 
 المنشورات الأعلى وصولاً:
-${input.topPosts.length ? input.topPosts.map((post) => `- ${post.topic}: وصول ${post.reach}، إعجاب ${post.likes}`).join("\n") : "- لا توجد بيانات بعد"}`
+${input.topPosts.length ? input.topPosts.map((post) => `- ${post.topic}: وصول ${post.reach}، إعجاب ${post.likes}`).join("\n") : "- لا توجد بيانات بعد"}
+
+التصاميم المستخدمة في آخر المنشورات (الأحدث أولاً): ${input.recentTemplates.length ? input.recentTemplates.join("، ") : "لا شيء"}
+
+المناسبات والمواسم:
+- إذا وقعت مناسبة في الأيام الثمانية القادمة، خصص لها منشوراً واحداً (تهنئة في يومها، أو فكرة تفيد صاحب المحل قبلها). المواسم الكبيرة (رمضان، العيدين، اليوم الوطني، يوم التأسيس، موسم التخفيضات) يُكتب عنها قبلها بأسبوع إلى أسبوعين بنصائح للتجهيز.
+- المناسبات الدينية بأسلوب محترم وهادئ: تهنئة بدون بيع مباشر يوم العيد أو يوم عرفة. والتواريخ الهجرية تقريبية: قل «قرّب رمضان» ولا تجزم بيوم محدد.
+- اكتب في topic اسم المناسبة إن كان المنشور عنها. وإن لم توجد مناسبة قريبة فاكتب المنشورات العادية.
+${input.occasions || "- لا توجد مناسبات قريبة معروفة"}`
 
     const response = await this.client.beta.messages.parse({
       model: this.model,

@@ -67,6 +67,8 @@ export interface BlogPlanInput {
   whatsNew: WhatsNewEntry[]
   topPerformers: Array<{ title: string; views: number; leads: number; signups: number }>
   search: BlogSearchSignals | null
+  // Saudi occasions in the coming weeks, as text for the prompt.
+  occasions: string
 }
 
 export interface BlogWriteInput {
@@ -104,7 +106,9 @@ export class BlogAgent {
     private readonly now: () => Date = () => new Date(),
     private readonly adminUrl = "https://app.madar.my/madar-admin/blog",
     // Search Console numbers, so the week's topics aim at ranking first (null without them).
-    private readonly search: () => Promise<BlogSearchSignals | null> = async () => null
+    private readonly search: () => Promise<BlogSearchSignals | null> = async () => null,
+    // Saudi occasions coming up, as prompt text (calendar + web search); "" without them.
+    private readonly occasions: (from: Date) => Promise<string> = async () => ""
   ) {}
 
   // Called every hour (server.ts). Writes once per week: on Sunday from 8:00 Riyadh, the first
@@ -251,8 +255,9 @@ export class BlogAgent {
       ...live.map((post) => ({ title: post.title, category: post.category })),
     ]
     const search = await this.search().catch(() => null)
+    const occasions = await this.occasions(now).catch(() => "")
     const topics = (
-      await this.writer.plan({ count, today, existing, whatsNew, topPerformers, search })
+      await this.writer.plan({ count, today, existing, whatsNew, topPerformers, search, occasions })
     ).slice(0, count)
     const positionOf = (keyword: string) => {
       const wanted = keyword.trim().toLowerCase()
@@ -455,7 +460,10 @@ ${input.whatsNew.length ? input.whatsNew.map((entry) => `- ${entry.key} (${entry
 المقالات الأعلى نتائج آخر 30 يوماً:
 ${input.topPerformers.length ? input.topPerformers.map((entry) => `- ${entry.title}: ${entry.views} مشاهدة، ${entry.leads} طلب تواصل، ${entry.signups} تسجيل`).join("\n") : "- لا توجد بيانات بعد"}
 
-${searchSection(input.search)}`
+${searchSection(input.search)}
+
+المواسم والمناسبات السعودية: إذا اقترب موسم كبير (رمضان، العيدين، اليوم الوطني، يوم التأسيس، موسم التخفيضات، العودة للمدارس) خلال الأسابيع الثلاثة القادمة، فاجعل مقالاً واحداً هذا الأسبوع دليلاً عملياً لأصحاب المنشآت للاستعداد له (مثل «كيف تجهز محلك لرمضان»)، بعبارة بحث يبحث عنها الناس. التواريخ الهجرية تقريبية فلا تجزم بيوم محدد.
+${input.occasions || "- لا توجد مناسبات قريبة معروفة"}`
 
     const response = await this.client.beta.messages.parse({
       model: this.model,

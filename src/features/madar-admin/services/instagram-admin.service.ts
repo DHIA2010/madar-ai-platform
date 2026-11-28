@@ -3,7 +3,7 @@ import { createSessionManager } from "@/infrastructure/identity"
 
 // Madar Admin → إنستقرام: the connected account, the agent's weekly posts, approval and results.
 
-export type AdminInstagramTemplate = "a" | "b" | "c"
+export type AdminInstagramTemplate = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j"
 export type AdminInstagramIcon =
   | "pos"
   | "store"
@@ -17,6 +17,19 @@ export type AdminInstagramIcon =
   | "report"
   | "ai"
 export type AdminInstagramScreen = "cashier" | "products" | "close"
+export type AdminInstagramScene =
+  | "shop-night"
+  | "cafe-cashier"
+  | "phone-stock"
+  | "salon"
+  | "laundry"
+  | "online-store"
+  | "supermarket"
+  | "boutique"
+  | "ads"
+  | "stocktake"
+  | "ramadan"
+  | "payment"
 
 export interface AdminInstagramDesign {
   titleTop: string
@@ -27,6 +40,13 @@ export interface AdminInstagramDesign {
   chips?: string[]
   screen?: AdminInstagramScreen
   cards?: Array<{ icon: AdminInstagramIcon; title: string; text: string }>
+  kicker?: string
+  number?: string
+  options?: string[]
+  wrong?: string[]
+  right?: string[]
+  steps?: Array<{ title: string; text: string }>
+  scene?: AdminInstagramScene
   cta: string
 }
 

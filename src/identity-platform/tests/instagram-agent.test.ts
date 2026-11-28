@@ -12,6 +12,11 @@ import {
   type MetaAppAccess,
 } from "../instagram/publisher"
 import { InstagramService } from "../instagram/service"
+import {
+  occasionsSection,
+  saudiOccasionsSource,
+  upcomingSaudiOccasions,
+} from "../marketing/saudi-calendar"
 import { handleAdminInstagramRoute } from "../interfaces/rest/instagram-routes"
 
 // Madar's Instagram agent: the account is connected once through the Meta app, the agent writes
@@ -65,8 +70,10 @@ function fakeGraph() {
   }
 }
 
+const writes: any[] = []
 const writer: InstagramWriter = {
   async write(input) {
+    writes.push(input)
     return Array.from({ length: input.count }, (_, index) =>
       toDraft({
         template: (["a", "b", "c"] as const)[index % 3],
@@ -80,6 +87,13 @@ const writer: InstagramWriter = {
         chips: ["ملصق 1", "ملصق 2"],
         screen: "cashier",
         cards: [{ icon: "pos", title: "الكاشير", text: "نص" }],
+        kicker: "",
+        number: "",
+        options: [],
+        wrong: [],
+        right: [],
+        steps: [],
+        scene: "shop-night",
         cta: "جرّب مدار مجاناً",
         caption: "كابشن المنشور",
         hashtags: ["مدار", "#كاشير"],
@@ -233,6 +247,90 @@ describe("instagram agent", () => {
     expect(post.status).toBe("failed")
     expect(post.lastError).toContain("Media download")
     expect(notes.some((note) => note.includes("تعذر نشر منشور إنستقرام"))).toBe(true)
+  })
+
+  it("rotates styles: the writer sees the latest styles and the coming Saudi occasions", async () => {
+    await agent().tick()
+    const sourced = new InstagramAgent(
+      database,
+      service,
+      null,
+      writer,
+      async () => ({ text: "", values: [] }),
+      async () => undefined,
+      () => clock,
+      undefined,
+      async () => "مناسبات سعودية قادمة (التقويم):\n- 2027-02-08: بداية شهر رمضان"
+    )
+    await sourced.runNow()
+    const last = writes.at(-1)
+    expect(last.recentTemplates.length).toBeGreaterThan(0)
+    expect(last.occasions).toContain("رمضان")
+  })
+
+  it("fills the new styles with only their own fields", () => {
+    const base = {
+      kind: "tip" as const,
+      topic: "t",
+      titleTop: "منصات إعلانية",
+      titleBottom: "في لوحة وحدة",
+      search: "x",
+      sub: "سطر",
+      points: ["p"],
+      chips: ["جوجل", "ميتا", "سناب", "تيك توك", "زيادة"],
+      screen: "cashier" as const,
+      cards: [],
+      kicker: "حملاتك",
+      number: "4",
+      options: ["أ", "ب"],
+      wrong: ["قديم"],
+      right: ["جديد"],
+      steps: [{ title: "خطوة", text: "نص" }],
+      scene: "salon" as const,
+      cta: "ابدأ",
+      caption: "c",
+      hashtags: [],
+      firstComment: "",
+      featureKeys: [],
+    }
+    const big = toDraft({ ...base, template: "d" })
+    expect(big.design).toMatchObject({ number: "4", kicker: "حملاتك" })
+    expect(big.design.chips).toHaveLength(4)
+    expect(big.design.points).toBeUndefined()
+    expect(toDraft({ ...base, template: "j" }).design).toMatchObject({ scene: "salon", sub: "سطر" })
+    expect(toDraft({ ...base, template: "f" }).design).toMatchObject({
+      wrong: ["قديم"],
+      right: ["جديد"],
+    })
+    expect(
+      designWarnings("d", { titleTop: "a", titleBottom: "b", cta: "c", number: "123456" })
+    ).toEqual(["الرقم أطول من المساحة (6/5 حرفاً)"])
+  })
+
+  it("knows Saudi occasions, with Islamic dates from the Umm al-Qura calendar", async () => {
+    const year = upcomingSaudiOccasions(new Date("2026-11-28T00:00:00Z"), 400)
+    const on = (key: string) => year.find((entry) => entry.key === key)?.date
+    expect(on("ramadan")).toBe("2027-02-08")
+    expect(on("eid-al-fitr")).toBe("2027-03-09")
+    expect(on("eid-al-adha")).toBe("2027-05-16")
+    expect(on("founding-day")).toBe("2027-02-22")
+    expect(on("national-day")).toBe("2027-09-23")
+    expect(on("white-friday")).toBe("2027-11-26")
+    expect(year.find((entry) => entry.key === "ramadan")?.approximate).toBe(true)
+    expect(occasionsSection([], null)).toContain("لا مناسبات")
+
+    // One web search a day, shared by both agents.
+    let searches = 0
+    const source = saudiOccasionsSource({
+      async search() {
+        searches += 1
+        return "2027-01-15: موسم الرياض"
+      },
+    })
+    const day = new Date("2027-01-10T06:00:00Z")
+    expect(await source(day)).toContain("موسم الرياض")
+    await source(day)
+    expect(searches).toBe(1)
   })
 
   it("flags words too long for their place on the image", () => {

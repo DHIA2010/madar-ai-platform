@@ -230,6 +230,7 @@ import {
 } from "../../instagram/publisher"
 import { InstagramService } from "../../instagram/service"
 import { handleAdminInstagramRoute } from "./instagram-routes"
+import { ClaudeOccasionResearcher, saudiOccasionsSource } from "../../marketing/saudi-calendar"
 import { SearchConsoleClient } from "../../seo/search-console"
 import { SeoService } from "../../seo/service"
 import { handleAdminSeoRoute } from "./seo-routes"
@@ -1457,6 +1458,15 @@ export function createIdentityApiServer(
   registerCheckupSources(checkupSources)
   registerAdChangeTracker(checkupSources?.tracker ?? null)
   // Madar's blog, and the agent that writes its weekly drafts (needs the AI key).
+  // Saudi occasions for the blog and Instagram agents (calendar + one web search a day).
+  const saudiOccasions = saudiOccasionsSource(
+    container.config.anthropicApiKey
+      ? new ClaudeOccasionResearcher(
+          container.config.anthropicApiKey,
+          process.env.INSTAGRAM_AGENT_MODEL ?? container.config.invoiceReaderModel
+        )
+      : null
+  )
   // Madar's own Google search numbers (Search Console, read with a service account).
   const seoService = container.infrastructure.database
     ? new SeoService(
@@ -1487,7 +1497,8 @@ export function createIdentityApiServer(
           },
           undefined,
           undefined,
-          async () => (seoService ? seoService.searchSignals() : null)
+          async () => (seoService ? seoService.searchSignals() : null),
+          saudiOccasions
         )
       : null
   registerBlogAgent(blogAgent)
@@ -1532,7 +1543,10 @@ export function createIdentityApiServer(
               : formatPrices([]),
           async (text) => {
             await whatsAppLeadAlerts?.notifyTeamText(text)
-          }
+          },
+          undefined,
+          undefined,
+          saudiOccasions
         )
       : null
   registerInstagramAgent(instagramAgent)

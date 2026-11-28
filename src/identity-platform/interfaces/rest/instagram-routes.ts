@@ -4,7 +4,12 @@ import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import type { InstagramAgent } from "../../instagram/agent"
 import type { InstagramConnector, InstagramPublisher } from "../../instagram/publisher"
 import type { InstagramService } from "../../instagram/service"
-import { INSTAGRAM_ICONS, INSTAGRAM_SCREENS, INSTAGRAM_TEMPLATES } from "../../instagram/types"
+import {
+  INSTAGRAM_ICONS,
+  INSTAGRAM_SCENES,
+  INSTAGRAM_SCREENS,
+  INSTAGRAM_TEMPLATES,
+} from "../../instagram/types"
 import { requirePlatformPermission } from "../../platform-admin/guard"
 
 type Send = (status: number, body: unknown) => boolean
@@ -15,7 +20,7 @@ const designSchema = z.object({
   search: z.string().trim().max(80).optional(),
   sub: z.string().trim().max(160).optional(),
   points: z.array(z.string().trim().max(120)).max(5).optional(),
-  chips: z.array(z.string().trim().max(80)).max(3).optional(),
+  chips: z.array(z.string().trim().max(80)).max(4).optional(),
   screen: z.enum(INSTAGRAM_SCREENS).optional(),
   cards: z
     .array(
@@ -27,6 +32,16 @@ const designSchema = z.object({
     )
     .max(4)
     .optional(),
+  kicker: z.string().trim().max(60).optional(),
+  number: z.string().trim().max(12).optional(),
+  options: z.array(z.string().trim().max(60)).max(4).optional(),
+  wrong: z.array(z.string().trim().max(60)).max(3).optional(),
+  right: z.array(z.string().trim().max(60)).max(3).optional(),
+  steps: z
+    .array(z.object({ title: z.string().trim().max(60), text: z.string().trim().max(120) }))
+    .max(3)
+    .optional(),
+  scene: z.enum(INSTAGRAM_SCENES).optional(),
   cta: z.string().trim().max(40),
 })
 

@@ -52,6 +52,7 @@ import {
   type AdminInstagramDesign,
   type AdminInstagramIcon,
   type AdminInstagramPost,
+  type AdminInstagramScene,
   type AdminInstagramScreen,
   type AdminInstagramSettings,
   type AdminInstagramStatus,
@@ -60,7 +61,7 @@ import {
 } from "../services/instagram-admin.service"
 import { Segmented } from "./admin-segmented"
 import { renderPostJpeg } from "./instagram-render"
-import { ICONS, InstagramPostFluid, InstagramPostPreview } from "./instagram-templates"
+import { ICONS, InstagramPostFluid, InstagramPostPreview, SCENES } from "./instagram-templates"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
 
 // Madar Admin → إنستقرام. The agent writes the week's posts on Sunday; here they are seen as
@@ -73,6 +74,13 @@ const TEMPLATE_LABEL: Record<AdminInstagramTemplate, string> = {
   a: "صورة وقائمة (A)",
   b: "شاشات التطبيق (B)",
   c: "بطاقات (C)",
+  d: "رقم كبير (D)",
+  e: "سؤال اليوم (E)",
+  f: "القديم ومع مدار (F)",
+  g: "نصائح مرقمة (G)",
+  h: "شاشة الجوال (H)",
+  i: "جملة واحدة (I)",
+  j: "صورة سينمائية (J)",
 }
 const KIND_LABEL: Record<AdminInstagramPost["kind"], string> = {
   news: "جديد في مدار",
@@ -139,6 +147,31 @@ function withDefaults(template: AdminInstagramTemplate, design: AdminInstagramDe
           text: "",
         }))
   }
+  if (template === "d") {
+    next.kicker ??= ""
+    next.number ??= ""
+    next.chips = next.chips?.length ? next.chips : ["", ""]
+  }
+  if (template === "e") {
+    next.kicker ??= "سؤال اليوم"
+    next.options = next.options?.length ? next.options : ["", "", "", ""]
+  }
+  if (template === "f") {
+    next.wrong = next.wrong?.length ? next.wrong : ["", "", ""]
+    next.right = next.right?.length ? next.right : ["", "", ""]
+  }
+  if (template === "g") {
+    next.kicker ??= "نصيحة الأسبوع"
+    next.steps = next.steps?.length
+      ? next.steps
+      : [
+          { title: "", text: "" },
+          { title: "", text: "" },
+          { title: "", text: "" },
+        ]
+  }
+  if (template === "h" || template === "i" || template === "j") next.sub ??= ""
+  if (template === "j") next.scene ??= "shop-night"
   return next
 }
 
@@ -192,6 +225,37 @@ function Editor({
         ...(template === "c"
           ? { cards: (design.cards ?? []).filter((card) => card.title.trim()) }
           : {}),
+        ...(template === "d"
+          ? {
+              kicker: design.kicker?.trim(),
+              number: design.number?.trim(),
+              chips: (design.chips ?? []).map((c) => c.trim()).filter(Boolean),
+            }
+          : {}),
+        ...(template === "e"
+          ? {
+              kicker: design.kicker?.trim(),
+              options: (design.options ?? []).map((o) => o.trim()).filter(Boolean),
+            }
+          : {}),
+        ...(template === "f"
+          ? {
+              wrong: (design.wrong ?? []).map((w) => w.trim()).filter(Boolean),
+              right: (design.right ?? []).map((r) => r.trim()).filter(Boolean),
+            }
+          : {}),
+        ...(template === "g"
+          ? {
+              kicker: design.kicker?.trim(),
+              steps: (design.steps ?? [])
+                .map((step) => ({ title: step.title.trim(), text: step.text.trim() }))
+                .filter((step) => step.title),
+            }
+          : {}),
+        ...(template === "h" || template === "i" || template === "j"
+          ? { sub: design.sub?.trim() }
+          : {}),
+        ...(template === "j" ? { scene: design.scene } : {}),
       }
       const saved = await instagramAdminService.updatePost(post.id, {
         template,
@@ -422,6 +486,133 @@ function Editor({
                   </div>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {template === "d" || template === "e" || template === "g" ? (
+            <div>
+              <label className={FIELD_LABEL}>السطر الصغير فوق العنوان</label>
+              <AppInput
+                value={design.kicker ?? ""}
+                onChange={(e) => set({ kicker: e.target.value })}
+                className={FIELD}
+              />
+            </div>
+          ) : null}
+
+          {template === "d" ? (
+            <>
+              <div>
+                <label className={FIELD_LABEL}>الرقم الكبير</label>
+                <AppInput
+                  value={design.number ?? ""}
+                  onChange={(e) => set({ number: e.target.value })}
+                  className={FIELD}
+                />
+              </div>
+              {listField(
+                "الملصقات تحت العنوان (حتى 4)",
+                [
+                  ...(design.chips ?? []),
+                  ...(design.chips && design.chips.length < 4 ? [""] : []),
+                ].slice(0, 4),
+                (chips) => set({ chips }),
+                30
+              )}
+            </>
+          ) : null}
+
+          {template === "e"
+            ? listField(
+                "الخيارات الأربعة",
+                (design.options ?? ["", "", "", ""]).slice(0, 4),
+                (options) => set({ options }),
+                26
+              )
+            : null}
+
+          {template === "f" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {listField(
+                "الطريقة القديمة",
+                (design.wrong ?? ["", "", ""]).slice(0, 3),
+                (wrong) => set({ wrong }),
+                26
+              )}
+              {listField(
+                "مع مدار",
+                (design.right ?? ["", "", ""]).slice(0, 3),
+                (right) => set({ right }),
+                26
+              )}
+            </div>
+          ) : null}
+
+          {template === "g" ? (
+            <div>
+              <label className={FIELD_LABEL}>النصائح الثلاث</label>
+              <div className="flex flex-col gap-2">
+                {(design.steps ?? []).map((step, index) => (
+                  <div key={index} className="grid grid-cols-[1fr_1.6fr] gap-2">
+                    <AppInput
+                      value={step.title}
+                      placeholder="العنوان"
+                      onChange={(e) =>
+                        set({
+                          steps: (design.steps ?? []).map((entry, at) =>
+                            at === index ? { ...entry, title: e.target.value } : entry
+                          ),
+                        })
+                      }
+                      className={FIELD}
+                    />
+                    <AppInput
+                      value={step.text}
+                      placeholder="سطر قصير"
+                      onChange={(e) =>
+                        set({
+                          steps: (design.steps ?? []).map((entry, at) =>
+                            at === index ? { ...entry, text: e.target.value } : entry
+                          ),
+                        })
+                      }
+                      className={FIELD}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {template === "h" || template === "i" || template === "j" ? (
+            <div>
+              <label className={FIELD_LABEL}>السطر تحت العنوان</label>
+              <AppInput
+                value={design.sub ?? ""}
+                onChange={(e) => set({ sub: e.target.value })}
+                className={FIELD}
+              />
+            </div>
+          ) : null}
+
+          {template === "j" ? (
+            <div>
+              <label className={FIELD_LABEL}>الصورة</label>
+              <AppSelect
+                value={design.scene ?? "shop-night"}
+                onValueChange={(value) => set({ scene: value as AdminInstagramScene })}
+              >
+                <AppSelectTrigger className="h-11 w-full rounded-[10px]">
+                  <AppSelectValue />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {(Object.keys(SCENES) as AdminInstagramScene[]).map((key) => (
+                    <AppSelectItem key={key} value={key}>
+                      {SCENES[key].label}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
             </div>
           ) : null}
 

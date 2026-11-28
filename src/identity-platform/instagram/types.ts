@@ -1,7 +1,9 @@
-// Madar's own Instagram posts. A post is one of the three approved square designs (A: photo and
-// checklist, B: app screens, C: cards) filled with the agent's words, plus the caption.
+// Madar's own Instagram posts. A post is one of the approved square designs filled with the
+// agent's words, plus the caption. All designs share Madar's identity (navy, blue, teal):
+// A photo and checklist, B app screens, C cards, D big number, E question, F old way vs Madar,
+// G numbered tips, H phone screen, I one bold line, J cinematic scene photo with a headline.
 
-export const INSTAGRAM_TEMPLATES = ["a", "b", "c"] as const
+export const INSTAGRAM_TEMPLATES = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] as const
 export type InstagramTemplate = (typeof INSTAGRAM_TEMPLATES)[number]
 
 // The icons a card (design C) can show.
@@ -24,22 +26,52 @@ export type InstagramIcon = (typeof INSTAGRAM_ICONS)[number]
 export const INSTAGRAM_SCREENS = ["cashier", "products", "close"] as const
 export type InstagramScreen = (typeof INSTAGRAM_SCREENS)[number]
 
+// The scene photos design J can use (made once with Figma AI; public/instagram/scenes/).
+export const INSTAGRAM_SCENES = [
+  "shop-night",
+  "cafe-cashier",
+  "phone-stock",
+  "salon",
+  "laundry",
+  "online-store",
+  "supermarket",
+  "boutique",
+  "ads",
+  "stocktake",
+  "ramadan",
+  "payment",
+] as const
+export type InstagramScene = (typeof INSTAGRAM_SCENES)[number]
+
 export interface InstagramDesign {
   // Two headline lines: the first in white/dark, the second in Madar's colours.
   titleTop: string
   titleBottom: string
   // A: the search-bar line above the headline.
   search?: string
-  // B: one line under the headline.
+  // B, H, I, J: one line under the headline.
   sub?: string
   // A: 3-4 ticks.
   points?: string[]
-  // B: two labels over the screens.
+  // B: two labels over the screens. D: up to four small labels under the number.
   chips?: string[]
   // B: which app screen.
   screen?: InstagramScreen
   // C: four cards.
   cards?: Array<{ icon: InstagramIcon; title: string; text: string }>
+  // D, E, G: a small label above the headline.
+  kicker?: string
+  // D: the big number (or short word).
+  number?: string
+  // E: four answer choices.
+  options?: string[]
+  // F: three lines each for the old way and with Madar.
+  wrong?: string[]
+  right?: string[]
+  // G: three numbered tips.
+  steps?: Array<{ title: string; text: string }>
+  // J: the scene photo.
+  scene?: InstagramScene
   // The button text.
   cta: string
 }
